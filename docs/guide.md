@@ -900,6 +900,13 @@ talks the release through first, what's in it and what it means for your
 own changes, and changes nothing until you say. From a thread, `tb updates`
 says the same, and `tb updates check` looks again now.
 
+### Light and dark
+
+Threadbear follows your Mac's appearance (System Settings > Appearance)
+unless you pick one for it alone: Settings (⌘,) > General > Appearance has
+Same as the Mac, Light and Dark. It changes straight away and stays picked
+the next time the app opens.
+
 ### The activity log
 
 Turn on Keep an activity log in Settings (⌘,) > General and the app notes
