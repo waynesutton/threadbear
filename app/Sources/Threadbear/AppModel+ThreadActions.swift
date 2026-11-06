@@ -12,6 +12,7 @@ extension AppModel {
         // A new thread is never the bear's chat unless the bear opened it
         // (BearChat.open aims it there after this).
         if newThreadCwd == BearChat.folder.path { newThreadCwd = nil }
+        showsSettingsPage = false
         selection = nil
         openProjectId = nil
         showsProjectsHome = false

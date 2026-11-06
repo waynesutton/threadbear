@@ -1052,6 +1052,15 @@ while its chat is working. To hide it, turn off Show the bear in the
 sidebar in Settings (⌘,) > General; its chats, memory and Voice keep
 working.
 
+### Where Settings opens
+
+Settings (⌘, or the gear at the bottom of the bar on the left) opens over
+the main panel, with its tabs along the top. The thread or page you had
+open stays as it was under it: the X at the top right, Esc, the gear again
+or picking a thread closes Settings and puts you back. To have Settings in
+a window of its own instead, set Open Settings in to Its own window in
+Settings > General.
+
 ### Light and dark
 
 Threadbear follows your Mac's appearance (System Settings > Appearance)
