@@ -109,6 +109,8 @@ export type ClaudeAdapterDeps = {
   queryFn?: typeof sdkQuery;
   // In-process MCP servers for a thread's session (the threadbear tools).
   mcpServersFor?: (threadId: string) => Record<string, McpServerConfig>;
+  /** Plugins every session gets: Threadbear's skills (skills.ts), whichever login it's on. */
+  plugins?: () => { type: 'local'; path: string }[];
   // Tools that ask Mike even in a thread with full access.
   alwaysAsk?: Set<string>;
   // One reply (needs.ts), read when a session starts, as its end_turn is.
@@ -331,6 +333,8 @@ class ClaudeSession implements AgentSession {
     };
     const servers = deps.mcpServersFor?.(opts.threadId);
     if (servers && Object.keys(servers).length) options.mcpServers = servers;
+    const plugins = deps.plugins?.() ?? [];
+    if (plugins.length) options.plugins = plugins;
     this.hasEndTurn = Object.keys(servers ?? {}).some((k) => END_TURN_FULL_NAME.startsWith(`mcp__${k}__`));
     if (opts.model) options.model = opts.model;
     const effort = claudeEffort(opts.effort);
