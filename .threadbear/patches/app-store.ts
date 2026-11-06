@@ -29,6 +29,17 @@ function versions(sh: Ctx["sh"]): Promise<Version[]> {
 
 const needsMike = (state: string) => state === "PENDING_DEVELOPER_RELEASE" || state.endsWith("REJECTED");
 
+// Mike's links (his site, App Store Connect, his Sentry) show only where his asc-status script is,
+// like the panel: in someone else's copy of the repo they're his accounts, not theirs.
+const mikesMac = async ({ sh }: Ctx) => {
+  try {
+    await sh("test -f ~/dev/me/poddle/scripts/asc-status.mjs");
+    return true;
+  } catch {
+    return false;
+  }
+};
+
 const WORDS: Record<string, string> = {
   READY_FOR_DISTRIBUTION: "Live",
   PENDING_DEVELOPER_RELEASE: "Approved, waiting for you to release it",
@@ -44,9 +55,9 @@ const WORDS: Record<string, string> = {
 export default {
   icon: "pawprint",
   actions: [
-    { title: "Website", icon: "safari", url: "https://threadbear.mikecann.app/" },
-    { title: "App Store Connect", icon: "app.badge", url: CONNECT },
-    { title: "Sentry", icon: "exclamationmark.triangle", url: "https://mikec.sentry.io/issues/?project=4512336956293120" },
+    { title: "Website", icon: "safari", url: "https://threadbear.mikecann.app/", when: mikesMac },
+    { title: "App Store Connect", icon: "app.badge", url: CONNECT, when: mikesMac },
+    { title: "Sentry", icon: "exclamationmark.triangle", url: "https://mikec.sentry.io/issues/?project=4512336956293120", when: mikesMac },
     {
       title: "Release it",
       icon: "paperplane",
