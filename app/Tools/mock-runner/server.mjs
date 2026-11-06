@@ -20,6 +20,7 @@
 import { WebSocketServer } from 'ws';
 import crypto from 'node:crypto';
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 // The tour's sample threads, the runner's own (it runs TypeScript as it is).
 import { SAMPLE_THREADS } from '../../../runner/src/samples.ts';
@@ -1393,7 +1394,14 @@ async function fakeTurn(threadId, text, images, turnId = 'turn_' + crypto.random
   persist(threadId, { type: 'user.message', text, images, ...(origin ? { origin } : {}), ...extra }, turnId);
   persist(threadId, { type: 'turn.started', turnId }, turnId);
   // A Plan mode turn's reply is saved as the plan, as the runner does.
-  if (extra.mode === 'plan') setTimeout(() => persist(threadId, { type: 'system.note', text: `Saved the plan to plans/${new Date().toISOString().slice(0, 10)}-mock.md.` }, turnId), 900);
+  if (extra.mode === 'plan') {
+    // A real file, so the link opens: in the mock's temp folder.
+    const dir = path.join(os.tmpdir(), 'threadbear-mock-plans');
+    fs.mkdirSync(dir, { recursive: true });
+    const file = path.join(dir, `${new Date().toISOString().slice(0, 10)}-mock.md`);
+    fs.writeFileSync(file, `# Plan: ${t.summary.title}\n\n## Goal\n\n${text}\n\n## Steps\n\n1. Look\n2. Plan\n3. Do\n`);
+    setTimeout(() => persist(threadId, { type: "system.note", text: `Saved the plan to [plans/${path.basename(file)}](<${file}>).` }), 7000);
+  }
   setStatus(threadId, 'running');
 
   // Say "signed out" for a turn refused by the login, as Claude Code's
