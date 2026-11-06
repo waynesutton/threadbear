@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 // The thread manager: owns threads, turns, the event log, approvals, idle
 // release and snoozes. Providers plug in through AgentAdapter; the WebSocket
 // server in rpc.ts is a thin layer over the public methods here.
@@ -153,6 +154,7 @@ export type Notification =
   | { method: 'clis.updated'; params: { clis: CliStatus[] } }
   | { method: 'settings.updated'; params: { settings: Settings } }
   | { method: 'skills.updated'; params: { skills: import('./skills.ts').Skill[]; enabled: boolean } }
+  | { method: 'skills.instructions'; params: { instructions: string } }
   | { method: 'runner.updates'; params: { updates: RunnerUpdates } }
   | { method: 'projects.updated'; params: { projects: Project[] } }
   | { method: 'librarian.updated'; params: { librarian: LibrarianStatus } }
@@ -472,6 +474,8 @@ export type RunnerDeps = {
   // Projects (projects.ts): their folders' patches, the brief a session
   // starts with, and the summary's `projects`. Started by start().
   projects?: Projects;
+  /** Mike's standing instructions for every session (Skills > Instructions, skills.ts); '' for none. */
+  standingInstructions?: () => string;
   // A completed turn asked Mike to Restart to Update, by end_turn or in its
   // closing "What I need from you" (app-restarts.ts signs the thread up).
   appRestartAsked?: (threadId: string) => void;
@@ -560,6 +564,7 @@ export class Runner {
   // Where answers to ask_secret go, and the key the phone seals them to.
   secrets: SecretStore;
   models?: Pick<Models, 'generate'>;
+  standingInstructions?: () => string;
   projects?: Projects;
   activity = new Set<(a: ThreadActivity) => void>();
   patchCache: PatchCache = new Map();
@@ -639,6 +644,7 @@ export class Runner {
     this.secrets = new SecretStore(paths.secrets(deps.config.home), () => this.clock.now());
     this.models = deps.models;
     this.projects = deps.projects;
+    this.standingInstructions = deps.standingInstructions;
     this.appRestartAsked = deps.appRestartAsked;
     this.atMac = deps.atMac;
     this.adapters = deps.adapters;
@@ -1555,6 +1561,8 @@ export class Runner {
     // live, or since it last ran. A fresh session got them as instructions.
     const news = this.projectNews(rec);
     if (news) text = `${news}\n\n${text}`;
+    const standing = this.instructionsNews(rec);
+    if (standing) text = `${standing}\n\n${text}`;
     if (rec.moved) {
       // A CLI that moves folders itself: the live session got setCwd, or a
       // released one resumes in the new folder (startSession passes it).
@@ -2975,6 +2983,10 @@ export class Runner {
   briefFor(rec: ThreadRecord, resume: boolean): { instructions?: string } {
     if (resume) return {};
     const parts: string[] = [];
+    // Mike's own standing instructions first: they're for everything.
+    const standing = this.standingInstructions?.().trim() ?? '';
+    rec.instructionsTold = instructionsHash(standing);
+    if (standing) parts.push(standingText(standing));
     if (this.projects) {
       rec.projectsTold = this.projects.briefIds(rec);
       const brief = this.projects.brief(rec);
@@ -2988,6 +3000,20 @@ export class Runner {
   // The thread's projects its session hasn't been told about, as lines to
   // put before its next message, or undefined. A thread whose session
   // predates projects (never told anything) gets the whole brief.
+  // Mike's standing instructions, when they've changed since the session
+  // last heard them (or it never has): a resumed Claude session keeps its
+  // first system prompt, so the change comes before his next message.
+  instructionsNews(rec: ThreadRecord): string | undefined {
+    if (!this.standingInstructions) return undefined;
+    const standing = this.standingInstructions().trim();
+    const hash = instructionsHash(standing);
+    if (rec.instructionsTold === hash) return undefined;
+    const before = rec.instructionsTold;
+    rec.instructionsTold = hash;
+    if (!standing) return before === undefined || before === instructionsHash('') ? undefined : 'Note from Threadbear: the user cleared their standing instructions; earlier ones no longer apply.';
+    return `Note from Threadbear: the user's standing instructions${before === undefined || before === instructionsHash('') ? '' : ' have changed, and replace any earlier ones'}.\n\n${standingText(standing)}`;
+  }
+
   projectNews(rec: ThreadRecord): string | undefined {
     if (!this.projects) return undefined;
     const ids = this.projects.briefIds(rec);
@@ -3311,4 +3337,13 @@ function openInBrowser(url: string): Promise<void> {
   return new Promise((resolve, reject) => {
     execFile('/usr/bin/open', [page], (err) => (err ? reject(new RpcError(ErrorCode.other, `Couldn't open ${page}: ${err.message}`)) : resolve()));
   });
+}
+
+// Mike's standing instructions as an agent is given them.
+function standingText(text: string): string {
+  return `The user's standing instructions (set in Threadbear, Skills > Instructions). Keep them in mind in everything you do for them:\n\n${text}`;
+}
+
+function instructionsHash(text: string): string {
+  return createHash('sha256').update(text).digest('hex').slice(0, 16);
 }
