@@ -95,6 +95,7 @@ struct ComposerView: View {
                 pictures: ComposerTextView.Pictures(allowed: { picturesAllowed() }, importOne: { await importPicture($0) }),
                 handle: handle,
                 onEscape: { cancelEdit() },
+                onShiftTab: { app.cycleTurnMode(draftKey) },
                 editable: !creating
             )
             .frame(height: height)
@@ -383,6 +384,8 @@ struct ComposerTextField: NSViewRepresentable {
     var handle: ComposerHandle?
     /// Esc: true if it did something (left an edit).
     var onEscape: () -> Bool = { false }
+    /// Shift-Tab: the next of Plan and Ask mode (AppModel.cycleTurnMode); false leaves it to the text box.
+    var onShiftTab: () -> Bool = { false }
     /// False while what's in it is being sent (a new thread being made).
     var editable = true
 
@@ -458,6 +461,7 @@ struct ComposerTextField: NSViewRepresentable {
         textView.onReturnWhenEmpty = onReturnWhenEmpty
         textView.pictures = pictures
         textView.onEscape = onEscape
+        textView.onShiftTab = onShiftTab
         textView.placeholder = placeholder
         handle?.textView = textView
         if textView.isEditable != editable { textView.isEditable = editable }
@@ -533,6 +537,7 @@ final class ComposerTextView: NSTextView {
     var onSend: (() -> Void)?
     var onReturnWhenEmpty: (() -> Bool)?
     var onEscape: (() -> Bool)?
+    var onShiftTab: (() -> Bool)?
     /// Pictures pasted or dropped in an ask's box, which keeps them beside
     /// its words (AskAnswerBox). The composer sets `pictures` instead.
     var onImages: (([URL]) -> Void)?
@@ -728,6 +733,12 @@ final class ComposerTextView: NSTextView {
             return
         }
         insertText(edit.text, replacementRange: edit.range)
+    }
+
+    /// Shift-Tab steps through Plan and Ask mode, as in Claude Code.
+    override func insertBacktab(_ sender: Any?) {
+        if onShiftTab?() == true { return }
+        super.insertBacktab(sender)
     }
 
     override func cancelOperation(_ sender: Any?) {

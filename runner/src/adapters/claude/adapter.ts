@@ -229,6 +229,9 @@ export class ClaudeAdapter implements AgentAdapter {
 // (set by the caller), brings CLAUDE.md back without its settings (tried
 // on CLI 2.1.318, 5 Nov 2026), and the rest of the settings come in as flag
 // settings, which sit above user settings as project ones do.
+// What Plan and Ask mode turns may not use (modes.ts).
+const READ_ONLY_REFUSED = new Set(['Edit', 'MultiEdit', 'Write', 'NotebookEdit']);
+
 export function untrustedSettings(cwd: string, settings: Record<string, unknown>): Pick<Options, 'settingSources' | 'settings' | 'additionalDirectories'> {
   return { settingSources: ['user'], additionalDirectories: [cwd], ...(Object.keys(settings).length ? { settings } : {}) };
 }
@@ -325,6 +328,9 @@ class ClaudeSession implements AgentSession {
       // PostToolUse is awaited before the CLI goes on, so a taken end_turn
       // is always noted before the Stop that follows it.
       hooks: {
+        // Plan and Ask mode turns change nothing (modes.ts). PreToolUse runs
+        // whatever the permission mode, full access included.
+        PreToolUse: [{ hooks: [async (input) => this.readOnlyCheck(input)] }],
         Stop: [{ hooks: [(input) => this.onStop(input)] }],
         PostToolUse: [{ matcher: END_TURN_FULL_NAME, hooks: [async (input) => this.onEndTurn(input)] }],
       },
@@ -402,7 +408,11 @@ class ClaudeSession implements AgentSession {
         // a message sent during a turn lands before the Stop that turn still
         // has coming, and that sent a turn which had called end_turn back
         // to call it (1 Nov 2026, thread cdfccbc3).
-        if ((msg as { type?: string }).type === 'result') this.forgetEndTurn();
+        if ((msg as { type?: string }).type === 'result') {
+          this.forgetEndTurn();
+          // The turn's over: the next message says whether it's read-only.
+          this.readOnly = false;
+        }
         for (const out of this.normalizer.handle(msg as Record<string, unknown>)) {
           this.sink.output(out);
           // Words after end_turn's result, by the events' own order: the
@@ -511,7 +521,27 @@ class ClaudeSession implements AgentSession {
     }
   }
 
+  /** The turn is in Plan or Ask mode (UserInput.readOnly). */
+  private readOnly = false;
+
+  /** Refuses tools that change files while the turn is read-only. */
+  private readOnlyCheck(input: HookInput): Record<string, unknown> {
+    if (!this.readOnly || input.hook_event_name !== 'PreToolUse') return {};
+    const tool = (input as { tool_name?: string }).tool_name ?? '';
+    if (!READ_ONLY_REFUSED.has(tool)) return {};
+    return {
+      hookSpecificOutput: {
+        hookEventName: 'PreToolUse',
+        permissionDecision: 'deny',
+        permissionDecisionReason: "This turn is in Plan or Ask mode, so nothing may change: reply instead (in Plan mode, with the plan).",
+      },
+    };
+  }
+
   send(input: UserInput): void {
+    // A Plan or Ask message makes its turn read-only until it ends (a plain
+    // one steered into it doesn't unlock it).
+    if (input.readOnly) this.readOnly = true;
     this.normalizer.sent();
     // Each picture where its [Picture N] marker is in the words, or before
     // them when nothing places it (pictures.ts).

@@ -3,6 +3,8 @@ import { createHash } from 'node:crypto';
 // release and snoozes. Providers plug in through AgentAdapter; the WebSocket
 // server in rpc.ts is a thin layer over the public methods here.
 import { isPublishCommand, siteUrls, SITE_LINK_TITLE } from './site-links.ts';
+import { modeInstructions, planDocument, planPath } from './modes.ts';
+import type { TurnMode } from './store.ts';
 import { reachable, type Reachable } from './net-probe.ts';
 import type { UpstreamStatus } from './upstream.ts';
 import fs from 'node:fs';
@@ -265,6 +267,8 @@ export type Turn = {
   workedIn?: Set<string>;
   /** Tool calls this turn that published something (site-links.ts). */
   publishCalls?: Set<string>;
+  /** A Plan mode turn: its reply is saved as the plan (modes.ts). */
+  plan?: boolean;
   // The agent's own end_turn input and last text, for what the turn needs
   // from Mike (needs.ts). Never a sub-agent's.
   endTurn?: Record<string, unknown>;
@@ -1331,6 +1335,7 @@ export class Runner {
     if (opts.scheduleId) msg.scheduleId = opts.scheduleId;
     if (opts.answers?.length) msg.answers = opts.answers;
     if (opts.editOf) msg.editOf = opts.editOf;
+    if (opts.mode) msg.mode = opts.mode;
     rec.lastActivityAt = this.isoNow();
     if (rt.turn && !opts.queue && fromMike(text, opts) && this.switchWaiting(st)) {
       // He picked another login (another provider, usually) during this
@@ -1424,7 +1429,7 @@ export class Runner {
     // more thing" shouldn't send the thread away. It can ask again.
     if (turn.endTurn?.archive) turn.endTurn = { ...turn.endTurn, archive: false };
     this.markDirty(st);
-    rt.session!.send({ id: msg.turnId, text: this.forAgent(msg), images: msg.images });
+    rt.session!.send({ id: msg.turnId, text: this.forAgent(msg), images: msg.images, ...(msg.mode ? { readOnly: true } : {}) });
   }
 
   // The text the agent gets for a message. One from the phone says so, and
@@ -1432,7 +1437,8 @@ export class Runner {
   // step while he's out and keeps the reply short. It goes on every phone
   // message rather than once, as he moves between the two. The transcript
   // keeps what he typed.
-  forAgent(msg: { text: string; origin?: MessageOrigin }): string {
+  forAgent(msg: { text: string; origin?: MessageOrigin; mode?: TurnMode }): string {
+    if (msg.mode) return `${modeInstructions(msg.mode)}\n\n${this.forAgent({ ...msg, mode: undefined })}`;
     if (msg.origin !== 'phone') return msg.text;
     const atMac = this.atMac?.();
     const where = atMac === true ? ', at the Mac' : atMac === false ? ', away from the Mac' : '';
@@ -1458,7 +1464,7 @@ export class Runner {
     }
     rt.idleTimer?.cancel();
     rt.idleTimer = undefined;
-    rt.turn = { turnId: msg.turnId, startedAt: this.clock.now(), interruptRequested: false, messages: [msg.turnId], edited: new Set() };
+    rt.turn = { turnId: msg.turnId, startedAt: this.clock.now(), interruptRequested: false, messages: [msg.turnId], edited: new Set(), ...(msg.mode === 'plan' ? { plan: true } : {}) };
     rt.activeAt = this.clock.now();
     rec.turnId = msg.turnId;
     rec.lastActivityAt = this.isoNow();
@@ -1488,6 +1494,25 @@ export class Runner {
   // A site a deploy put up (site-links.ts) as "Live site" on each project
   // the thread is in, unless the project has it already (its title then
   // stays as it is) or already has as many links as it can.
+  // The plan a Plan mode turn replied with, as a Markdown file in the
+  // thread's folder named for the day and its project (or folder), pinned
+  // in Highlights and noted in the transcript.
+  savePlan(st: ThreadState, text: string): void {
+    const { rec } = st;
+    try {
+      const project = this.projects?.threadProjects(rec)?.[0]?.title;
+      const file = planPath(rec.cwd, project ?? path.basename(rec.cwd), new Date(this.clock.now()));
+      fs.mkdirSync(path.dirname(file), { recursive: true });
+      fs.writeFileSync(file, planDocument(text, { title: rec.title, project, date: new Date(this.clock.now()) }));
+      const shown = path.relative(rec.cwd, file);
+      this.emit(st, { type: 'system.note', text: `Saved the plan to ${shown}.` });
+      this.pin(rec.id, { path: file, title: `Plan: ${rec.title}`, note: 'The plan from Plan mode' });
+    } catch (err) {
+      this.log.warn('could not save a plan', { threadId: rec.id, err: String(err) });
+      this.emit(st, { type: 'system.note', text: `Couldn't save the plan: ${err instanceof Error ? err.message : String(err)}` });
+    }
+  }
+
   addSiteLinks(rec: ThreadRecord, sites: string[]): void {
     const projects = this.projects;
     if (!projects) return;
@@ -1569,7 +1594,7 @@ export class Runner {
       this.emit(st, { type: 'system.note', text: `Moved to ${rec.cwd}. The session carries on there.` }, msg.turnId);
       delete rec.moved;
     }
-    rt.session!.send({ id: msg.turnId, text, images: msg.images });
+    rt.session!.send({ id: msg.turnId, text, images: msg.images, ...(msg.mode ? { readOnly: true } : {}) });
     if (msg.reviewId && !rec.reviewDeliveries?.includes(msg.reviewId)) {
       (rec.reviewDeliveries ??= []).push(msg.reviewId);
       // A persisted transcript row is not proof of dispatch: both initial
@@ -2136,6 +2161,8 @@ export class Runner {
     // The turn may have changed what live state reads (comments resolved,
     // a handback): read it now rather than at the next poll.
     if (rt.patches?.live && !this.stopping) void this.refreshPatches(st);
+    // A Plan mode turn: its reply saved as plans/<date>-<project>.md and pinned.
+    if (outcome === 'completed' && finished?.plan && finished.lastText) this.savePlan(st, finished.lastText);
     if (outcome && finished && !finished.auto && !this.stopping) {
       this.tellActivity({ kind: 'turn.end', threadId: rec.id, outcome, edited: [...finished.edited].map((p) => path.resolve(rec.cwd, p)), workedIn: [...(finished.workedIn ?? [])] });
     }
@@ -3118,7 +3145,7 @@ export function stoppedWorkMessage(what: string[], last: boolean): string {
   ].join('\n');
 }
 
-export type SendOptions = { origin?: MessageOrigin; scheduleId?: string; queue?: boolean; answers?: AskAnswer[]; editOf?: number };
+export type SendOptions = { origin?: MessageOrigin; scheduleId?: string; queue?: boolean; answers?: AskAnswer[]; editOf?: number; mode?: TurnMode };
 
 // Typed by Mike, at the Mac or on his phone: not the runner's, a
 // schedule's or an agent's (another thread's, or this one's own `then`
@@ -3168,6 +3195,7 @@ export function userMessage(msg: QueuedSend): EventBody {
     ...(msg.reviewId ? { reviewId: msg.reviewId, reviewResponse: msg.reviewResponse } : {}),
     ...(msg.answers?.length ? { answers: msg.answers } : {}),
     ...(msg.editOf ? { editOf: msg.editOf } : {}),
+    ...(msg.mode ? { mode: msg.mode } : {}),
   };
 }
 
