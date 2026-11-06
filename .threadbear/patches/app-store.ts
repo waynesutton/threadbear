@@ -1,7 +1,9 @@
 // Threadbear's own pages one click away and where its iPhone app stands with Apple. The panel asks
 // Apple through Poddle's asc-status script (one team, one API key, so it's Mike's alone) and keeps
-// the answer for 15 minutes. In anyone else's copy of this repo there's no script, so the panel
-// and the Release button don't show.
+// the answer for 15 minutes. In anyone else's copy of this repo there's no script, so the panel,
+// the Release button and the links to Mike's own accounts (App Store Connect, Sentry) don't show.
+// Wayne saw the Sentry chip in his fork on 6 Nov and asked if he was meant to;
+// test/unit/fork-view.test.ts now checks what a stranger's copy shows.
 
 type Ctx = { sh: (command: string) => Promise<string> };
 type Version = { version: string; state: string };
@@ -27,11 +29,9 @@ function versions(sh: Ctx["sh"]): Promise<Version[]> {
   return pending;
 }
 
-const needsMike = (state: string) => state === "PENDING_DEVELOPER_RELEASE" || state.endsWith("REJECTED");
-
-// Mike's links (his site, App Store Connect, his Sentry) show only where his asc-status script is,
-// like the panel: in someone else's copy of the repo they're his accounts, not theirs.
-const mikesMac = async ({ sh }: Ctx) => {
+// Mike's Mac, told by the script only he has. A file check rather than asking Apple, so the links
+// stay when Apple's API is down.
+const onMikesMac = async ({ sh }: Ctx) => {
   try {
     await sh("test -f ~/dev/me/poddle/scripts/asc-status.mjs");
     return true;
@@ -39,6 +39,8 @@ const mikesMac = async ({ sh }: Ctx) => {
     return false;
   }
 };
+
+const needsMike = (state: string) => state === "PENDING_DEVELOPER_RELEASE" || state.endsWith("REJECTED");
 
 const WORDS: Record<string, string> = {
   READY_FOR_DISTRIBUTION: "Live",
@@ -55,9 +57,9 @@ const WORDS: Record<string, string> = {
 export default {
   icon: "pawprint",
   actions: [
-    { title: "Website", icon: "safari", url: "https://threadbear.mikecann.app/", when: mikesMac },
-    { title: "App Store Connect", icon: "app.badge", url: CONNECT, when: mikesMac },
-    { title: "Sentry", icon: "exclamationmark.triangle", url: "https://mikec.sentry.io/issues/?project=4512336956293120", when: mikesMac },
+    { title: "Website", icon: "safari", url: "https://threadbear.mikecann.app/" },
+    { title: "App Store Connect", icon: "app.badge", url: CONNECT, when: onMikesMac },
+    { title: "Sentry", icon: "exclamationmark.triangle", url: "https://mikec.sentry.io/issues/?project=4512336956293120", when: onMikesMac },
     {
       title: "Release it",
       icon: "paperplane",
