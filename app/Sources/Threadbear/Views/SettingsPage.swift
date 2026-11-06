@@ -2,7 +2,7 @@ import SwiftUI
 import ThreadbearCore
 
 /// Where Settings opens (Settings > General): over the main panel, the
-/// default (Wayne, 6 Nov), or in a window of its own as Mac apps' do.
+/// default, or in a window of its own as Mac apps' do.
 enum SettingsPlace: String, CaseIterable, Identifiable {
     case panel, window
 

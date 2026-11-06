@@ -6,7 +6,7 @@ import ThreadbearCore
 /// own folder, ~/ThreadbearThreads/Bear, so it has the same tools and
 /// approvals as any other. The remembering is the folder's: Claude Code
 /// keeps a memory for each folder, and the folder's CLAUDE.md (written
-/// once, never overwritten, so it's Wayne's to change) tells the bear to
+/// once, never overwritten, so it is the user's to change) tells the bear to
 /// keep what it learns about him there. A new chat there, after the last
 /// was archived, still knows him.
 @MainActor
