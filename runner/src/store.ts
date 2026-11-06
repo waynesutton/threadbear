@@ -1,7 +1,7 @@
 import type { HighlightState } from './highlights.ts';
 import fs from 'node:fs';
 import path from 'node:path';
-import type { WaitingForRoom, Ask, AskAnswer, NeedsWho, DesignReview, ReviewDraft, EffortLevel, MessageOrigin, PanelRequest, PermissionMode, ThreadShare, PersistedEvent, Provider, Subagent, ThreadProject, ThreadSchedule, ThreadStartedBy, ThreadStatus, ImageRef } from './protocol.ts';
+import type { WaitingForRoom, Ask, AskAnswer, NeedsWho, DesignReview, ReviewDraft, EffortLevel, MessageOrigin, PanelRequest, PermissionMode, ThreadShare, PersistedEvent, Provider, ArchivedBy, ArchiveVerdict, Subagent, ThreadProject, ThreadSchedule, ThreadStartedBy, ThreadStatus, ImageRef } from './protocol.ts';
 import { atomicWriteFileSync, readJsonSync } from './fsutil.ts';
 import { paths } from './config.ts';
 import type { WorktreeRecord } from './worktrees.ts';
@@ -57,9 +57,25 @@ export type ThreadRecord = {
   snoozedUntil?: string;
   snoozedUntilRestart?: boolean; // snoozedUntil is UNTIL_RESTART; start() wakes it
   wakeWhen?: WakeWhen; // hibernated in Mike's words (wake-when.ts)
+  // Hibernating until these threads finish (end_turn's waitFor,
+  // runner/hibernation.ts): each counts once it has finished (with no new
+  // work since), been archived or been deleted.
+  // `until`: waits for something in particular, which the librarian
+  // judges from its looks at that thread (met), not for any finish.
+  waitingOn?: { threadId: string; title: string; until?: string; done?: { at: string; how: 'finished' | 'met' | 'archived' | 'deleted'; reply?: string; why?: string } }[];
+  // Its last finished turn (nothing needed, nothing left running) and that
+  // turn's reply, for threads waiting on it, including on a runner it
+  // moves to (runner/hibernation.ts, reconcileWaits). Cleared by any new
+  // work (a message, a turn its CLI opens), so no clock is compared.
+  finished?: { at: string; reply?: string };
   snoozedAt?: string; // when it was last put away, for how long it slept; may be stale once awake
   woke?: { at: string; since?: string }; // woke by itself and not looked at yet (since = snoozedAt)
   archivedAt?: string;
+  // Who archived it, and Mike's verdict from the done card. Set afresh by
+  // every archive and only read while archivedAt is set, so the paths that
+  // bring a thread back needn't clear them.
+  archivedBy?: ArchivedBy;
+  archiveVerdict?: ArchiveVerdict;
   starredAt?: string; // Mike starred it: the Starred section, oldest star first
   preview: string;
   lastSeq: number;
@@ -259,6 +275,15 @@ export class ThreadStore {
 
   blobsDir(id: string): string {
     return paths.blobs(this.home, id);
+  }
+
+  // The ids of every thread folder on disk, this runner's or not.
+  ids(): string[] {
+    try {
+      return fs.readdirSync(paths.threads(this.home)).filter((n) => !n.startsWith('.'));
+    } catch {
+      return [];
+    }
   }
 
   // Every thread on disk. `broken` lists folders that have an event log but

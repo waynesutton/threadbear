@@ -255,6 +255,14 @@ test('update renames and snoozes others, but will not stop its own turn', async 
   assert.equal(ownSnooze.error, true);
   assert.match(ownSnooze.text, /snooze: and when to wake/);
   assert.equal(h.runner.get(me.id).archivedAt, undefined);
+  // An agent's archive says so, and read_thread tells a sweep who did it.
+  const archived = await t.call('update_thread', { threadId: other.id, archived: true });
+  assert.match(archived.text, /archived: \S+ by an agent/);
+  assert.equal(h.runner.get(other.id).archivedBy, 'agent');
+  h.runner.update({ threadId: other.id, archived: false });
+  h.runner.update({ threadId: other.id, archived: true, verdict: 'didntWork' });
+  assert.match((await t.call('list_threads', { include: ['archived'] })).text, /archived by the user: it didn't work/);
+  h.runner.update({ threadId: other.id, archived: false });
   const snoozed = await t.call('update_thread', { threadId: other.id, snooze: '2h' });
   assert.match(snoozed.text, /snoozed until: 2026-10-26T14:00:00\.000Z/);
   await t.call('update_thread', { threadId: other.id, snooze: 'off' });
@@ -1078,7 +1086,7 @@ test("end_turn lists only today's form, whichever forms it takes", async () => {
   const h = makeHarness();
   const { thread } = start(h);
   const one = await mcpClient(h, thread.id, true).endTurnShown();
-  assert.deepEqual(Object.keys(one.inputSchema.properties).sort(), ['archive', 'asks', 'byline', 'headline', 'needs', 'next', 'snooze']);
+  assert.deepEqual(Object.keys(one.inputSchema.properties).sort(), ['archive', 'asks', 'byline', 'headline', 'needs', 'next', 'snooze', 'waitFor']);
   assert.ok(!one.inputSchema.required?.length, 'every field is optional');
   const ask = (one.inputSchema.properties.asks as { items: { required: string[]; properties: Record<string, { description?: string; items?: { type?: string } }> } }).items;
   assert.deepEqual(ask.required, ['question']);
@@ -1098,7 +1106,7 @@ test("An end_turn that fits neither form hears today's shape and order in words"
   const one = await mcpClient(h, thread.id, true).endTurn(garbled);
   assert.equal(one.error, true);
   assert.match(one.text, /asks\[0\]\.options\[0\]/);
-  assert.match(one.text, /\{ headline\?, needs\?, asks\?: \{ question, options\?: \{ label, does\? \}\[\], suggested\?, links\? \}\[\], next\?, archive\?, snooze\? \}/);
+  assert.match(one.text, /\{ headline\?, needs\?, asks\?: \{ question, options\?: \{ label, does\? \}\[\], suggested\?, links\? \}\[\], next\?, archive\?, snooze\?, waitFor\? \}/);
   assert.match(one.text, /then write your reply after it/);
   assert.doesNotMatch(one.text, /MCP error/);
   const old = await mcpClient(h, thread.id, false).endTurn({ needs: 'maybe' });
@@ -1264,6 +1272,47 @@ test('one reply: a nudged end_turn with no message to keep still asks for the re
   second.s.result('completed');
   await tick();
   assert.equal(h.runner.endTurnNudged(second.thread.id), false);
+});
+
+// 5 Nov 2026, thread 1d9689e6: a Slack draft for Mike to approve was
+// written before end_turn, as narration, and the reply after it was "Nothing
+// has been sent yet." Words since the last step fold away with one reply, so
+// the result asks for them again in full; words before a step don't count.
+test('one reply: words written just before end_turn are asked for again in full, as they fold away', async () => {
+  const h = makeHarness();
+  const again = /write it again in full as your reply/;
+  const input = { headline: 'Draft update for Jamie ready to send', asks: [{ question: 'Send the Hetzner update to Jamie in your Slack DM?', options: [{ label: 'Send it' }, { label: "I'll edit and send" }] }] };
+  // The draft as narration, straight before the call.
+  const first = start(h);
+  const one = tools(h, first.thread.id, undefined, () => true);
+  toolCall(first.s, 'b1', 'Bash', { command: 'slack-read D081T2X5SG6' });
+  toolResult(first.s, 'b1');
+  first.s.out({ kind: 'event', event: { type: 'assistant.text', itemId: 'n1', text: 'The Hetzner Linux runner is up and sits in threadbear beside your Mac and Bruce.', narration: true } });
+  toolCall(first.s, 'e1', END_TURN, input);
+  let r = await one.call('end_turn', input);
+  assert.equal(r.error, false, r.text);
+  assert.match(r.text, /Now write your reply/);
+  assert.match(r.text, again);
+  assert.match(r.text, /never see your thinking/);
+  // Plain text counts too, and a done turn hears it as well.
+  const second = start(h);
+  const two = tools(h, second.thread.id, undefined, () => true);
+  second.s.text('m1', 'Three ways to share pools: A, B and C, and here is each.');
+  toolCall(second.s, 'e2', END_TURN, { headline: 'Laid out three designs', needs: 'nothing' });
+  r = await two.call('end_turn', { headline: 'Laid out three designs', needs: 'nothing' });
+  assert.match(r.text, /^Noted: this thread is done/);
+  assert.match(r.text, again);
+  // A status line before a step is just working: nothing to write again.
+  const third = start(h);
+  const three = tools(h, third.thread.id, undefined, () => true);
+  third.s.text('m1', 'Checking the DM with Jamie first.');
+  toolCall(third.s, 'b1', 'Bash', { command: 'slack-read D081T2X5SG6' });
+  toolResult(third.s, 'b1');
+  toolCall(third.s, 'e3', END_TURN, input);
+  r = await three.call('end_turn', input);
+  assert.match(r.text, /Now write your reply/);
+  assert.doesNotMatch(r.text, again);
+  assert.match(r.text, /never see your thinking/, 'what the asks are about always goes in the reply');
 });
 
 // One reply (docs/protocol.md, "One reply"; 1 Nov 2026): end_turn carries

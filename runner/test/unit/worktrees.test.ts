@@ -244,9 +244,10 @@ test("setup runs only when the worktree's own copy of the patch is trusted, and 
 
   // Committed: a setup script that does harm. In the main checkout, not
   // committed: a harmless one, and that's what was trusted.
-  const bad = makeRepo(PATCH(`{ setup: "sh ./setup.sh" }`));
-  commit(bad.main, { 'setup.sh': 'touch .evil-ran\n' }, 'setup');
-  fs.writeFileSync(path.join(bad.main, 'setup.sh'), 'touch .setup-ran\n');
+  const bad = makeRepo(PATCH(`{ setup: "./setup.sh" }`));
+  commit(bad.main, { 'setup.sh': '#!/bin/sh\ntouch .evil-ran\n' }, 'setup');
+  fs.chmodSync(path.join(bad.main, 'setup.sh'), 0o755);
+  fs.writeFileSync(path.join(bad.main, 'setup.sh'), '#!/bin/sh\ntouch .setup-ran\n');
   const trust = new PatchTrust();
   trust.trustCurrent([file(bad.main)]);
   const h = makeHarness(undefined, {}, { ...opts, patchTrust: trust });
@@ -259,13 +260,18 @@ test("setup runs only when the worktree's own copy of the patch is trusted, and 
   const events = h.events(thread.id);
   assert.equal(events.some((e) => e.type === 'action.run'), false);
   const note = events.filter((e) => e.type === 'system.note').at(-1);
-  assert.match(note?.text ?? '', /^Didn't run the worktree's setup \(sh \.\/setup\.sh\): its copy of the checks patch isn't a version you've trusted\./);
+  assert.match(note?.text ?? '', /^Didn't run the worktree's setup \(\.\/setup\.sh\): its copy of the checks patch isn't a version you've trusted\./);
 
-  // Both versions trusted: the worktree's own setup is the one that runs.
-  const good = makeRepo(PATCH(`{ setup: "touch .committed-ran" }`));
+  // Both versions trusted: the worktree's own setup is the one that runs,
+  // by the absolute path of the worktree's script.
+  const good = makeRepo(PATCH(`{ setup: "./committed.sh" }`));
+  commit(good.main, { 'committed.sh': '#!/bin/sh\ntouch .committed-ran\n', 'main.sh': '#!/bin/sh\ntouch .main-ran\n' }, 'scripts');
+  fs.chmodSync(path.join(good.main, 'committed.sh'), 0o755);
+  fs.chmodSync(path.join(good.main, 'main.sh'), 0o755);
+  sh(good.main, 'git add -A && git commit -qm modes');
   const t2 = new PatchTrust();
   t2.trustCurrent([file(good.main)]);
-  fs.writeFileSync(file(good.main), PATCH(`{ setup: "touch .main-ran" }`));
+  fs.writeFileSync(file(good.main), PATCH(`{ setup: "./main.sh" }`));
   fs.utimesSync(file(good.main), new Date(Date.now() + 5000), new Date(Date.now() + 5000));
   t2.trustCurrent([file(good.main)]);
   const h2 = makeHarness(undefined, {}, { ...opts, patchTrust: t2 });
@@ -274,7 +280,93 @@ test("setup runs only when the worktree's own copy of the patch is trusted, and 
   const p2 = h2.store.load(made.thread.id)!.worktree!.path;
   assert.ok(fs.existsSync(path.join(p2, '.committed-ran')));
   assert.equal(fs.existsSync(path.join(p2, '.main-ran')), false);
-  assert.equal(h2.events(made.thread.id).find((e) => e.type === 'action.run')?.command, 'touch .committed-ran');
+  assert.equal(h2.events(made.thread.id).find((e) => e.type === 'action.run')?.command, './committed.sh');
+});
+
+// The remediation test for Daybreak's finding: changing only the setup
+// script needs a fresh trust decision before a new thread runs it, however
+// the setup names it. `cd scripts && ./setup.sh` kept its trust while
+// scripts/setup.sh changed, as the hash only saw ./setup.sh.
+test('changing only the setup script needs trusting again before a thread runs it; a setup that cds first never runs', async () => {
+  const opts = { actionShell: ['/bin/sh', '-c'], actionTimeoutMs: 10_000 };
+  const file = (main: string) => path.join(main, '.threadbear/patches/checks.ts');
+
+  const cd = makeRepo(PATCH(`{ setup: "cd scripts && ./setup.sh" }`));
+  commit(cd.main, { 'scripts/setup.sh': 'touch ../.setup-ran\n' }, 'setup');
+  sh(cd.main, 'chmod +x scripts/setup.sh && git add -A && git commit -qm mode');
+  const trust = new PatchTrust();
+  trust.trustCurrent([file(cd.main)]);
+  // A commit changes only the script the trusted command reaches.
+  commit(cd.main, { 'scripts/setup.sh': 'touch ../.evil-ran\n' }, 'evil');
+  const h = makeHarness(undefined, {}, { ...opts, patchTrust: trust });
+  const { thread } = h.runner.create({ text: 'Go', accountId: 'claude-3', cwd: cd.main });
+  await until(() => h.adapter.sessions.length === 1, 'the CLI to start');
+  assert.equal(h.runner.get(thread.id).worktree, undefined, 'the patch is refused, so no worktree either');
+  assert.equal(h.adapter.last.opts.cwd, cd.main);
+  assert.equal(h.events(thread.id).some((e) => e.type === 'action.run'), false);
+  assert.equal(fs.existsSync(path.join(cd.main, '.evil-ran')), false);
+  await h.runner.patchesIdle();
+  // The command is followed for the hash too now, so the changed script is
+  // asked about; as it stands it'd be refused anyway (patch-trust tests).
+  const info = h.runner.get(thread.id).patches?.find((p) => p.id === 'checks');
+  assert.equal(info?.untrusted, 'changed');
+
+  // Named as one script: trusted, then a commit changes only the script.
+  const one = makeRepo(PATCH(`{ setup: "./scripts/setup.sh" }`));
+  commit(one.main, { 'scripts/setup.sh': '#!/bin/sh\ntouch .setup-ran\n' }, 'setup');
+  sh(one.main, 'chmod +x scripts/setup.sh && git add -A && git commit -qm mode');
+  const t2 = new PatchTrust();
+  t2.trustCurrent([file(one.main)]);
+  commit(one.main, { 'scripts/setup.sh': '#!/bin/sh\ntouch .evil-ran\n' }, 'evil');
+  // The main checkout's patch is trusted no longer, so no worktree, and nothing runs.
+  const h2 = makeHarness(undefined, {}, { ...opts, patchTrust: t2 });
+  const made = h2.runner.create({ text: 'Go', accountId: 'claude-3', cwd: one.main });
+  await until(() => h2.adapter.sessions.length === 1, 'the CLI to start');
+  assert.equal(h2.runner.get(made.thread.id).worktree, undefined);
+  assert.equal(h2.events(made.thread.id).some((e) => e.type === 'action.run'), false);
+  await h2.runner.patchesIdle();
+  assert.equal(h2.runner.get(made.thread.id).patches?.find((p) => p.id === 'checks')?.untrusted, 'changed');
+
+  // Trusting the new version is what lets it run.
+  t2.trustCurrent([file(one.main)]);
+  const h3 = makeHarness(undefined, {}, { ...opts, patchTrust: t2 });
+  const third = h3.runner.create({ text: 'Go', accountId: 'claude-3', cwd: one.main });
+  await until(() => h3.adapter.sessions.length === 1, 'the CLI to start');
+  const p3 = h3.store.load(third.thread.id)!.worktree!.path;
+  assert.ok(fs.existsSync(path.join(p3, '.evil-ran')), 'the version trusted now runs');
+});
+
+// Daybreak verify-fix (5 Nov): the worktree's copy of a trusted patch
+// hashed the same when only a script its setup runs had changed, so the
+// changed helper ran before the first turn. Now the helper is in the hash.
+test("a worktree whose setup script is unchanged but whose helper changed doesn't run the setup; trusting that version does", async () => {
+  const opts = { actionShell: ['/bin/sh', '-c'], actionTimeoutMs: 10_000 };
+  const file = (main: string) => path.join(main, '.threadbear/patches/checks.ts');
+  const r = makeRepo(PATCH(`{ setup: "./setup.sh" }`));
+  // Committed: an unchanged setup.sh that runs a harmful helper. In the main
+  // checkout, not committed: a harmless helper, and that's what was trusted.
+  commit(r.main, { 'setup.sh': '#!/bin/sh\n"$(dirname "$0")/scripts/helper.sh"\n', 'scripts/helper.sh': '#!/bin/sh\ntouch .evil-ran\n' }, 'setup');
+  sh(r.main, 'chmod +x setup.sh scripts/helper.sh && git add -A && git commit -qm modes');
+  fs.writeFileSync(path.join(r.main, 'scripts/helper.sh'), '#!/bin/sh\ntouch .setup-ran\n');
+  const trust = new PatchTrust();
+  trust.trustCurrent([file(r.main)]);
+  const h = makeHarness(undefined, {}, { ...opts, patchTrust: trust });
+  const { thread } = h.runner.create({ text: 'Go', accountId: 'claude-3', cwd: r.main });
+  await until(() => h.adapter.sessions.length === 1, 'the CLI to start');
+  const wtPath = h.store.load(thread.id)!.worktree!.path;
+  assert.equal(fs.existsSync(path.join(wtPath, '.evil-ran')), false, "the worktree's changed helper didn't run");
+  assert.equal(h.events(thread.id).some((e) => e.type === 'action.run'), false);
+  const note = h.events(thread.id).filter((e) => e.type === 'system.note').at(-1);
+  assert.match(note?.text ?? '', /^Didn't run the worktree's setup \(\.\/setup\.sh\): its copy of the checks patch isn't a version you've trusted\./);
+
+  // Committing the helper that was trusted: the worktree's copy matches,
+  // and the setup runs it.
+  sh(r.main, 'git add -A && git commit -qm helper');
+  const h2 = makeHarness(undefined, {}, { ...opts, patchTrust: trust });
+  const made = h2.runner.create({ text: 'Go', accountId: 'claude-3', cwd: r.main });
+  await until(() => h2.adapter.sessions.length === 1, 'the CLI to start');
+  await until(() => h2.events(made.thread.id).some((e) => e.type === 'action.run'), 'the setup to run');
+  assert.ok(fs.existsSync(path.join(h2.store.load(made.thread.id)!.worktree!.path, '.setup-ran')));
 });
 
 test('threads.create takes worktree: false over RPC, and refuses a worktree that isn\'t a boolean', async () => {

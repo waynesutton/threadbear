@@ -36,6 +36,7 @@ import { UsageStore } from './usage.ts';
 import { UsageHistory } from './usage-history.ts';
 import { TokenTally } from './token-tally.ts';
 import { usageStatsMethods } from './usage-stats.ts';
+import { Relay } from './relay.ts';
 import { RpcServer } from './rpc.ts';
 import { realClock } from './clock.ts';
 import { acquireLock } from './lock.ts';
@@ -43,8 +44,11 @@ import { removeTempFiles } from './fsutil.ts';
 import { Models } from './models/index.ts';
 import { SettingsService, modelMethods, settingsMethods } from './settings.ts';
 import { ConvexSync, defaultRunnerName, ensureRunnerId, readSyncKey } from './sync.ts';
+import { Scrubber } from './scrub.ts';
+import { SecretCheck } from './secret-check.ts';
 import { SharedPools } from './shared-pools.ts';
 import { readPools } from './pools.ts';
+import { machineSampler } from './runner-stats.ts';
 import { detectMachineIcon } from './machine.ts';
 import { filesMethods } from './files.ts';
 import { devicesMethods } from './devices.ts';
@@ -141,11 +145,19 @@ async function main(): Promise<void> {
     codex: { resolve: (start) => resolveCodexBinary(start), checkSurface, testedVersion },
     notice: (level, message) => runner.notice(level, message),
   });
+  // The gateway's own word on which services are signed out, asked fresh
+  // when a turn's gateway call failed: a sign-in ask comes only from that,
+  // never from what a tool result says (connectors.ts, signInSignal).
+  // `connectors` is the monitor made below; this only runs during a turn.
+  const gatewayHealth = async () => {
+    const s = await connectors.refresh(true);
+    return s.state === 'ok' ? s.services : undefined;
+  };
   const claude = new ClaudeAdapter({
     claudePath: cfg.claudePath,
     registry,
     log,
-    mcpServersFor: (threadId) => ({ [SERVER_NAME]: threadbearMcpServer(router(), threadId, scheduleControl(), projectControl(), appRestarts, () => cfg.bulletReplies, pocketControl, () => cfg.oneReply, () => cfg.connectorsUrl) }),
+    mcpServersFor: (threadId) => ({ [SERVER_NAME]: threadbearMcpServer(router(), threadId, scheduleControl(), projectControl(), appRestarts, () => cfg.bulletReplies, pocketControl, () => cfg.oneReply, () => cfg.connectorsUrl, gatewayHealth) }),
     oneReply: () => cfg.oneReply,
     alwaysAsk: ALWAYS_ASK_TOOLS,
   });
@@ -156,7 +168,7 @@ async function main(): Promise<void> {
     codexArgs: cfg.codexArgs,
     registry,
     log,
-    toolsFor: (threadId) => buildThreadbearTools(router(), threadId, Date.now, scheduleControl(), projectControl(), appRestarts, { provider: 'codex', bulletReplies: () => cfg.bulletReplies, oneReply: () => cfg.oneReply, pocket: pocketControl, gateway: () => cfg.connectorsUrl }),
+    toolsFor: (threadId) => buildThreadbearTools(router(), threadId, Date.now, scheduleControl(), projectControl(), appRestarts, { provider: 'codex', bulletReplies: () => cfg.bulletReplies, oneReply: () => cfg.oneReply, pocket: pocketControl, gateway: () => cfg.connectorsUrl, gatewayHealth }),
     onNotice: (text) => runner.notice('warning', text),
   });
   // The runner's own small-model calls, on the settings' Claude pool.
@@ -196,6 +208,8 @@ async function main(): Promise<void> {
       if (!appRestarts.isWatching(threadId)) appRestarts.watch(threadId);
     },
   });
+  // Until it is listening (below): see Runner.holdWaits.
+  runner.holdWaits = true;
   const settings = new SettingsService({ config: cfg, publish: (n) => runner.publish(n), poolIds: () => runner.listPools().pools.map((p) => p.id) });
   // Runners still finishing turns after a handover: connected before the
   // threads load, so the ones they have are left to them. Nothing after the
@@ -213,10 +227,16 @@ async function main(): Promise<void> {
         restarter?.resumeAdopted(threadId);
         // Cut off mid-turn if the old runner crashed with it: carried on.
         if (o?.crashed) runner.carryOnStopped(threadId);
+        // It may have finished on the old runner while a thread waiting on
+        // it had already come across. After its own carry-ons, which are
+        // new work, so a finish they replace doesn't count.
+        runner.reconcileWaits();
         // Told now if the app restarted while it was over there.
         if (t) appRestarts?.adopted(threadId);
         return t;
       },
+      // A thread here may be waiting on one deleted over there.
+      waitedOnDeleted: (threadId) => runner.waitedOnDeleted(threadId),
       publish: (n) => runner.publish(n),
     },
     usage: (accountId, reading) => usage.record(accountId, reading),
@@ -239,6 +259,9 @@ async function main(): Promise<void> {
   // Its runner id and name are the mirror's (sync.ts), since that's how other
   // runners and the backend know this one (step 6, docs/step6-plan.md).
   const syncRunnerId = cfg.sync.runnerId ?? ensureRunnerId(cfg.home);
+  // When this process started: the heartbeat sends it, and runners.list
+  // gives it for this runner too (the app's Runners panel says "up 3h").
+  const startedAt = new Date().toISOString();
   // The kind of Mac this is, for its icon in lists (machine.ts).
   const runnerIcon = cfg.sync.icon ?? (await detectMachineIcon());
   scheduler = new Scheduler({
@@ -247,7 +270,7 @@ async function main(): Promise<void> {
     clock: realClock,
     log,
     elsewhere: (id) => peers.owns(id),
-    self: { id: syncRunnerId, name: cfg.sync.name ?? defaultRunnerName(), icon: runnerIcon },
+    self: { id: syncRunnerId, name: cfg.sync.name ?? defaultRunnerName(), icon: runnerIcon, version: RUNNER_VERSION, release: RELEASE.release, startedAt },
     syncOn: Boolean(cfg.sync.enabled && cfg.sync.url && readSyncKey(cfg.home)),
   });
   scheduler.start();
@@ -310,6 +333,8 @@ async function main(): Promise<void> {
     sharedPools.loadCache();
     runner.sharedPools = sharedPools;
   }
+  const scrubber = new Scrubber({ secretsDir: paths.secrets(cfg.home), log });
+  runner.secrets.onWritten = (value) => scrubber.known.add(value);
   const sync = new ConvexSync({
     config: { ...cfg.sync, runnerId: syncRunnerId, icon: runnerIcon },
     key: syncKey,
@@ -329,19 +354,39 @@ async function main(): Promise<void> {
     },
     // The phone's commands, through the same methods the app's RPCs use,
     // on whichever runner has the thread.
-    commands: phoneCommands(runner, peers),
+    commands: {
+      ...phoneCommands(runner, peers),
+      // A schedule's own runner gets its command, so the scheduler here is its.
+      schedule: ({ scheduleId, action }) => (action === 'run' ? scheduler.runNow(scheduleId) : scheduler.update({ scheduleId, paused: action === 'pause' })),
+    },
+    sample: machineSampler(cfg.home),
     secretBox: runner.secrets,
     schedules: scheduler,
     pools: sharedPools,
+    sharedUsage: usage,
     publish: (n) => runner.publish(n),
     home: cfg.home,
+    // A key the backend turns down (sync.ts KEY_REJECTED): said in the app,
+    // and once tb runner add has written a new one, a restart onto it.
+    notice: (level, message) => runner.notice(level, message),
+    readKey: () => readSyncKey(cfg.home),
+    restart: (reason) => void restarter.request({ when: 'idle', reason }),
+    scrubber,
     version: RUNNER_VERSION,
     release: RELEASE.release,
-    startedAt: new Date().toISOString(),
+    startedAt,
     clock: realClock,
     log,
   });
   sync.start();
+  // Counts only, and off unless runner.json asks (src/secret-check.ts).
+  const secretCheck = new SecretCheck({ home: cfg.home, enabled: cfg.secretCheck === true, log });
+  if (secretCheck.on) {
+    secretCheck.start();
+    runner.onNotification((n) => {
+      if (n.method === 'thread.event') secretCheck.see(n.params.threadId, n.params.event as Parameters<SecretCheck['see']>[1]);
+    });
+  }
   if (swept) runner.startupNotice('info', `Stopped ${swept === 1 ? 'a process group' : `${swept} process groups`} left running by the previous runner.`);
 
   // launch.mjs went back to this release because a newer one kept crashing
@@ -430,18 +475,29 @@ async function main(): Promise<void> {
   const restartStatus = methods['runner.status'];
   methods['runner.status'] = (p) => {
     const draining = peers.status();
-    return { ...(restartStatus(p) as Record<string, unknown>), clis: updates.list(), sync: sync.status(), upstream: upstream.status(), ...(draining.length ? { draining } : {}), ...(macScreen ? { macScreen: macScreen.status() } : {}) };
+    return { ...(restartStatus(p) as Record<string, unknown>), clis: updates.list(), sync: sync.status(), secretCheck: secretCheck.status(), relay: relay.status(), upstream: upstream.status(), ...(draining.length ? { draining } : {}), ...(macScreen ? { macScreen: macScreen.status() } : {}) };
   };
   // tb updates (docs/protocol.md, "Mike's releases").
   methods['upstream.status'] = () => ({ upstream: upstream.status() });
   // Other runners' threads, for the Mac app's sidebar (step 6 part 2).
   methods['remoteThreads.list'] = () => sync.remoteThreads();
+  // Every runner's machine figures, for the Mac app's Runners panel.
+  methods['runners.stats'] = async () => ({ stats: await sync.runnerStats() });
   // A file here, for a Mac app showing one of this runner's threads from
   // another Mac (files.ts).
   Object.assign(methods, filesMethods());
   methods['upstream.check'] = async () => ({ upstream: await upstream.check() });
   const codexWarning = missingCodex(updates.codexBinary(), cfg);
   if (codexWarning) log.warn('codex CLI not found', { path: updates.codexBinary() });
+  // Other runners' threads through the backend, for the Mac app (relay.ts).
+  const relay = new Relay({
+    source: () => sync.relaySource(),
+    remote: () => sync.remoteNow(),
+    subscribed: (threadId) => rpcServer?.isSubscribed(threadId) ?? false,
+    publish: (n) => rpcServer?.notifyClients(n),
+    clock: realClock,
+    log,
+  });
   const server = (rpcServer = new RpcServer({
     host: cfg.host,
     port: cfg.port,
@@ -451,6 +507,7 @@ async function main(): Promise<void> {
     clis: updates,
     methods,
     remote: peers,
+    relay,
     updates: () => (draining ? undefined : runnerUpdates()),
     appHello: (build) => appRestarts.appHello(build),
     helloNotices: () => {
@@ -502,6 +559,10 @@ async function main(): Promise<void> {
   restarter.resumeAfterRestart();
   runner.tellStoppedWork();
   runner.carryOnStopped();
+  // A thread waited on may have finished while the runner was down. Only
+  // now: waking one starts its CLI, whose tools need what's set up above.
+  runner.holdWaits = false;
+  runner.reconcileWaits();
 
   let stopping = false;
   const stop = async (signal: string) => {
@@ -531,6 +592,7 @@ async function main(): Promise<void> {
     updates.stop();
     // A restart's new release writes everything again under the same
     // runnerId; only a stop for good tells the phone this runner is gone.
+    secretCheck.stop();
     await sync.stop({ bye: signal !== 'restart' && !draining });
     try {
       await runner.shutdown();
@@ -576,6 +638,7 @@ async function main(): Promise<void> {
       usage.stopWriting();
       tally.stopWriting();
       // The new release mirrors from here on.
+      secretCheck.stop();
       void sync.stop();
       // The older runners it was connected to are the new primary's now:
       // it connects to every one of them, and each thread they hand over
@@ -618,7 +681,7 @@ async function main(): Promise<void> {
         },
       });
       const { port: drainPort } = await drainServer.listen();
-      writeDrainInfo(cfg.home, { pid: process.pid, port: drainPort, version: RUNNER_VERSION, release: RELEASE.release, since: new Date().toISOString(), threads: runner.keeping() ?? [] });
+      writeDrainInfo(cfg.home, { pid: process.pid, port: drainPort, version: RUNNER_VERSION, release: RELEASE.release, since: new Date().toISOString(), threads: runner.keeping() ?? [], auth: 'challenge' });
       await server.close().catch(() => {});
       lock.release();
       // The agent tools reach the new runner over the port from here.

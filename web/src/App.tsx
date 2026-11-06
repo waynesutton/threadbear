@@ -5,6 +5,7 @@
 import { Component, Fragment, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import { useMutation, useQuery } from 'convex/react';
 import { useLiveQuery } from './live';
+import { InboxProvider, useInbox } from './inbox';
 import { useTranscript } from './transcript';
 import { ConvexError } from 'convex/values';
 import { api } from '../../convex/_generated/api';
@@ -16,6 +17,7 @@ import { CommandState } from './command-state';
 import { previewOf, ShareControl, SharePage } from './share';
 import { busy, Lists, ResizeHandle, type Row, useSidebarWidth } from './sidebar';
 import { Pop } from './menu';
+import { pastedOf } from './picture-chips';
 import { Rail } from './rail';
 import { NewThread, ProjectPage, ProjectsList, RunnerPage, RunnersList, ScheduledList, SchedulePage, UsageList, UsagePage } from './pages';
 import { duration, fold, splitTurns, type Item } from './turns';
@@ -34,7 +36,9 @@ export function App() {
   // Keyed on the token so a fresh sign-in clears an earlier auth error.
   return (
     <Catch key={token}>
-      <Shell token={token} route={route} />
+      <InboxProvider token={token}>
+        <Shell token={token} route={route} />
+      </InboxProvider>
     </Catch>
   );
 }
@@ -150,7 +154,7 @@ function ThreadView({ token, threadId }: { token: string; threadId: string }) {
   const t = useLiveQuery(api.phone.threadRow, { token, threadId });
   const shown = useTranscript(token, threadId);
   // For thread: links, as agents may give only the start of an id.
-  const inbox = useLiveQuery(api.phone.threads, { token, view: 'inbox' });
+  const inbox = useInbox();
   const update = useMutation(api.phone.update);
   const [pending, setPending] = useState<Id<'commands'> | null>(null);
   const bottom = useRef<HTMLDivElement>(null);
@@ -220,8 +224,8 @@ function ThreadView({ token, threadId }: { token: string; threadId: string }) {
     return (
       <div key={m.seq} className={`msg ${m.role}`}>
         {from ? <div className="origin">{from.who}</div> : m.role === 'user' && m.origin && m.origin !== 'user' && m.origin !== 'phone' ? <div className="origin">{originLabel(m.origin)}</div> : null}
-        {from ? <MessageText text={from.body} pictures={inText} seq={m.seq} rows={messages} threadPath={linkTo} /> : <MessageText text={m.text} pictures={inText} seq={m.seq} rows={messages} threadPath={linkTo} pictureChips={m.role === 'user'} />}
-        <Pictures items={after.get(m.seq) ?? []} />
+        {from ? <MessageText text={from.body} pictures={inText} seq={m.seq} rows={messages} threadPath={linkTo} /> : <MessageText text={m.text} pictures={inText} seq={m.seq} rows={messages} threadPath={linkTo} pictureChips={m.role === 'user'} pasted={m.role === 'user' ? pastedOf(pictures, m.seq, m.text).byNumber : undefined} />}
+        <Pictures items={[...(after.get(m.seq) ?? []), ...(m.role === 'user' ? pastedOf(pictures, m.seq, m.text).unplaced : [])]} />
       </div>
     );
   };
@@ -237,7 +241,7 @@ function ThreadView({ token, threadId }: { token: string; threadId: string }) {
           <span className="sep">/</span>
           <h1>{t.title || 'Untitled'}</h1>
         </div>
-        <ShareControl token={token} threadId={threadId} share={t.share} preview={previewOf(t.title, messages, pictures)} />
+        <ShareControl token={token} threadId={threadId} share={t.share} preview={previewOf(t.title, messages, pictures.filter((p) => !p.src?.startsWith('picture:')))} />
         <MoreMenu
           items={[
             { label: 'Copy link', icon: <Icon.Link />, run: () => void navigator.clipboard.writeText(location.origin + location.pathname) },
@@ -276,7 +280,7 @@ function ThreadView({ token, threadId }: { token: string; threadId: string }) {
 
       <div className="dock">
         {pending ? <CommandState token={token} commandId={pending} onDone={() => setPending(null)} /> : null}
-        <Dock token={token} thread={t} lastSeq={lastSeq} onSent={setPending} onArchive={() => void act({ archive: true })} />
+        <Dock token={token} thread={t} lastSeq={lastSeq} onSent={setPending} onArchive={(verdict) => void act({ archive: true, ...(verdict ? { verdict } : {}) })} />
       </div>
     </article>
   );
@@ -310,7 +314,20 @@ function MoreMenu({ items }: { items: ({ label: string; icon: ReactNode; run: ()
 // What sits at the bottom, in one rounded box as on the Mac: an approval or
 // question the CLI is waiting on, else the end_turn card of asks, else the
 // done card's follow-ups, then the composer under it.
-function Dock({ token, thread: t, lastSeq, onSent, onArchive }: { token: string; thread: Row; lastSeq?: number; onSent: (id: Id<'commands'>) => void; onArchive: () => void }) {
+// The done card's Archive asks how the thread went before archiving, so
+// later sweeps know it was archived on purpose (backend API 42; the website
+// ships with its backend, so it's always new enough).
+type Verdict = 'worked' | 'didntWork' | 'notNeeded';
+const verdicts: { verdict: Verdict | undefined; label: string; icon: ReactNode }[] = [
+  { verdict: 'worked', label: 'Worked', icon: <Icon.Check /> },
+  { verdict: 'didntWork', label: "Didn't work", icon: <Icon.Close /> },
+  { verdict: 'notNeeded', label: 'Not needed', icon: <Icon.Minus /> },
+  // No verdict: for threads that are just done and fit none of the three
+  // (Mike, 5 Nov), as on the Mac and iPhone.
+  { verdict: undefined, label: 'Okey-dokey', icon: <Icon.Archive /> },
+];
+
+function Dock({ token, thread: t, lastSeq, onSent, onArchive }: { token: string; thread: Row; lastSeq?: number; onSent: (id: Id<'commands'>) => void; onArchive: (verdict: Verdict | undefined) => void }) {
   const send = useMutation(api.phone.send);
   const [text, setText] = useState('');
   // Picks on the card of asks: ask index to choice index, for one card.
@@ -379,9 +396,22 @@ function Dock({ token, thread: t, lastSeq, onSent, onArchive }: { token: string;
     <section className="card">
       <h2>
         Done
-        <button className="btn plain" style={{ marginLeft: 'auto' }} onClick={onArchive}>
-          Archive
-        </button>
+        <Pop title="Archive" label="Archive" above>
+          {(close) =>
+            verdicts.map((v) => (
+              <button
+                key={v.label}
+                onClick={() => {
+                  onArchive(v.verdict);
+                  close();
+                }}
+              >
+                {v.icon}
+                {v.label}
+              </button>
+            ))
+          }
+        </Pop>
       </h2>
       <div className="choices">
         {next.map((n, i) => {

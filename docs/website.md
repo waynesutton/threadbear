@@ -25,9 +25,14 @@ Built 28 Oct 2026 (thread 66935d23).
   Projects, a tile per runner with a dot for online, then Usage and a gear
   (appearance, sign out). Each opens a list in the sidebar and a page beside
   it (`web/src/pages.tsx`, at `/scheduled`, `/projects`, `/runners`, `/usage`,
-  each with `/<id>`), which subscribe only while they're showing. They read,
-  they don't change: a schedule or project is edited on the Mac or through
-  an agent. On a phone the rail is a tab bar, with Runners and Usage under
+  each with `/<id>`), which subscribe only while they're showing. A schedule
+  has Pause and Run now (`phone:schedule`); anything else, and any change to a
+  project, is on the Mac or through an agent. A project's page lists all its
+  threads, live then archived, newest first, from `phone:projectThreads` (Show
+  more for older ones). A runner's page has its CPU, memory and disk, reported
+  only while that view is open (docs/protocol.md, Sync, "Runner figures"), and
+  its tile an orange dot while it's low on memory or disk. The sidebar and rail
+  read `phone:wakes`, not the schedules. On a phone the rail is a tab bar, with Runners and Usage under
   More. The pencil beside the search starts a thread (`/new`, `phone:create`)
   on the runner's default folder and login. And a
   thread whose finished turns fold to "Worked for 4m 12s" and the reply
@@ -48,7 +53,7 @@ Built 28 Oct 2026 (thread 66935d23).
   the site, and one route of our own, `/s/`, serves a shared thread's
   page (below). Unknown paths fall back to `index.html`, so `/t/<id>`
   works cold.
-- The Mac app's thread `...` menu has **Copy web link**. It takes the site
+- The Mac app's thread `...` menu has **Open on the web**. It takes the site
   from `runner.status`'s `sync.url` (`.convex.cloud` → `.convex.site`), so
   it only shows while sync is on.
 
@@ -89,10 +94,14 @@ thread isn't shared, with `manage`, so his page keeps its controls.
 
 Pictures are in file storage (`shareImages`), uploaded by the runner only
 while the thread is shared and dropped when it stops, and only real
-pictures from the thread's own places (docs/protocol.md, "Sharing"). A picture written in
+pictures from the thread's media folder (attachments, tool pictures, and
+what the agent copies into `THREADBEAR_MEDIA_DIR`), never its working
+folder or a temp folder (docs/protocol.md, "Sharing"). A picture written in
 a message's Markdown (`src`) takes the place of that Markdown image; the
 rest go after the row they came with. Mike's own thread page shows them
-too (`phone:messages` returns them). A Markdown picture that wasn't
+too (`phone:messages` returns them), with what he pasted into his own messages
+(`src` `picture:N`, `web/src/picture-chips.ts`), which goes up for every thread as
+it's sent, never for a shared page. A Markdown picture that wasn't
 uploaded shows as its alt text, not a broken image.
 
 Sharing with specific people (an emailed code, through Resend) was built

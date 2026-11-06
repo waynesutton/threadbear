@@ -687,3 +687,24 @@ test('a tool call written into a message is cut off it', () => {
   // Plain text, and a message about the token, keep every word.
   for (const keep of ['All done.', 'It wrote `to=functions.exec` into the reply.', 'Set to=5 and rerun.']) assert.equal(stripLeakedToolCall(keep), keep);
 });
+
+test("a patch never says it wrote files, applied or not: patch trust can't tie Codex's result to bytes", () => {
+  const n = new CodexNormalizer(env().ctx);
+  const changes = [
+    { path: '/w/a.ts', kind: { type: 'update', move_path: null }, diff: '@@ -1 +1 @@\n-x\n+y\n' },
+    { path: '/w/old.ts', kind: { type: 'update', move_path: '/w/moved.ts' }, diff: '' },
+    { path: '/w/new.ts', kind: { type: 'add' }, diff: 'n\n' },
+    { path: '/w/gone.ts', kind: { type: 'delete' }, diff: 'g\n' },
+  ];
+  const wrote = (outs: AdapterOutput[]) => outs.filter((o) => o.kind === 'wrote');
+  for (const status of ['declined', 'failed']) {
+    const id = `p-${status}`;
+    assert.deepEqual(wrote(n.handle('item/started', { threadId: 'th', item: { type: 'fileChange', id, changes, status: 'inProgress' } })), []);
+    assert.deepEqual(wrote(n.handle('item/fileChange/patchUpdated', { threadId: 'th', itemId: id, changes })), []);
+    assert.deepEqual(wrote(n.handle('item/completed', { threadId: 'th', item: { type: 'fileChange', id, changes, status } })), [], status);
+  }
+  n.handle('item/started', { threadId: 'th', item: { type: 'fileChange', id: 'ok', changes, status: 'inProgress' } });
+  const done = n.handle('item/completed', { threadId: 'th', item: { type: 'fileChange', id: 'ok', changes, status: 'completed' } });
+  assert.deepEqual(wrote(done), []);
+  assert.ok(done.some((o) => o.kind === 'event' && o.event.type === 'tool.result' && o.event.ok));
+});

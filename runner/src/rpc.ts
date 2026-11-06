@@ -1,13 +1,15 @@
 // WebSocket JSON-RPC 2.0 server at ws://127.0.0.1:<port>/rpc.
 import http from 'node:http';
 import crypto from 'node:crypto';
+import type { Duplex } from 'node:stream';
 import { WebSocketServer, WebSocket } from 'ws';
 import type { Runner, Notification, CliControl } from './runner.ts';
 import type { Logger } from './log.ts';
-import { CLI_POLICIES, EFFORT_LEVELS, ErrorCode, PROVIDERS, RpcError, isEffortLevel, isProvider } from './protocol.ts';
-import type { ApprovalDecision, AskAnswer, CliPolicy, EffortLevel, ImageRef, PermissionMode, Provider, ShareAccess, ThreadStartedBy, ThreadSummary } from './protocol.ts';
+import { ARCHIVE_VERDICTS, CLI_POLICIES, EFFORT_LEVELS, ErrorCode, PROVIDERS, RpcError, isEffortLevel, isProvider } from './protocol.ts';
+import type { ArchiveVerdict, ApprovalDecision, AskAnswer, CliPolicy, EffortLevel, ImageRef, PermissionMode, Provider, ShareAccess, ThreadStartedBy, ThreadSummary } from './protocol.ts';
 import { MAX_BYLINE } from './needs.ts';
 import { isMoved, mergeSummaries, type Bucket } from './handover.ts';
+import { AUTH_VERSION, authProof, isNonce, newNonce, proofMatches, type AuthChannel } from './rpc-auth.ts';
 
 type Conn = {
   id: number;
@@ -15,11 +17,22 @@ type Conn = {
   authed: boolean;
   subs: Set<string>;
   client?: string;
+  browserPanel?: boolean;
   authTimer?: NodeJS.Timeout;
+  // This connection's auth.challenge nonce (docs/protocol.md, "Auth").
+  challenge?: string;
 };
 
-// A client that hasn't authenticated by then is dropped.
-const AUTH_TIMEOUT_MS = 5000;
+// Until a connection has authenticated (docs/protocol.md, "Auth"), it gets
+// a small frame limit, a short deadline, and only so many of them may wait
+// at once: without these, anyone on the Mac could open sockets and send
+// 64 MiB frames for the runner to buffer and JSON-parse before it even
+// looked at the credentials.
+const AUTH_TIMEOUT_MS = 3000;
+const PREAUTH_MAX_PAYLOAD = 64 * 1024;
+const MAX_PENDING_AUTH = 16;
+// What an authenticated client may send in one frame.
+const MAX_PAYLOAD = 64 * 1024 * 1024;
 // Backpressure for a client that stops reading (a hung app, a debugger):
 // past SKIP_DELTAS_BYTES of unsent data, transient deltas are skipped (the
 // persisted event replaces them anyway); past CLOSE_BYTES the socket is
@@ -52,6 +65,7 @@ const THREAD_METHODS = new Set([
   'threads.hibernateWhen',
   'threads.removeHighlight',
   'threads.panelShown',
+  'threads.showPanel',
   'threads.tickAsk',
   'threads.share',
   'approvals.respond',
@@ -72,6 +86,15 @@ export type RemoteThreads = {
   search(query: string, limit: number): Promise<ThreadSummary[]>;
 };
 
+// relay.ts's Relay, as the server uses it.
+export type RelayHandler = {
+  owns(threadId: string): boolean;
+  call(threadId: string, method: string, params: Record<string, unknown>): Promise<unknown>;
+  create(runnerId: string, params: Record<string, unknown>): Promise<unknown>;
+  listFolder(runnerId: string, path: string): Promise<unknown>;
+  logins(runnerId: string): Promise<unknown>;
+};
+
 export type RpcServerOptions = {
   host: string;
   port: number;
@@ -90,12 +113,16 @@ export type RpcServerOptions = {
   remote?: RemoteThreads;
   // A draining runner's own server: only the threads it still has.
   onlyOwn?: boolean;
+  // Other runners' threads, through the backend (relay.ts). Without it, or
+  // for a thread it doesn't own, they're unknown here as before.
+  relay?: RelayHandler;
   // hello's `updates` (docs/protocol.md, "Runner updates").
   updates?: () => unknown;
   // The Mac app's hello with its build (docs/protocol.md, "App restarts").
   appHello?: (build: { commit: string; short: string; tree: string }) => void;
   // Tests shorten these.
   authTimeoutMs?: number;
+  maxPendingAuth?: number;
   skipDeltasBytes?: number;
   closeBytes?: number;
   closeGraceMs?: number;
@@ -121,10 +148,19 @@ export class RpcServer {
       res.writeHead(404);
       res.end();
     });
-    this.wss = new WebSocketServer({ server: this.http, path: '/rpc', maxPayload: 64 * 1024 * 1024 });
-    this.wss.on('connection', (ws, req) => this.onConnection(ws, req));
-    // ws re-emits the HTTP server's errors (EADDRINUSE on listen); listen()
-    // reports those, and without a listener here they'd crash the process.
+    // A socket that never finishes its request headers is let go sooner
+    // than Node's minute.
+    this.http.headersTimeout = 10_000;
+    // The upgrade is handled here rather than by ws so a wrong header or
+    // too many connections waiting to authenticate is refused before it
+    // becomes a WebSocket. Every socket starts on the small pre-auth frame
+    // limit; unlock() raises it once the client has authenticated.
+    this.wss = new WebSocketServer({ noServer: true, maxPayload: PREAUTH_MAX_PAYLOAD });
+    this.http.on('upgrade', (req, socket, head) => this.onUpgrade(req, socket, head));
+    // The HTTP server's errors (EADDRINUSE on listen): listen() reports
+    // those, and without a listener here they'd crash the process. ws used
+    // to listen for them when it owned the upgrade.
+    this.http.on('error', (e) => opts.log.warn('rpc server error', { error: String(e) }));
     this.wss.on('error', (e) => opts.log.warn('websocket server error', { error: String(e) }));
     this.unlisten = opts.runner.onNotification((n) => this.broadcast(n));
   }
@@ -167,9 +203,20 @@ export class RpcServer {
     return n;
   }
 
+  /** Whether any client is subscribed to a thread (relay.ts watches only then). */
+  isSubscribed(threadId: string): boolean {
+    for (const c of this.conns) if (c.authed && c.subs.has(threadId) && c.ws.readyState === WebSocket.OPEN) return true;
+    return false;
+  }
+
+  /** A notification for clients only, never the runner's own listeners: relay.ts's events are another runner's, which sync must not mirror as this one's. */
+  notifyClients(n: Notification): void {
+    this.broadcast(n);
+  }
+
   // Whether the Mac app itself is connected (hello's client), for presence.ts.
-  appConnected(): boolean {
-    for (const c of this.conns) if (c.authed && c.client === 'threadbear-mac' && c.ws.readyState === WebSocket.OPEN) return true;
+  appConnected(browserPanel = false): boolean {
+    for (const c of this.conns) if (c.authed && c.client === 'threadbear-mac' && (!browserPanel || c.browserPanel) && c.ws.readyState === WebSocket.OPEN) return true;
     return false;
   }
 
@@ -180,31 +227,96 @@ export class RpcServer {
     return a.length === b.length && crypto.timingSafeEqual(a, b);
   }
 
-  private onConnection(ws: WebSocket, req: http.IncomingMessage): void {
-    const header = req.headers.authorization ?? '';
-    const m = /^Bearer\s+(.+)$/i.exec(header);
-    const conn: Conn = { id: this.nextId++, ws, authed: Boolean(m && this.tokenOk(m[1].trim())), subs: new Set() };
+  private pendingAuth(): number {
+    let n = 0;
+    for (const c of this.conns) if (!c.authed) n++;
+    return n;
+  }
+
+  private onUpgrade(req: http.IncomingMessage, socket: Duplex, head: Buffer): void {
+    socket.on('error', () => socket.destroy());
+    const refuse = (status: number, text: string) => {
+      if (socket.writable) socket.write(`HTTP/1.1 ${status} ${text}\r\nConnection: close\r\nContent-Length: 0\r\n\r\n`);
+      socket.destroy();
+    };
+    if ((req.url ?? '').split('?')[0] !== '/rpc') return refuse(400, 'Bad Request');
+    // An old client's bearer header (docs/protocol.md, "Before the
+    // challenge"): right, it's in; wrong, it's refused here. No header means
+    // the challenge.
+    const header = req.headers.authorization;
+    let authed = false;
+    if (header !== undefined) {
+      const m = /^Bearer\s+(.+)$/i.exec(header);
+      if (!m || !this.tokenOk(m[1].trim())) return refuse(401, 'Unauthorized');
+      authed = true;
+    } else if (this.pendingAuth() >= (this.opts.maxPendingAuth ?? MAX_PENDING_AUTH)) {
+      return refuse(503, 'Service Unavailable');
+    }
+    this.wss.handleUpgrade(req, socket, head, (ws) => this.onConnection(ws, authed));
+  }
+
+  // Raises an authenticated socket's frame limit. ws has no public way to
+  // change maxPayload on a live socket, so this sets its receiver's
+  // (ws 8.x; rpc.test.ts fails if a ws update moves it).
+  private unlock(conn: Conn): void {
+    conn.authed = true;
+    clearTimeout(conn.authTimer);
+    conn.challenge = undefined;
+    const receiver = (conn.ws as unknown as { _receiver?: { _maxPayload?: unknown } })._receiver;
+    if (receiver && typeof receiver._maxPayload === 'number') receiver._maxPayload = MAX_PAYLOAD;
+    else this.opts.log.warn('could not raise the frame limit for an authenticated client', { conn: conn.id });
+  }
+
+  // Closes an unauthenticated connection with 4401, and cuts it off if it
+  // doesn't answer the close within a second: ws would otherwise keep a
+  // client that ignores it for 30 s. It counts as waiting until it's gone,
+  // so refused sockets can't pile up past the cap.
+  private refuseConn(conn: Conn): void {
+    clearTimeout(conn.authTimer);
+    conn.ws.close(4401, 'unauthorized');
+    setTimeout(() => conn.ws.terminate(), 1000).unref();
+  }
+
+  // What this server's proofs are bound to (docs/protocol.md, "Auth"): the
+  // kind of server and the port it listens on.
+  private channel(): AuthChannel {
+    const addr = this.http.address();
+    return { server: this.opts.onlyOwn ? 'drain' : 'primary', port: typeof addr === 'object' && addr ? addr.port : this.opts.port };
+  }
+
+  private onConnection(ws: WebSocket, headerAuthed: boolean): void {
+    const conn: Conn = { id: this.nextId++, ws, authed: false, subs: new Set() };
     this.conns.add(conn);
-    if (!conn.authed) {
+    if (headerAuthed) {
+      this.unlock(conn);
+    } else {
       conn.authTimer = setTimeout(() => {
-        if (!conn.authed) ws.close(4401, 'unauthorized');
+        if (!conn.authed) this.refuseConn(conn);
       }, this.opts.authTimeoutMs ?? AUTH_TIMEOUT_MS);
       conn.authTimer.unref();
+      conn.challenge = newNonce();
+      this.send(conn, { jsonrpc: '2.0', method: 'auth.challenge', params: { version: AUTH_VERSION, nonce: conn.challenge, port: this.channel().port } });
     }
     ws.on('message', (data, isBinary) => {
       if (isBinary) {
         // The protocol is text only; before auth, anything else is refused.
-        if (!conn.authed) ws.close(4401, 'unauthorized');
+        if (!conn.authed) this.refuseConn(conn);
         return;
       }
       this.onMessage(conn, data.toString());
     });
-    const gone = () => {
+    ws.on('close', () => {
       clearTimeout(conn.authTimer);
       this.conns.delete(conn);
-    };
-    ws.on('close', gone);
-    ws.on('error', gone);
+    });
+    // A protocol error (a frame over the limit, bad UTF-8): ws closes with
+    // 1009 or 1002 and waits up to 30 s for the other side to answer. Cut it
+    // off now; it stays counted (against the pending cap, if it hadn't
+    // authenticated) until its 'close'.
+    ws.on('error', () => {
+      clearTimeout(conn.authTimer);
+      ws.terminate();
+    });
   }
 
   private send(conn: Conn, obj: unknown): void {
@@ -233,26 +345,43 @@ export class RpcServer {
     }
   }
 
+  // The one message a connection may send before it has authenticated
+  // (at most PREAUTH_MAX_PAYLOAD, so parsing it is cheap): auth.prove
+  // answering this connection's challenge, or an old client's auth with
+  // the token itself. Anything else closes it.
+  private onAuthMessage(conn: Conn, raw: string): void {
+    let msg: { id?: string | number | null; method?: unknown; params?: unknown };
+    try {
+      msg = JSON.parse(raw);
+    } catch {
+      return this.refuseConn(conn);
+    }
+    const id = msg && typeof msg === 'object' ? (msg.id ?? null) : null;
+    const p = (msg && typeof msg === 'object' && msg.params && typeof msg.params === 'object' ? msg.params : {}) as Record<string, unknown>;
+    if (msg?.method === 'auth.prove' && conn.challenge && isNonce(p.nonce) && p.nonce !== conn.challenge
+      && proofMatches(authProof(this.opts.token, 'client', conn.challenge, p.nonce, this.channel()), p.proof)) {
+      const proof = authProof(this.opts.token, 'runner', conn.challenge, p.nonce, this.channel());
+      this.unlock(conn);
+      this.send(conn, { jsonrpc: '2.0', id, result: { proof } });
+      return;
+    }
+    if (msg?.method === 'auth' && this.tokenOk(p.token)) {
+      this.unlock(conn);
+      if (id !== null) this.send(conn, { jsonrpc: '2.0', id, result: {} });
+      return;
+    }
+    this.refuseConn(conn);
+  }
+
   private onMessage(conn: Conn, raw: string): void {
+    if (!conn.authed) return this.onAuthMessage(conn, raw);
     let msg: { jsonrpc?: string; id?: string | number | null; method?: unknown; params?: unknown };
     try {
       msg = JSON.parse(raw);
     } catch {
-      if (!conn.authed) return conn.ws.close(4401, 'unauthorized');
       return this.send(conn, { jsonrpc: '2.0', id: null, error: { code: ErrorCode.parseError, message: 'Parse error' } });
     }
     const id = msg?.id ?? null;
-    if (!conn.authed) {
-      // Clients that can't set headers authenticate with their first message.
-      if (msg?.method === 'auth' && this.tokenOk((msg.params as { token?: unknown } | undefined)?.token)) {
-        conn.authed = true;
-        clearTimeout(conn.authTimer);
-        if (id !== null) this.send(conn, { jsonrpc: '2.0', id, result: {} });
-        return;
-      }
-      conn.ws.close(4401, 'unauthorized');
-      return;
-    }
     if (!msg || typeof msg !== 'object' || Array.isArray(msg) || typeof msg.method !== 'string') {
       return this.send(conn, { jsonrpc: '2.0', id, error: { code: ErrorCode.invalidRequest, message: 'Invalid request' } });
     }
@@ -324,16 +453,29 @@ export class RpcServer {
   // its live stream happen in the same tick and nothing can slip between.
   private dispatch(conn: Conn, method: string, p: Record<string, unknown>): unknown {
     const r = this.opts.runner;
+    // A local tool needs to know whether its handoff can reach the Mac app.
+    // Check on the primary, before forwarding to the runner owning the thread.
+    if (method === 'threads.showPanel' && !this.opts.onlyOwn) {
+      const browser = ['browser', 'threadbear.browser'].includes(String(p.panel).trim().toLowerCase());
+      if (!this.appConnected(browser)) return { available: false };
+    }
     const tid = typeof p.threadId === 'string' ? p.threadId : undefined;
     if (tid !== undefined && THREAD_METHODS.has(method) && !r.has(tid)) {
       if (this.opts.remote?.owns(tid)) return this.forward(conn, method, p, tid);
       if (this.opts.onlyOwn) throw new RpcError(ErrorCode.moved, 'This runner has handed that thread over to the new one.');
+      if (this.opts.relay?.owns(tid)) {
+        return this.opts.relay.call(tid, method, p).then((res) => {
+          if (method === 'threads.subscribe') conn.subs.add(tid);
+          return res;
+        });
+      }
     }
     switch (method) {
       case 'auth':
         return {};
       case 'hello': {
         conn.client = optString(p, 'client');
+        conn.browserPanel = p.browserPanel === true;
         // Only the Mac app's own builds: a dev build has none.
         const build = p.build as Record<string, unknown> | undefined;
         if (conn.client === 'threadbear-mac' && build && typeof build === 'object'
@@ -361,6 +503,15 @@ export class RpcServer {
         return remote.search(query, limit ?? 50).then((more) => ({ threads: mergeSummaries(local, more).slice(0, limit ?? 50) }));
       }
       case 'threads.create': {
+        // On another runner (docs/protocol.md, "Other runners' threads through the backend").
+        if (typeof p.runnerId === 'string' && this.opts.relay) {
+          return this.opts.relay.create(p.runnerId, p).then((res) => {
+            // Never one of this runner's own: its requests would come here.
+            const id = (res as { thread?: { id?: unknown } }).thread?.id;
+            if (typeof id === 'string' && r.has(id)) throw new RpcError(ErrorCode.other, "The other runner named one of this Mac's threads as the new one.");
+            return res;
+          });
+        }
         if (p.worktree !== undefined && typeof p.worktree !== 'boolean') throw bad('worktree must be a boolean');
         const res = r.create({
           text: optString(p, 'text') ?? '',
@@ -414,6 +565,15 @@ export class RpcServer {
         if (p.archived !== undefined) {
           if (typeof p.archived !== 'boolean') throw bad('archived must be a boolean');
           upd.archived = p.archived;
+        }
+        if (p.archivedBy !== undefined) {
+          if (p.archivedBy !== 'mike' && p.archivedBy !== 'agent' && p.archivedBy !== 'threadbear') throw bad('archivedBy must be "mike", "agent" or "threadbear"');
+          upd.archivedBy = p.archivedBy;
+        }
+        if (p.verdict !== undefined) {
+          if (!ARCHIVE_VERDICTS.includes(p.verdict as ArchiveVerdict)) throw bad(`verdict must be one of ${ARCHIVE_VERDICTS.join(', ')}`);
+          if (p.archived !== true) throw bad('verdict goes with archived: true');
+          upd.verdict = p.verdict as ArchiveVerdict;
         }
         if (p.starred !== undefined) {
           if (typeof p.starred !== 'boolean') throw bad('starred must be a boolean');
@@ -469,6 +629,8 @@ export class RpcServer {
         return r.removeHighlight(reqString(p, 'threadId'), reqString(p, 'highlightId'));
       case 'threads.panelShown':
         return r.panelShown(reqString(p, 'threadId'), reqString(p, 'requestId'));
+      case 'threads.showPanel':
+        return r.showPanel(reqString(p, 'threadId'), { panel: reqString(p, 'panel') }).then(result => ({ available: true, ...result }));
       case 'threads.share': {
         const access = reqString(p, 'access');
         if (access !== 'off' && access !== 'link') throw bad('access is "off" or "link"');
@@ -563,6 +725,13 @@ export class RpcServer {
       }
       default: {
         // hasOwn, so "constructor" and friends aren't methods.
+        // A folder on another runner, for the folder browser on one of its threads.
+        if (method === 'files.list' && typeof p.runnerId === 'string' && this.opts.relay) return this.opts.relay.listFolder(p.runnerId, reqString(p, 'path'));
+        if (method === 'files.read' && typeof p.runnerId === 'string') throw new RpcError(ErrorCode.other, 'Files on another runner are kept there for now.');
+        if (method === 'remoteThreads.logins') {
+          if (!this.opts.relay) throw new RpcError(ErrorCode.other, "This Mac's runner can't reach other runners through Convex.");
+          return this.opts.relay.logins(reqString(p, 'runnerId'));
+        }
         const methods = this.opts.methods;
         if (methods && Object.hasOwn(methods, method)) return methods[method](p);
         throw new RpcError(ErrorCode.methodNotFound, `Unknown method ${method}`);

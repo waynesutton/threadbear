@@ -5,12 +5,15 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { makeHarness, tick, tmpDir } from '../helpers/fakes.ts';
-import { ConvexSync, forBackend, ASKED_API_VERSION, LINKS_API_VERSION, PROJECTS_DIFF_API_VERSION, STARS_API_VERSION, NETWORK_WAIT_API_VERSION, BACKEND_API_VERSION, TURNS_API_VERSION, ICONS_API_VERSION, RUNNER_ICON_API_VERSION, SCHEDULES_API_VERSION, SHARE_API_VERSION, WOKE_API_VERSION, STARTED_BY_API_VERSION, SECTIONS_API_VERSION, MODELS_API_VERSION, REPLY_IMAGES_API_VERSION, REPLY_IMAGES_LOOKBACK_MS, REPLY_IMAGES_SCANS_PER_FLUSH, toAccountDoc, PRESENCE_MS, SYNC_COALESCE_MS, HEARTBEAT_MS, SYNC_BATCH, ensureRunnerId, toThreadDoc, convexPoster, convexUploader, pictureName, type ThreadDoc } from '../../src/sync.ts';
+import { ConvexSync, forBackend, ASKED_API_VERSION, LINKS_API_VERSION, PROJECTS_DIFF_API_VERSION, STARS_API_VERSION, NETWORK_WAIT_API_VERSION, BACKEND_API_VERSION, MAC_RUNNER_STATS_API_VERSION, TURNS_API_VERSION, ICONS_API_VERSION, RUNNER_ICON_API_VERSION, SCHEDULES_API_VERSION, SHARE_API_VERSION, WOKE_API_VERSION, STARTED_BY_API_VERSION, SECTIONS_API_VERSION, MODELS_API_VERSION, REPLY_IMAGES_API_VERSION, REPLY_IMAGES_LOOKBACK_MS, REPLY_IMAGES_SCANS_PER_FLUSH, toAccountDoc, PRESENCE_MS, SYNC_COALESCE_MS, HEARTBEAT_MS, SYNC_BATCH, ensureRunnerId, toThreadDoc, convexPoster, convexUploader, pictureName, type ThreadDoc } from '../../src/sync.ts';
 import type { Project } from '../../src/protocol.ts';
 import type { ScheduleBackend } from '../../src/schedules.ts';
 import { nullLogger, type Logger } from '../../src/log.ts';
 import { AT_MAC_IDLE_MS, isAtMac } from '../../src/presence.ts';
-import { readRunnerJson } from '../../src/config.ts';
+import { paths, readRunnerJson } from '../../src/config.ts';
+import { scrubText } from '../../src/redaction.ts';
+import { Scrubber } from '../../src/scrub.ts';
+import { SCRUB_API_VERSION } from '../../src/sync.ts';
 
 type Call = { kind: string; fn: string; args: Record<string, unknown> };
 
@@ -21,6 +24,7 @@ function setup(
     key?: string;
     answer?: (fn: string) => unknown;
     schedules?: ConstructorParameters<typeof ConvexSync>[0]['schedules'];
+    extra?: Partial<ConstructorParameters<typeof ConvexSync>[0]>;
   } = {},
 ) {
   const h = makeHarness();
@@ -42,6 +46,7 @@ function setup(
     log: nullLogger,
     post,
     schedules: opts.schedules,
+    ...opts.extra,
   });
   const upserts = () => calls.filter((c) => c.fn === 'sync:upsertThreads');
   const docs = () => upserts().flatMap((c) => c.args.threads as ThreadDoc[]);
@@ -387,6 +392,9 @@ function setupFull(opts: { heads?: { threadId: string; lastSeq: number }[]; take
       listAccounts: () => [{ id: 'claude-3', provider: 'claude', title: 'three@example.com', configDir: '/tmp/three', models: [{ id: 'x', title: 'X' }] as never, usage: { windows: [{ kind: 'five_hour', title: '5-hour', remainingPercent: 80.5 }], readAt: '2026-10-27T00:00:00.000Z', source: 'live' } }],
     },
     commands: {
+      schedule: (p) => {
+        applied.push(`schedule ${p.scheduleId} ${p.action}`);
+      },
       send: (id, text, images, o) => {
         applied.push(`send ${id} ${text} ${o.origin}`);
         // A forwarded command fails later, as a rejected promise.
@@ -639,7 +647,7 @@ test('commands: each pending one is taken once, applied through the runner as fr
   await tick();
   const cmds: Command[] = [
     { commandId: 'c1', kind: 'send', threadId: t.id, args: { text: 'from my phone' }, createdAt: 1 },
-    { commandId: 'c2', kind: 'update', threadId: t.id, args: { archive: true }, createdAt: 2 },
+    { commandId: 'c2', kind: 'update', threadId: t.id, args: { archive: true, verdict: 'worked' }, createdAt: 2 },
     { commandId: 'c3', kind: 'create', args: { text: 'a new one', cwd: h.cfg.defaults.cwd, accountId: 'claude-3' }, createdAt: 3 },
     { commandId: 'c4', kind: 'share', threadId: t.id, args: { access: 'link', newLink: true }, createdAt: 4 },
   ];
@@ -647,7 +655,7 @@ test('commands: each pending one is taken once, applied through the runner as fr
   await tick(10);
   push(cmds); // the same list again, as a live query re-run would send
   await tick(10);
-  assert.deepEqual(applied, [`send ${t.id} from my phone phone`, `update {"threadId":"${t.id}","archived":true}`, 'create a new one phone', `share ${t.id} link new`]);
+  assert.deepEqual(applied, [`send ${t.id} from my phone phone`, `update {"threadId":"${t.id}","archived":true,"verdict":"worked"}`, 'create a new one phone', `share ${t.id} link new`]);
   const finished = calls.filter((c) => c.fn === 'sync:finishCommand').map((c) => c.args);
   assert.equal(finished.length, 4);
   assert.ok(finished.every((f) => f.ok === true && f.key === 'k'));
@@ -664,6 +672,24 @@ test('commands: each pending one is taken once, applied through the runner as fr
   assert.equal(h.runner.get(t.id).archivedAt !== undefined, true);
   assert.equal(h.runner.get(t.id).share?.access, 'link');
   assert.deepEqual(sync.status().commands, { state: 'on', applied: 4, failed: 0 });
+});
+
+test('commands: the website pauses, resumes and runs a schedule, and nonsense fails with a note', async () => {
+  const { sync, calls, push, applied } = setupFull();
+  sync.start();
+  await sync.flushNow();
+  push([
+    { commandId: 's1', kind: 'schedule', args: { scheduleId: 'a', action: 'pause' }, createdAt: 1 },
+    { commandId: 's2', kind: 'schedule', args: { scheduleId: 'a', action: 'run' }, createdAt: 2 },
+    { commandId: 's3', kind: 'schedule', args: { scheduleId: 'a', action: 'delete' }, createdAt: 3 },
+    { commandId: 's4', kind: 'schedule', args: { action: 'pause' }, createdAt: 4 },
+  ]);
+  await tick(10);
+  assert.deepEqual(applied, ['schedule a pause', 'schedule a run']);
+  const finished = calls.filter((c) => c.fn === 'sync:finishCommand').map((c) => c.args);
+  assert.deepEqual(finished.map((f) => f.ok), [true, true, false, false]);
+  assert.match(String(finished[2]!.note), /action is/);
+  assert.match(String(finished[3]!.note), /no schedule/);
 });
 
 test('commands: a quickAsk is kept as a thread and finished with its id', async () => {
@@ -884,7 +910,7 @@ test('the backend API version from the heartbeat shows in status, and an old bac
 // Project pictures: a runner with a picture for a project sends it to file
 // storage once, when the backend takes pictures (API 5), and never again
 // for the same copy.
-function setupPictures(opts: { backend?: number; has?: { projectId: string; picture: string }[]; project?: Partial<Project> } = {}) {
+function setupPictures(opts: { backend?: number; has?: { projectId: string; picture: string }[]; project?: Partial<Project>; uploadFails?: () => Error | undefined } = {}) {
   const h = makeHarness();
   const dir = tmpDir();
   // A tiny PNG by name only: the bytes don't matter to the sync, which
@@ -916,6 +942,8 @@ function setupPictures(opts: { backend?: number; has?: { projectId: string; pict
     log: nullLogger,
     post,
     upload: async (url, bytes, mediaType) => {
+      const err = opts.uploadFails?.();
+      if (err) throw err;
       uploads.push({ url, bytes: Buffer.from(bytes).toString(), mediaType });
       return `st_${uploads.length}`;
     },
@@ -1182,18 +1210,20 @@ function pngBytes(w: number, h: number): Buffer {
 }
 
 test('sharing: pictures of a shared thread go to file storage, once each, and go when it stops', async () => {
-  const dir = tmpDir();
-  const pic = path.join(dir, 'chart.png');
+  const h = makeHarness();
   const png = pngBytes(32, 16);
-  fs.writeFileSync(pic, png);
+  // One in a temp folder that isn't the thread's, which never goes
+  // (Daybreak verify-fix, 5 Nov: another app's screenshot was one line away).
+  const other = path.join(tmpDir(), 'Screenshot.png');
+  fs.writeFileSync(other, pngBytes(8, 8));
   const calls: Call[] = [];
   const uploads: string[] = [];
   let stored: { seq: number; path: string }[] = [];
-  const h = makeHarness();
   const sync = new ConvexSync({
     config: { enabled: true, url: 'https://x.convex.cloud', runnerId: 'r1' },
     key: 'k',
     runner: h.runner,
+    home: h.cfg.home,
     version: '0.1.0+test',
     startedAt: '2026-10-29T00:00:00.000Z',
     clock: h.clock,
@@ -1211,9 +1241,17 @@ test('sharing: pictures of a shared thread go to file storage, once each, and go
     },
   });
   const t = h.runner.create({ text: 'draw it', cwd: h.cfg.defaults.cwd, accountId: 'claude-3' }).thread;
+  // The chart is in the thread's media folder, where a picture goes to be
+  // on its shared page. One in the thread's folder never goes, however new
+  // (Daybreak verify-fix, 5 Nov: Markdown naming one published it).
+  const pic = path.join(paths.media(h.cfg.home, t.id), 'chart.png');
+  fs.mkdirSync(path.dirname(pic), { recursive: true });
+  fs.writeFileSync(pic, png);
+  const old = path.join(h.cfg.defaults.cwd, 'scan.png');
+  fs.writeFileSync(old, pngBytes(9, 9));
   const s = session(h, t.id);
   s.init();
-  s.text('m1', `Here it is:\n\n![The chart](${pic})\n\nand a [link](https://example.com).`);
+  s.text('m1', `Here it is:\n\n![The chart](${pic})\n\nand a [link](https://example.com). ![Not mine](${other}) ![Was there](${old})`);
   s.result('completed');
   await tick();
 
@@ -1254,12 +1292,12 @@ test('sharing: pictures of a shared thread go to file storage, once each, and go
 });
 
 test('sharing: a shared thread seen before it comes across in a handover has its pictures sent once it arrives', async () => {
-  const dir = tmpDir();
-  const pic = path.join(dir, 'shot.png');
-  fs.writeFileSync(pic, pngBytes(4, 4));
   const calls: Call[] = [];
   const h = makeHarness();
   const t = h.runner.create({ text: 'look', cwd: h.cfg.defaults.cwd, accountId: 'claude-3' }).thread;
+  const pic = path.join(paths.media(h.cfg.home, t.id), 'shot.png');
+  fs.mkdirSync(path.dirname(pic), { recursive: true });
+  fs.writeFileSync(pic, pngBytes(4, 4));
   const s = session(h, t.id);
   s.init();
   s.text('m1', `![shot](${pic})`);
@@ -1281,6 +1319,7 @@ test('sharing: a shared thread seen before it comes across in a handover has its
       },
       events: (id, o) => h.runner.events(id, o),
     },
+    home: h.cfg.home,
     version: '0.1.0+test',
     startedAt: '2026-10-29T00:00:00.000Z',
     clock: h.clock,
@@ -1322,7 +1361,7 @@ test('schedules: a backend of API 9 gets the scheduler attached, and schedules s
   assert.equal(attached.length, 0, 'an older backend keeps them in the file');
   await old.sync.stop();
 
-  const answers: Record<string, unknown> = { 'sync:heartbeat': { apiVersion: SCHEDULES_API_VERSION }, 'sync:claimSchedule': true, 'sync:runnersList': [{ runnerId: 'r2', name: 'bruce', lastSeenAt: 5 }] };
+  const answers: Record<string, unknown> = { 'sync:heartbeat': { apiVersion: SCHEDULES_API_VERSION }, 'sync:claimSchedule': true, 'sync:runnersList': [{ runnerId: 'r2', name: 'bruce', lastSeenAt: 5, version: '0.4.0', startedAt: 's', draining: false, threadCount: 3 }] };
   const f = setup({ answer: (fn) => answers[fn] ?? null, schedules: { attach: (b) => void attached.push(b), inBackend: () => inBackend } });
   f.sync.start();
   await tick();
@@ -1332,7 +1371,7 @@ test('schedules: a backend of API 9 gets the scheduler attached, and schedules s
   const claim = f.calls.find((c) => c.fn === 'sync:claimSchedule')!;
   assert.deepEqual({ ...claim.args, holder: undefined }, { key: 'k', runnerId: 'r1', scheduleId: 's1', holder: undefined, kind: 'due', expect: '2026-10-27T03:00:00.000Z' });
   assert.match(String(claim.args.holder), /^r1:\d+:2026-10-27T00:00:00.000Z$/);
-  assert.deepEqual(await b.runners(), [{ id: 'r2', name: 'bruce', lastSeenAt: 5 }]);
+  assert.deepEqual(await b.runners(), [{ id: 'r2', name: 'bruce', lastSeenAt: 5, version: '0.4.0', startedAt: 's' }]);
   await b.save({ id: 's9', runnerId: 'r2', title: 't', text: 'x', whenText: 'Every day at 0:00', cron: '@daily', paused: false, createdAt: 'c', updatedAt: 'u', runs: 0 });
   assert.deepEqual(f.calls.find((c) => c.fn === 'sync:saveSchedule')!.args.schedule, { id: 's9', runnerId: 'r2', title: 't', text: 'x', whenText: 'Every day at 0:00', paused: false, createdAt: 'c', updatedAt: 'u', runs: 0, cron: '@daily' });
 
@@ -1513,7 +1552,7 @@ test('a row carries who started it, once the backend takes it', async () => {
 });
 
 // Reply pictures: for any thread, shared or not, once the backend takes them.
-function setupReplyImages(opts: { backend?: number } = {}) {
+function setupReplyImages(opts: { backend?: number; uploadFails?: () => Error | undefined; pastedPictures?: boolean } = {}) {
   const h = makeHarness();
   const dir = tmpDir();
   const png = path.join(dir, 'guide.png');
@@ -1529,7 +1568,7 @@ function setupReplyImages(opts: { backend?: number } = {}) {
   // A runner start is a new ConvexSync over the same mirror.
   const fresh = () =>
     new ConvexSync({
-      config: { enabled: true, url: 'https://x.convex.cloud', runnerId: 'r1' },
+      config: { enabled: true, url: 'https://x.convex.cloud', runnerId: 'r1', ...(opts.pastedPictures === false ? { pastedPictures: false } : {}) },
       key: 'k',
       runner: h.runner,
       version: '0.1.0+test',
@@ -1545,6 +1584,8 @@ function setupReplyImages(opts: { backend?: number } = {}) {
         return null;
       },
       upload: async (_url, _bytes, mediaType) => {
+        const err = opts.uploadFails?.();
+        if (err) throw err;
         uploads.push(mediaType);
         return `st_${uploads.length}`;
       },
@@ -1584,6 +1625,38 @@ test('reply pictures: from a thread that is not shared, with their size, new one
   await settle(sync);
   assert.equal(uploads.length, 2);
   assert.notEqual(added()[1]!.seq, added()[0]!.seq);
+  await sync.stop();
+});
+
+test('pasted pictures: go up as they are sent, each named for its marker, never looked back for', async () => {
+  const { h, fresh, uploads, added, png, settle } = setupReplyImages();
+  const before = h.runner.create({ text: 'old', images: [{ path: png, mediaType: 'image/png' }], cwd: h.cfg.defaults.cwd, accountId: 'claude-3' }).thread;
+  await tick();
+  const sync = fresh();
+  sync.start();
+  await settle(sync);
+  assert.deepEqual(uploads, [], 'one from before this runner started stays on the Mac');
+  await h.runner.send(before.id, 'this [Picture 1] like [Picture 2]', [{ path: png, mediaType: 'image/png' }, { path: png, mediaType: 'image/png' }]);
+  await tick();
+  await settle(sync);
+  // The runner copies a message's pictures into the thread's own media folder.
+  assert.deepEqual(added().map((a) => [a.threadId, a.src, a.width]), [[before.id, 'picture:1', 400], [before.id, 'picture:2', 400]]);
+  assert.ok(added().every((a) => String(a.path).includes('/media/')));
+  assert.equal(added()[0]!.seq, added()[1]!.seq);
+  await sync.stop();
+});
+
+test('pasted pictures: runner.json can keep them on the Mac', async () => {
+  const { h, fresh, uploads, png, settle } = setupReplyImages({ pastedPictures: false });
+  const t = h.runner.create({ text: 'x', cwd: h.cfg.defaults.cwd, accountId: 'claude-3' }).thread;
+  await tick();
+  const sync = fresh();
+  sync.start();
+  await settle(sync);
+  await h.runner.send(t.id, 'see [Picture 1]', [{ path: png, mediaType: 'image/png' }]);
+  await tick();
+  await settle(sync);
+  assert.deepEqual(uploads, []);
   await sync.stop();
 });
 
@@ -1747,4 +1820,478 @@ test('secrets: an older backend gets the row without the card', async () => {
   const last = calls.filter((c) => c.fn === 'sync:upsertThreads').flatMap((c) => c.args.threads as ThreadDoc[]).filter((d) => d.threadId === t.id).at(-1)!;
   assert.equal(last.status, 'waiting');
   assert.equal(last.pendingApproval, undefined);
+});
+
+test("a runner key's refused setSchedules stops the mirroring quietly, and the rest of the write goes on", async () => {
+  // docs/protocol.md, "Runner keys": setSchedules is the main key's only.
+  let setSchedules = 0;
+  const f = setup({
+    fail: () => undefined,
+    answer: (fn) => {
+      if (fn === 'sync:setSchedules') {
+        setSchedules++;
+        throw Object.assign(new Error('Server Error'), { data: { kind: 'forbidden', message: "This runner's key can't call setSchedules" } });
+      }
+      return null;
+    },
+    schedules: { attach: () => {}, inBackend: () => false },
+  });
+  f.sync.start();
+  f.h.runner.publish({ method: 'schedules.updated', params: { schedules: [] } });
+  f.h.clock.advance(SYNC_COALESCE_MS);
+  await tick();
+  f.h.runner.publish({ method: 'schedules.updated', params: { schedules: [] } });
+  f.h.clock.advance(SYNC_COALESCE_MS * 3);
+  await tick();
+  assert.equal(setSchedules, 1, 'asked once, not again');
+  assert.equal(f.sync.status().state, 'ok');
+  await f.sync.stop();
+});
+
+test('a write the backend refuses for good is tried row by row, the bad row left out and said, and the rest go', async () => {
+  // docs/protocol.md, "Runner keys": caps are permanent refusals, not outages.
+  let bad = '';
+  const f = setup({
+    answer: (fn) => {
+      if (fn === 'sync:upsertThreads') return { skipped: [] };
+      return null;
+    },
+  });
+  const realPost = (f.sync as unknown as { post: (k: string, fn: string, a: Record<string, unknown>) => Promise<unknown> }).post;
+  (f.sync as unknown as { post: typeof realPost }).post = async (kind, fn, args) => {
+    if (fn === 'sync:upsertThreads' && (args.threads as { threadId: string }[]).some((t) => t.threadId === bad)) throw Object.assign(new Error('Server Error'), { data: { kind: 'badArgs', message: 'A thread row is over 8192 bytes' } });
+    return realPost(kind, fn, args);
+  };
+  const a = f.h.runner.create({ text: 'one', cwd: f.h.cfg.defaults.cwd, accountId: 'claude-3' }).thread;
+  const b = f.h.runner.create({ text: 'two', cwd: f.h.cfg.defaults.cwd, accountId: 'claude-3' }).thread;
+  bad = a.id;
+  f.sync.start();
+  await f.sync.flushNow();
+  assert.deepEqual(f.docs().map((d) => d.threadId), [b.id]);
+  assert.equal(f.sync.status().state, 'ok', 'not stuck retrying');
+  assert.ok(f.calls.some((c) => c.fn === 'sync:prune'), 'the full write went on to prune');
+  await f.sync.stop();
+});
+
+test("the upload route refusing a picture is a refusal for good, and a row the backend left out isn't remembered as sent", async () => {
+  const { convexUploader, refusedForGood } = await import('../../src/sync.ts');
+  for (const status of [403, 413]) {
+    const up = convexUploader((async () => new Response('{"error":"no"}', { status })) as unknown as typeof fetch);
+    const err = await up('https://x', new Uint8Array(1), 'image/png').catch((e: unknown) => e);
+    assert.equal(refusedForGood(err), true, String(status));
+  }
+  const busy = convexUploader((async () => new Response('', { status: 503 })) as unknown as typeof fetch);
+  assert.equal(refusedForGood(await busy('https://x', new Uint8Array(1), 'image/png').catch((e: unknown) => e)), false);
+  // Left out by the backend: written again next time.
+  let skip = true;
+  const f = setup({ answer: (fn) => (fn === 'sync:upsertThreads' ? { skipped: skip ? [a.id] : [] } : null) });
+  const a = f.h.runner.create({ text: 'one', cwd: f.h.cfg.defaults.cwd, accountId: 'claude-3' }).thread;
+  f.sync.start();
+  await f.sync.flushNow();
+  skip = false;
+  f.h.runner.publish({ method: 'thread.updated', params: { thread: f.h.runner.get(a.id) } } as never);
+  await f.sync.flushNow();
+  assert.equal(f.docs().filter((d) => d.threadId === a.id).length, 2, 'sent again');
+  await f.sync.stop();
+});
+
+test('a picture over the upload allowance waits and goes once the window has passed, without holding up the rest', async () => {
+  const { convexUploader, refusedForGood, retryLater } = await import('../../src/sync.ts');
+  const later = await convexUploader((async () => new Response('{"error":"later"}', { status: 429 })) as unknown as typeof fetch)('https://x', new Uint8Array(1), 'image/png').catch((e: unknown) => e);
+  assert.equal(retryLater(later), true);
+  assert.equal(refusedForGood(later), false);
+  assert.equal(retryLater(Object.assign(new Error('x'), { data: { kind: 'rateLimited' } })), true);
+  let full = true;
+  const { h, fresh, uploads, added, png, thread, settle } = setupReplyImages({ uploadFails: () => (full ? (later as Error) : undefined) });
+  const { t } = thread(`Here: ![Back](${png})`);
+  await tick();
+  const sync = fresh();
+  sync.start();
+  await settle(sync);
+  assert.deepEqual(added(), [], 'not sent yet');
+  assert.notEqual(sync.status().state, 'error', 'and nothing else held up');
+  full = false;
+  h.clock.advance(11 * 60_000);
+  await settle(sync);
+  assert.deepEqual(added().map((a) => a.threadId), [t.id], 'sent once the window passed');
+  assert.deepEqual(uploads, ['image/png']);
+  await sync.stop();
+});
+
+test("messages the backend leaves out aren't counted as sent, so they go again", async () => {
+  let refuse = true;
+  const f = setup({ answer: () => null });
+  const realPost = (f.sync as unknown as { post: (k: string, fn: string, a: Record<string, unknown>) => Promise<unknown> }).post;
+  (f.sync as unknown as { post: typeof realPost }).post = async (kind, fn, args) => {
+    if (fn === 'sync:appendMessages' && refuse) throw Object.assign(new Error('Server Error'), { data: { kind: 'badArgs', message: 'no' } });
+    return realPost(kind, fn, args);
+  };
+  const a = f.h.runner.create({ text: 'hello there', cwd: f.h.cfg.defaults.cwd, accountId: 'claude-3' }).thread;
+  f.sync.start();
+  await f.sync.flushNow();
+  assert.equal(f.calls.filter((c) => c.fn === 'sync:appendMessages').length, 0);
+  refuse = false;
+  await f.sync.stop();
+  // The next start sends it: nothing recorded it as sent.
+  f.sync.start();
+  await f.sync.flushNow();
+  const sent = f.calls.filter((c) => c.fn === 'sync:appendMessages').flatMap((c) => c.args.messages as { threadId: string }[]);
+  assert.ok(sent.some((m) => m.threadId === a.id));
+  await f.sync.stop();
+});
+
+test('a project picture held back by the upload allowance goes by itself once the window passes, on an idle runner', async () => {
+  let full = true;
+  const later = Object.assign(new Error('later'), { data: { kind: 'retryLater', message: 'later' } });
+  const { h, sync, setIcons } = setupPictures({ uploadFails: () => (full ? later : undefined) });
+  sync.start();
+  await tick(20);
+  await sync.flushNow();
+  assert.equal(setIcons().length, 0);
+  full = false;
+  // Nothing else happens: only the pause's own timer brings it round.
+  h.clock.advance(11 * 60_000);
+  await tick(20);
+  h.clock.advance(SYNC_COALESCE_MS * 2);
+  await tick(20);
+  assert.equal(setIcons().length, 1);
+});
+
+// ---- Secret scrubbing (src/scrub.ts): what's sent, not what's kept.
+
+const FAKE_KEY = `sk-${'a1b2'.repeat(12)}`;
+const planted = (fn: string, calls: Call[]) => calls.filter((c) => c.fn === fn && JSON.stringify({ ...c.args, key: undefined }).includes(FAKE_KEY));
+
+test('no text the mirror sends carries a secret, in any field', async () => {
+  const { h, sync, calls } = setup({ answer: (fn) => (fn === 'sync:heartbeat' ? { apiVersion: BACKEND_API_VERSION } : null) });
+  sync.start();
+  await sync.flushNow();
+  const t = h.runner.create({ text: `please use ${FAKE_KEY}`, cwd: h.cfg.defaults.cwd, accountId: 'claude-3' }).thread;
+  await tick();
+  // Every free-text field a row can carry, as a thread might have it.
+  const full = {
+    ...h.runner.get(t.id),
+    title: `title ${FAKE_KEY}`,
+    preview: `preview ${FAKE_KEY}`,
+    asked: `asked ${FAKE_KEY}`,
+    background: [{ id: 'b', kind: 'shell', description: `working ${FAKE_KEY}`, startedAt: '2026-11-05T00:00:00.000Z' }],
+    startedBy: { kind: 'thread', label: `by ${FAKE_KEY}`, why: `why ${FAKE_KEY}` },
+    asks: [{ action: `ask ${FAKE_KEY}`, why: `because ${FAKE_KEY}`, options: [`option ${FAKE_KEY}`], reply: `reply ${FAKE_KEY}`, links: [{ title: `link ${FAKE_KEY}`, url: `https://x.dev/?k=${FAKE_KEY}` }] }],
+    asksSeq: 1,
+    projects: [{ id: 'p', title: `project ${FAKE_KEY}` }],
+  };
+  h.runner.publish({ method: 'thread.updated', params: { thread: full } } as never);
+  h.runner.publish({ method: 'thread.event', params: { threadId: t.id, event: { seq: 900, ts: '2026-11-05T00:00:00.000Z', threadId: t.id, type: 'assistant.text', itemId: 'i', text: `reply with ${FAKE_KEY}` } } } as never);
+  h.runner.publish({ method: 'thread.event', params: { threadId: t.id, event: { seq: 901, ts: '2026-11-05T00:00:00.000Z', threadId: t.id, type: 'tool.call', itemId: 'j', name: 'Bash', kind: 'command', title: `curl -H "x: ${FAKE_KEY}"`, input: { command: `curl -H "x: ${FAKE_KEY}"` } } } } as never);
+  h.runner.publish({ method: 'thread.event', params: { threadId: t.id, event: { seq: 902, ts: '2026-11-05T00:00:00.000Z', threadId: t.id, type: 'approval.requested', approvalId: 'a', name: 'Bash', title: `Run ${FAKE_KEY}`, options: ['allow'], input: { command: `export TOKEN=${FAKE_KEY}` } } } } as never);
+  h.runner.publish({ method: 'projects.updated', params: { projects: [{ id: 'p', title: `t ${FAKE_KEY}`, folders: [], goals: `g ${FAKE_KEY}`, state: `s ${FAKE_KEY}`, notes: `n ${FAKE_KEY}`, createdBy: 'user', createdAt: 'x', updatedAt: 'x', threadCount: 0 }] } } as never);
+  h.runner.publish({ method: 'schedules.updated', params: { schedules: [{ id: 's', title: `t ${FAKE_KEY}`, text: `x ${FAKE_KEY}`, whenText: 'daily', paused: false, createdAt: 'x', updatedAt: 'x', runs: 0, lastRun: { at: 'x', outcome: 'failed', note: `note ${FAKE_KEY}` } }] } } as never);
+  await tick();
+  await sync.flushNow();
+  await sync.savePocketCard({ title: `card ${FAKE_KEY}`, text: `text ${FAKE_KEY}`, place: `place ${FAKE_KEY}` });
+  assert.ok(calls.some((c) => c.fn === 'sync:upsertThreads' && JSON.stringify(c.args).includes('[REDACTED]')), 'the row went up, scrubbed');
+  assert.ok(calls.some((c) => c.fn === 'sync:appendMessages' && JSON.stringify(c.args).includes('reply with [REDACTED]')));
+  for (const c of calls.filter((x) => x.kind === 'mutation')) {
+    const { key: _key, ...rest } = c.args;
+    assert.ok(!JSON.stringify(rest).includes(FAKE_KEY), `${c.fn} carried the key`);
+  }
+  assert.ok(calls[0]!.args.key === 'k', 'the runner key itself still goes');
+  assert.ok(planted('sync:upsertThreads', calls).length === 0);
+  assert.ok(sync.status().scrub!.changed > 0);
+  await sync.stop();
+});
+
+test('the runner keeps its own words: scrubbing is only on the way up', async () => {
+  const { h, sync } = setup();
+  sync.start();
+  const t = h.runner.create({ text: `keep ${FAKE_KEY}`, cwd: h.cfg.defaults.cwd, accountId: 'claude-3' }).thread;
+  await tick();
+  await sync.flushNow();
+  const { events } = h.runner.events(t.id, { afterSeq: 0, limit: 50 });
+  assert.ok(events.some((e) => e.type === 'user.message' && e.text.includes(FAKE_KEY)));
+  await sync.stop();
+});
+
+test('a long message is scrubbed before it is cut, so a value at the cut is not missed', () => {
+  const longKey = `sk-${'c3d4'.repeat(30)}`;
+  const text = 'x '.repeat(3990) + longKey;
+  const doc = toMessageDoc('t', { type: 'assistant.text', seq: 1, ts: 'x', threadId: 't', itemId: 'i', text } as never, scrubText)!;
+  assert.ok(!doc.text.includes('c3d4'));
+  const bare = toMessageDoc('t', { type: 'assistant.text', seq: 1, ts: 'x', threadId: 't', itemId: 'i', text } as never)!;
+  assert.ok(bare.text.includes('c3d4'), 'the cut really did fall inside the value');
+});
+
+test('a tool line and an approval line are scrubbed before they are cut to one line', () => {
+  const pem = `-----BEGIN PRIVATE KEY-----\n${'a1B2'.repeat(16)}\n-----END PRIVATE KEY-----`;
+  assert.ok(!toolLine({ name: 'Bash', kind: 'command', title: '', input: { command: `TOKEN=${FAKE_KEY} npm test` } }, scrubText).includes(FAKE_KEY));
+  assert.ok(!inputSummary({ command: `TOKEN=${FAKE_KEY} npm test` }, scrubText)!.includes(FAKE_KEY));
+  assert.ok(!inputSummary({ command: pem }, scrubText)!.includes('a1B2'));
+});
+
+test('status says whether the backend checks too', async () => {
+  const older = setup({ answer: (fn) => (fn === 'sync:heartbeat' ? { apiVersion: SCRUB_API_VERSION - 1 } : null) });
+  older.sync.start();
+  await older.sync.flushNow();
+  await tick();
+  assert.equal(older.sync.status().scrub!.backendChecks, false);
+  await older.sync.stop();
+  const newer = setup({ answer: (fn) => (fn === 'sync:heartbeat' ? { apiVersion: SCRUB_API_VERSION } : null) });
+  newer.sync.start();
+  await newer.sync.flushNow();
+  await tick();
+  assert.equal(newer.sync.status().scrub!.backendChecks, true);
+  await newer.sync.stop();
+});
+
+test('a phone answer in scrubbed words reaches the CLI in the real ones', async () => {
+  const { sync } = setup();
+  const internals = sync as unknown as { pending: Map<string, unknown>; realAnswers(id: string, a: Record<string, string>): Record<string, string> };
+  const q = `Use ${FAKE_KEY} here?`;
+  const label = `The key ${FAKE_KEY}`;
+  internals.pending.set('t', { approvalId: 'a', kind: 'question', questions: [{ question: q, multiSelect: false, options: [{ label }, { label: 'No' }] }, { question: 'Plain?', multiSelect: false, options: [{ label: 'Yes' }] }] });
+  const real = internals.realAnswers('t', { 'Use [REDACTED] here?': 'The key [REDACTED]', 'Plain?': 'Yes' });
+  assert.deepEqual(real, { [q]: label, 'Plain?': 'Yes' });
+  assert.deepEqual(internals.realAnswers('t', { 'Use [REDACTED] here?': 'The key [REDACTED], No' }), { [q]: `${label}, No` });
+  assert.deepEqual(internals.realAnswers('other', { x: 'y' }), { x: 'y' });
+  const comma = `Key ${FAKE_KEY}, prod`;
+  internals.pending.set('c', { approvalId: 'b', kind: 'question', questions: [{ question: 'Which?', multiSelect: true, options: [{ label: comma }, { label: 'No' }] }] });
+  assert.deepEqual(internals.realAnswers('c', { 'Which?': 'Key [REDACTED], prod, No' }), { 'Which?': `${comma}, No` });
+});
+
+test("an archived thread's folder is looked at for its history", async () => {
+  const dir = tmpDir();
+  const value = `opaque9${'Zq7x'.repeat(6)}`;
+  const { h } = setup();
+  const folder = path.join(dir, 'old-project');
+  fs.mkdirSync(path.join(folder, '.git'), { recursive: true });
+  fs.writeFileSync(path.join(folder, '.env'), `WEBHOOK_SECRET=${value}\n`);
+  const t = h.runner.create({ text: `quoting ${value}`, cwd: folder, accountId: 'claude-3' }).thread;
+  await tick();
+  await h.runner.update({ threadId: t.id, archived: true, title: `about ${value}` });
+  const calls: Call[] = [];
+  const sync = new ConvexSync({
+    config: { enabled: true, url: 'https://x.convex.cloud', name: 'TestMac', runnerId: 'r1' },
+    key: 'k',
+    runner: h.runner,
+    version: '0.1.0+test',
+    startedAt: '2026-10-27T00:00:00.000Z',
+    clock: h.clock,
+    log: nullLogger,
+    scrubber: new Scrubber({ env: {}, home: dir }),
+    post: async (kind, fn, args) => {
+      calls.push({ kind, fn, args });
+      return fn === 'sync:heartbeat' ? { apiVersion: BACKEND_API_VERSION } : null;
+    },
+  });
+  sync.start();
+  await sync.flushNow();
+  const sent = calls.filter((c) => c.fn === 'sync:appendMessages' || c.fn === 'sync:upsertThreads' || c.fn === 'sync:setThreadIndex');
+  assert.ok(sent.length > 0);
+  assert.ok(!JSON.stringify(sent).includes(value), 'neither its history nor its row');
+  await sync.stop();
+});
+
+test('text waits rather than go up while .env files are still being read', async () => {
+  const { h } = setup();
+  const calls: Call[] = [];
+  const scrubber = new Scrubber({ env: {}, folders: false });
+  let ready = false;
+  scrubber.known.settled = async () => ready;
+  const sync = new ConvexSync({
+    config: { enabled: true, url: 'https://x.convex.cloud', name: 'TestMac', runnerId: 'r1' },
+    key: 'k',
+    runner: h.runner,
+    version: '0.1.0+test',
+    startedAt: '2026-10-27T00:00:00.000Z',
+    clock: h.clock,
+    log: nullLogger,
+    scrubber,
+    post: async (kind, fn, args) => {
+      calls.push({ kind, fn, args });
+      return fn === 'sync:heartbeat' ? { apiVersion: BACKEND_API_VERSION } : null;
+    },
+  });
+  h.runner.create({ text: 'waits', cwd: h.cfg.defaults.cwd, accountId: 'claude-3' });
+  sync.start();
+  await sync.flushNow();
+  assert.ok(calls.some((c) => c.fn === 'sync:heartbeat'), 'a heartbeat still goes');
+  assert.equal(calls.filter((c) => c.fn === 'sync:upsertThreads').length, 0);
+  assert.match(sync.status().lastError ?? '', /still reading/);
+  ready = true;
+  await sync.flushNow();
+  assert.ok(calls.some((c) => c.fn === 'sync:upsertThreads'));
+  await sync.stop();
+});
+
+test("a command for another runner keeps the user's words, and everything else the Mac's relay sends is scrubbed", async () => {
+  const { h } = setup();
+  const calls: Call[] = [];
+  const sync = new ConvexSync({
+    config: { enabled: true, url: 'https://x.convex.cloud', name: 'TestMac', runnerId: 'r1' },
+    key: 'k',
+    runner: h.runner,
+    version: '0.1.0+test',
+    startedAt: '2026-10-27T00:00:00.000Z',
+    clock: h.clock,
+    log: nullLogger,
+    scrubber: new Scrubber({ env: {}, folders: false }),
+    post: async (kind, fn, args) => {
+      calls.push({ kind, fn, args });
+      return fn === 'sync:heartbeat' ? { apiVersion: BACKEND_API_VERSION } : null;
+    },
+  });
+  sync.start();
+  await sync.flushNow();
+  const src = sync.relaySource();
+  assert.ok(src, 'the backend is new enough for the relay');
+  // Made up here, so no key-shaped text sits in the repo.
+  const typed = `use this: sk-${'a1B2'.repeat(10)}`;
+  await src.post('mutation', 'relay:queueCommand', { key: 'k', runnerId: 'r2', kind: 'send', args: { text: typed } });
+  await src.post('mutation', 'sync:somethingElse', { key: 'k', text: typed });
+  const queued = calls.find((c) => c.fn === 'relay:queueCommand')!;
+  assert.equal((queued.args.args as { text: string }).text, typed, 'that runner gets the words as typed');
+  const other = calls.find((c) => c.fn === 'sync:somethingElse')!;
+  assert.ok(!String(other.args.text).includes('a1B2a1B2'), 'any other mutation is scrubbed');
+  await sync.stop();
+});
+
+test("a call's answer is still JSON after scrubbing, whatever a file is called", async () => {
+  const { h } = setup();
+  const calls: Call[] = [];
+  const sync = new ConvexSync({
+    config: { enabled: true, url: 'https://x.convex.cloud', name: 'TestMac', runnerId: 'r1' },
+    key: 'k',
+    runner: h.runner,
+    version: '0.1.0+test',
+    startedAt: '2026-10-27T00:00:00.000Z',
+    clock: h.clock,
+    log: nullLogger,
+    scrubber: new Scrubber({ env: {}, folders: false }),
+    post: async (kind, fn, args) => {
+      calls.push({ kind, fn, args });
+      return fn === 'sync:heartbeat' ? { apiVersion: BACKEND_API_VERSION } : null;
+    },
+  });
+  sync.start();
+  await sync.flushNow();
+  const src = sync.relaySource()!;
+  // This name's rule matches across the escaped quotes in the JSON text, which
+  // is what used to leave the answer unparseable.
+  const name = 'security unlock-keychain -p "madeUpPassword123"';
+  await src.post('mutation', 'sync:finishCommand', { key: 'k', commandId: 'c1', ok: true, result: JSON.stringify({ entries: [{ name }, { name: 'plain.txt' }] }) });
+  const sent = calls.find((c) => c.fn === 'sync:finishCommand')!;
+  const parsed = JSON.parse(sent.args.result as string) as { entries: { name: string }[] };
+  assert.ok(!parsed.entries[0]!.name.includes('madeUpPassword123'), 'scrubbed');
+  assert.equal(parsed.entries[1]!.name, 'plain.txt');
+  // A field scrubbing skips in a row means nothing in an answer.
+  const hidden = `tbr_${'ab'.repeat(32)}`;
+  await src.post('mutation', 'sync:finishCommand', { key: 'k', commandId: 'c0', ok: true, result: JSON.stringify({ entries: [{ name: 'a.txt', key: hidden, cwd: hidden, seenAt: hidden }] }) });
+  assert.ok(!String(calls.filter((c) => c.fn === 'sync:finishCommand')[1]!.args.result).includes(hidden));
+  await src.post('mutation', 'sync:finishCommand', { key: 'k', commandId: 'c2', ok: true, result: 'not json' });
+  assert.equal(calls.filter((c) => c.fn === 'sync:finishCommand')[2]!.args.result, undefined, "text that doesn't parse isn't sent");
+  await sync.stop();
+});
+
+// The 5 Nov 2026 owner-key rotation left the cloud runner on the old key:
+// every heartbeat came back "bad runner key" and all it did was log a
+// warning a minute. Now it says so once, plainly, where Mike looks (tb
+// status, the app's notice, one error in the log), and once tb runner add
+// has put a new key in secrets/convex-key it restarts onto it by itself.
+test('a key the backend turns down is said once, plainly, and a new key on disk restarts the runner onto it', async () => {
+  const rejected = () => Object.assign(new Error('[Request ID: x] Server Error\nUncaught ConvexError: {"kind":"auth","message":"bad runner key"}'), { data: { kind: 'auth', message: 'bad runner key' } });
+  let bad = true;
+  let onDisk = 'k';
+  const notices: { level: string; message: string }[] = [];
+  const restarts: string[] = [];
+  const errors: string[] = [];
+  const log: Logger = { ...nullLogger, error: (msg: string) => void errors.push(msg) };
+  const { h, sync } = setup({
+    fail: () => (bad ? rejected() : undefined),
+    answer: (fn) => (fn === 'sync:heartbeat' ? { apiVersion: BACKEND_API_VERSION } : null),
+    extra: { log, notice: (level, message) => void notices.push({ level, message }), restart: (reason) => void restarts.push(reason), readKey: () => onDisk },
+  });
+  sync.start();
+  await tick();
+  h.clock.advance(HEARTBEAT_MS);
+  await tick();
+  h.clock.advance(HEARTBEAT_MS);
+  await tick();
+  const s = sync.status();
+  assert.equal(s.state, 'error');
+  assert.equal(s.keyRejected, true);
+  assert.match(s.lastError ?? '', /turned down this runner's key/);
+  assert.match(s.lastError ?? '', /tb runner add/);
+  assert.equal(notices.length, 1, 'said once, not every minute');
+  assert.equal(notices[0]!.level, 'error');
+  assert.equal(errors.filter((m) => /key/.test(m)).length, 1);
+  assert.deepEqual(restarts, [], 'same key on disk: nothing to restart onto');
+  // tb runner add writes a new key: the next turned-down heartbeat restarts onto it, once.
+  onDisk = 'tbr_new';
+  h.clock.advance(HEARTBEAT_MS);
+  await tick();
+  h.clock.advance(HEARTBEAT_MS);
+  await tick();
+  assert.equal(restarts.length, 1);
+  // The key working again clears it.
+  bad = false;
+  h.clock.advance(HEARTBEAT_MS);
+  await tick();
+  assert.equal(sync.status().keyRejected, undefined);
+  await sync.stop();
+});
+
+// Moving a runner onto its own key while the main key still works (as
+// Bruce was): its old main-key heartbeat is refused as forbidden, not
+// turned down, and it should still restart onto the new key on disk.
+test('a forbidden heartbeat with a new key on disk restarts onto it too', async () => {
+  const forbidden = () => Object.assign(new Error('forbidden'), { data: { kind: 'forbidden', message: "This runner's key can't act as runner r1 with the main key, as that runner has a key of its own." } });
+  let onDisk = 'k';
+  const restarts: string[] = [];
+  const { h, sync } = setup({ fail: forbidden, extra: { restart: (reason) => void restarts.push(reason), readKey: () => onDisk } });
+  sync.start();
+  await tick();
+  assert.deepEqual(restarts, []);
+  assert.equal(sync.status().keyRejected, undefined, 'forbidden is not a turned-down key');
+  onDisk = 'tbr_new';
+  h.clock.advance(HEARTBEAT_MS);
+  await tick();
+  assert.equal(restarts.length, 1);
+  await sync.stop();
+});
+
+test('runners.stats marks the figures wanted at most every 20 s, and is empty where it can\'t be had', async () => {
+  const row = { runnerId: 'r2', at: '2026-11-05T08:00:00.000Z', cpuPercent: 12, cores: 8, memUsed: 4, memTotal: 8, diskFree: 50, diskTotal: 100, uptimeSec: 60 };
+  let forbid = false;
+  const answer = (fn: string) => {
+    if (fn === 'sync:heartbeat') return { apiVersion: MAC_RUNNER_STATS_API_VERSION };
+    if (fn === 'sync:runnerStatsList') {
+      if (forbid) throw Object.assign(new Error('forbidden'), { data: { kind: 'forbidden', message: "This runner's key can't list runners." } });
+      return [row];
+    }
+    return null;
+  };
+  const { h, sync, calls } = setup({ answer });
+  assert.deepEqual(await sync.runnerStats(), [], 'not before it has started');
+  sync.start();
+  await tick();
+  assert.deepEqual(await sync.runnerStats(), [row]);
+  assert.deepEqual(await sync.runnerStats(), [row]);
+  const watches = () => calls.filter((c) => c.fn === 'sync:watchRunnersFromMac').length;
+  assert.equal(watches(), 1, 'one watch for two asks close together');
+  h.clock.advance(21_000);
+  await sync.runnerStats();
+  assert.equal(watches(), 2);
+  forbid = true;
+  assert.deepEqual(await sync.runnerStats(), [], "a runner key can't see the others");
+  const asked = calls.filter((c) => c.fn === 'sync:runnerStatsList').length;
+  await sync.runnerStats();
+  assert.equal(calls.filter((c) => c.fn === 'sync:runnerStatsList').length, asked, 'and stops asking');
+  await sync.stop();
+
+  const old = setup({ answer: (fn) => (fn === 'sync:heartbeat' ? { apiVersion: MAC_RUNNER_STATS_API_VERSION - 1 } : null) });
+  old.sync.start();
+  await tick();
+  assert.deepEqual(await old.sync.runnerStats(), [], 'an older backend has none');
+  assert.equal(old.calls.filter((c) => c.fn === 'sync:runnerStatsList').length, 0);
+  await old.sync.stop();
 });

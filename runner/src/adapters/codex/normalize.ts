@@ -625,6 +625,10 @@ export class CodexNormalizer {
     }
     const wasBackground = this.background.delete(id);
     this.open.delete(id);
+    // No 'wrote' for a patch, applied or not: its result doesn't say what
+    // bytes it wrote, and hashing the file when the result arrives trusted
+    // whatever a command had put there first (Codex review, 5 Nov). A patch
+    // file Codex writes waits for Mike (docs/protocol.md).
     out.push(this.completedResult(type, id, item));
     if (wasBackground) out.push(this.tasks());
   }

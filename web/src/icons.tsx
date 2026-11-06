@@ -131,6 +131,11 @@ export const Check = () => (
     <path d="m3 8.5 3.3 3.3L13 4.7" />
   </svg>
 );
+export const Minus = () => (
+  <svg {...base} strokeWidth={2}>
+    <path d="M3.5 8h9" />
+  </svg>
+);
 export const Photo = () => (
   <svg {...base}>
     <path d="M2 3h12v10H2zM2 11l3.5-3.5L8 10l2.5-2.5L14 11" />
@@ -183,5 +188,15 @@ export const Globe = () => (
 export const Server = () => (
   <svg {...base}>
     <path d="M2.5 2.5h11V7h-11zM2.5 9h11v4.5h-11zM5 4.75h.01M5 11.25h.01" />
+  </svg>
+);
+export const Pause = () => (
+  <svg {...base}>
+    <path d="M5.5 3v10M10.5 3v10" />
+  </svg>
+);
+export const Play = () => (
+  <svg {...base}>
+    <path d="M4.5 2.5 13 8l-8.5 5.5z" />
   </svg>
 );

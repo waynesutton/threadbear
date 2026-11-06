@@ -52,11 +52,13 @@ import os from 'node:os';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { execFile, spawn } from 'node:child_process';
+import { loginShell } from './system-tools.ts';
 import type { Action, Hook, ImageRef, Panel, PanelItem, PatchInfo } from './protocol.ts';
 import { LIMITS } from './protocol.ts';
 import { imageRefFor } from './media.ts';
 import { FolderCache } from './folder-cache.ts';
-import { TRUST_ALL, worktreeOf, type PatchGate } from './patch-trust.ts';
+import { automaticCommand, TRUST_ALL, unhashedFiles, worktreeOf, type PatchGate } from './patch-trust.ts';
+import { verifiedUrl } from './verified-imports.ts';
 
 export const CONVEX_DASHBOARD = 'https://dashboard.convex.dev';
 // `npx convex dev` on an anonymous (no account) deployment serves the
@@ -71,7 +73,9 @@ export const EMPTY_PATCH_SET: PatchSet = { panels: [], actions: [], hooks: [], p
 
 // Loaded patch files by path, so a summary refresh doesn't import a file
 // whose mtime hasn't moved. One per runner.
-export type PatchCache = Map<string, { mtimeMs: number; loaded: LoadedPatch }>;
+// `key`: the trust hash a project patch was loaded at (its mtime for one
+// trusted whatever it holds), so a new version loads again.
+export type PatchCache = Map<string, { key: string; loaded: LoadedPatch }>;
 type LoadedPatch = { info: PatchInfo; panels: Panel[]; actions: Action[]; hooks: Hook[]; worktree?: WorktreeConfig; appliesTo?: string[] };
 
 // A patch's `worktree`: the repo gives each new thread a git worktree of
@@ -82,7 +86,9 @@ type LoadedPatch = { info: PatchInfo; panels: Panel[]; actions: Action[]; hooks:
 // built in, so a fresh worktree builds from cold. With `keep`, an archived
 // thread's worktree is set aside, those folders and all, for the next
 // thread rather than removed (worktrees.ts, "spares").
-export type WorktreeConfig = { setup?: string; check?: string; keep?: string[] };
+// `setupRun` is `setup` as it runs, for a patch trusted by its hash
+// (bindAutomatic); absent, `setup` runs as written.
+export type WorktreeConfig = { setup?: string; check?: string; keep?: string[]; setupRun?: string };
 
 // A folder of one of the thread's projects.
 export type ProjectFolder = { folder: string; projectId: string };
@@ -261,7 +267,7 @@ function inFolder(loaded: LoadedPatch, root: ProjectFolder | undefined, infoFold
   return {
     info: { ...loaded.info, folder: infoFolder ?? root.folder, ...tag },
     panels: loaded.panels.map((p) => ({ ...p, ...tag })),
-    actions: loaded.actions.map((a) => ({ ...a, folder: root.folder, ...tag })),
+    actions: loaded.actions.map((a) => ({ ...a, folder: a.folder ?? root.folder, ...tag })),
     hooks: loaded.hooks.map((h) => ({ ...h, folder: root.folder, ...tag })),
   };
 }
@@ -368,6 +374,9 @@ async function loadPatchFile(file: string, source: 'home' | 'project', cache: Pa
   if (mtimeMs === undefined) return { info: { id, source, file, error: `can't read ${file}` }, panels: [], actions: [], hooks: [] };
   // Before the cache: a file imported once and then changed by a pull is
   // asked about again, whatever's cached for it.
+  let files: string[] | undefined;
+  let blocked: Record<string, string> | undefined;
+  let verified: { hash: string; root: string; code: Map<string, Buffer>; edges: Map<string, Map<string, string>> } | undefined;
   if (source === 'project') {
     let verdict;
     try {
@@ -379,20 +388,78 @@ async function loadPatchFile(file: string, source: 'home' | 'project', cache: Pa
     // version of it to say yes to (patch-trust.ts).
     if (!verdict.trusted && verdict.reason === 'unchecked') return { info: { id, source, file, error: `Not run: ${verdict.problem}` }, panels: [], actions: [], hooks: [] };
     if (!verdict.trusted) return { info: { id, source, file, untrusted: verdict.reason, hash: verdict.hash, ...(verdict.helpers ? { helpers: verdict.helpers } : {}) }, panels: [], actions: [], hooks: [] };
+    files = verdict.files;
+    blocked = verdict.blocked;
+    if (verdict.hash && verdict.root && verdict.code && verdict.edges) verified = { hash: verdict.hash, root: verdict.root, code: verdict.code, edges: verdict.edges };
+    // Trusted by hash, it's imported from the bytes that hash was made
+    // from (verified-imports.ts); one without them can't be.
+    else if (files) return { info: { id, source, file, error: "Not run: patch trust didn't keep the code it checked." }, panels: [], actions: [], hooks: [] };
   }
+  const key = verified ? `v:${verified.hash}` : `m:${mtimeMs}`;
   const hit = cache.get(file);
-  if (hit && hit.mtimeMs === mtimeMs) return hit.loaded;
+  if (hit && hit.key === key) return files ? bindAutomatic(hit.loaded, file, files, blocked, verified?.hash) : hit.loaded;
   let loaded: LoadedPatch;
   try {
     // The query makes Node load the file again after an edit: a module URL
     // is loaded once per process.
-    const mod = (await import(`${pathToFileURL(file).href}?mtime=${mtimeMs}`)) as { default?: unknown };
+    const url = verified ? verifiedUrl(verified.root, verified.hash, verified.code, verified.edges) : `${pathToFileURL(file).href}?mtime=${mtimeMs}`;
+    const mod = (await import(url)) as { default?: unknown };
     loaded = readPatchModule(id, source, file, mod.default);
   } catch (e) {
     loaded = { info: { id, source, file, error: firstLine(e) }, panels: [], actions: [], hooks: [] };
   }
-  cache.set(file, { mtimeMs, loaded });
-  return loaded;
+  cache.set(file, { key, loaded });
+  return files ? bindAutomatic(loaded, file, files, blocked, verified?.hash) : loaded;
+}
+
+// The patch version each bound automatic command (a hook's `exec`, a
+// setup's `setupRun`) was approved by, so the runner can check the patch
+// still hashes to it just before running it: a script runs from the
+// folder, not from the bytes that were hashed.
+const boundBy = new Map<string, { file: string; hash: string }>();
+export function automaticTrust(run: string): { file: string; hash: string } | undefined {
+  return boundBy.get(run);
+}
+
+// A trusted-by-hash patch's commands that run by themselves (its hooks and
+// worktree setup) as they'll run: each must be one hashed script and plain
+// words (automaticCommand), or the whole patch is refused with why, as a
+// patch whose code can't all be checked is. A copy, as `loaded` is cached.
+// Actions aren't held to it: one runs only when it's pressed.
+function bindAutomatic(loaded: LoadedPatch, file: string, files: string[], blocked?: Record<string, string>, hash?: string): LoadedPatch {
+  if (loaded.info.error) return loaded;
+  const note = (run: string) => {
+    if (hash) boundBy.set(run, { file, hash });
+    return run;
+  };
+  const folder = path.dirname(path.dirname(path.dirname(file)));
+  const refuse = (what: string, problem: string): LoadedPatch => ({ info: { ...loaded.info, error: `Not run: its ${what} ${problem}` }, panels: [], actions: [], hooks: [] });
+  const hooks: Hook[] = [];
+  for (const hook of loaded.hooks) {
+    const bound = automaticCommand(hook.command, folder, files, blocked);
+    if ('problem' in bound) return refuse(`hook "${hook.title}"`, bound.problem);
+    hooks.push({ ...hook, exec: note(bound.run) });
+  }
+  // Actions run from the folder holding .threadbear/, where their commands
+  // were followed for the hash from, and one worked out in code mustn't
+  // reach a file the hash didn't cover.
+  const actions: Action[] = [];
+  for (const action of loaded.actions) {
+    if (action.kind === 'command' && action.command) {
+      const missed = unhashedFiles(action.command, folder, [file, ...files]);
+      if (missed.length) {
+        return refuse(`action "${action.title}"`, `runs ${missed[0]}, which patch trust didn't hash: write the command in the patch as plain text, so trusting the patch covers what it runs.`);
+      }
+      actions.push({ ...action, folder: action.folder ?? fs.realpathSync(folder) });
+    } else actions.push(action);
+  }
+  let worktree = loaded.worktree;
+  if (worktree?.setup) {
+    const bound = automaticCommand(worktree.setup, folder, files, blocked);
+    if ('problem' in bound) return refuse('worktree setup', bound.problem);
+    worktree = { ...worktree, setupRun: note(bound.run) };
+  }
+  return { ...loaded, actions, hooks, ...(worktree ? { worktree } : {}) };
 }
 
 // Turns a patch module's default export into actions and panels, with ids
@@ -567,12 +634,25 @@ export async function findWorktreePatch(
   gate: PatchGate = TRUST_ALL,
 ): Promise<WorktreePatch | undefined> {
   for (const file of worktreePatchFiles(cwd, home, dirs)) {
-    const loaded = await loadPatchFile(file, 'project', cache, dirs, gate);
-    if (loaded.worktree && !loaded.info.error) {
-      return { ...loaded.worktree, patch: loaded.info.id, file, folder: path.dirname(path.dirname(path.dirname(file))) };
-    }
+    const found = await readWorktreePatch(file, cache, dirs, gate);
+    if (found && !('error' in found)) return found;
   }
   return undefined;
+}
+
+// One patch file's `worktree`, if it loads and has one; `error` when it
+// doesn't load (untrusted, or refused), for saying why setup didn't run.
+export async function readWorktreePatch(
+  file: string,
+  cache: PatchCache = new Map(),
+  dirs: FolderCache = new FolderCache(),
+  gate: PatchGate = TRUST_ALL,
+): Promise<WorktreePatch | { error: string } | undefined> {
+  const loaded = await loadPatchFile(file, 'project', cache, dirs, gate);
+  if (loaded.info.error) return { error: loaded.info.error };
+  if (loaded.info.untrusted) return { error: "it isn't a version you've trusted." };
+  if (!loaded.worktree) return undefined;
+  return { ...loaded.worktree, patch: loaded.info.id, file, folder: path.dirname(path.dirname(path.dirname(file))) };
 }
 
 // The patch files findWorktreePatch would read, nearest folder first.
@@ -962,6 +1042,8 @@ function panelItem(raw: unknown): PanelItem | undefined {
   const item: PanelItem = { title: r.title.trim().slice(0, 300) };
   for (const k of ['detail', 'url', 'path', 'icon'] as const) if (typeof r[k] === 'string' && (r[k] as string).trim()) item[k] = (r[k] as string).trim().slice(0, 2000);
   if (r.tone === 'attention' || r.tone === 'failed' || r.tone === 'done') item.tone = r.tone;
+  if (typeof r.section === 'string' && r.section.trim()) item.section = r.section.trim().slice(0, 80);
+  if (typeof r.trailing === 'string' && r.trailing.trim()) item.trailing = r.trailing.trim().slice(0, 24);
   return item;
 }
 
@@ -1019,7 +1101,7 @@ export function runCommand(
   opts: { cwd: string; env: Record<string, string | undefined>; shell?: string[]; timeoutMs?: number },
 ): Promise<CommandOutcome> {
   const started = Date.now();
-  const [bin, ...args] = opts.shell ?? ['/bin/zsh', '-lc'];
+  const [bin, ...args] = opts.shell ?? loginShell();
   return new Promise((resolve) => {
     const chunks: Buffer[] = [];
     let size = 0;

@@ -40,15 +40,23 @@ extension AppModel {
             // Never in place of one of this Mac's own.
             if let existing = next[summary.id], !existing.isRemote { continue }
             listed.insert(summary.id)
+            madeRemote.remove(summary.id)
             if liveRemote.contains(summary.id), next[summary.id] != nil { continue }
             next[summary.id] = summary
         }
-        let gone = next.values.filter { $0.isRemote && !listed.contains($0.id) && !liveRemote.contains($0.id) }.map(\.id)
+        let gone = next.values.filter { $0.isRemote && !listed.contains($0.id) && !liveRemote.contains($0.id) && !madeRemote.contains($0.id) }.map(\.id)
         if next != threads { threads = next }
         for id in gone { forget(id) }
     }
 
     func isRemote(_ threadId: String) -> Bool { threads[threadId]?.isRemote == true }
+
+    /// Another runner's thread reached through this Mac's runner and Convex
+    /// (the default), not a connection of its own.
+    func viaRelay(_ threadId: String) -> Bool { isRemote(threadId) && !directRemoteLink }
+
+    /// Another runner's thread on a connection of its own (the direct link).
+    func viaDirectLink(_ threadId: String) -> Bool { isRemote(threadId) && directRemoteLink }
 
     func route(_ threadId: String) -> ThreadRoute { ThreadRoute.of(threads[threadId], runners: remoteRunners) }
 
@@ -90,13 +98,18 @@ extension AppModel {
     /// for its own threads (and with no thread), the thread's runner while
     /// it's connected, else nil.
     func client(for threadId: String?) -> RPCClient? {
-        guard let threadId else { return client }
+        guard let threadId, !viaRelay(threadId) else { return client }
         return remoteClients.client(for: route(threadId), local: client)
     }
 
     /// The same, connecting to the thread's runner if need be. Throws
     /// `RemoteUnreachable` when it can't be reached from this Mac.
     func openClient(for threadId: String) async throws -> RPCClient {
+        if viaRelay(threadId) {
+            guard let client else { throw RPCError.disconnected(nil) }
+            if let runnerId = threads[threadId]?.runnerId, remoteLogins[runnerId] == nil { loadRelayLogins(runnerId) }
+            return client
+        }
         switch route(threadId) {
         case .local:
             guard let client else { throw RPCError.disconnected(nil) }
@@ -181,6 +194,7 @@ extension AppModel {
         newThreadPool = nil
         newThreadProvider = nil
         guard let runnerId else { return tidyRemoteClients() }
+        guard directRemoteLink else { return loadRelayLogins(runnerId) }
         Task {
             do {
                 guard let runner = remoteRunners.first(where: { $0.id == runnerId }) else {
@@ -213,7 +227,7 @@ extension AppModel {
     /// The default is another runner that a new thread can go to now.
     var defaultRunnerReady: Bool {
         guard let id = defaultRunnerId, let runner = remoteRunners.first(where: { $0.id == id }) else { return false }
-        return runner.online && runner.tokenFile != nil
+        return runner.online && (!directRemoteLink || runner.tokenFile != nil)
     }
 
     /// The runner a new thread will be made on, when it isn't this Mac.
@@ -248,8 +262,17 @@ extension AppModel {
                 guard let runner = remoteRunners.first(where: { $0.id == runnerId }) else {
                     throw RemoteUnreachable(runnerId: runnerId, runnerName: name, online: false, reason: .unknownRunner)
                 }
-                let client = try await remoteClients.client(for: runner)
-                var made = try await client.createThread(newThreadRequest(text: text, images: []))
+                var request = newThreadRequest(text: text, images: [])
+                let made0: ThreadSummary
+                if directRemoteLink {
+                    made0 = try await remoteClients.client(for: runner).createThread(request)
+                } else {
+                    // Through this Mac's runner, as a command for that one.
+                    guard let client else { throw RPCError.disconnected(nil) }
+                    request.runnerId = runnerId
+                    made0 = try await client.createThread(request)
+                }
+                var made = made0
                 if drafts["new"] == draft { drafts["new"] = nil }
                 // The runner, folder, "Ask before edits" and picks were for
                 // this thread; the next starts on the defaults again,
@@ -263,7 +286,9 @@ extension AppModel {
                 newThreadPool = nil
                 newThreadProvider = nil
                 made.runnerId = runnerId
-                liveRemote.insert(made.id)
+                // Its own connection's summaries keep a direct one fresh; a
+                // relayed one waits for the sidebar table's row.
+                if directRemoteLink { liveRemote.insert(made.id) } else { madeRemote.insert(made.id) }
                 threads[made.id] = made
                 select(made.id)
                 applyDefaultRunner()
@@ -276,6 +301,52 @@ extension AppModel {
                 AppLog.write("rpc", "threads.create on \(name) failed: \(error.localizedDescription)")
                 errorMessage = "Couldn't start it on \(name). \(error.localizedDescription)"
             }
+        }
+    }
+
+    // MARK: Through Convex
+
+    /// That runner's logins for the pickers, from Convex through this Mac's
+    /// runner, when the direct link isn't there to say hello.
+    func loadRelayLogins(_ runnerId: String) {
+        guard let client else { return }
+        Task {
+            do {
+                let logins = try await client.remoteLogins(runnerId: runnerId)
+                guard !directRemoteLink else { return }
+                remoteLogins[runnerId] = logins
+                if newThreadRunnerId == runnerId { newThreadRunnerProblem = nil }
+            } catch {
+                AppLog.write("rpc", "remoteThreads.logins for \(remoteName(runnerId)) failed: \(error.localizedDescription)")
+                if newThreadRunnerId == runnerId { newThreadRunnerProblem = error.localizedDescription }
+            }
+        }
+    }
+
+    /// The direct link went on or off: other runners' open threads read
+    /// afresh the other way, and connections of their own close.
+    func switchedRemoteLink() {
+        AppLog.write("connection", directRemoteLink ? "other machines' threads: direct" : "other machines' threads: through Convex")
+        let remote = openSessions.filter { isRemote($0.threadId) }
+        // They were this Mac's runner's to watch: tell it they're not. Direct
+        // ones go with their connections.
+        if directRemoteLink, let client {
+            for session in remote where session.subscribed {
+                let threadId = session.threadId
+                Task { try? await client.unsubscribe(threadId: threadId) }
+            }
+        }
+        remoteClients.closeAll()
+        liveRemote.removeAll()
+        remoteLogins.removeAll()
+        applyRemoteIndex()
+        let width = transcript.width > 0 ? transcript.width : transcript.currentTableWidth
+        for session in remote {
+            if isOnScreen(session.threadId) { session.reload(width: width) } else { dropSession(session.threadId) }
+        }
+        if let runnerId = newThreadRunnerId {
+            newThreadRunnerId = nil
+            chooseNewThreadRunner(runnerId, byMike: newThreadRunnerPicked)
         }
     }
 

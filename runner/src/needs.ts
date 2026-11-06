@@ -150,6 +150,29 @@ export function snoozeFromTool(input: unknown): string | undefined {
   return needsFromTool(input)?.needs === 'nothing' ? s.trim() : undefined;
 }
 
+// end_turn's waitFor: the threads this one hibernates until they finish
+// (runner/hibernation.ts, waitOn). Like snooze, only with needs "nothing".
+export const MAX_WAIT_FOR = 5;
+// Each is a thread id, or { thread, until } to wait until it has done
+// something in particular, which the librarian judges (librarian.ts, met).
+export const MAX_UNTIL = 200;
+export type WaitFor = { id: string; until?: string };
+export function waitForFromTool(input: unknown): WaitFor[] | undefined {
+  if (!input || typeof input !== 'object') return undefined;
+  const w = (input as Record<string, unknown>).waitFor;
+  if (!Array.isArray(w)) return undefined;
+  const out: WaitFor[] = [];
+  for (const x of w) {
+    const o = x && typeof x === 'object' ? (x as Record<string, unknown>) : undefined;
+    const id = (typeof x === 'string' ? x : typeof o?.thread === 'string' ? o.thread : '').trim();
+    const until = typeof o?.until === 'string' ? o.until.replace(/\s+/g, ' ').trim().slice(0, MAX_UNTIL) : '';
+    if (!id || out.some((y) => y.id === id)) continue;
+    out.push(until ? { id, until } : { id });
+    if (out.length === MAX_WAIT_FOR) break;
+  }
+  return out.length && needsFromTool(input)?.needs === 'nothing' ? out : undefined;
+}
+
 // end_turn's byline: a few words for the row of a thread Mike didn't start.
 export const MAX_BYLINE = 80;
 export function bylineFromTool(input: unknown): string | undefined {
@@ -388,7 +411,7 @@ const NEXT_ROW =
 
 // Hibernating itself, in every form's description (snoozeFromTool).
 const END_TURN_SNOOZE =
-  'snooze hibernates this thread once the turn is over, with needs "nothing" only, until a time ("2h", "1d", "tomorrow", an ISO time with its offset, or "restart") or words saying when ("when the phone arrives"). Use it when the user asks for this thread to be snoozed or hibernated, or when the rest waits on another thread or a job that will message this one (a message wakes it): then give the time that should have happened by. ';
+  'snooze hibernates this thread once the turn is over, with needs "nothing" only, until a time ("2h", "1d", "tomorrow", an ISO time with its offset, or "restart") or words saying when ("when the phone arrives"). Use it when the user asks for this thread to be snoozed or hibernated, or when the rest waits on a message (one wakes it), until it should have come; waitFor names threads it waits on, which wake it when they finish. ';
 
 // Handing a step over, in every form's description. This used to say to offer
 // "Can you do it?" when the agent could plausibly do the step itself, which told
@@ -506,13 +529,19 @@ const CODEX_MESSAGE_END_TURN_DESCRIPTION =
 // replies (today's lost the agent's words in 6 of 16), and wrote the reply
 // twice in 2 runs where putting it inside end_turn did in 9
 // (~/dev/me/misc/end-turn-eval/v3). Codex already worked in this order.
+// The "lost track" line: six times from 30 Oct to 5 Nov 2026 Mike had to
+// ask what a piece of work was ("Sorry, I'm not really following") after a
+// long turn or in a thread another agent started, as the reply reported
+// only the latest step (28cee9ef: one experiment's result, never the plan
+// it was for). One line, only then: he likes replies at their usual length.
 const ONE_REPLY_REPLY =
   'Then write your reply as ordinary text straight after it, as your final message. ' +
   'That reply is the only text the user sees from this turn: everything you write before end_turn folds away into your working, out of sight. So don\'t write your answer before calling it, and call no tools after it. ' +
   'The reply: lead with the point and keep it as short as it can be while they can act on it without reading your working. ' +
+  'If they may have lost track (a long turn, work picked up from another thread, a thread they didn\'t start), open with one line on what the work is for and where it stands, before the latest step. ' +
   'A work report is a few bullets of what changed and the result, each linked to where it can be checked: [tests pass](work:npm test) quotes a few words of a step in your working (the command you ran or its description) and opens it there, lit up; [its own thread](thread:<its id from list_threads>) opens another thread; web pages and files link as usual. ' +
   'An explanation, a draft or an answer to their question is prose, at the length it needs. ' +
-  'When you\'re asking something, end the reply with what they need to know to answer it. The question itself, and what each answer would do, are in the card under the reply, so don\'t repeat them. ' +
+  'When you\'re asking something, end the reply with what they need to know to answer it, in full, as they never see your thinking: the draft to approve, the options you weighed. The question itself, and what each answer would do, are in the card under the reply, so don\'t repeat them. ' +
   'Never write a "What I need from you" section, a "Nothing needed from you" line or a list of follow-ups in the reply: asks and next are those. ';
 
 // Only what the fields' own descriptions don't say (threadbear-mcp.ts):
@@ -544,11 +573,27 @@ export function endTurnDescription(provider: 'claude' | 'codex', bulletReplies: 
 // the turn's reply (runner.ts, onOutput).
 export const ONE_REPLY_NEXT = 'Now write your reply';
 
-export function oneReplyAccepted(needsYou: boolean, restart = ''): string {
+export function oneReplyAccepted(needsYou: boolean, restart = '', wroteFirst = false): string {
+  const first = wroteFirst ? WROTE_FIRST : '';
   return needsYou
-    ? `${ENDED} will wait in Needs you.${restart} ${ONE_REPLY_NEXT}: it's the only text the user sees from this turn, with the card of asks under it. Don't repeat the questions or answers, and write nothing after your reply.`
-    : `${ENDED} is done. ${ONE_REPLY_NEXT}: it's the only text the user sees from this turn. Write nothing after it.`;
+    ? `${ENDED} will wait in Needs you.${restart} ${ONE_REPLY_NEXT}: it's the only text the user sees from this turn, with the card of asks under it. ${first}${ASKS_NEED_THE_REPLY} Don't repeat the card's questions or answers, and write nothing after your reply.`
+    : `${ENDED} is done. ${ONE_REPLY_NEXT}: it's the only text the user sees from this turn. ${first}Write nothing after it.`;
 }
+
+// On 5 Nov 2026 (thread 1d9689e6) Opus wrote a Slack draft for Mike to
+// approve, and another time three designs for him to pick from, before
+// end_turn, as narration blocks (which reach the runner only as a
+// one-line summary), then took "Don't repeat the questions or answers" to
+// mean the draft was already in front of him and wrote one line after
+// it: "Nothing has been sent yet." He got a card asking him to approve a
+// message he couldn't see. Everything before end_turn folds into the
+// working with one reply, so when the turn has words since its last step
+// (turnReply), they were meant as the reply and have to be written again.
+// Asking for more text gets more text (16509f4), which is the point here.
+const WROTE_FIRST =
+  'What you wrote just before this call folded into your working with the rest, out of sight, so they haven\'t read it: write it again in full as your reply. ';
+const ASKS_NEED_THE_REPLY =
+  'They never see your thinking either, so whatever the asks are about (a draft for them to approve, the options you weighed) goes in the reply in full.';
 
 // For an end_turn the Stop hook asked for, in a turn that has its message:
 // the nudge said "your message above is the reply", and "Now write your reply"
@@ -583,8 +628,8 @@ export function endTurnIsOneReply(result: { ok: boolean; text: string }): boolea
 // (thread 1b770c6a).
 export function endTurnMisfit(problem: string, oneReply: boolean): string {
   const shape = oneReply
-    ? '{ headline?, needs?, asks?: { question, options?: { label, does? }[], suggested?, links? }[], next?, archive?, snooze? }, then write your reply after it, as ordinary text: that reply is the only text the user sees from the turn.'
-    : '{ needs?, summary?: string[], asks?: { action, why, reply?, options?: string[], suggested?, links? }[], next?, archive?, snooze? }, after writing your reply as ordinary text, with nothing after the call.';
+    ? '{ headline?, needs?, asks?: { question, options?: { label, does? }[], suggested?, links? }[], next?, archive?, snooze?, waitFor? }, then write your reply after it, as ordinary text: that reply is the only text the user sees from the turn.'
+    : '{ needs?, summary?: string[], asks?: { action, why, reply?, options?: string[], suggested?, links? }[], next?, archive?, snooze?, waitFor? }, after writing your reply as ordinary text, with nothing after the call.';
   return `Not ended: those arguments don't fit end_turn.\n${problem}\nCall it with ${shape} Go by this rather than the tool's description, which can be out of date in a session this old, and reloading it won't change that.`;
 }
 
@@ -858,7 +903,7 @@ export function turnReply(events: PersistedEvent[], serverName = 'threadbear'): 
   let lastText = 0;
   let lastWords = 0; // the last text that wasn't a summary
   let lastWork = 0;
-  let lastTool = 0; // the last result from any tool but end_turn and ToolSearch
+  let lastTool = 0; // the last result from any tool but end_turn
   let lastUser = 0;
   for (const e of events.slice(start)) {
     // A Codex child's items carry its prefix (<child>/<id>); Claude's
@@ -880,7 +925,10 @@ export function turnReply(events: PersistedEvent[], serverName = 'threadbear'): 
         const name = names.get(e.itemId);
         open.delete(e.itemId);
         if (name !== undefined && !name.startsWith(ownPrefix) && !PLUMBING_TOOLS.has(name)) lastWork = e.seq;
-        if (name !== undefined && name !== endTurn && !PLUMBING_TOOLS.has(name)) lastTool = e.seq;
+        // ToolSearch too: a status line, ToolSearch for end_turn, then the
+        // answer as narration left the status line standing as the reply
+        // (Codex's review of the 5 Nov 2026 fix, below).
+        if (name !== undefined && name !== endTurn) lastTool = e.seq;
         break;
       }
       default:

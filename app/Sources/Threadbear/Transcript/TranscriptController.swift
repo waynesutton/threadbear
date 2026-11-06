@@ -211,6 +211,13 @@ final class TranscriptController: NSObject, NSTableViewDataSource, NSTableViewDe
             let visible = scrollView.window?.occlusionState.contains(.visible) ?? false
             AppLog.write("transcript", "showing \(session.threadId): \(rowCount) rows, \(session.state), width \(Int(width)), clip \(Int(clip.minY))+\(Int(clip.height)) of \(Int(tableView.frame.height)), window \(scrollView.window == nil ? "none" : visible ? "visible" : "hidden")")
         }
+        // Paging older rows in is driven by the scroll position changing,
+        // and a first page shorter than the view can't scroll, so it never
+        // changed. A long last turn's newest 500 events fold into one
+        // "Worked for" row, and the thread looked as if it began halfway
+        // down with no way up (Mike, 5 Nov). Ask here too, after a fresh
+        // load and when an already loaded thread is shown again.
+        loadOlderIfNearTop()
     }
 
     var rowCount: Int { session?.displayCount ?? 0 }
@@ -857,7 +864,8 @@ final class TranscriptController: NSObject, NSTableViewDataSource, NSTableViewDe
     /// A button on the open asks card: `pick:<ask>:<n>` picks (or unpicks)
     /// an answer, which waits in the composer; `link:<ask>:<n>` opens one of
     /// the ask's links where links open (the pane or the browser). The done
-    /// card's `archive` archives the thread, as ⌘E does, and `next:<n>`
+    /// card's `archive` opens the menu that asks how it went, then archives
+    /// the thread with that (`archive:<verdict>` picks without the menu), and `next:<n>`
     /// ticks or unticks a suggested follow-up, which waits in the composer;
     /// `explain:<n>` (the "?" at its right) turns on asking the agent what
     /// it meant, which waits in the composer the same way.
@@ -868,7 +876,17 @@ final class TranscriptController: NSObject, NSTableViewDataSource, NSTableViewDe
         if action == "archive" {
             // Already archived (end_turn's archive: true, or ⌘E): nothing to do,
             // and archiving again would move the selection off it.
-            if !thread.isArchived { app.archive(thread.id) }
+            guard !thread.isArchived else { return }
+            // Archive asks how it went before it goes, and there's no
+            // archiving from here without an answer (Mike, 5 Nov, from
+            // mockups): it's the mark that he put it away on purpose.
+            ArchiveVerdictMenu.show { [weak app] verdict in app?.archive(thread.id, verdict: verdict) }
+            return
+        }
+        if action.hasPrefix("archive:") {
+            // Scripted runs pick straight away: `archive:worked`.
+            guard !thread.isArchived, let verdict = ArchiveVerdict(rawValue: String(action.dropFirst(8))) else { return }
+            app.archive(thread.id, verdict: verdict)
             return
         }
         if action.hasPrefix("page:") {

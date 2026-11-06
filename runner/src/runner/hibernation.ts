@@ -6,9 +6,17 @@ import type { Runner } from '../runner.ts';
 import type { RunnerPart } from './part.ts';
 import type { ThreadSummary } from '../protocol.ts';
 import { ErrorCode, RpcError } from '../protocol.ts';
-import { SAID_MAX, WAKE_SYSTEM, awayFor, hibernateNote, readWakeAnswer, wakePrompt } from '../wake-when.ts';
+import { SAID_MAX, WAKE_SYSTEM, awayFor, hibernateNote, localWhen, readWakeAnswer, wakePrompt } from '../wake-when.ts';
 import type { ThreadState } from '../runner.ts';
 import { NO_WAKE_TIME } from '../runner.ts';
+import { parseWhen } from '../when.ts';
+import type { WaitFor } from '../needs.ts';
+
+// How long a thread waiting on others sleeps at most when end_turn gave no
+// snooze, so one that never hears still comes back.
+export const WAIT_FOR_DEFAULT_MS = 86_400_000;
+// How much of each finished thread's reply the waiting one is handed.
+export const WAIT_FOR_REPLY_CHARS = 2000;
 
 export const hibernationPart = {
   // Hibernates a thread until when Mike said, in his own words
@@ -89,6 +97,163 @@ export const hibernationPart = {
     return true;
   },
 
+  // end_turn's waitFor, once the turn is over: hibernates until every
+  // named thread finishes a turn with nothing left (or is archived or
+  // deleted), then wakes with what they said. A thread that never hears
+  // wakes at the snooze time, or after a day. Before 5 Nov 2026 a thread
+  // waiting on another's report could only end as done, in the inbox.
+  waitOn(this: Runner, st: ThreadState, waits: WaitFor[], when: string | undefined): void {
+    const { rec } = st;
+    const list: { threadId: string; title: string; until?: string }[] = [];
+    const skipped: string[] = [];
+    const ids = waits.map((w) => w.id);
+    for (const { id, until } of waits) {
+      const hits = [...this.threads.values()].filter((t) => !t.rt.deleted && (t.rec.id === id || t.rec.id.startsWith(id)));
+      let found: { id: string; title: string; archived: boolean } | undefined;
+      if (hits.length === 1) found = { id: hits[0].rec.id, title: hits[0].rec.title, archived: Boolean(hits[0].rec.archivedAt) };
+      else if (!hits.length) {
+        // On another runner of this Mac's (one that's draining, or the new
+        // one it moved to while this turn ended): waited on all the same,
+        // and checked when either comes across.
+        const there = this.store.ids().filter((n) => n === id || n.startsWith(id));
+        const rec = there.length === 1 && !this.threads.has(there[0]) ? this.store.load(there[0]) : undefined;
+        if (rec) found = { id: rec.id, title: rec.title, archived: Boolean(rec.archivedAt) };
+      }
+      if (!found || found.id === rec.id || found.archived) skipped.push(id);
+      else if (!list.some((x) => x.threadId === found.id)) list.push({ threadId: found.id, title: found.title, ...(until ? { until } : {}) });
+    }
+    if (!list.length) {
+      this.emit(st, { type: 'system.note', text: `Not hibernated: none of the threads it was to wait on (${ids.join(', ')}) are here and still going.` });
+      return;
+    }
+    const now = this.clock.now();
+    let until: string | undefined;
+    if (when && when.toLowerCase() !== 'restart') {
+      try {
+        until = parseWhen(when, now);
+      } catch {
+        until = undefined;
+      }
+    }
+    if (!until || Date.parse(until) <= now) until = new Date(now + WAIT_FOR_DEFAULT_MS).toISOString();
+    this.update({ threadId: rec.id, snoozedUntil: until });
+    rec.waitingOn = list;
+    this.markDirty(st);
+    const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    const also = skipped.length ? ` (${skipped.join(', ')} isn't a thread here that's still going, so it isn't waited on.)` : '';
+    this.emit(st, { type: 'system.note', text: `Hibernating until ${waitsLine(list)}, or ${localWhen(Date.parse(until), timeZone)} at the latest.${also}` });
+    // One may have finished already (while this turn was ending, or before
+    // it with nothing new since): it wakes now with that reply.
+    this.reconcileWaits();
+    // One waited on for something may have done it already, and had its
+    // look before this wait was there to be judged: one more look.
+    for (const x of list) if (x.until && this.threads.has(x.threadId)) this.tellActivity({ kind: 'waited-on', threadId: x.threadId });
+  },
+
+  // A turn finished with nothing needed and nothing left running: kept with
+  // its reply, then any thread waiting on it hears.
+  markFinished(this: Runner, st: ThreadState, lastText: string | undefined): void {
+    let reply = lastText?.trim() ?? '';
+    if (!reply) {
+      try {
+        reply = this.threadGist(st.rec.id, { recent: 1, chars: WAIT_FOR_REPLY_CHARS }).recent.filter((x) => x.who === 'assistant').at(-1)?.text ?? '';
+      } catch {
+        reply = '';
+      }
+    }
+    if (reply.length > WAIT_FOR_REPLY_CHARS) reply = reply.slice(0, WAIT_FOR_REPLY_CHARS) + '…';
+    st.rec.finished = { at: this.isoNow(), ...(reply ? { reply } : {}) };
+    this.markDirty(st);
+    this.reconcileWaits();
+  },
+
+  waitedOnDeleted(this: Runner, threadId: string): void {
+    for (const st of this.threads.values()) {
+      for (const w of st.rec.waitingOn ?? []) {
+        if (w.threadId === threadId && !w.done) {
+          w.done = { at: this.isoNow(), how: 'deleted' };
+          this.markDirty(st);
+        }
+      }
+    }
+    this.reconcileWaits();
+  },
+
+  // Marks each wait whose thread has finished (with no new work since) or
+  // been archived, and wakes any thread whose waits are all done with their
+  // replies. Run whenever that could have changed: a finish, an archive,
+  // a delete, a new wait, a start and a thread coming across from a
+  // draining runner. A thread not here (still on that runner) waits.
+  reconcileWaits(this: Runner): void {
+    if (this.holdWaits) return;
+    for (const st of this.threads.values()) {
+      const waits = st.rec.waitingOn;
+      if (!waits || st.rt.deleted || st.rec.archivedAt || this.bucket(st.rec) !== 'snoozed') continue;
+      for (const w of waits) {
+        if (w.done) continue;
+        const t = this.threads.get(w.threadId);
+        if (!t || t.rt.deleted) continue;
+        const fin = t.rec.finished;
+        // One waiting for something in particular hears from the librarian
+        // (waitMet), not from any finish.
+        if (fin && !w.until) w.done = { at: fin.at, how: 'finished', ...(fin.reply ? { reply: fin.reply } : {}) };
+        else if (t.rec.archivedAt) w.done = { at: t.rec.archivedAt, how: 'archived' };
+        else continue;
+        w.title = t.rec.title;
+        this.markDirty(st);
+      }
+      if (waits.every((x) => x.done)) this.deliverWaits(st, waits);
+    }
+  },
+
+  deliverWaits(this: Runner, st: ThreadState, waits: NonNullable<ThreadState['rec']['waitingOn']>): void {
+    const parts = waits.map((x) => {
+      const head = `"${x.title}" (thread ${x.threadId.slice(0, 8)})`;
+      const said = x.done?.how === 'deleted' ? 'was deleted' : x.done?.how === 'archived' ? 'was archived'
+        : x.done?.how === 'met' ? `has done what you waited for (${x.until}): ${x.done.why || 'the librarian read it so'}` : 'finished';
+      return x.done?.reply ? `${head} ${said}. Its last reply:\n\n${x.done.reply}` : `${head} ${said}.`;
+    });
+    const one = waits.length === 1;
+    const why = one ? `"${waits[0].title}" finished` : 'the threads it was waiting on finished';
+    const text = `The thread${one ? '' : 's'} you hibernated to wait on ${one ? 'has' : 'have'} finished.\n\n${parts.join('\n\n')}\n\nCarry on from here. read_thread has the rest of ${one ? 'it' : 'them'}.`;
+    this.wake(st, { why });
+    this.armSnoozeTimer();
+    this.sendTo(st, text, [], { origin: 'runner', queue: true });
+    this.log.info('woke after waiting on threads', { threadId: st.rec.id, on: waits.map((x) => x.threadId) });
+  },
+
+  // The waits on this thread for something in particular, for the
+  // librarian's look at it.
+  waitedOnFor(this: Runner, threadId: string): { threadId: string; title: string; until: string }[] {
+    const out: { threadId: string; title: string; until: string }[] = [];
+    for (const { rec, rt } of this.threads.values()) {
+      if (rt.deleted || rec.archivedAt || this.bucket(rec) !== 'snoozed') continue;
+      for (const w of rec.waitingOn ?? []) if (w.threadId === threadId && w.until && !w.done) out.push({ threadId: rec.id, title: rec.title, until: w.until });
+    }
+    return out;
+  },
+
+  // The librarian read in a look at `targetId` that what `waiterId` waits
+  // for there has happened: that wait is done, with the thread's latest
+  // reply, and the waiter wakes once all of its waits are.
+  waitMet(this: Runner, waiterId: string, targetId: string, why: string, until: string): boolean {
+    const st = this.threads.get(waiterId);
+    // The same condition the look was shown, not one set since.
+    const w = st?.rec.waitingOn?.find((x) => x.threadId === targetId && x.until === until && !x.done);
+    if (!st || !w || st.rt.deleted || this.bucket(st.rec) !== 'snoozed') return false;
+    let reply = '';
+    try {
+      reply = this.threadGist(targetId, { recent: 2, chars: WAIT_FOR_REPLY_CHARS }).recent.filter((x) => x.who === 'assistant').at(-1)?.text ?? '';
+    } catch {
+      reply = '';
+    }
+    w.done = { at: this.isoNow(), how: 'met', ...(reply ? { reply } : {}), ...(why ? { why: why.slice(0, 200) } : {}) };
+    this.markDirty(st);
+    this.log.info('a wait was met', { waiterId, targetId, why });
+    this.reconcileWaits();
+    return true;
+  },
+
   armSnoozeTimer(this: Runner): void {
     this.snoozeTimer?.cancel();
     this.snoozeTimer = undefined;
@@ -128,6 +293,7 @@ export const hibernationPart = {
     delete st.rec.snoozedUntil;
     delete st.rec.snoozedUntilRestart;
     delete st.rec.wakeWhen;
+    delete st.rec.waitingOn;
     st.rec.forceUnread = true;
     st.rec.updatedAt = this.isoNow();
     this.markDirty(st);
@@ -136,3 +302,10 @@ export const hibernationPart = {
 };
 
 export type HibernationPart = RunnerPart<typeof hibernationPart>;
+
+// "\"Convex I/O\" finishes", "\"Convex I/O\" reports the saving", joined.
+function waitsLine(list: { title: string; until?: string }[]): string {
+  const one = (x: { title: string; until?: string }) => `"${x.title}" ${x.until ? `does this: ${x.until}` : 'finishes'}`;
+  if (list.every((x) => !x.until)) return `${list.map((x) => `"${x.title}"`).join(list.length === 2 ? ' and ' : ', ')} ${list.length === 1 ? 'finishes' : 'finish'}`;
+  return list.map(one).join('; ');
+}

@@ -6,6 +6,7 @@
 // starts the runner again. The next start reads the file, notes the restart
 // in the threads that asked to carry on, and sends each of them its resume
 // text as a turn of the runner's own.
+import type { SecretCheckStatus } from './secret-check.ts';
 import type { MacScreenStatus } from './mac-screen.ts';
 import type { UpstreamStatus } from './upstream.ts';
 import fs from 'node:fs';
@@ -92,6 +93,7 @@ export type RunnerStatus = {
   upstream?: UpstreamStatus;
   // The Convex mirror (src/sync.ts; main.ts adds it).
   sync?: SyncStatus;
+  secretCheck?: SecretCheckStatus;
   // Dialogs on this Mac's screen and Full Disk Access (mac-screen.ts; main.ts adds it).
   macScreen?: MacScreenStatus;
 };
@@ -133,6 +135,9 @@ export function threadEnv(threadId: string, home: string, basePath = process.env
     THREADBEAR_HOME: home,
     THREADBEAR_RUNNER_HOME: home,
     THREADBEAR_RUNNER_VERSION: RUNNER_VERSION,
+    // A picture copied in here can be on the thread's shared page; one
+    // anywhere else can't (docs/protocol.md, "Sharing").
+    THREADBEAR_MEDIA_DIR: paths.media(home, threadId),
     // The old names too, for skills and scripts written before the rename.
     THREADBARE_THREAD_ID: threadId,
     THREADBARE_HOME: home,

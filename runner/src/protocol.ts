@@ -47,7 +47,9 @@ export type UsageWindow = {
 export type AccountUsage = {
   windows: UsageWindow[];
   readAt: string; // when the newest reading in it was taken
-  source: 'tokenStats' | 'live';
+  // 'shared': another runner's reading of the same login (by email) was the
+  // newest (docs/protocol.md, Accounts, "Shared readings").
+  source: 'tokenStats' | 'live' | 'shared';
   stale?: boolean; // Token Stats has gone quiet and there's no live reading since
   blocked?: boolean; // the provider says this login is at its limit
   notice?: string; // Token Stats' own note
@@ -131,6 +133,11 @@ export type RunnerDefaults = {
 
 export type ThreadStatus = 'idle' | 'starting' | 'running' | 'waiting' | 'error' | 'stopped';
 
+// Who archived a thread, and how Mike said it went (Who archived a thread).
+export type ArchivedBy = 'mike' | 'agent' | 'threadbear';
+export type ArchiveVerdict = 'worked' | 'didntWork' | 'notNeeded';
+export const ARCHIVE_VERDICTS: readonly ArchiveVerdict[] = ['worked', 'didntWork', 'notNeeded'];
+
 export type ThreadSummary = {
   id: string;
   title: string;
@@ -164,9 +171,14 @@ export type ThreadSummary = {
   // Hibernated in Mike's words ("Hibernate in words"): what he said, the
   // topic it waits for, and pending while the time is worked out.
   wakeWhen?: { said: string; topic?: string; pending?: true };
+  waitingOn?: { threadId: string; title: string; until?: string; done?: true }[]; // hibernating until these finish (or do `until`)
   woke?: { at: string; since?: string }; // woke from hibernating by itself, not looked at yet
   onOldRunner?: boolean; // finishing a turn on a runner that handed over (Handovers)
   archivedAt?: string;
+  // Who archived it and, from the done card's Archive menu, the user's word
+  // on how it went; only while archivedAt is set (Who archived a thread).
+  archivedBy?: ArchivedBy;
+  archiveVerdict?: ArchiveVerdict;
   starredAt?: string; // in the Starred section above the Inbox, unless archived
   preview: string;
   lastSeq: number;
@@ -335,7 +347,7 @@ export type ProjectIcon = {
 
 // 'notes': a project's notes got long and were tidied; the entry is the
 // project's, with an empty threadId.
-export type LibrarianReason = 'first-message' | 'first-turn' | 'new-folder' | 'moved' | 'catch-up' | 'asked' | 'notes';
+export type LibrarianReason = 'first-message' | 'first-turn' | 'new-folder' | 'moved' | 'catch-up' | 'asked' | 'notes' | 'waited-on';
 
 export type LibrarianJob = {
   threadId: string;
@@ -405,7 +417,7 @@ export type Action = {
   prompt?: string; // kind "prompt"
   url?: string; // kind "url": an http or https page
   patch: string;
-  folder?: string; // where the command runs; absent: the thread's folder
+  folder?: string; // where the command runs (a project patch's: the folder holding its .threadbear/); absent: the thread's folder
   projectId?: string; // the project whose folder gave it
   note?: string;
   icon?: string; // an SF Symbol for the chip: the action's own, else its patch's
@@ -424,6 +436,10 @@ export type Hook = {
   title: string;
   on: HookTrigger;
   command: string;
+  // What the runner hands the shell instead, for a patch trusted by its hash:
+  // `command`'s script by its absolute path, every word quoted (patch-trust.ts,
+  // automaticCommand). Clients show `command`.
+  exec?: string;
   edited?: string; // only after a turn that edited a file matching this glob (relative to the folder)
   tell: HookTell; // when the result goes to the agent as a message
   patch: string;
@@ -482,6 +498,10 @@ export type PanelItem = {
   path?: string;
   icon?: string;
   tone?: 'attention' | 'failed' | 'done';
+  // A heading drawn over the row where it differs from the row before's.
+  section?: string;
+  // Short, faint, at the end of the title's line: a date or a count.
+  trailing?: string;
 };
 
 export type BackgroundKind = 'agent' | 'shell' | 'monitor' | 'other';

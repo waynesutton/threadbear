@@ -179,6 +179,8 @@ export function checkSummary(t: Obj): string[] {
   if (t.asked !== undefined && (!isStr(t.asked) || !t.asked || t.asked.length > 140 || t.asked.includes('\n'))) problems.push('asked');
   if (t.title.length > 200) problems.push('title');
   for (const k of ['model', 'modelInUse', 'snoozedUntil', 'archivedAt', 'nativeSessionId']) if (t[k] !== undefined && !isStr(t[k])) problems.push(k);
+  if (t.archivedBy !== undefined && (!['mike', 'agent', 'threadbear'].includes(t.archivedBy as string) || t.archivedAt === undefined)) problems.push('archivedBy');
+  if (t.archiveVerdict !== undefined && (!['worked', 'didntWork', 'notNeeded'].includes(t.archiveVerdict as string) || t.archivedAt === undefined)) problems.push('archiveVerdict');
   if (t.poolId !== undefined && (!isStr(t.poolId) || !t.poolId)) problems.push('poolId');
   if (t.waitingForRoom !== undefined) {
     const w = t.waitingForRoom;
@@ -195,6 +197,12 @@ export function checkSummary(t: Obj): string[] {
     const ok = w && typeof w === 'object' && isStr(w.said) && isStr(t.snoozedUntil) && (w.topic === undefined || isStr(w.topic)) && (w.pending === undefined || w.pending === true) &&
       Object.keys(w).every((k) => ['said', 'topic', 'pending'].includes(k));
     if (!ok) problems.push('wakeWhen');
+  }
+  if (t.waitingOn !== undefined) {
+    const w = t.waitingOn;
+    const ok = Array.isArray(w) && w.length > 0 && isStr(t.snoozedUntil) &&
+      w.every((x: any) => x && isStr(x.threadId) && isStr(x.title) && (x.done === undefined || x.done === true) && Object.keys(x).every((k) => ['threadId', 'title', 'done'].includes(k)));
+    if (!ok) problems.push('waitingOn');
   }
   for (const k of ['effort', 'effortInUse']) if (t[k] !== undefined && !EFFORTS.includes(t[k])) problems.push(k);
   for (const k of ['contextTokens', 'contextWindow', 'costUsd']) if (t[k] !== undefined && !isNum(t[k])) problems.push(k);
@@ -295,8 +303,8 @@ export function checkSummary(t: Obj): string[] {
   }
   const allowed = new Set([
     'id', 'title', 'cwd', 'accountId', 'provider', 'model', 'permissionMode', 'status', 'live', 'needsYou', 'createdAt', 'updatedAt',
-    'lastActivityAt', 'snoozedUntil', 'snoozedUntilRestart', 'archivedAt', 'starredAt', 'preview', 'lastSeq', 'lastSeenSeq', 'nativeSessionId', 'contextTokens', 'costUsd',
-    'poolId', 'waitingForRoom', 'waitingForNetwork', 'wakeWhen',
+    'lastActivityAt', 'snoozedUntil', 'snoozedUntilRestart', 'archivedAt', 'archivedBy', 'archiveVerdict', 'starredAt', 'preview', 'lastSeq', 'lastSeenSeq', 'nativeSessionId', 'contextTokens', 'costUsd',
+    'poolId', 'waitingForRoom', 'waitingForNetwork', 'wakeWhen', 'waitingOn',
     'effort', 'modelInUse', 'effortInUse', 'contextWindow', 'panels', 'actions', 'hooks', 'patches', 'background', 'subagents', 'projects', 'worktree',
     'needs', 'asks', 'asksSeq', 'highlightsAt', 'panelRequest', 'share', 'startedBy', 'asked',
   ]);

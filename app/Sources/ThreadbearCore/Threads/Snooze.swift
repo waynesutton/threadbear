@@ -84,6 +84,11 @@ public enum WakeWords {
     /// What a Hibernating row shows where its time would be, and the tooltip
     /// with the rest; nil for one hibernated the ordinary way.
     public static func row(_ thread: ThreadSummary, now: Date) -> (text: String, tip: String)? {
+        if let names = waitingNames(thread) {
+            var tip = "Back when \(whatFor(thread))"
+            if let time = time(thread) { tip += ", or \(RelativeTime.until(time, now: now)) at the latest" }
+            return ("Waiting on \(names)", tip + ".")
+        }
         guard let wake = thread.wakeWhen else { return nil }
         if wake.pending { return ("Thinking…", "Working out when from \"\(wake.said)\"") }
         guard let topic = wake.topic else { return nil }
@@ -94,11 +99,39 @@ public enum WakeWords {
 
     /// The thread's status line ("Hibernating until you talk about woodworking").
     public static func status(_ thread: ThreadSummary, now: Date) -> String? {
+        if waitingNames(thread) != nil {
+            let base = "Hibernating until \(whatFor(thread))"
+            if let time = time(thread) { return base + ", or \(RelativeTime.until(time, now: now))" }
+            return base
+        }
         guard let wake = thread.wakeWhen else { return nil }
         if wake.pending { return "Hibernating, working out until when" }
         guard let topic = wake.topic else { return nil }
         if let time = time(thread) { return "Hibernating until you talk about \(topic), or \(RelativeTime.until(time, now: now))" }
         return "Hibernating until you talk about \(topic)"
+    }
+
+    /// The threads it still waits on (end_turn's waitFor).
+    static func stillGoing(_ thread: ThreadSummary) -> [WaitingOn] {
+        (thread.waitingOn ?? []).filter { !$0.done }
+    }
+
+    /// What it's still waiting for: "\"Convex I/O\" finishes", or with a
+    /// condition, "\"Convex I/O\" reports the saving".
+    static func whatFor(_ thread: ThreadSummary) -> String {
+        let left = stillGoing(thread)
+        if left.allSatisfy({ $0.until == nil }) {
+            let names = left.map { "\"\($0.title)\"" }.joined(separator: left.count == 2 ? " and " : ", ")
+            return names + (left.count == 1 ? " finishes" : " finish")
+        }
+        return left.map { "\"\($0.title)\" " + ($0.until ?? "finishes") }.joined(separator: "; ")
+    }
+
+    /// "Convex I/O", or "Convex I/O and 1 more", for the row and status line.
+    static func waitingNames(_ thread: ThreadSummary) -> String? {
+        let left = stillGoing(thread)
+        guard let first = left.first else { return nil }
+        return left.count == 1 ? "\"\(first.title)\"" : "\"\(first.title)\" and \(left.count - 1) more"
     }
 
     // The runner's 9999-12-31 is beyond this; any real time is well before.

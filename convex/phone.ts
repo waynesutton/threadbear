@@ -7,9 +7,11 @@ import { ConvexError, v, type Infer } from 'convex/values';
 import { mutation, query, type QueryCtx } from './_generated/server';
 import type { Doc, Id } from './_generated/dataModel';
 import { threadFields, views } from './schema';
-import { checkPhoneToken } from './lib';
+import { checkPhoneToken, hasLiveKey, runnerStatsRows, watchRunnersFor } from './lib';
 import { API_VERSION } from './version';
 import { imagesFrom, phoneImage, replyImagesFrom } from './share';
+import { runnerName } from './sync';
+import { HEADS_MARK } from './projectHeads';
 
 // A runner not heard from for this long is offline, and a command with no
 // runnerId goes to the main one still online (mainRunner).
@@ -47,6 +49,8 @@ type PhoneThread = Infer<typeof row>;
 function stripThread(doc: Doc<'threads'>): PhoneThread {
   const out: Record<string, unknown> = {};
   for (const [k, value] of Object.entries(doc)) if (PHONE_THREAD_KEYS.has(k) && value !== undefined) out[k] = value;
+  // Out of its list for a runner key's cap (sync.ts upsertThreads): shown where it belongs.
+  if (doc.view === 'overflow') out.view = doc.wantView ?? 'inbox';
   return out as PhoneThread;
 }
 
@@ -63,12 +67,14 @@ export const me = query({
 
 export const runners = query({
   args: { token: v.string() },
-  returns: v.array(v.object({ runnerId: v.string(), name: v.string(), version: v.string(), lastSeenAt: v.string(), draining: v.boolean() })),
+  // release to pressure since API 45, for the website's runner page. An older
+  // phone ignores them.
+  returns: v.array(v.object({ runnerId: v.string(), name: v.string(), version: v.string(), lastSeenAt: v.string(), draining: v.boolean(), release: v.optional(v.string()), startedAt: v.optional(v.string()), threadCount: v.optional(v.number()), pressure: v.optional(v.string()) })),
   handler: async (ctx, { token }) => {
     await checkPhoneToken(ctx, token);
     const out = [];
     for await (const r of ctx.db.query('runners')) {
-      out.push({ runnerId: r.runnerId, name: r.name, version: r.version, lastSeenAt: new Date(r.lastSeenAt).toISOString(), draining: r.draining });
+      out.push({ runnerId: r.runnerId, name: r.name, version: r.version, lastSeenAt: new Date(r.lastSeenAt).toISOString(), draining: r.draining, ...(r.release ? { release: r.release } : {}), startedAt: r.startedAt, threadCount: r.threadCount, ...(r.pressure ? { pressure: r.pressure } : {}) });
     }
     return out;
   },
@@ -86,6 +92,51 @@ export const threads = query({
       .order('desc');
     const rows = view === 'den' ? await q.take(DEN_LIMIT) : await q.collect();
     return rows.map(stripThread);
+  },
+});
+
+// A list once, and the time to follow it from with threadsSince (API 43). The
+// list re-read whole for every row written was most of the I/O of an open
+// phone or browser: about 39 KB a time, hundreds of times an hour.
+export const threadsAt = query({
+  args: { token: v.string(), view: v.union(...views.map((x) => v.literal(x))) },
+  returns: v.object({ rows: v.array(row), at: v.number() }),
+  handler: async (ctx, { token, view }) => {
+    await checkPhoneToken(ctx, token);
+    const q = ctx.db.query('threads').withIndex('by_view_activity', (x) => x.eq('view', view)).order('desc');
+    const rows = view === 'den' ? await q.take(DEN_LIMIT) : await q.collect();
+    return { rows: rows.map(stripThread), at: Date.now() };
+  },
+});
+
+const SINCE_CAP = 200;
+// threadGone rows last a day (pruneOld, which runs every 6 hours), so asking
+// from further back than this could miss one: load the list again instead.
+const SINCE_OLDEST_MS = 12 * 60 * 60_000;
+
+// Rows written at or after `since`, in any view, and threads gone or out of
+// the lists since then. A client merges them into what it has and asks again
+// from the newest it heard (less CHANGES_MARGIN_MS in its own code), so each
+// run reads only what changed. `more`: too many to send, load the list again.
+export const threadsSince = query({
+  args: { token: v.string(), since: v.number() },
+  returns: v.object({ rows: v.array(v.object({ ...row.fields, updatedMs: v.number() })), gone: v.array(v.string()), more: v.optional(v.boolean()) }),
+  handler: async (ctx, { token, since }) => {
+    await checkPhoneToken(ctx, token);
+    if (since < Date.now() - SINCE_OLDEST_MS) return { rows: [], gone: [], more: true };
+    const docs = await ctx.db.query('threads').withIndex('by_updated', (x) => x.gte('updatedMs', since)).take(SINCE_CAP + 1);
+    const goneRows = await ctx.db.query('threadGone').withIndex('by_at', (x) => x.gte('at', since)).take(SINCE_CAP + 1);
+    if (docs.length > SINCE_CAP || goneRows.length > SINCE_CAP) return { rows: [], gone: [], more: true };
+    const rows = [];
+    // An id that's back since it went has a row, which is what's true now.
+    const here = new Set(docs.map((d) => d.threadId));
+    const gone = goneRows.filter((g) => !here.has(g.threadId)).map((g) => g.threadId);
+    for (const d of docs) {
+      // Out of its list for a runner key's cap: threads doesn't show it either.
+      if (d.view === 'overflow') gone.push(d.threadId);
+      else rows.push({ ...stripThread(d), updatedMs: d.updatedMs ?? since });
+    }
+    return { rows, gone };
   },
 });
 
@@ -265,30 +316,100 @@ const projectRow = v.object({
   icon: v.optional(v.object({ symbol: v.optional(v.string()), url: v.optional(v.string()), by: v.string() })),
 });
 
+// A project's picture as a URL, in place of the name the runner gave it.
+async function iconOf(ctx: QueryCtx, p: { runnerId: string; id: string; icon?: { symbol?: string; picture?: string; by: string } }) {
+  if (!p.icon) return {};
+  let url: string | undefined;
+  if (p.icon.picture) {
+    const stored = await ctx.db
+      .query('projectIcons')
+      .withIndex('by_runner_project', (q) => q.eq('runnerId', p.runnerId).eq('projectId', p.id))
+      .unique();
+    url = (stored && (await ctx.storage.getUrl(stored.storageId))) ?? undefined;
+  }
+  return { icon: { ...(p.icon.symbol ? { symbol: p.icon.symbol } : {}), ...(url ? { url } : {}), by: p.icon.by } };
+}
+
+// The list, from projectHeads (API 48): goals, state, notes and folders come
+// back empty, and phone:project has them. The iPhone follows this all the time
+// and has only ever read the id, title, archived and icon, so apps already out
+// there get the saving too; reading `projects` cost about 200 KB a run for
+// Mike's 79, nearly all of it notes.
 export const projects = query({
   args: { token: v.string(), archived: v.optional(v.boolean()) },
   returns: v.array(projectRow),
   handler: async (ctx, { token, archived }) => {
     await checkPhoneToken(ctx, token);
     const out = [];
-    for await (const p of ctx.db.query('projects')) {
+    // `projects` only until the first heartbeat on this backend has copied them.
+    const ready = await ctx.db.query('backendMarks').withIndex('by_name', (q) => q.eq('name', HEADS_MARK)).first();
+    for await (const p of ready ? ctx.db.query('projectHeads') : ctx.db.query('projects')) {
       if (p.archived && !archived) continue;
-      const { icon, ...rest } = strip(p);
-      if (!icon) {
-        out.push(rest);
-        continue;
-      }
-      let url: string | undefined;
-      if (icon.picture) {
-        const stored = await ctx.db
-          .query('projectIcons')
-          .withIndex('by_runner_project', (q) => q.eq('runnerId', p.runnerId).eq('projectId', p.id))
-          .unique();
-        url = (stored && (await ctx.storage.getUrl(stored.storageId))) ?? undefined;
-      }
-      out.push({ ...rest, icon: { ...(icon.symbol ? { symbol: icon.symbol } : {}), ...(url ? { url } : {}), by: icon.by } });
+      const { runnerId, id, title, createdBy, createdAt, updatedAt, threadCount, lastActivityAt } = p;
+      out.push({ runnerId, id, title, createdBy, archived: p.archived, createdAt, updatedAt, threadCount, ...(lastActivityAt !== undefined ? { lastActivityAt } : {}), folders: [], goals: '', state: '', notes: '', ...(await iconOf(ctx, p)) });
     }
     return out.sort((a, b) => (b.lastActivityAt ?? b.updatedAt).localeCompare(a.lastActivityAt ?? a.updatedAt));
+  },
+});
+
+// Which projects' goals or state have these words, for the website's search box
+// (API 48). The list doesn't carry those, so this reads the big rows, and only
+// while someone has typed something. Ids only: the list has the rest.
+export const projectSearch = query({
+  args: { token: v.string(), text: v.string() },
+  returns: v.array(v.object({ runnerId: v.string(), id: v.string() })),
+  handler: async (ctx, { token, text }) => {
+    await checkPhoneToken(ctx, token);
+    const q = text.trim().toLowerCase();
+    if (!q) return [];
+    const out = [];
+    for await (const p of ctx.db.query('projects')) {
+      if ([p.goals, p.state].some((x) => x.toLowerCase().includes(q))) out.push({ runnerId: p.runnerId, id: p.id });
+    }
+    return out;
+  },
+});
+
+// One project whole, for its page (API 48). Reads only that project's row, so
+// it re-runs only when that project changes.
+export const project = query({
+  args: { token: v.string(), runnerId: v.string(), id: v.string() },
+  returns: v.union(projectRow, v.null()),
+  handler: async (ctx, { token, runnerId, id }) => {
+    await checkPhoneToken(ctx, token);
+    const p = await ctx.db.query('projects').withIndex('by_runner_id', (q) => q.eq('runnerId', runnerId).eq('id', id)).unique();
+    if (!p) return null;
+    const { icon: _icon, ...rest } = strip(p);
+    return { ...rest, ...(await iconOf(ctx, p)) };
+  },
+});
+
+// A project's threads, archived ones too (API 40), through projectThreads,
+// so it reads only this project's rows rather than every thread. It takes
+// the ones that joined the project last, then puts those in order of
+// activity (links don't carry it; schema.ts). The website asks for more by
+// raising limit, as phone:messages.
+const PROJECT_THREADS_MAX = 1000;
+export const projectThreads = query({
+  args: { token: v.string(), projectId: v.string(), limit: v.optional(v.number()) },
+  returns: v.array(row),
+  handler: async (ctx, { token, projectId, limit }) => {
+    await checkPhoneToken(ctx, token);
+    const n = Math.max(1, Math.min(PROJECT_THREADS_MAX, Math.floor(limit ?? PAGE_DEFAULT)));
+    const links = await ctx.db
+      .query('projectThreads')
+      .withIndex('by_project', (q) => q.eq('projectId', projectId))
+      .order('desc')
+      .take(n);
+    const out = [];
+    for (const l of links) {
+      const t = await ctx.db
+        .query('threads')
+        .withIndex('by_threadId', (q) => q.eq('threadId', l.threadId))
+        .unique();
+      if (t) out.push(stripThread(t));
+    }
+    return out.sort((a, b) => b.lastActivityMs - a.lastActivityMs);
   },
 });
 
@@ -299,7 +420,14 @@ export const pocket = query({
   handler: async (ctx, { token }) => {
     await checkPhoneToken(ctx, token);
     const rows = await ctx.db.query('pocketCards').collect();
-    return rows.map(({ _id, _creationTime, key, ...card }) => ({ id: key, ...card }));
+    // A card a runner key filed says which Mac it's from, ahead of its
+    // source, so a card from Bruce can't pass for one from the main Mac.
+    const out = [];
+    for (const { _id, _creationTime, key, runnerId, ...card } of rows) {
+      const from = runnerId ? `From ${await runnerName(ctx, runnerId)}` : undefined;
+      out.push({ id: key, ...card, ...(from ? { source: card.source ? `${from} · ${card.source}` : from } : {}) });
+    }
+    return out;
   },
 });
 
@@ -324,10 +452,35 @@ export const schedules = query({
     const out = [];
     // `owned` and `claim` are the backend's own (API 9), not the phone's.
     for await (const s of ctx.db.query('schedules')) {
-      const { owned, claim, ...rest } = strip(s);
+      const { owned, claim, updatedMs: _u, ...rest } = strip(s);
       out.push(rest);
     }
     return out;
+  },
+});
+
+// What a sidebar needs of the schedules, all the time (API 45; schema.ts,
+// scheduleWakes): a row per active one, without the claims and runs that make
+// phone:schedules re-run.
+export const wakes = query({
+  args: { token: v.string() },
+  returns: v.array(v.object({ scheduleId: v.string(), threadId: v.optional(v.string()), nextRunAt: v.optional(v.string()) })),
+  handler: async (ctx, { token }) => {
+    await checkPhoneToken(ctx, token);
+    const out = [];
+    for await (const w of ctx.db.query('scheduleWakes')) out.push({ scheduleId: w.scheduleId, ...(w.threadId ? { threadId: w.threadId } : {}), ...(w.nextRunAt ? { nextRunAt: w.nextRunAt } : {}) });
+    return out;
+  },
+});
+
+// Each runner's machine figures (API 45), last reported while someone was
+// watching: see watchRunners.
+export const runnerStats = query({
+  args: { token: v.string() },
+  returns: v.array(v.object({ runnerId: v.string(), at: v.string(), cpuPercent: v.number(), cores: v.number(), memUsed: v.number(), memTotal: v.number(), diskFree: v.number(), diskTotal: v.number(), load1: v.optional(v.number()), uptimeSec: v.number(), machine: v.optional(v.string()), os: v.optional(v.string()) })),
+  handler: async (ctx, { token }) => {
+    await checkPhoneToken(ctx, token);
+    return runnerStatsRows(ctx);
   },
 });
 
@@ -343,6 +496,31 @@ export const accounts = query({
 });
 
 // ------------------------------------------------------------ mutations
+
+// The Runners view is open (API 45): runners report their figures until this
+// lapses. The website calls it every 30 seconds while it's showing, so a closed
+// tab stops them within RUNNER_WATCH_MS (lib.ts).
+export const watchRunners = mutation({
+  args: { token: v.string() },
+  returns: v.null(),
+  handler: async (ctx, { token }) => {
+    await checkPhoneToken(ctx, token);
+    await watchRunnersFor(ctx);
+    return null;
+  },
+});
+
+// Pause, resume or run a schedule (API 45), on the runner it belongs to.
+export const schedule = mutation({
+  args: { token: v.string(), scheduleId: v.string(), action: v.union(v.literal('pause'), v.literal('resume'), v.literal('run')) },
+  returns: v.id('commands'),
+  handler: async (ctx, { token, scheduleId, action }) => {
+    await checkPhoneToken(ctx, token);
+    const s = await ctx.db.query('schedules').withIndex('by_scheduleId', (q) => q.eq('id', scheduleId)).unique();
+    if (!s) throw new ConvexError({ kind: 'notFound', message: 'no such schedule' });
+    return queue(ctx, s.runnerId, 'schedule', undefined, { scheduleId, action });
+  },
+});
 
 // answers (API 14): the open card's asks the message answers, as the Mac
 // app passes them to threads.send, so the transcript shows them as answers.
@@ -407,7 +585,8 @@ export const update = mutation({
     change: v.union(
       v.object({ snooze: v.object({ until: v.optional(v.string()), untilRestart: v.optional(v.boolean()) }) }),
       v.object({ wake: v.literal(true) }),
-      v.object({ archive: v.literal(true) }),
+      // verdict (API 43): how it went, from the done card's Archive menu.
+      v.object({ archive: v.literal(true), verdict: v.optional(v.union(v.literal('worked'), v.literal('didntWork'), v.literal('notNeeded'))) }),
       v.object({ unarchive: v.literal(true) }),
       v.object({ markSeen: v.literal(true) }),
       v.object({ title: v.string() }),
@@ -498,14 +677,20 @@ export const quickAsk = mutation({
   },
 });
 
-// The online runner with the most threads, or "any" (the first one back takes
-// it). Most threads stands in for the Mac Mike really works on, which has his
-// repos and printer. Going by the latest heartbeat instead sent a phone thread
-// to whichever runner had just checked in, so about half landed on Bruce.
+// Where a phone's new thread goes when the phone doesn't say: the online
+// runner heartbeating with the owner key (byOwner, docs/protocol.md "Runner
+// keys") with the most threads, which is the Mac Mike really works on, with
+// his repos and printer. With none online it's "any", which only the owner
+// key takes, so it waits for that Mac rather than going to one with a
+// runner key: Mike's text is for his main Mac unless he picks another.
+// (Going by the latest heartbeat once sent half of them to Bruce; going by
+// most threads alone let a runner key claim a million threads to get them.)
 async function mainRunner(ctx: QueryCtx): Promise<string> {
   let best: { runnerId: string; threadCount: number; lastSeenAt: number } | undefined;
   for await (const r of ctx.db.query('runners')) {
-    if (r.draining || Date.now() - r.lastSeenAt > ONLINE_MS) continue;
+    // A runner with a live key of its own isn't the main Mac, whatever its
+    // last heartbeat said (lib.ts hasLiveKey).
+    if (!r.byOwner || r.draining || Date.now() - r.lastSeenAt > ONLINE_MS || (await hasLiveKey(ctx, r.runnerId))) continue;
     if (!best || r.threadCount > best.threadCount || (r.threadCount === best.threadCount && r.lastSeenAt > best.lastSeenAt)) best = r;
   }
   return best?.runnerId ?? 'any';
@@ -585,6 +770,6 @@ async function commandImages(ctx: { storage: { getUrl(id: Id<'_storage'>): Promi
   return { images: out };
 }
 
-async function queue(ctx: { db: QueryCtx['db'] & { insert: any } }, runnerId: string, kind: 'send' | 'respond' | 'update' | 'create' | 'page' | 'share' | 'quickAsk', threadId: string | undefined, args: Record<string, unknown>) {
+async function queue(ctx: { db: QueryCtx['db'] & { insert: any } }, runnerId: string, kind: 'send' | 'respond' | 'update' | 'create' | 'page' | 'share' | 'quickAsk' | 'schedule', threadId: string | undefined, args: Record<string, unknown>) {
   return ctx.db.insert('commands', { runnerId, ...(threadId ? { threadId } : {}), kind, args, state: 'pending', createdAt: Date.now() });
 }

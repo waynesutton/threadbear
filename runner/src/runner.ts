@@ -48,7 +48,7 @@ import type {
   TurnOutcome,
 } from './protocol.ts';
 import { agentsStillWorking, ErrorCode, LIMITS, PROTOCOL_VERSION, RpcError, sentByAgent } from './protocol.ts';
-import type { LibrarianStatus, Project, Schedule } from './protocol.ts';
+import type { ArchivedBy, ArchiveVerdict, LibrarianStatus, Project, Schedule } from './protocol.ts';
 import { Projects } from './projects.ts';
 import type { Settings } from './settings.ts';
 import type {
@@ -92,7 +92,7 @@ import { parseWhen } from './when.ts';
 import { emptyHighlights, observe as observeHighlights, pinItem, remove as removeHighlight, unpin as unpinHighlight, upsert as upsertHighlight, view as highlightsView, absolute, type ThreadHighlights } from './highlights.ts';
 import { SERVER_NAME, approvalTitle } from './threadbear-mcp.ts';
 import { PANEL_ACK_WAIT_MS, PANEL_PLACES, resolvePanel } from './panel-requests.ts';
-import { archiveFromTool, bylineFromTool, END_TURN_TOOL, endTurnAccepted, endTurnAddedArchive, endTurnAddedSnooze, snoozeFromTool, endTurnAsksForMessage, endTurnIsOneReply, endTurnOwesReply, endTurnRefusedRepeat, endTurnTaken, endTurnWantsReply, needsFromText, needsFromTool, replyWithoutRepeat, splitReplySection, summaryFromTool, summaryMarkdown } from './needs.ts';
+import { archiveFromTool, bylineFromTool, END_TURN_TOOL, endTurnAccepted, endTurnAddedArchive, endTurnAddedSnooze, snoozeFromTool, waitForFromTool, endTurnAsksForMessage, endTurnIsOneReply, endTurnOwesReply, endTurnRefusedRepeat, endTurnTaken, endTurnWantsReply, needsFromText, needsFromTool, replyWithoutRepeat, splitReplySection, summaryFromTool, summaryMarkdown } from './needs.ts';
 import type { Needs } from './needs.ts';
 import { asksForAppRestart } from './app-restarts.ts';
 import type { ConnectorsStatus } from './connectors.ts';
@@ -176,6 +176,9 @@ export type RunnerUpdates = {
 // and a folder move.
 export type ThreadActivity =
   | { kind: 'turn.start'; threadId: string }
+  // Any completed turn (its CLI's own too) in a thread another is waiting
+  // on for something in particular, for the librarian to judge (met).
+  | { kind: 'waited-on'; threadId: string }
   | { kind: 'turn.end'; threadId: string; outcome: TurnOutcome; edited: string[]; workedIn?: string[] }
   | { kind: 'moved'; threadId: string; from: string; to: string };
 
@@ -249,12 +252,10 @@ export type Turn = {
   // sent while it ran, which go straight into the CLI. The turn ends when
   // the CLI has answered them all.
   messages: string[];
-  // Files the turn edited or wrote (edit.diff paths, Write and Edit calls),
-  // for hooks that run only after a change to certain files.
+  // Files the turn edited, wrote or proposed to (edit.diff paths, Write
+  // and Edit calls, denied ones too), for hooks that run only after a
+  // change to certain files. Never trusted from: see 'wrote'.
   edited: Set<string>;
-  // Edit and Write calls on patch files, by item, until their result: the
-  // file is trusted as the agent left it (patch-trust.ts).
-  patchEdits?: Map<string, string>;
   // Folders its shell commands worked in (commandFolders), so the
   // librarian knows the repo a thread in a catch-all folder works on.
   workedIn?: Set<string>;
@@ -264,6 +265,9 @@ export type Turn = {
   // What endTurn was before the latest call, until that call's result says
   // whether it replaced it (a repeat doesn't).
   endTurnBefore?: Record<string, unknown>;
+  // An end_turn of either form was taken (endTurnTaken): ended is only the
+  // one-reply form's, and Codex's bullets form says "Noted. Now write".
+  tookEndTurn?: boolean;
   lastText?: string;
   // The agent's latest end_turn call, and whether one was accepted since
   // Mike last wrote. Text after that is dropped: end_turn has already told
@@ -475,6 +479,14 @@ export type RunnerDeps = {
   reachable?: Reachable;
 };
 
+// The note Mike's pick from the done card's Archive menu leaves in the
+// thread (threads.update's verdict).
+const ARCHIVE_NOTES: Record<ArchiveVerdict, string> = {
+  worked: 'Archived by you: it worked.',
+  didntWork: "Archived by you: it didn't work.",
+  notNeeded: 'Archived by you: not needed any more.',
+};
+
 const DELTA_INTERVAL_MS = 33; // at most ~30 delta flushes a second per thread
 // An interrupted turn that the CLI hasn't ended by then is ended anyway, so
 // a CLI that never answers can't leave a thread stuck as running.
@@ -519,6 +531,10 @@ export const NO_WAKE_TIME = UNTIL_RESTART;
 // Parts of the Runner that live in runner/ (see each file's top).
 export interface Runner extends NewThreadsPart, HibernationPart, TitlesPart, HighlightsPart, PatchesPart, EditingPart, ClisPart, ReviewsPart, ApprovalsPart, ProjectsHostPart, StoppedWorkPart, HandoversPart, PoolsPart, NetworkPart, WorktreesPart {}
 export class Runner {
+  // While main.ts is still starting up: waking a thread for its waits
+  // (reconcileWaits) would start a CLI whose tools aren't ready, so they
+  // wait for main.ts's own reconcileWaits once it's listening.
+  holdWaits = false;
   cfg: Config;
   store: ThreadStore;
   adapters: Record<string, AgentAdapter>;
@@ -1249,7 +1265,9 @@ export class Runner {
     const st = this.mustGet(threadId);
     this.checkAccepting();
     // A thread a draining runner is letting go of is about to be the new
-    // runner's; a message queued here now would be lost on the way.
+    // runner's; a message queued here now would be lost on the way. The Mac
+    // app sends it again on the new runner by these words
+    // (AppModel.turnedAwayByRestart), so keep them.
     if (this.draining && !this.draining.keep.has(threadId)) throw new RpcError(ErrorCode.busy, 'The runner is handing over to a new one; send again in a moment.');
     if (!text && images.length === 0) throw new RpcError(ErrorCode.badParams, 'text or images required');
     // Its turn was made up; a real agent picking it up would only be lost.
@@ -1276,11 +1294,15 @@ export class Runner {
         throw new RpcError(ErrorCode.badParams, (e as Error).message);
       }
     });
+    // New work: its last finish no longer says it's done, for threads
+    // waiting on it (runner/hibernation.ts).
+    delete rec.finished;
     // Sending to a snoozed or archived thread brings it back.
     if (rec.snoozedUntil || rec.archivedAt) {
       delete rec.snoozedUntil;
       delete rec.snoozedUntilRestart;
       delete rec.wakeWhen;
+      delete rec.waitingOn;
       delete rec.archivedAt;
       rt.releaseWhenIdle = false;
     }
@@ -1412,6 +1434,8 @@ export class Runner {
   // than stuck on a turn that never started.
   startTurn(st: ThreadState, msg: QueuedSend): void {
     const { rec, rt } = st;
+    // New work (a review's answer comes this way without sendTo).
+    delete rec.finished;
     // A review can be replayed after a failed turn.started append. Its
     // stable message ID keeps the original user row rather than duplicating it.
     const hasReviewMessage = msg.reviewId && this.store.log(rec.id).read(1, rec.lastSeq).some(e => e.type === 'user.message' && e.reviewId === msg.reviewId && e.turnId === msg.turnId);
@@ -1689,7 +1713,10 @@ export class Runner {
           // under a result saying it hadn't, and its card replaced the one
           // Mike was told about. One that adds archive adds only that.
           if (ev.type === 'tool.result' && ev.itemId === rt.turn.endTurnCall) {
-            if (endTurnRefusedRepeat(ev)) rt.turn.endTurn = rt.turn.endTurnBefore;
+            // Any refusal after one it took, not just ALREADY_ENDED: a bad
+            // snooze or waitFor on a repeat once turned an ask into Done.
+            if (endTurnRefusedRepeat(ev) || (!ev.ok && (rt.turn.ended || rt.turn.tookEndTurn))) rt.turn.endTurn = rt.turn.endTurnBefore;
+            else if (endTurnTaken(ev)) rt.turn.tookEndTurn = true;
             else if (endTurnAddedArchive(ev)) rt.turn.endTurn = { ...rt.turn.endTurnBefore, archive: true };
             else if (endTurnAddedSnooze(ev)) rt.turn.endTurn = { ...rt.turn.endTurnBefore, snooze: rt.turn.endTurn?.snooze };
           }
@@ -1704,20 +1731,13 @@ export class Runner {
             const bullets = endTurnIsOneReply(ev) ? undefined : summaryFromTool(rt.turn.endTurn);
             rt.turn.owedReply = !bullets ? undefined : endTurnAsksForMessage(ev) ? 0 : endTurnOwesReply(ev) ? summaryMarkdown(bullets).length : undefined;
           }
+          // For hooks and the librarian only, never trust: these include
+          // previews (an edit.diff before approval) and edits that were
+          // then denied or failed. Trust comes from 'wrote' alone.
           if (ev.type === 'edit.diff') rt.turn.edited.add(ev.path);
           else if (ev.type === 'tool.call' && (ev.kind === 'edit' || ev.kind === 'write')) {
             const file = ev.input.file_path ?? ev.input.path ?? ev.input.notebook_path;
-            if (typeof file === 'string') {
-              rt.turn.edited.add(file);
-              const full = path.resolve(rec.cwd, file);
-              // Patch files, and helpers a trusted patch may import:
-              // trusted as the agent leaves them (patch-trust.ts).
-              (rt.turn.patchEdits ??= new Map()).set(ev.itemId, full);
-            }
-          } else if (ev.type === 'tool.result' && rt.turn.patchEdits?.has(ev.itemId)) {
-            const file = rt.turn.patchEdits.get(ev.itemId)!;
-            rt.turn.patchEdits.delete(ev.itemId);
-            if (ev.ok) this.trustAgentPatches([file], true, rec.cwd);
+            if (typeof file === 'string') rt.turn.edited.add(file);
           } else if (ev.type === 'tool.call' && own && ev.kind === 'command') {
             const cmd = Array.isArray(ev.input.command) ? ev.input.command.join(' ') : ev.input.command;
             if (typeof cmd === 'string') {
@@ -1847,6 +1867,16 @@ export class Runner {
       case 'subagent':
         this.updateSubagent(st, o.update);
         break;
+      case 'wrote':
+        // Patch files, and helpers a trusted patch may import, an edit the
+        // CLI says it made: trusted as that edit left them, and only while
+        // the file still has those bytes (patch-trust.ts).
+        this.trustAgentPatches(
+          o.files.map((f) => ({ ...f, path: path.resolve(rec.cwd, f.path) })),
+          true,
+          rec.cwd,
+        );
+        break;
       case 'allowRules': {
         const rules = new Set(rec.allowRules ?? []);
         for (const r of o.rules) rules.add(r);
@@ -1911,6 +1941,8 @@ export class Runner {
     // "still waiting" and "it's back" read as one breath).
     const wokeBy = rt.finished.map((t) => ({ kind: t.kind, description: t.description }));
     rt.finished = [];
+    // Working again, so not finished for threads waiting on it.
+    delete rec.finished;
     const turnId = crypto.randomUUID();
     this.emit(st, wokeBy.length ? { type: 'turn.started', turnId, wokeBy } : { type: 'turn.started', turnId }, turnId);
     rt.idleTimer?.cancel();
@@ -1997,12 +2029,28 @@ export class Runner {
     const archive = away && archiveFromTool(turn.endTurn);
     // Hibernating likewise (end_turn's snooze). Archive wins if it asked for both.
     const snooze = away && !archive ? snoozeFromTool(turn.endTurn) : undefined;
+    // Waiting on other threads (end_turn's waitFor), with snooze as the
+    // latest it wakes.
+    const waitFor = away && !archive ? waitForFromTool(turn.endTurn) : undefined;
+    // Done, with nothing left running: any thread waiting on this one hears.
+    // Not if it put itself away to wait too, as it hasn't finished. An auto
+    // turn counts (the one after a sub-agent or background job ends is
+    // often where the report is), so this reads end_turn itself, not `away`.
+    // Judged before endTurn, which starts any queued message.
+    const finished = outcome === 'completed' && said?.needs === 'nothing' && !rec.queue.length && !archive &&
+      !snoozeFromTool(turn.endTurn) && !waitForFromTool(turn.endTurn) &&
+      !rec.subagents?.some((a) => a.status === 'running') && !rt.tasks.length &&
+      // A job that ended mid-turn: the CLI's turn reading its result is next.
+      !rt.taskEndedInTurn && !rt.finished.length;
     this.endTurn(st, ev.seq, outcome === 'failed' ? 'error' : 'idle', outcome, limitHit, netLost);
+    if (finished) this.markFinished(st, turn.lastText);
+    if (outcome === 'completed' && this.waitedOnFor(rec.id).length) this.tellActivity({ kind: 'waited-on', threadId: rec.id });
     if (archive && !rt.turn && !rec.archivedAt && !this.stopping) {
       this.emit(st, { type: 'system.note', text: 'Archived, as the agent was asked to once it had finished.' });
-      this.update({ threadId: rec.id, archived: true });
+      this.update({ threadId: rec.id, archived: true, archivedBy: 'agent' });
     }
-    if (snooze && !rt.turn && !rec.archivedAt && !this.stopping) this.snoozeAfterTurn(st, snooze);
+    if (waitFor && !rt.turn && !rec.archivedAt && !this.stopping) this.waitOn(st, waitFor, snooze);
+    else if (snooze && !rt.turn && !rec.archivedAt && !this.stopping) this.snoozeAfterTurn(st, snooze);
   }
 
   // end_turn's snooze, once the turn is over: a time as update_thread
@@ -2042,9 +2090,6 @@ export class Runner {
     const finished = rt.turn;
     rt.turn?.interruptTimer?.cancel();
     rt.turn = undefined;
-    // Patch files the turn wrote some other way than Edit and Write calls
-    // (a Codex patch's edit.diff) are trusted as it left them.
-    if (finished) this.trustAgentPatches([...finished.edited].map((p) => path.resolve(rec.cwd, p)), false, rec.cwd);
     // The turn may have added a patch file or a convex/ folder.
     this.forgetFolders();
     // The folder's turn.end hooks, after a turn the agent finished itself
@@ -2272,6 +2317,12 @@ export class Runner {
     permissionMode?: PermissionMode;
     snoozedUntil?: string | null; // an ISO time, or 'restart' for until the runner next starts
     archived?: boolean;
+    // Who's archiving it: Mike (the default: the app, the phone, tb), an
+    // agent (update_thread, end_turn's archive) or Threadbear itself. With
+    // Mike's verdict from the done card's Archive menu, so whoever reads
+    // the thread later knows it was put away on purpose, and how it went.
+    archivedBy?: ArchivedBy;
+    verdict?: ArchiveVerdict;
     starred?: boolean;
   }): { thread: ThreadSummary } {
     const st = this.mustGet(params.threadId);
@@ -2430,6 +2481,7 @@ export class Runner {
       delete rec.woke;
       delete rec.snoozedUntilRestart;
       delete rec.wakeWhen;
+      delete rec.waitingOn;
       if (params.snoozedUntil === null) delete rec.snoozedUntil;
       else if (params.snoozedUntil === 'restart') {
         rec.snoozedUntil = UNTIL_RESTART;
@@ -2447,10 +2499,18 @@ export class Runner {
     if (params.archived !== undefined) {
       if (params.archived) {
         archiving = !rec.archivedAt;
+        const by = params.archivedBy ?? 'mike';
+        const verdict = by === 'mike' ? params.verdict : undefined;
+        // Said in the thread, for the agent or a sweeper reading it later.
+        if (verdict && (archiving || verdict !== rec.archiveVerdict)) this.emit(st, { type: 'system.note', text: ARCHIVE_NOTES[verdict] });
         rec.archivedAt = this.isoNow();
+        rec.archivedBy = by;
+        if (verdict) rec.archiveVerdict = verdict;
+        else delete rec.archiveVerdict;
         stop = true;
       } else delete rec.archivedAt;
     }
+    if (archiving) this.reconcileWaits();
     if (params.starred === true) rec.starredAt ??= this.isoNow();
     else if (params.starred === false) delete rec.starredAt;
     if (accountChanged && rt.turn && rt.session && !stop) {
@@ -2487,6 +2547,7 @@ export class Runner {
     const { rec, rt } = st;
     rt.deleted = true;
     this.threads.delete(threadId);
+    this.waitedOnDeleted(threadId);
     this.dirty.delete(threadId);
     rt.idleTimer?.cancel();
     rt.deltaTimer?.cancel();
@@ -2806,8 +2867,14 @@ export class Runner {
     if (rec.snoozedUntil) s.snoozedUntil = rec.snoozedUntil;
     if (rec.snoozedUntilRestart) s.snoozedUntilRestart = true;
     if (rec.wakeWhen && rec.snoozedUntil) s.wakeWhen = { ...rec.wakeWhen };
+    if (rec.waitingOn && rec.snoozedUntil) s.waitingOn = rec.waitingOn.map((w) => ({ threadId: w.threadId, title: w.title, ...(w.until ? { until: w.until } : {}), ...(w.done ? { done: true as const } : {}) }));
     if (rec.woke && rec.forceUnread) s.woke = { ...rec.woke };
-    if (rec.archivedAt) s.archivedAt = rec.archivedAt;
+    if (rec.archivedAt) {
+      s.archivedAt = rec.archivedAt;
+      // Archived before who did it was kept: nobody can say.
+      if (rec.archivedBy) s.archivedBy = rec.archivedBy;
+      if (rec.archiveVerdict) s.archiveVerdict = rec.archiveVerdict;
+    }
     if (rec.starredAt) s.starredAt = rec.starredAt;
     if (rec.nativeSessionId && rec.sessionUsed) s.nativeSessionId = rec.nativeSessionId;
     if (rec.contextTokens !== undefined) s.contextTokens = rec.contextTokens;
@@ -2962,7 +3029,7 @@ export class Runner {
     st.rec.forceUnread = false;
     this.emit(st, { type: 'system.note', text });
     this.markDirty(st);
-    if (archive && !st.rt.turn && !st.rec.archivedAt && this.opening(threadId).text === undefined) this.update({ threadId, archived: true });
+    if (archive && !st.rt.turn && !st.rec.archivedAt && this.opening(threadId).text === undefined) this.update({ threadId, archived: true, archivedBy: 'threadbear' });
   }
 }
 

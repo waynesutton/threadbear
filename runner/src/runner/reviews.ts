@@ -131,6 +131,7 @@ export const reviewsPart = {
       delete next.snoozedUntil;
       delete next.snoozedUntilRestart;
       delete next.wakeWhen;
+      delete next.waitingOn;
       delete next.archivedAt;
     }
     this.store.save(next);
@@ -138,7 +139,14 @@ export const reviewsPart = {
       delete st.rec.snoozedUntil;
       delete st.rec.snoozedUntilRestart;
       delete st.rec.wakeWhen;
+      delete st.rec.waitingOn;
       delete st.rec.archivedAt;
+    }
+    // An answer queued is new work: its last finish no longer counts for
+    // threads waiting on it (runner/hibernation.ts).
+    if (queue.length > st.rec.queue.length) {
+      delete next.finished;
+      delete st.rec.finished;
     }
     // Preserve the record object used by any in-flight deliver() callback.
     Object.assign(st.rec, next);

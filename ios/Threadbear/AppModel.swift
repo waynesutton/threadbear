@@ -108,6 +108,9 @@ final class AppModel {
     var canSendPhotos: Bool { isFake || (apiVersion ?? 0) >= BackendCompatibility.photosAPIVersion }
     /// Whether a secret card can be answered here (backend API 35, phone:secret).
     var canAnswerSecrets: Bool { isFake || (apiVersion ?? 0) >= BackendCompatibility.secretsAPIVersion }
+    /// Whether an archive can say how the thread went (backend API 42), for
+    /// the done card's Archive menu.
+    var canGiveVerdict: Bool { isFake || (apiVersion ?? 0) >= BackendCompatibility.archiveVerdictAPIVersion }
     /// The demo's kept runner keys, in memory so it never writes the keychain,
     /// with the sample Mac's as if it came in a pairing link.
     private let demoRunnerKeys = MemoryRunnerKeyStore(FakeBackend.sampleRunnerKeys)
@@ -245,7 +248,9 @@ final class AppModel {
     /// the page to clear, then slides off where he can see it go (Mike, 31
     /// Oct). The command is only sent once the row has gone, as the runner
     /// can answer within the animation and a list update would snap it away.
-    func archive(_ threadId: String, leavingThread: Bool = false) {
+    /// `verdict` is the done card's pick; it's only sent to a backend that
+    /// takes it (`canGiveVerdict`), and anything older just archives.
+    func archive(_ threadId: String, leavingThread: Bool = false, verdict: ArchiveVerdict? = nil) {
         guard let backend, !archiving.contains(threadId), !slidingOff.contains(threadId) else { return }
         UIImpactFeedbackGenerator(style: .light).impactOccurred()
         // Hibernating threads can be archived from their page but have no inbox row to animate.
@@ -263,7 +268,8 @@ final class AppModel {
             }
             slidingOff.remove(threadId)
             do {
-                let command = try await backend.update(threadId: threadId, change: .archive)
+                let change: ThreadChange = if let verdict, canGiveVerdict { .archiveWithVerdict(verdict) } else { .archive }
+                let command = try await backend.update(threadId: threadId, change: change)
                 for try await status in backend.command(command) {
                     if status?.state == .failed { throw TransportError.server(status?.note ?? "The runner couldn't archive that thread.") }
                     if status?.state == .done { return }
@@ -334,7 +340,8 @@ final class AppModel {
             }
         }
         for view in wanted where listTasks[view] == nil {
-            listTasks[view] = follow(backend.threads(view)) { model, list in
+            let usesChanges = view == .inbox && (apiVersion ?? 0) >= BackendCompatibility.threadChangesAPIVersion
+            listTasks[view] = follow(usesChanges ? backend.inboxChanges() : backend.threads(view)) { model, list in
                 model.pinRunners(list)
                 switch view {
                 case .inbox:
@@ -366,18 +373,45 @@ final class AppModel {
 
     // MARK: Pairing
 
-    /// From a `threadbear://pair` link: checks the token works before
-    /// keeping it.
-    func pair(with link: URL) async {
-        #if DEBUG
-        let allowLocal = true // the simulator against `npx convex dev` on this Mac
-        #else
-        let allowLocal = false
-        #endif
-        guard let pairing = Pairing.parse(link, allowLocal: allowLocal) else {
+    #if DEBUG
+    private static let allowLocalPairing = true // the simulator against `npx convex dev` on this Mac
+    #else
+    private static let allowLocalPairing = false
+    #endif
+
+    /// A pairing link waiting for Mike's yes (ThreadbearApp's alert).
+    let pairingGate = PairingGate()
+    /// A yes is being checked with the server, for the pair screen's spinner.
+    private(set) var isPairing = false
+
+    /// Every pairing link, from the Camera, the pair screen's scanner or the
+    /// clipboard, starts here: it's held for a yes and nothing is saved yet,
+    /// paired or not (an expired token used to let a link straight in).
+    func askToPair(_ link: URL) {
+        lastError = nil
+        switch pairingGate.ask(link, allowLocal: Self.allowLocalPairing, current: pairing ?? PairingStore.load(),
+                               keys: { Self.runnerKeys(for: $0) }) {
+        case .asking: break
+        case .notPairing: lastError = "That link isn't a Threadbear pairing link."
+        case .busy: lastError = "Answer the pairing question first, then open the link again."
+        }
+    }
+
+    /// Mike said yes to `shown`. Synchronous, so the request is taken before
+    /// the alert's dismissal cancels the gate.
+    func acceptPairing(_ shown: PairingRequest) {
+        pairingGate.accept(shown) { [weak self] request in await self?.pair(with: request.link) }
+    }
+
+    /// From a `threadbear://pair` link Mike said yes to (or `-ThreadbearPair`
+    /// in a Debug build): checks the token works before keeping it.
+    private func pair(with link: URL) async {
+        guard let pairing = Pairing.parse(link, allowLocal: Self.allowLocalPairing) else {
             lastError = "That link isn't a Threadbear pairing link."
             return
         }
+        isPairing = true
+        defer { isPairing = false }
         let backend = ConvexBackend(deploymentURL: pairing.deploymentURL, token: pairing.token)
         do {
             _ = try await backend.me()
@@ -512,6 +546,13 @@ final class AppModel {
             guard let identity = try? await backend.me() else { return }
             self?.backendProblem = BackendCompatibility.problem(identity)
             self?.apiVersion = identity.apiVersion ?? 0
+            // The inbox started before this was known: over to following its
+            // changes. The list on screen stays until the new one answers.
+            if (identity.apiVersion ?? 0) >= BackendCompatibility.threadChangesAPIVersion, !Task.isCancelled, let self {
+                self.listTasks[.inbox]?.cancel()
+                self.listTasks[.inbox] = nil
+                self.followLists()
+            }
             // An older backend has no phone:counts, and asking would only
             // fail and retry.
             if (identity.apiVersion ?? 0) >= BackendCompatibility.countsAPIVersion, !Task.isCancelled, let self {

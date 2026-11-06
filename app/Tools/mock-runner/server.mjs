@@ -25,6 +25,7 @@ import path from 'node:path';
 import { SAMPLE_THREADS } from '../../../runner/src/samples.ts';
 import { fileURLToPath } from 'node:url';
 import { reviewDraft, reviewReply, sameDraft } from '../../../runner/src/reviews.ts';
+import { authProof, isNonce, newNonce } from '../../../runner/src/rpc-auth.ts';
 
 // What a waiting (untrusted) demo patch gives once it's trusted, by file.
 const waitingPatchGives = new Map();
@@ -420,15 +421,27 @@ function onConnection(ws, request) {
   const client = { ws, subs: new Set(), authed: header === `Bearer ${token}`, as: where === '/bruce/rpc' ? BRUCE : null };
   clients.add(client);
   ws.on('close', () => clients.delete(client));
+  // The real runner's auth challenge (docs/protocol.md, "Auth"), for a
+  // client that didn't send the old bearer header.
+  const challenge = client.authed ? null : newNonce();
+  // Bound to its own listening port, as the real runner's are.
+  const channel = { server: 'primary', port: request.socket.localPort };
+  if (challenge) ws.send(JSON.stringify({ jsonrpc: '2.0', method: 'auth.challenge', params: { version: 1, nonce: challenge, port: channel.port } }));
   ws.on('message', (raw) => {
     let message;
     try {
       message = JSON.parse(raw.toString());
     } catch {
+      if (!client.authed) return ws.close(4401, 'unauthorized');
       return reply(client, null, null, { code: -32700, message: 'Parse error' });
     }
     if (!client.authed) {
-      if (message.method === 'auth' && message.params?.token === token) {
+      const p = message.params ?? {};
+      if (message.method === 'auth.prove' && challenge && isNonce(p.nonce) && p.proof === authProof(token, 'client', challenge, p.nonce, channel)) {
+        client.authed = true;
+        return reply(client, message.id, { proof: authProof(token, 'runner', challenge, p.nonce, channel) });
+      }
+      if (message.method === 'auth' && p.token === token) {
         client.authed = true;
         return reply(client, message.id, {});
       }
@@ -1038,7 +1051,28 @@ async function dispatch(client, method, p) {
       return remoteThreads(client);
     case 'runners.list':
       if (oldRunner) throw rpcError(-32601, `Unknown method ${method}`);
-      return { runners: runners.map((r) => ({ id: r.id, name: r.name, icon: r.icon, online: true, lastSeenAt: iso(), self: r.self })) };
+      // With what each one's heartbeat says, for the Runners panel: bruce
+      // a release behind and up for a day.
+      return {
+        runners: runners.map((r) => ({
+          id: r.id, name: r.name, icon: r.icon, online: true, lastSeenAt: iso(), self: r.self,
+          ...(r.self
+            ? { version: '0.1.0+20261105T064853Z-c4d90ca', release: '20261105T064853Z-c4d90ca', startedAt: iso(-16 * 60_000) }
+            : { version: '0.1.0+20261104T221010Z-51ae514', release: '20261104T221010Z-51ae514', startedAt: iso(-26 * 3_600_000) }),
+        })),
+      };
+    case 'runners.stats': {
+      // Each runner's machine figures, a little different each ask.
+      if (oldRunner) throw rpcError(-32601, `Unknown method ${method}`);
+      const GB = 1024 ** 3;
+      const wobble = () => Math.round(Math.random() * 8);
+      return {
+        stats: [
+          { runnerId: SELF_RUNNER.id, at: iso(), cpuPercent: 31 + wobble(), cores: 10, memUsed: 17.4 * GB, memTotal: 24 * GB, diskFree: 212 * GB, diskTotal: 994 * GB, load1: 3.42, uptimeSec: 4 * 86400 + 3600, machine: 'Apple M5', os: 'macOS 27.2' },
+          { runnerId: 'runner_bruce', at: iso(), cpuPercent: 8 + wobble(), cores: 8, memUsed: 7.4 * GB, memTotal: 8 * GB, diskFree: 41 * GB, diskTotal: 228 * GB, load1: 1.1, uptimeSec: 19 * 86400, machine: 'Apple M1', os: 'macOS 27.1' },
+        ],
+      };
+    }
     case 'schedules.create': {
       if (!p.text) throw rpcError(-32602, 'text is required');
       if (Boolean(p.at) === Boolean(p.cron)) throw rpcError(-32602, 'Give exactly one of at and cron');
@@ -2697,11 +2731,13 @@ The new hero is shorter, and every page now leads with what the app does.
     site.summary.panels = [{
       id: 'deploys.previews', title: 'Previews', kind: 'list', icon: 'paperplane', patch: 'deploys', note: 'landing-rebuild',
       mockItems: [
-        { title: 'Home', detail: 'Ready 4 minutes ago', url: 'https://site-git-landing-rebuild.vercel.app', icon: 'globe', tone: 'done' },
-        { title: 'Pricing', detail: 'Waiting on the plan prices', url: 'https://site-git-landing-rebuild.vercel.app/pricing', icon: 'globe', tone: 'attention' },
-        { title: 'Docs', detail: 'Build failed: no image at /docs/hero.png', path: path.join(root, 'logs/docs-build.txt'), icon: 'globe', tone: 'failed' },
-        { title: 'Local', detail: 'astro dev on port 4321', url: 'http://localhost:4321/', icon: 'laptopcomputer' },
-        { title: 'Production', detail: 'main, deployed 2 days ago', url: 'https://example.com', icon: 'globe' },
+        // Grouped under headings, with a date at the end of the line and a
+        // sentence long enough to wrap onto its second line.
+        { title: 'Home', detail: 'Ready, with the new hero, the three plan cards and the footer links all pointing at the rebuilt pages', url: 'https://site-git-landing-rebuild.vercel.app', icon: 'globe', tone: 'done', section: 'This branch', trailing: '4m' },
+        { title: 'Pricing', detail: 'Waiting on the plan prices', url: 'https://site-git-landing-rebuild.vercel.app/pricing', icon: 'globe', tone: 'attention', section: 'This branch', trailing: '12m' },
+        { title: 'Docs', detail: 'Build failed: no image at /docs/hero.png', path: path.join(root, 'logs/docs-build.txt'), icon: 'globe', tone: 'failed', section: 'This branch', trailing: '20m' },
+        { title: 'Local', detail: 'astro dev on port 4321', url: 'http://localhost:4321/', icon: 'laptopcomputer', section: 'Elsewhere' },
+        { title: 'Production', detail: 'main, deployed 2 days ago', url: 'https://example.com', icon: 'globe', section: 'Elsewhere', trailing: '2d' },
       ],
     }];
     site.summary.patches = [{ id: 'deploys', source: 'project', file: path.join(root, '.threadbear/patches/deploys.ts') }];
@@ -2877,8 +2913,9 @@ function rpcError(code, message) {
   return error;
 }
 
-function iso() {
-  return new Date().toISOString();
+// Now, or `offset` ms from now.
+function iso(offset = 0) {
+  return new Date(Date.now() + offset).toISOString();
 }
 
 function sleep(ms) {

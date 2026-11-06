@@ -161,8 +161,8 @@ what Mike built a native app for.
 registers itself (`runners` table: name, version, last heartbeat) and
 mirrors its own threads, so the phone sees one list across machines
 with a machine label, and a command carries the `runnerId` it's for. A
-thread started from the phone names a runner, or "any" and the first
-online runner takes it. No new Convex work is needed for step 6. The
+thread started from the phone names a runner, or goes to the main Mac
+(docs/protocol.md, "Runner keys"). No new Convex work is needed for step 6. The
 Mac app still has to reach the second runner somehow for transcripts
 and sends: either a second socket over Tailscale, or, later, by reading
 remote runners' summaries from Convex and opening a socket only for the
@@ -341,14 +341,24 @@ the functions without a deployment (`npm run convex:typecheck`). Having a
 dashboard panel.
 
 - `convex/schema.ts`: `runners`, `threads`, `messages`, `commands`,
-  `projects`, `schedules`, `accounts`, `tokens`, `devices`.
+  `projects`, `schedules`, `accounts`, `tokens`, `devices`, `runnerKeys`,
+  `threadTombstones` (docs/protocol.md, "Runner keys").
 - `convex/sync.ts`: the runner's mutations (`upsertThreads`,
   `removeThreads`, `prune`, `heartbeat`, `bye`, `appendMessages`,
   `setProjects`, `upsertProjects`, `setSchedules`, `setAccounts`, `takeCommand`,
   `finishCommand`), its queries (`threadsOf`, `runnersList`,
   `messageHeads`, `pendingCommands`, which it holds as a live query) and
-  `pruneOld` for `crons.ts`. Each takes `key`, which must equal the
-  deployment's `RUNNER_KEY` env var.
+  `pruneOld` for `crons.ts`. `convex/relay.ts` (API 44) is the main Mac's
+  runner reading another runner's thread (`remoteTail`, `remoteMessages`,
+  `remoteThread`) and queueing work for it (`queueCommand`, `commandState`,
+  `remoteAccounts`), owner key only, so the Mac app opens other Macs'
+  threads with no link to them (docs/protocol.md, "Other runners' threads
+  through the backend"). Each takes `key`: the deployment's
+  `RUNNER_KEY` (the owner key, the main Mac's), or a runner key from
+  `runnerKeys`, which acts as its own runner alone (`convex/lib.ts`
+  `runnerAuth`, `convex/runnerAccess.ts`; the table of who may call what
+  is docs/protocol.md, "Runner keys"). `tb runner add` on the main Mac
+  makes one for another Mac.
 - `convex/phone.ts`: the phone's API (section 6).
 - `convex/push.ts` (Node action) and `convex/devices.ts`: APNs over
   HTTP/2 with the team's token-based key, copied from Poddle's `apns.ts`.
@@ -409,9 +419,16 @@ quota by deleting its 41 `temp-*`/`tmp-*` projects), all in Sydney
 `npx convex dev` pushes there and `npx convex deploy` ships prod.
 `.env.e2e` names the local one for `runner/test/e2e/sync.e2e.test.ts`,
 which passes `--env-file .env.e2e` to every convex command it runs. Both
-cloud deployments have `RUNNER_KEY` set to the key in the live runner's
+cloud deployments have `RUNNER_KEY` set to the key in the M5's runner's
 `secrets/convex-key`, and the live `runner.json` has `sync.url` pointing
-at prod, so the mirror is on from the runner's next start.
+at prod, so the mirror is on from the runner's next start. Bruce has a
+runner key of its own on prod (`tb runner add bruce --ssh bruce --id
+cb921b2447ea --replace`), not a copy of `RUNNER_KEY`, and so has the
+Hetzner box (`cloud`, runner `befe8df8975c`, since 07:03 UTC 5 Nov),
+which that day's rotation had cut off while it still had the old shared
+key. To rotate `RUNNER_KEY` with no gap, `tb runner
+rotate-owner` on the M5, restart its runner, then `tb runner rotate-owner
+--finish` (docs/protocol.md, "Runner keys").
 
 **Working on it.** `npx convex dev` at the repo root runs the local
 backend and pushes `convex/` as it changes; `npx convex env set RUNNER_KEY
@@ -472,6 +489,15 @@ Queries:
 - `phone:runners({ token })` → `[{ runnerId, name, version, lastSeenAt,
   draining }]`. Offline is `lastSeenAt` older than 3 minutes (a runner
   that stopped for good has `lastSeenAt` of 1970).
+  Since API 45 also `release?, startedAt?, threadCount?, pressure?`
+  (`memory` or `disk` while one's running low).
+- `phone:wakes({ token })` (API 45) → `[{ scheduleId, threadId?, nextRunAt? }]`,
+  a small row per active schedule, from `scheduleWakes`: what a sidebar needs
+  all the time. `phone:schedules` costs about 150 KB and re-runs on every claim
+  and run, so it's for a schedules view that's open.
+- `phone:runnerStats({ token })` (API 45) → each runner's machine figures, last
+  reported while someone was watching, and `phone:watchRunners({ token })` says
+  someone is (docs/protocol.md, Sync, "Runner figures").
 - `phone:threads({ token, view: "inbox" | "hibernating" | "den" })` →
   rows, newest `lastActivityAt` first; the den is capped at 100. A row is
   `threadId, runnerId, title, cwd, accountId, provider, model?, status,
@@ -511,6 +537,14 @@ Queries:
   reads older pages once, with `beforeSeq` (`web/src/transcript.ts`); the
   iPhone still raises `limit` as you scroll back. `phone:thread` stays as API 1 had it (newest 20 text messages plus
   any paged ones, never tool rows), for phone apps built before.
+- `phone:threadsAt({ token, view })` (API 43) → `{ rows, at }`, a list once;
+  `phone:threadsSince({ token, since })` → `{ rows, gone, more? }`, every row
+  written at or after `since` in any view, each with `updatedMs`, and threads
+  gone or out of the lists. The client merges them and asks again from the
+  newest `updatedMs` less 5 seconds (a mutation can commit just after one stamped
+  later), so each run reads only what changed; `more` says to load the list
+  again. The website and the iPhone follow the inbox this way; hibernating and
+  archived stay on `phone:threads`, as they're rarely written.
 - `phone:threadRow({ token, threadId })` (API 37) → the thread's row alone,
   for a client that reads messages with `phone:messages`.
 - `phone:images({ token, threadId, from })` (API 37) → the thread's pictures
@@ -525,7 +559,10 @@ gives it only the newest 100 of the den.
 
 Also `phone:projects({ token, archived? })`, `phone:schedules({ token })`
 and `phone:accounts({ token })`, the runner's lists as it last sent them
-(docs/protocol.md "Sync" says which fields). Since API 5 a project row
+(docs/protocol.md "Sync" says which fields). Since API 48 `phone:projects`
+reads `projectHeads` and returns `goals`, `state`, `notes` and `folders` empty;
+`phone:project({ token, runnerId, id })` is one project whole, or null, read
+only when its page is open. Since API 5 a project row
 has `icon?: { symbol?, url?, by }`: the Mac's `ProjectIcon` with the
 picture as a URL into file storage (the runner uploads it, docs/protocol.md
 "Sync", "Project pictures") in place of a path on the Mac. The phone draws
@@ -554,9 +591,10 @@ within a second or two while it's online (state `taken`, then `done` or
   `{ snooze: { until?, untilRestart? } }`, `{ wake: true }`, `{ archive:
   true }`, `{ unarchive: true }`, `{ markSeen: true }`, `{ title }`.
 - `phone:create({ token, text, runnerId?, cwd?, accountId?, model? })`.
-  With no `runnerId`, of the runners seen in the last 3 minutes, the one with
-  the most threads (the Mac Mike works on, not whichever last heartbeat), or
-  `"any"` (the first runner back takes it).
+  With no `runnerId`, of the runners heartbeating with the owner key
+  (`byOwner`) seen in the last 3 minutes, the one with the most threads (the
+  Mac Mike works on), or `"any"`, which only the owner key takes, so it waits
+  for that Mac (docs/protocol.md, "Runner keys").
 - `phone:quickAsk({ token, question, answer, sources?, askedAt, runnerId? })`
   (API 10): a quick ask the phone has already answered out loud, kept as a
   thread. `question` is 1 to 2,000 characters once trimmed, `answer` 1 to
@@ -581,6 +619,57 @@ Changes from the proposal: `answers` values are strings, not arrays (a
 multi-select question's choices go in one string, comma-joined, which is
 what the Mac app sends); `view` and `lastActivityMs` are on every row; a
 `title` change was added to `update`.
+
+## Secret scrubbing (API 47, 5 Nov 2026)
+
+Threadbear had none until now. Today's mirror was nearly clean only because it
+sends one-line tool rows: on 5 Nov the rules would have changed 2 of prod's 83,924
+message rows and nothing in its other tables. Full sync would be a different
+story (about 220 of Mike's 200,000 events, tool output mostly), so this came
+first. The lessons are Agent Archive's:
+
+- **Patterns alone fail, and on the worst leaks.** `sed`, `cut`, `sort` and
+  truncation mangled keys past each version of its rules (Poddle's APNs key, a
+  whole Google key). So there are three layers on the runner: where it came from
+  (`runner/src/withhold.ts`, for the output of `env list`, `.env`, `.p8` and the
+  like, unused until tool output goes up), values it knows
+  (`runner/src/secret-values.ts`) and shapes (`runner/src/redaction.ts`, copied
+  from Agent Archive with its tests).
+- **Scrub on both ends.** An older runner sends what it sends, so the backend
+  runs the same rules (`convex/redaction.ts`, a byte-identical copy a unit test
+  keeps equal).
+- **One way up.** Agent Archive's tool output over 64 KB took a path the backend
+  didn't scrub, and was never replaced. Here it's one wrapper on `ConvexSync.post`
+  and a generic walk over every field, and the backend's `clean()` in each mutation.
+- **New rules need old rows rewritten, without re-sending everything.** A bump
+  made every Agent Archive daemon recheck about 3,600 files. Here nothing re-sends:
+  bump `SCRUB_RULES_VERSION` and run `node runner/scripts/scrub-stored.mjs`, a dry
+  run unless `--apply`, which prints ids and counts only.
+- **Cleaning up isn't undoing.** That cleanup also had to reach backups and
+  exports, and the keys had been to the AI providers already. So the docs say to
+  rotate, and never that the data is secret-free.
+
+Not scrubbed, on purpose: a command's words while it's on its way (a message from
+the phone or another Mac has to reach the runner as typed). Once a command is over,
+however it ended, its words are dropped from the row rather than scrubbed, so a
+value only the sender knew doesn't stay. One that's never taken stays as typed
+until a runner takes it. A value only the sending runner knows still goes up in the
+message row once the other runner has it, as that runner can't know to take it out.
+Identity fields aren't scrubbed either. A title or preview is cut before it gets here, so the
+rules and known values also take out a key's start at the very end of a text, and
+what's left of a key cut shorter than that is a few characters. A title that holds
+two different secrets can come out the same for two Pocket cards, so the second
+replaces the first, and likewise two pictures on one event whose file names
+hold secrets. That loses a card or a picture and leaks nothing, so it stays.
+
+The on-device check (`runner/src/secret-check.ts`, `runner/src/secret-check/`)
+is an experiment, off by default, that changes nothing. In a fake test on 5 Nov,
+Apple's model caught what the rules can't (9 of 9 values with no known prefix) but
+raised 6 false alarms in 19, and on a sample of Mike's real data it flagged 4.4%
+of tool outputs and 8% of screenshots, so it counts first. If it's ever trusted,
+it may only hold things back, never clear them: tool output is untrusted and can
+tell the model to answer "clean". Linux has no such model, so a Linux runner has
+the rules and the withhold list, and `tb status` says so.
 
 ## The Pocket (API 19)
 
@@ -740,6 +829,19 @@ Backend changes (these deploy prod when they land on main; Mike said yes to
    the projects that changed and the ones gone, with
    `sync:upsertProjects`. Mostly Mike's own cost: his 70-odd projects with
    long notes were about 460 KB each time a turn moved one.
+5. Done (API 40): a project's page reads its threads through
+   `projectThreads`, a small row per thread per project kept by
+   `upsertThreads` (only when a thread is new, taken over or changes
+   projects), `removeThreads` and `prune`, with `phone:projectThreads`
+   taking the ones that joined last by an index on `projectId` and sorting
+   that page by activity. The first version kept each link's
+   `lastActivityMs` current, a patch on every turn, which took
+   `upsertThreads` from about 4.1 KB to 7 KB a call (35 MB a day). A thread's projects are an array on
+   its row, which can't be indexed, so the alternative was reading every
+   thread, archived ones included. Threads from before API 40 are linked
+   once per runner by `sync:linkProjects`, a page at a time, which a
+   heartbeat starts (`viewCounts.projectsLinked`). The "22 threads" on a
+   project is still the runner's own count, sent on its project row.
 
 ### The restart cost (5 Nov 2026, API 37)
 
@@ -761,6 +863,46 @@ website watches a 30-row tail, reads older pages once, watches pictures apart
 (`phone:images`) and lets go of its live queries after a minute hidden. The
 iPhone app still raises `limit` and uses `phone:thread`, which costs about
 70 KB for each message that arrives while a thread is open.
+
+Since measured below: the inbox follows only what changed (API 43), and a
+reading copied from another runner goes up at most every 10 minutes, or at once
+if the login is blocked. The runner that made a reading still writes it at once.
+
+Measured from `npx convex logs --success --jsonl` on 5 Nov. A runner start: 9.6
+MB before, 0.39 MB after (5 rows written), though every 3 days one is still a
+full write. The functions this changed fell from about 375 to 178 MB a day at
+the rate of each hour's sample (0.86 h and 1.05 h, the second with more
+starts), but these are busy daytime samples, not daily figures. By then most
+I/O was live reads for open clients: `phone:threads` about 390 MB a day at that
+rate (39 KB per re-run), `phone:projects` 165 MB (190 KB), `phone:schedules` 68
+MB (157 KB). Those cost nothing with no client open. Also new that day: `sync:sharedUsage` (API 39) reads every login's row, and one
+reading gets copied to the other runners' rows, so one change is three writes
+and nine re-runs, about 70 MB a day at that rate.
+
+Then, API 48. Measured from the logs on 5 Nov before the change: `sync:schedules`
+168 KB a run, `sync:sharedUsage` 16 KB a run. A runner key's `sync:schedules` now
+reads only its own rows, so Bruce and Hetzner no longer pay for, or re-run on, the
+M5's claims, and every runner of 45 follows only the rows written since (`sync:schedulesSince`), so a run costs a row or two rather than the table. Finished one-offs already go after 7 days (`KEEP_FINISHED_MS`), and they're now read only when a runner starts. `phone:projects` reads
+`projectHeads` rather than `projects`: 79 projects are 199 KB in `projects`, 143 KB
+of it notes, and the fields a list needs are about 30 KB. Editing notes no longer
+re-runs the list. `sync:sharedUsage` leaves out the caller's rows. A day's real
+rate after this hasn't been measured yet.
+
+Measured after API 48 landed (20 minutes of prod logs, 5 Nov, late at night with
+almost no client open, so not comparable with the samples above): `phone:projects`
+37 KB a run, `sync:schedulesSince` one whole read at 178 KB and then little,
+`sync:sharedUsage` still 12 KB a run and the biggest at 78 runs, and about 184 MB/day
+overall. A full day's rate is still to come.
+
+An estimate for one Mac with the app open, 300 threads, 15 turns and half an
+hour of phone use a day: about 6 MB a day, 185 MB a month, under a fifth of the
+free 1 GB. Heartbeats are 2.4 MB of that and the three-day full write 1.3 MB,
+which grows with threads kept (about 13 KB a thread).
+
+Confirmed live on 5 Nov: `phone:threadsSince` costs 2.4 KB a run against
+`phone:threadsAt`'s 37.5 KB. Next: `sync:schedules`, 160 KB a run, as each
+schedule write makes every runner read all 113 rows, 61 of them finished
+one-offs. It could follow only what changed, as the inbox does.
 
 Not urgent: messages are kept forever, so storage grows about 10 MB a month
 for a typical user. Dropping the messages of threads archived more than a

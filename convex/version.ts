@@ -154,4 +154,66 @@
 //    `pools` table, sync:pools, sync:savePools and sync:adoptPools. A runner
 //    follows it only with a backend of 38 or later; before, each keeps its
 //    own runner.json pools.
-export const API_VERSION = 38;
+// 39: sync:sharedUsage, every runner's latest usage reading of each login
+//    with an email, so a login signed in on several machines shows the
+//    newest reading on each (docs/protocol.md, Accounts, "Shared
+//    readings"). A runner subscribes only with a backend of 39 or later.
+// 40: projectThreads, a row per thread per project kept by the thread
+//    writes, and phone:projectThreads, a project's threads newest first,
+//    archived ones included, so the website's project page can list all of
+//    them. The backend links the threads it already has by itself
+//    (sync:linkProjects); nothing changes on the runner.
+// 41: runner keys (docs/protocol.md, "Runner keys"). Besides the owner
+//    key (RUNNER_KEY), a key per runner (runnerKeys, sync:addRunnerKey),
+//    which acts as that runnerId alone: its own heartbeat, threads,
+//    messages, schedules, commands and Pocket cards, and none of the
+//    owner-only functions (phone tokens, runner keys, other runners'
+//    threads). The owner key does everything, as before. A runner's
+//    heartbeat with the owner key marks its row byOwner, and a phone's new
+//    thread goes to that runner first. Runner keys come only from a runner
+//    of 41 or later (tb runner add); older runners just use the owner key.
+//    A runner key's iconUploadUrl is a one-use /runner/upload URL that
+//    answers as Convex's own does, so any runner's uploader works with it;
+//    the owner's heartbeat can carry ownerKeyRotating, which older runners
+//    ignore.
+// 42: phone:update's archive takes a verdict ("worked", "didntWork" or
+//    "notNeeded"), the pick from the done card's Archive menu, which the
+//    runner keeps as the thread's archiveVerdict (docs/protocol.md, "Who
+//    archived a thread"). A phone sends it only to a backend of 42 or
+//    later; an older runner ignores it and just archives.
+// 43: phone:threadsAt and phone:threadsSince, a list read once and then only
+//    the rows written since. Thread rows carry updatedMs. An older phone goes
+//    on using phone:threads, and an older runner's writes go through the same
+//    upsertThreads, which stamps them.
+// 44: other runners' threads through the backend (docs/protocol.md, "Other
+//    runners' threads through the backend"): relay.ts, owner only, for the
+//    main Mac's runner to read another runner's thread (remoteTail,
+//    remoteMessages, remoteThread) and ask it to act (queueCommand,
+//    commandState, remoteAccounts). Commands gain kinds `interrupt` and
+//    `call` (allow-listed methods, answered in the command's `result`), and
+//    a pending approval its event's `seq`. A runner older than 44 fails an
+//    interrupt or a call as an unknown command, and its approvals have no
+//    seq, so the main Mac's transcript has no card for them (the
+//    thread still shows it needs you).
+// 45: the website's rail (docs/website.md). scheduleWakes and phone:wakes, a
+//    sidebar's small view of the schedules; runnerStats, phone:runnerStats,
+//    phone:watchRunners, sync:runnerWatch and sync:setRunnerStats, a machine's
+//    figures, written only while someone's looking; `pressure` on the
+//    heartbeat; phone:schedule and a `schedule` command, for Pause and Run now.
+//    A runner sends these only to a backend of 45 or later, and a runner from
+//    before fails a schedule command with "unknown command".
+// 46: sync:watchRunnersFromMac and sync:runnerStatsList, the Mac app's Runners
+//    panel's figures through the main Mac's runner (runners.stats). Owner key
+//    only.
+// 47: the backend scrubs secrets from what a runner sends before storing it
+//    (convex/redaction.ts), and sync:scrubStoredBatch rewrites stored rows
+//    with today's rules. Nothing a client sends or reads changes shape; the
+//    runner's `tb status` says the backend checks too from this version.
+// 48: phone:projects reads projectHeads, a small row per project, and returns
+//    goals, state, notes and folders empty; phone:project has one whole. No
+//    iPhone app has ever read those four. sync:sharedUsage takes the caller's
+//    runnerId and leaves its rows out of what it reads; an older runner sends
+//    none and is told about everyone's, as before. sync:schedules reads only a
+//    runner key's own rows. sync:schedulesSince is the table once and then only
+//    the rows written since; an older runner goes on using sync:schedules.
+export const API_VERSION = 48;

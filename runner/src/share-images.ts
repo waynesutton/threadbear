@@ -1,6 +1,7 @@
 // The pictures in a shared thread's events (docs/website.md, "Sharing"),
 // which the mirror uploads to file storage so the shared page can show
-// them. Only for shared threads: the rest keep their pictures on the Mac.
+// them. What Mike pasted and what agents showed him go up for his own website
+// and phone too, below; the rest of an unshared thread's stay on the Mac.
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -99,14 +100,16 @@ function readCapped(file: string): { bytes: Uint8Array } | { skip: string } {
   return { bytes: new Uint8Array(fs.readFileSync(file)) };
 }
 
-// Where a shared thread's pictures may come from: its folder, its own
-// folder in the data dir (media/, where attachments and tool pictures are
-// copied) and the temp folders agents save screenshots in. Anything else
-// is somewhere an agent talked into it could point at to publish a file.
-export function shareRoots(cwd: string | undefined, threadDir: string | undefined): string[] {
-  return [cwd, threadDir, os.tmpdir(), '/tmp'].filter((d): d is string => Boolean(d));
-}
-
+// A shared thread's pictures come only from its media folder in the data
+// dir (`threads/<id>/media`): its attachments and the pictures tools handed
+// back are copied there, and an agent that wants a picture on the page
+// copies it there on purpose (THREADBEAR_MEDIA_DIR). A path in assistant
+// Markdown is only text the agent wrote, maybe at a repo's or a web page's
+// say, so it gives no authority to publish a file from anywhere else: not
+// the thread's folder, however new the file (pictures made there since the
+// thread started went, and that was still Markdown publishing a local
+// file: Daybreak verify-fix, 5 Nov), and not the temp folders, which hold
+// every app's screenshots. Anything else shows its caption.
 function under(file: string, dir: string): boolean {
   const rel = path.relative(dir, file);
   return rel === '' || (rel !== '..' && !rel.startsWith('..' + path.sep) && !path.isAbsolute(rel));
@@ -120,35 +123,60 @@ function realOr(p: string): string {
   }
 }
 
-const OUTSIDE = "it isn't in the thread's folder, its media or a temp folder";
+const OUTSIDE = "it isn't in the thread's media folder";
 
 // The bytes of a shared thread's picture and what they really are, or why
-// not. It goes to a public page, so: a file under `roots` (by its real
-// path, so a folder link can't lead out), not itself a link, and really a
-// picture whatever its name says. The type comes from the bytes too.
-export function readShareImage(file: string, roots: string[]): { bytes: Uint8Array; mediaType: string; width?: number; height?: number } | { skip: string } {
-  const real = roots.flatMap((r) => [r, realOr(r)]);
-  if (!real.some((r) => under(path.resolve(file), r))) return { skip: OUTSIDE };
+// not. It goes to a public page, so: a file in `mediaDir` (by its real path
+// too, so a folder link can't lead out), not itself a link, and really a
+// picture whatever its name says. The type comes from the bytes. Read
+// through one descriptor opened without following a link, and checked to
+// be the file at the real path, so nothing can be swapped in between.
+export function readShareImage(file: string, mediaDir: string | undefined): { bytes: Uint8Array; mediaType: string; width?: number; height?: number } | { skip: string } {
+  if (!mediaDir) return { skip: OUTSIDE };
+  const abs = path.resolve(file);
+  if (!under(abs, mediaDir) && !under(abs, realOr(mediaDir))) return { skip: OUTSIDE };
   let st: fs.Stats;
   try {
-    st = fs.lstatSync(file);
+    st = fs.lstatSync(abs);
   } catch {
     return { skip: 'the file is gone' };
   }
   if (st.isSymbolicLink()) return { skip: "it's a link" };
   if (!st.isFile()) return { skip: "it can't be read" };
-  if (!real.some((r) => under(realOr(file), r))) return { skip: OUTSIDE };
-  let read: ReturnType<typeof readCapped>;
+  const real = realOr(abs);
+  if (!under(real, realOr(mediaDir))) return { skip: OUTSIDE };
+  let fd: number;
   try {
-    read = readCapped(file);
+    fd = fs.openSync(abs, fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW);
+  } catch (e) {
+    return { skip: (e as NodeJS.ErrnoException).code === 'ELOOP' ? "it's a link" : "it can't be read" };
+  }
+  try {
+    const open = fs.fstatSync(fd);
+    let atReal: fs.Stats;
+    try {
+      atReal = fs.statSync(real);
+    } catch {
+      return { skip: 'the file is gone' };
+    }
+    if (!open.isFile() || open.ino !== atReal.ino || open.dev !== atReal.dev) return { skip: "it can't be read" };
+    if (open.size > SHARE_IMAGE_BYTES) return { skip: `it's ${Math.round(open.size / 1024 / 1024)} MB` };
+    const bytes = Buffer.alloc(open.size);
+    let got = 0;
+    while (got < bytes.length) {
+      const n = fs.readSync(fd, bytes, got, bytes.length - got, got);
+      if (n === 0) break;
+      got += n;
+    }
+    // Pictures only: the page draws them with <img>.
+    const info = sniffImage(bytes.subarray(0, got));
+    if (!info) return { skip: "it isn't a picture" };
+    return { bytes: new Uint8Array(bytes.subarray(0, got)), mediaType: info.mediaType, ...(info.width ? { width: info.width } : {}), ...(info.height ? { height: info.height } : {}) };
   } catch {
     return { skip: "it can't be read" };
+  } finally {
+    fs.closeSync(fd);
   }
-  if ('skip' in read) return read;
-  // Pictures only: the page draws them with <img>.
-  const info = sniffImage(Buffer.from(read.bytes));
-  if (!info) return { skip: "it isn't a picture" };
-  return { bytes: read.bytes, mediaType: info.mediaType, ...(info.width ? { width: info.width } : {}), ...(info.height ? { height: info.height } : {}) };
 }
 
 // What the phone shows of any thread, shared or not (backend API 24,
@@ -173,6 +201,17 @@ export function replyImagesInEvent(e: PersistedEvent, cwd: string | undefined, h
   if (!raw || (!raw.startsWith('/') && !raw.startsWith('~') && !cwd)) return [];
   const file = absolute(raw, cwd ?? '/', home);
   return replyMediaType(file) ? [{ seq: e.seq, path: file, pinned: true }] : [];
+}
+
+// The pictures Mike pasted into a message, for his own website (`sync.pastedPictures`
+// in runner.json, on by default; docs/on-your-mac.md). `src` is picture:N, for
+// the [Picture N] that stands for it (docs/protocol.md, "Pictures in a message"):
+// the phone only swaps a src it finds in Markdown, so it goes on showing its
+// chip. Only as they're sent, never by looking back through the logs: nobody
+// asked for what they'd already pasted to go up, and backfills are what cost.
+export function pastedImagesInEvent(e: PersistedEvent): ReplyImage[] {
+  if (e.type !== 'user.message') return [];
+  return (e.images ?? []).map((image, i) => ({ seq: e.seq, path: image.path, src: `picture:${i + 1}` }));
 }
 
 // The bytes to upload and what they really are, or why not. An agent can

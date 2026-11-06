@@ -13,6 +13,7 @@
 // check.sh sets so no test runner ever writes to the real project.
 import type { PoolBackend } from './shared-pools.ts';
 import type { SharedPool } from './pools.ts';
+import type { SharedReading } from './usage.ts';
 import { isSealed, type Sealed } from './secrets.ts';
 import os from 'node:os';
 import fs from 'node:fs';
@@ -20,19 +21,27 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import { ConvexClient } from 'convex/browser';
 import { phonePicture } from './project-icons.ts';
-import { imagesInEvent, readReplyImage, readShareImage, replyImagesInEvent, shareRoots, type ReplyImage, type ShareImage } from './share-images.ts';
+import { RunnerStats, type MachineStats } from './runner-stats.ts';
+import { imagesInEvent, pastedImagesInEvent, readReplyImage, readShareImage, replyImagesInEvent, type ReplyImage, type ShareImage } from './share-images.ts';
 import { extForMediaType, sniffImage } from './media.ts';
 import { makeFunctionReference } from 'convex/server';
 import type { Clock, TimerHandle } from './clock.ts';
 import type { Logger } from './log.ts';
-import { agentsStillWorking, ErrorCode, isEffortLevel } from './protocol.ts';
-import type { Account, ApprovalDecision, ApprovalOption, AskAnswer, EffortLevel, ImageRef, OpenAsk, PersistedEvent, Project, Question, Schedule, ThreadSummary } from './protocol.ts';
+import { agentsStillWorking, ARCHIVE_VERDICTS, ErrorCode, isEffortLevel } from './protocol.ts';
+import type { Account, ArchiveVerdict, ApprovalDecision, ApprovalOption, AskAnswer, EffortLevel, ImageRef, OpenAsk, PersistedEvent, Project, Question, Schedule, ThreadSummary } from './protocol.ts';
 import type { Notification } from './runner.ts';
 import type { ScheduleBackend, StoredSchedule } from './schedules.ts';
+import { followSchedules } from './schedule-follow.ts';
 import { ThreadIndex, type RemoteThreads } from './thread-index.ts';
 import { digest, dropSyncCache, loadSyncCache, saveSyncCache, SYNC_CACHE_MAX_AGE_MS } from './sync-cache.ts';
 import { paths, readRunnerJson, writeRunnerJson } from './config.ts';
 import { unplacedPictures } from './pictures.ts';
+import { listFolderFor } from './files.ts';
+import { Scrubber, type ScrubStatus } from './scrub.ts';
+import { scrubEveryString } from './redaction.ts';
+import { withholdReason } from './withhold.ts';
+// A `call` for files.list answers with at most this many entries (the backend keeps it a day).
+const CALL_ENTRIES = 500;
 
 // At most one write per thread this often while a turn runs: a running
 // thread's preview and working line change many times a second.
@@ -62,11 +71,23 @@ export const PREVIEW_HOLD_MS = 20_000;
 // How often a project goes up only because its lastActivityAt moved. A turn
 // moves it, and a project's row with long notes is tens of KB to read and write.
 export const PROJECT_ACTIVITY_MS = 10 * 60_000;
+// How often a login's row goes up with a reading copied from another runner.
+// One reading used to ripple: each of three runners copied it to its own row,
+// three writes and nine re-runs of every runner's sync:sharedUsage (about 70 MB
+// a day). The runner that made the reading still writes it at once, which is
+// what the others read; a copy on this row is only what a phone shows.
+export const USAGE_COPY_MS = 10 * 60_000;
+// How long a start with a saved record waits before comparing rows with it. A
+// thread's patch links load a moment after the runner starts, so comparing at
+// once sees every thread with links as changed (464 of Mike's 716, each start).
+export const SETTLE_MS = 20_000;
 // How often what's been sent is saved (sync-cache.ts), and on stopping.
 const CACHE_SAVE_MS = 30_000;
 const BACKOFF_MIN_MS = 5000;
 const BACKOFF_MAX_MS = 5 * 60_000;
 const POST_TIMEOUT_MS = 15_000;
+// How long pictures wait after a runner key's upload allowance said "later".
+const PICTURES_PAUSE_MS = 10 * 60_000;
 const ALL: ('inbox' | 'snoozed' | 'archived')[] = ['inbox', 'snoozed', 'archived'];
 
 export type SyncConfig = {
@@ -76,6 +97,7 @@ export type SyncConfig = {
   runnerId?: string;
   icon?: string;
   rpcUrl?: string;
+  pastedPictures?: boolean;
 };
 
 // runner.status's `sync` (docs/protocol.md, "Sync").
@@ -84,12 +106,36 @@ export type SyncConfig = {
 // lower one means its backend hasn't been deployed since this runner was:
 // said in runner.status, tb status and the log rather than stopping, since
 // the runner only adds to what it sends while the number stays the same.
-export const BACKEND_API_VERSION = 38;
+export const BACKEND_API_VERSION = 48;
+// From this one the main Mac reads and steers other runners' threads through
+// the backend (convex/relay.ts): commands can be `interrupt` or `call`, and a
+// pending approval carries its event's seq (docs/protocol.md, "Other
+// runners' threads through the backend").
+export const RELAY_API_VERSION = 44;
+// From this one the Mac app's Runners panel can ask for every runner's machine
+// figures (runners.stats): sync:watchRunnersFromMac and sync:runnerStatsList,
+// on top of the website's runnerStats rows (API 45).
+export const MAC_RUNNER_STATS_API_VERSION = 46;
 // From this one an owned schedule can carry `poolId`, the pool that picks
 // its threads' login. An older backend's validator would turn it down.
 export const SCHEDULE_POOLS_API_VERSION = 36;
 // Pools shared between runners: the pools table (shared-pools.ts).
 export const SHARED_POOLS_API_VERSION = 38;
+// Other runners' usage readings of the same logins (sync:sharedUsage).
+export const SHARED_USAGE_API_VERSION = 39;
+// From this one the backend scrubs secrets again before storing what a runner
+// sends (convex/redaction.ts). A runner scrubs first either way.
+export const SCRUB_API_VERSION = 47;
+// From this one sync:sharedUsage takes this runner's id and doesn't read its
+// rows, so it doesn't re-run for this runner's own writes.
+export const SHARED_USAGE_OTHERS_API_VERSION = 48;
+// From this one the scheduler follows only the schedules written since it last
+// heard (sync:schedulesSince), rather than the whole table on every change.
+export const SCHEDULES_FOLLOW_API_VERSION = 48;
+export function sharedUsageArgs<K>(key: K, runnerId: string | undefined, backend: number): { key: K; runnerId?: string } {
+  // An older backend's validator would turn the extra argument down.
+  return runnerId && backend >= SHARED_USAGE_OTHERS_API_VERSION ? { key, runnerId } : { key };
+}
 // From this one a thread's row carries its open card of asks and a finished
 // turn's next steps, and a message row can be `summary` (end_turn's
 // bullets), so the phone shows end-of-turn cards. An older backend's
@@ -180,6 +226,10 @@ export const WOKE_BY_API_VERSION = 33;
 // "Secrets"), answered with phone:secret. An older backend's validator would
 // turn the whole row down, so it goes without the card.
 export const SECRETS_API_VERSION = 35;
+// From this one a runner reports its machine's figures while someone's watching
+// (runner-stats.ts), and its heartbeat carries `pressure`; an older backend's
+// validator would turn the heartbeat down.
+export const RUNNER_STATS_API_VERSION = 45;
 // How far back a start looks for pictures, as new ones go up as they come.
 // Reading a whole log for each thread is too much to do for all of them on
 // every start, and it's the threads in use that Mike opens on the phone.
@@ -205,15 +255,29 @@ export type SyncStatus = {
   // The backend's API version from the last heartbeat (0 for a backend from
   // before there was one), and the one this runner expects.
   backend?: { apiVersion: number; expected: number };
+  // The backend says RUNNER_KEY_NEXT is still set (the owner key only hears
+  // it): a rotation (tb runner rotate-owner) waiting for --finish.
+  ownerKeyRotating?: boolean;
+  // Schedules a runner key couldn't put in the backend, so all of them stay
+  // in this runner's schedules.json (schedules.ts heldLocal; the log says which).
+  schedulesHeld?: number;
+  // The backend turned this runner's key down ("bad runner key"): a main
+  // key rotated out from under it, or a runner key revoked. lastError says
+  // what to do.
+  keyRejected?: boolean;
+  // What this runner does about secrets (src/scrub.ts), and whether its
+  // backend checks again.
+  scrub?: ScrubStatus & { backendChecks?: boolean };
 };
 
 // The approval or question a thread is waiting on, as the phone sees it.
 export type PendingApproval =
-  | { approvalId: string; kind: 'approval'; name: string; title: string; options: ApprovalOption[]; inputSummary?: string }
-  | { approvalId: string; kind: 'question'; questions: Question[] }
+  // seq: the event's (API 44), for the main Mac's transcript of this thread.
+  | { approvalId: string; kind: 'approval'; seq?: number; name: string; title: string; options: ApprovalOption[]; inputSummary?: string }
+  | { approvalId: string; kind: 'question'; seq?: number; questions: Question[] }
   // docs/protocol.md, "Secrets": key is the runner's public key, which the
   // phone seals its answer to.
-  | { approvalId: string; kind: 'secret'; label: string; reason: string; placeholder?: string; key: string };
+  | { approvalId: string; kind: 'secret'; seq?: number; label: string; reason: string; placeholder?: string; key: string };
 
 // The phone's view of a thread: convex/schema.ts's threadFields plus view.
 export type ThreadDoc = {
@@ -289,6 +353,23 @@ export class WokeRows {
 }
 
 // One call to the deployment's HTTP API; tests pass a fake.
+// One runner's figures, as sync:runnerStatsList gives them (runner-stats.ts).
+export type RunnerStatsRow = {
+  runnerId: string;
+  at: string;
+  cpuPercent: number;
+  cores: number;
+  memUsed: number;
+  memTotal: number;
+  diskFree: number;
+  diskTotal: number;
+  load1?: number;
+  uptimeSec: number;
+  machine?: string;
+  os?: string;
+};
+const STATS_WATCH_EVERY_MS = 20_000;
+
 export type Post = (kind: 'mutation' | 'query', fn: string, args: Record<string, unknown>) => Promise<unknown>;
 
 // A live query on the deployment (the commands the phone has queued):
@@ -331,15 +412,20 @@ type Host = {
 // A thread's commands may go on to a draining runner (handover.ts's
 // phoneCommands), so they can answer later; apply() waits for each.
 export type CommandHost = {
-  send(threadId: string, text: string, images: ImageRef[], opts: { origin: 'phone'; answers?: AskAnswer[] }): unknown;
+  // origin: absent for a message Mike sent from the main Mac (a command `from: "mac"`).
+  send(threadId: string, text: string, images: ImageRef[], opts: { origin?: 'phone'; answers?: AskAnswer[] }): unknown;
   respondApproval(p: { threadId: string; approvalId: string; decision: ApprovalDecision; message?: string; answers?: Record<string, string> }): unknown;
   answerSecret(p: { threadId: string; approvalId: string; secret?: string; decline?: boolean }): unknown;
-  update(p: { threadId: string; title?: string; snoozedUntil?: string | null; archived?: boolean; starred?: boolean }): unknown;
+  update(p: { threadId: string; title?: string; snoozedUntil?: string | null; archived?: boolean; verdict?: ArchiveVerdict; starred?: boolean }): unknown;
   // Seen up to the last event it has.
   markSeen(threadId: string): unknown;
-  create(p: { text: string; images?: ImageRef[]; cwd?: string; accountId?: string; model?: string; effort?: EffortLevel; origin: 'phone' }): { thread: ThreadSummary };
+  create(p: { text: string; images?: ImageRef[]; cwd?: string; accountId?: string; model?: string; effort?: EffortLevel; permissionMode?: 'ask' | 'full' | 'auto'; origin?: 'phone' }): { thread: ThreadSummary };
+  // Stops the thread's turn (a command from the main Mac, API 44).
+  interrupt?(threadId: string): unknown;
   share(threadId: string, p: { access: 'off' | 'link'; newLink?: boolean }): unknown;
   quickAsk(p: { question: string; answer: string; sources?: { title: string; url: string }[]; askedAt?: number }): { thread: ThreadSummary };
+  // The website's Pause, Resume and Run now (API 45). Absent in small tests.
+  schedule?: (p: { scheduleId: string; action: 'pause' | 'resume' | 'run' }) => unknown;
 };
 
 export type SyncDeps = {
@@ -375,14 +461,41 @@ export type SyncDeps = {
   // The scheduler (schedules.ts), given the backend's schedules table once
   // a heartbeat says it has one; while inBackend(), schedules.updated isn't
   // mirrored. Absent in small tests.
-  schedules?: { attach(backend: ScheduleBackend): void | Promise<void>; inBackend(): boolean };
+  schedules?: { attach(backend: ScheduleBackend): void | Promise<void>; inBackend(): boolean; heldLocal?(): { id: string; why: string }[] };
   // Follows the shared pools once the backend has them (API 38).
   pools?: { attach(backend: PoolBackend): void };
+  // Takes the other runners' readings of the same logins (API 39).
+  sharedUsage?: { setShared(rows: SharedReading[]): void };
+  // This machine's figures (runner-stats.ts). Absent in tests, which report none.
+  sample?: () => Promise<MachineStats>;
   // For the sidebar table (thread-index.ts): telling the app about other
   // runners' threads, and the data dir their tokens are copied into.
   publish?: (n: Notification) => void;
   home?: string;
+  // When the backend turns this runner's key down: a notice for the app,
+  // the key on disk now (readSyncKey, so a new one from tb runner add is
+  // seen), and asking for a restart onto it. Absent in small tests.
+  notice?: (level: 'warning' | 'error', message: string) => void;
+  readKey?: () => string | undefined;
+  restart?: (reason: string) => void;
+  // What takes secrets out of everything sent (src/scrub.ts). Left out, the
+  // shape rules alone: there's always a scrubber on the way up.
+  scrubber?: Scrubber;
 };
+
+// What tb status and the app say while the backend turns this runner's
+// key down (keyRejected). Every minute's heartbeat is still tried, so it
+// clears by itself if the old key comes back.
+export const KEY_REJECTED =
+  "The Convex backend turned down this runner's key (bad runner key), so nothing here reaches the phone or the other runners. The main key was probably rotated (tb runner rotate-owner) while this runner still had a copy, or its runner key was revoked. On the main Mac, give it its own: tb runner add <name> --ssh <this host> --id <this runner's id> --replace. It restarts onto the new key by itself.";
+
+// "bad runner key" (convex/lib.ts runnerAuth): kind auth, in the error's
+// data from a post, or as JSON in a subscription's message.
+export function keyRejected(e: unknown): boolean {
+  const kind = (e as { data?: { kind?: unknown } } | null)?.data?.kind;
+  if (kind === 'auth') return true;
+  return /"kind"\s*:\s*"auth"/.test(String((e as Error | null)?.message ?? e ?? ''));
+}
 
 // POST /api/mutation or /api/query on a Convex deployment, the plain HTTP
 // API, so a write needs no client and a fake is one function.
@@ -395,10 +508,52 @@ export function convexPoster(url: string, fetchFn: typeof fetch = fetch): Post {
       body: JSON.stringify({ path: fn, args, format: 'json' }),
       signal: AbortSignal.timeout(POST_TIMEOUT_MS),
     });
-    const body = (await res.json().catch(() => undefined)) as { status?: string; value?: unknown; errorMessage?: string } | undefined;
-    if (!res.ok || !body || body.status !== 'success') throw new Error(body?.errorMessage ?? `HTTP ${res.status}`);
+    const body = (await res.json().catch(() => undefined)) as { status?: string; value?: unknown; errorMessage?: string; errorData?: unknown } | undefined;
+    if (!res.ok || !body || body.status !== 'success') {
+      // A ConvexError's data (`{ kind, message }`), as the Convex client
+      // keeps it, so forbiddenText can tell a runner key's refusal.
+      throw Object.assign(new Error(body?.errorMessage ?? `HTTP ${res.status}`), body?.errorData !== undefined ? { data: body.errorData } : {});
+    }
     return body.value;
   };
+}
+
+// A refusal that trying again won't change (convex/sync.ts caps and
+// ownership checks), as opposed to an outage.
+export function refusedForGood(e: unknown): boolean {
+  const kind = (e as { data?: { kind?: unknown } } | null)?.data?.kind;
+  if (kind === 'badArgs' || kind === 'tooMany' || kind === 'forbidden') return true;
+  return /"kind"\s*:\s*"(badArgs|tooMany|forbidden)"/.test(String((e as Error | null)?.message ?? ''));
+}
+
+// A refusal for now (a runner key's upload allowance, or too many upload
+// URLs this hour): the item waits and goes again later.
+export function retryLater(e: unknown): boolean {
+  const kind = (e as { data?: { kind?: unknown } } | null)?.data?.kind;
+  if (kind === 'retryLater' || kind === 'rateLimited') return true;
+  return /"kind"\s*:\s*"(retryLater|rateLimited)"/.test(String((e as Error | null)?.message ?? ''));
+}
+
+// What the backend said when this runner's key isn't allowed something
+// (a runner key reaching past its own runner, docs/protocol.md "Runner
+// keys"), or undefined for any other error. The feature that asked turns
+// itself off and says this once, rather than trying again.
+export function forbiddenText(e: unknown): string | undefined {
+  const data = (e as { data?: unknown } | null)?.data;
+  if (data && typeof data === 'object' && (data as { kind?: unknown }).kind === 'forbidden') {
+    const m = (data as { message?: unknown }).message;
+    return typeof m === 'string' ? m : "This runner's key can't do that.";
+  }
+  // A subscription's error may only have the data as JSON in its message.
+  const text = String((e as Error | null)?.message ?? e ?? '');
+  const json = text.match(/\{[^{}]*"kind"\s*:\s*"forbidden"[^{}]*\}/)?.[0];
+  if (!json) return undefined;
+  try {
+    const m = (JSON.parse(json) as { message?: unknown }).message;
+    return typeof m === 'string' ? m : "This runner's key can't do that.";
+  } catch {
+    return "This runner's key can't do that.";
+  }
 }
 
 // File storage's upload URL takes a plain POST of the bytes and answers
@@ -407,6 +562,12 @@ export function convexUploader(fetchFn: typeof fetch = fetch): Upload {
   return async (url, bytes, mediaType) => {
     const res = await fetchFn(url, { method: 'POST', headers: { 'Content-Type': mediaType }, body: bytes, signal: AbortSignal.timeout(POST_TIMEOUT_MS) });
     const body = (await res.json().catch(() => undefined)) as { storageId?: unknown } | undefined;
+    // The upload route refusing (403: a used or dead ticket, or over the
+    // allowance; 413: too big) won't change on a retry: said as a refusal
+    // for good, so that picture is left out rather than the flush retried.
+    if (res.status === 403 || res.status === 413) throw Object.assign(new Error(`upload refused: HTTP ${res.status}`), { data: { kind: 'tooMany', message: `upload refused: HTTP ${res.status}` } });
+    // 429: over an allowance for now (convex/http.ts): kept, and tried again later.
+    if (res.status === 429) throw Object.assign(new Error('upload over the allowance for now'), { data: { kind: 'retryLater', message: 'upload over the allowance for now' } });
     if (!res.ok || typeof body?.storageId !== 'string') throw new Error(`icon upload failed: HTTP ${res.status}`);
     return body.storageId;
   };
@@ -571,7 +732,7 @@ function phoneAnswers(raw: unknown): AskAnswer[] | undefined {
 export function forBackend(d: ThreadDoc, v: number, now: number): ThreadDoc {
   const asks = d.asks !== undefined || d.asksSeq !== undefined || d.next !== undefined;
   const sections = d.needs !== undefined || d.pendingReviews !== undefined || d.waitingForRoom !== undefined;
-  if ((v >= SHARE_API_VERSION || !d.share) && (v >= WOKE_API_VERSION || !d.woke) && (v >= ASKS_API_VERSION || !asks) && (v >= SECTIONS_API_VERSION || !sections) && (v >= STARTED_BY_API_VERSION || !d.startedBy) && (v >= STARS_API_VERSION || !d.starredAt) && (v >= LINKS_API_VERSION || !d.links) && (v >= ASKED_API_VERSION || !d.asked) && (v >= NETWORK_WAIT_API_VERSION || !d.waitingForNetwork) && (v >= SECRETS_API_VERSION || d.pendingApproval?.kind !== 'secret')) return d;
+  if ((v >= SHARE_API_VERSION || !d.share) && (v >= WOKE_API_VERSION || !d.woke) && (v >= ASKS_API_VERSION || !asks) && (v >= SECTIONS_API_VERSION || !sections) && (v >= STARTED_BY_API_VERSION || !d.startedBy) && (v >= STARS_API_VERSION || !d.starredAt) && (v >= LINKS_API_VERSION || !d.links) && (v >= ASKED_API_VERSION || !d.asked) && (v >= NETWORK_WAIT_API_VERSION || !d.waitingForNetwork) && (v >= SECRETS_API_VERSION || d.pendingApproval?.kind !== 'secret') && (v >= RELAY_API_VERSION || d.pendingApproval?.seq === undefined)) return d;
   const out = { ...d };
   if (v < SECTIONS_API_VERSION) {
     delete out.needs;
@@ -581,6 +742,10 @@ export function forBackend(d: ThreadDoc, v: number, now: number): ThreadDoc {
   if (v < SHARE_API_VERSION) delete out.share;
   if (v < NETWORK_WAIT_API_VERSION) delete out.waitingForNetwork;
   if (v < SECRETS_API_VERSION && out.pendingApproval?.kind === 'secret') delete out.pendingApproval;
+  if (v < RELAY_API_VERSION && out.pendingApproval?.seq !== undefined) {
+    const { seq: _seq, ...rest } = out.pendingApproval;
+    out.pendingApproval = rest as PendingApproval;
+  }
   if (v < WOKE_API_VERSION) delete out.woke;
   if (v < STARTED_BY_API_VERSION) delete out.startedBy;
   if (v < LINKS_API_VERSION) delete out.links;
@@ -600,13 +765,16 @@ export function forBackend(d: ThreadDoc, v: number, now: number): ThreadDoc {
 
 // A persisted user.message or assistant.text as a message row; anything
 // else is undefined.
-export function toMessageDoc(threadId: string, e: PersistedEvent): MessageDoc | undefined {
+// Scrubbed before it's cut, the one place a value could be split in two and
+// each half missed; everything is scrubbed again on the way up (this.post).
+export function toMessageDoc(threadId: string, e: PersistedEvent, scrub: (text: string) => string = (t) => t): MessageDoc | undefined {
   // The start of the id tells a thread's turns apart, in a row sent for every
   // message.
   const turn = e.turnId ? { turn: e.turnId.slice(0, 8) } : {};
-  if (e.type === 'tool.call') return { threadId, seq: e.seq, role: 'tool', text: toolLine(e), toolKind: e.kind, ...turn, at: e.ts };
+  if (e.type === 'tool.call') return { threadId, seq: e.seq, role: 'tool', text: toolLine(e, scrub), toolKind: e.kind, ...turn, at: e.ts };
   if (e.type !== 'user.message' && e.type !== 'assistant.text') return undefined;
-  const cut = e.text.length > MESSAGE_CHARS ? e.text.slice(0, MESSAGE_CHARS) + '\n\n[cut: the rest is on the Mac]' : e.text;
+  const clean = scrub(e.text);
+  const cut = clean.length > MESSAGE_CHARS ? clean.slice(0, MESSAGE_CHARS) + '\n\n[cut: the rest is on the Mac]' : clean;
   // Mike's own pictures stay on the Mac, so the phone and website get a line saying
   // there were some; a photo sent with no words would be an empty bubble.
   // One a [Picture N] marker places shows as a chip there instead, so the
@@ -624,7 +792,8 @@ export function toMessageDoc(threadId: string, e: PersistedEvent): MessageDoc | 
 // on the Mac): the agent's own description of a command when it gave one
 // ("Run the full check suite"), what was read, edited or searched, else the
 // call's title. Never the whole input.
-export function toolLine(e: { name: string; kind: string; title: string; input: Record<string, unknown> }): string {
+export function toolLine(e: { name: string; kind: string; title: string; input: Record<string, unknown> }, scrub: (text: string) => string = (t) => t): string {
+  const oneLine = (text: string) => shortLine(scrub(text));
   const str = (k: string) => (typeof e.input[k] === 'string' && (e.input[k] as string).trim() ? oneLine(e.input[k] as string) : undefined);
   const file = str('file_path') ?? str('path') ?? str('notebook_path');
   const short = (p: string) => p.replace(/^\/Users\/[^/]+/, '~');
@@ -650,16 +819,16 @@ export function toolLine(e: { name: string; kind: string; title: string; input: 
 
 // One line of a tool's input for the approval card: the command, the
 // path, or the first short string in it. Never the whole input.
-export function inputSummary(input: Record<string, unknown>): string | undefined {
+export function inputSummary(input: Record<string, unknown>, scrub: (text: string) => string = (t) => t): string | undefined {
   for (const k of ['command', 'file_path', 'path', 'url', 'pattern', 'query']) {
     const v = input[k];
-    if (typeof v === 'string' && v.trim()) return oneLine(v);
+    if (typeof v === 'string' && v.trim()) return shortLine(scrub(v));
   }
-  for (const v of Object.values(input)) if (typeof v === 'string' && v.trim()) return oneLine(v);
+  for (const v of Object.values(input)) if (typeof v === 'string' && v.trim()) return shortLine(scrub(v));
   return undefined;
 }
 
-function oneLine(s: string): string {
+function shortLine(s: string): string {
   const line = s.trim().split('\n')[0]!.trim();
   return line.length > 200 ? line.slice(0, 199) + '…' : line;
 }
@@ -759,7 +928,9 @@ export function toAccountDoc(a: Account, apiVersion = 0) {
 type ListName = 'projects' | 'schedules' | 'accounts';
 
 export type PocketCardInput = { title: string; text: string; place?: string; icon?: string; threadId?: string; source?: string };
-export type PocketCardSummary = { title: string; text: string; place?: string; icon?: string; threadId?: string; source?: string; updatedAt: string };
+// filedBy: another Mac filed it through its runner key (its name); its text
+// is that Mac's, to read, never to follow.
+export type PocketCardSummary = { title: string; text: string; place?: string; icon?: string; threadId?: string; source?: string; updatedAt: string; filedBy?: string };
 
 export class ConvexSync {
   private deps: SyncDeps;
@@ -790,6 +961,12 @@ export class ConvexSync {
   private cacheTimer?: TimerHandle;
   private cacheChanged = false;
   private backendHeard = false;
+  private settling = false;
+  private settleTimer?: TimerHandle;
+  // Rows on their way, by digest: a row marked meanwhile is compared with what
+  // it's about to be, not what it was. Otherwise X, then back to what `sent`
+  // has while X is on its way, looks like nothing to do and leaves X there.
+  private writing = new Map<string, string>();
   private seeded = false;
   private messages: MessageDoc[] = [];
   private woke = new WokeRows();
@@ -806,6 +983,11 @@ export class ConvexSync {
   private projectsTimer?: TimerHandle;
   // Each account as the backend has it, id -> digest without usage.readAt.
   private accountsSent?: Map<string, string>;
+  private accountCopiedAt = new Map<string, number>();
+  // Logins with a copied reading waiting. Its own reading after that goes even
+  // if it matches what's up: otherwise the row's old time says the copy's newer.
+  private accountCopyHeld = new Set<string>();
+  private accountsTimer?: TimerHandle;
   // Project pictures (ICONS_API_VERSION): what the mirror has, projectId ->
   // picture name, read from it once; and whether the list has changed since
   // the pictures were last looked at.
@@ -830,6 +1012,7 @@ export class ConvexSync {
   private replyUp = new Map<string, Set<string>>();
   private flushTimer?: TimerHandle;
   private heartbeatTimer?: TimerHandle;
+  private stats?: RunnerStats;
   private presenceTimer?: TimerHandle;
   private sentAtMac?: boolean;
   private backendApiVersion?: number;
@@ -851,6 +1034,15 @@ export class ConvexSync {
   private commandError?: string;
   private commandsState: 'off' | 'on' | 'error' = 'off';
   private index?: ThreadIndex;
+  private heartbeatRefused?: string;
+  private keyRejected = false;
+  private restartAsked = false;
+  private picturesPausedUntil?: number;
+  private ownerKeyRotating = false;
+  private schedulesRefused = false;
+  private scrubber: Scrubber;
+  // Tool calls on a file of secrets that haven't finished.
+  private secretCalls = new Map<string, string>();
 
   constructor(deps: SyncDeps) {
     this.deps = deps;
@@ -860,7 +1052,36 @@ export class ConvexSync {
     if (!enabled) this.off = 'sync.enabled is false';
     else if (!url) this.off = 'no sync.url in runner.json';
     else if (!deps.key) this.off = 'no secrets/convex-key';
-    this.post = deps.post ?? (url ? convexPoster(url) : async () => undefined);
+    this.scrubber = deps.scrubber ?? new Scrubber({ env: {}, folders: false });
+    // The one way up: every mutation, the sidebar table's and the scheduler's
+    // included, goes through here, so no field can be forgotten. Digests of what
+    // was sent are of the row before this, so a rule or a value changing never
+    // makes a row look new, and a start doesn't write everything again.
+    const send = deps.post ?? (url ? convexPoster(url) : async () => undefined);
+    this.post = async (kind, fn, args) => {
+      if (kind !== 'mutation') return send(kind, fn, args);
+      // A command for another runner, like one from the phone: that runner has
+      // to get the words as typed, or an agent is handed "[REDACTED]" where the
+      // user gave it a password. finishCommand scrubs the stored copy when it's done.
+      if (fn === 'relay:queueCommand') return send(kind, fn, args);
+      // Still reading .env files after this long: text waits and the flush tries
+      // again, rather than go up missing values that would have been masked.
+      // A heartbeat has no thread's words in it, and says the runner's alive.
+      if (fn !== 'sync:heartbeat' && !(await this.scrubber.known.settled())) throw new Error('still reading what to take out of text before sending it');
+      // A call's answer is JSON text: scrub what it says, not the text, which a
+      // match could leave unparseable. The backend does the same.
+      if (fn === 'sync:finishCommand' && typeof args.result === 'string') {
+        const { result, ...rest } = args;
+        let safe: string | undefined;
+        try {
+          safe = JSON.stringify(scrubEveryString(JSON.parse(result as string), this.scrubber.safeText));
+        } catch {
+          safe = undefined;
+        }
+        return send(kind, fn, { ...this.scrubber.doc(rest), ...(safe !== undefined ? { result: safe } : {}) });
+      }
+      return send(kind, fn, this.scrubber.doc(args));
+    };
     this.upload = deps.upload ?? convexUploader();
     if (!this.off) this.subscriber = deps.subscriber ?? (url ? convexSubscriber(url) : undefined);
     if (!this.off && deps.home) {
@@ -901,7 +1122,10 @@ export class ConvexSync {
     this.full = true;
     this.seedFromCache();
     this.unsub = this.deps.runner.onNotification((n) => this.onNotification(n));
-    for (const t of this.deps.runner.list(ALL)) this.mark(t);
+    if (this.seeded) {
+      this.settling = true;
+      this.settleTimer = this.deps.clock.setTimeout(() => this.settled(), SETTLE_MS);
+    } else for (const t of this.deps.runner.list(ALL)) this.mark(t);
     this.lists = {
       projects: this.deps.runner.listProjects?.(),
       schedules: this.deps.schedules?.inBackend() ? undefined : this.deps.runner.listSchedules?.(),
@@ -929,8 +1153,12 @@ export class ConvexSync {
     this.flushTimer?.cancel();
     this.heartbeatTimer?.cancel();
     this.presenceTimer?.cancel();
+    this.settleTimer?.cancel();
+    this.settling = false;
     this.heldTimer?.cancel();
     this.projectsTimer?.cancel();
+    this.accountsTimer?.cancel();
+    this.accountsTimer = undefined;
     this.cacheTimer?.cancel();
     this.saveCache();
     this.heldTimer = undefined;
@@ -939,6 +1167,7 @@ export class ConvexSync {
     this.presenceTimer = undefined;
     this.flushTimer = undefined;
     this.heartbeatTimer = undefined;
+    this.stats?.stop();
     await this.subscriber?.close();
     if (opts.bye) await this.post('mutation', 'sync:bye', { key: this.deps.key, runnerId: this.runnerId }).catch(() => {});
   }
@@ -993,6 +1222,15 @@ export class ConvexSync {
     if (this.lastError) s.lastError = this.lastError;
     if (this.retryAt !== undefined) s.retryAt = new Date(this.retryAt).toISOString();
     if (this.backendApiVersion !== undefined) s.backend = { apiVersion: this.backendApiVersion, expected: BACKEND_API_VERSION };
+    if (this.ownerKeyRotating) s.ownerKeyRotating = true;
+    if (this.keyRejected) {
+      s.state = 'error';
+      s.lastError = KEY_REJECTED;
+      s.keyRejected = true;
+    }
+    const held = this.deps.schedules?.heldLocal?.().length ?? 0;
+    if (held) s.schedulesHeld = held;
+    s.scrub = { ...this.scrubber.status(), ...(this.backendApiVersion !== undefined ? { backendChecks: this.backendApiVersion >= SCRUB_API_VERSION } : {}) };
     return s;
   }
 
@@ -1081,8 +1319,84 @@ export class ConvexSync {
       if (/could not find (public )?function/i.test(message)) {
         throw new Error('The Convex backend is older than this runner. It deploys with the runner\'s next update; try again in a few minutes.');
       }
+      // A runner key asking for something only the main Mac's key can do
+      // (pairing a phone, a schedule on another runner): the backend's own words.
+      const refused = forbiddenText(e);
+      if (refused) throw new Error(refused);
       throw e;
     }
+  }
+
+  // One write of rows. Refused for good (a runner key's caps or a row not its
+  // own: kind badArgs, tooMany or forbidden), it's tried row by row and the
+  // rows still refused are left out with a log line, so one can't stall the
+  // whole mirror; anything else (an outage) throws, for the flush's retry.
+  // Rows the backend left out itself (`skipped`) are said the same way.
+  private async writeRows<T>(fn: string, field: string, rows: T[], idOf: (row: T) => string, extra: Record<string, unknown>): Promise<Set<string>> {
+    const left = new Set<string>();
+    const once = async (some: T[]) => {
+      for (const id of this.noteSkipped(fn, await this.post('mutation', fn, { ...extra, [field]: some }))) left.add(id);
+    };
+    try {
+      await once(rows);
+      return left;
+    } catch (e) {
+      if (!refusedForGood(e)) throw e;
+      if (rows.length === 1) {
+        this.leftOut(fn, idOf(rows[0]!), e);
+        left.add(idOf(rows[0]!));
+        return left;
+      }
+    }
+    for (const row of rows) {
+      try {
+        await once([row]);
+      } catch (e) {
+        if (!refusedForGood(e)) throw e;
+        this.leftOut(fn, idOf(row), e);
+        left.add(idOf(row));
+      }
+    }
+    return left;
+  }
+
+  // One picture's upload and record. Refused for good (the upload route's
+  // 403 or 413, a runner key's hourly or stored allowance, a picture it may
+  // not attach), it's left out with a log line and the rest go on: false.
+  // For now ("later": an allowance), it stays queued and pictures pause
+  // until PICTURES_PAUSE_MS has passed; the rest of the flush goes on.
+  private async picture(fn: string, what: string, send: () => Promise<void>): Promise<'sent' | 'dropped' | 'later'> {
+    try {
+      await send();
+      return 'sent';
+    } catch (e) {
+      if (retryLater(e)) {
+        if (!this.picturesPausedUntil) this.deps.log.info('pictures wait: over this runner key\'s upload allowance for now', { fn, row: what });
+        this.picturesPausedUntil = this.deps.clock.now() + PICTURES_PAUSE_MS;
+        this.deps.clock.setTimeout(() => this.scheduleFlush(), PICTURES_PAUSE_MS + 1_000);
+        return 'later';
+      }
+      if (!refusedForGood(e)) throw e;
+      this.leftOut(fn, what, e);
+      return 'dropped';
+    }
+  }
+
+  private picturesPaused(): boolean {
+    if (this.picturesPausedUntil && this.deps.clock.now() < this.picturesPausedUntil) return true;
+    this.picturesPausedUntil = undefined;
+    return false;
+  }
+
+  private noteSkipped(fn: string, r: unknown): string[] {
+    const skipped = (r as { skipped?: unknown } | null)?.skipped;
+    if (!Array.isArray(skipped) || !skipped.length) return [];
+    this.deps.log.warn('the backend left rows out, over what this runner\'s key may write', { fn, rows: skipped.slice(0, 20), count: skipped.length });
+    return skipped.filter((x): x is string => typeof x === 'string');
+  }
+
+  private leftOut(fn: string, row: string, e: unknown): void {
+    this.deps.log.warn('a row the backend refused for good was left out', { fn, row, error: String((e as { data?: { message?: unknown } })?.data?.message ?? (e as Error)?.message ?? e) });
   }
 
   // Writes whatever is waiting now, however recent the last write; tests
@@ -1092,6 +1406,7 @@ export class ConvexSync {
     this.flushTimer = undefined;
     this.lastFlushAt = -Infinity;
     this.retryAt = undefined;
+    if (this.settling) this.settled();
     this.releaseHeld(true);
     await this.flush();
   }
@@ -1133,7 +1448,7 @@ export class ConvexSync {
         break;
       case 'schedules.updated':
         // Ones that live in the backend are written there by the scheduler.
-        if (this.deps.schedules?.inBackend()) break;
+        if (this.deps.schedules?.inBackend() || this.schedulesRefused) break;
         this.lists.schedules = n.params.schedules;
         this.dirtyLists.add('schedules');
         this.scheduleFlush();
@@ -1164,23 +1479,39 @@ export class ConvexSync {
     // Only to a backend that takes them: an older one would leave them
     // queued, and a start looks through recent threads once it's new enough.
     if ((this.backendApiVersion ?? 0) >= REPLY_IMAGES_API_VERSION) {
-      const found = replyImagesInEvent(e, this.cwdOf(threadId));
+      const found = [...replyImagesInEvent(e, this.cwdOf(threadId)), ...(this.deps.config.pastedPictures === false ? [] : pastedImagesInEvent(e))];
       if (found.length) {
         this.pendingReplyImages.push(...found.map((i) => ({ ...i, threadId })));
         this.scheduleFlush();
       }
     }
     this.woke.see(e);
-    const m = toMessageDoc(threadId, e);
+    // A thread that's just touched a file of secrets may quote what's in it.
+    // Looked at once it's done: a write hasn't happened yet when it's asked for.
+    // Any reason, as `printenv > .env` is an environment command first.
+    if (e.type === 'tool.call' && withholdReason(e)) {
+      const file = typeof e.input.file_path === 'string' ? e.input.file_path : undefined;
+      const dir = file && path.isAbsolute(file) ? path.dirname(file) : this.cwdOf(threadId);
+      this.scrubber.known.lookSoon(dir);
+      if (dir) this.secretCalls.set(`${threadId} ${e.itemId}`, dir);
+    } else if (e.type === 'tool.result' && this.secretCalls.size) {
+      const key = `${threadId} ${e.itemId}`;
+      const dir = this.secretCalls.get(key);
+      if (dir) {
+        this.secretCalls.delete(key);
+        this.scrubber.known.lookSoon(dir);
+      }
+    }
+    const m = toMessageDoc(threadId, e, this.scrubber.safeText);
     if (m) {
       this.messages.push(this.woke.take(m, e));
       this.scheduleFlush();
       return;
     }
     if (e.type === 'approval.requested') {
-      this.pending.set(threadId, { approvalId: e.approvalId, kind: 'approval', name: e.name, title: e.title, options: e.options, ...(inputSummary(e.input) ? { inputSummary: inputSummary(e.input) } : {}) });
+      this.pending.set(threadId, { approvalId: e.approvalId, kind: 'approval', seq: e.seq, name: e.name, title: e.title, options: e.options, ...(inputSummary(e.input, this.scrubber.safeText) ? { inputSummary: inputSummary(e.input, this.scrubber.safeText) } : {}) });
     } else if (e.type === 'question.requested') {
-      this.pending.set(threadId, { approvalId: e.approvalId, kind: 'question', questions: e.questions });
+      this.pending.set(threadId, { approvalId: e.approvalId, kind: 'question', seq: e.seq, questions: e.questions });
     } else if (e.type === 'secret.requested') {
       // forBackend drops it for a backend older than SECRETS_API_VERSION.
       const box = this.deps.secretBox;
@@ -1192,7 +1523,7 @@ export class ConvexSync {
         this.deps.log.warn('no key for secrets from the phone', { error: String(err) });
         return;
       }
-      this.pending.set(threadId, { approvalId: e.approvalId, kind: 'secret', label: e.label, reason: e.reason, ...(e.placeholder ? { placeholder: e.placeholder } : {}), key });
+      this.pending.set(threadId, { approvalId: e.approvalId, kind: 'secret', seq: e.seq, label: e.label, reason: e.reason, ...(e.placeholder ? { placeholder: e.placeholder } : {}), key });
     } else if (e.type === 'approval.resolved') {
       if (this.pending.get(threadId)?.approvalId === e.approvalId) this.pending.delete(threadId);
     } else return;
@@ -1205,26 +1536,35 @@ export class ConvexSync {
   }
 
   // Only a change the phone would see makes a write.
-  private mark(t: ThreadSummary): void {
+  private mark(t: ThreadSummary, now_ = false): void {
+    if (this.removedFromFile.delete(t.id)) {
+      this.removed.delete(t.id);
+      this.removing.delete(t.id);
+    }
+    // settled() looks at every thread, as they are by then. Not a new one: its
+    // row has to go up before it needs Mike, or no push ever fires for it (a
+    // push is needsYou going from false to true on a row that's there).
+    if (this.settling && !now_ && this.sent.has(t.id)) return;
+    // Its folder's .env files are what a thread's words are likely to quote.
+    if (!t.archivedAt) this.scrubber.known.noteFolder(t.cwd);
     // A thread that isn't waiting any more lost its approval some other
     // way (the turn ended, the runner restarted); the row mustn't keep it.
     if (t.status === 'idle' || t.status === 'error' || t.status === 'stopped') this.pending.delete(t.id);
     this.noteShared(t);
     const doc = toThreadDoc(t, this.runnerId, this.deps.clock.now(), this.pending.get(t.id), this.earliestSeq(t), this.nextSteps(t));
-    if (this.removedFromFile.delete(t.id)) {
-      this.removed.delete(t.id);
-      this.removing.delete(t.id);
-    }
     const now = this.deps.clock.now();
     // Against the row as this backend took it: `sent` holds that, without
     // the fields an older one doesn't know, which would otherwise make every
     // summary of a thread with one look new.
     const row = forBackend(doc, this.backendApiVersion ?? 0, now);
-    if (this.sent.get(t.id) === digest(JSON.stringify(row))) {
+    if ((this.writing.get(t.id) ?? this.sent.get(t.id)) === digest(JSON.stringify(row))) {
       this.dirty.delete(t.id);
       this.held.delete(t.id);
       return;
     }
+    // An archived thread isn't saying anything new, but a row about to go up
+    // for the first time can still quote what its folder holds.
+    if (t.archivedAt) this.scrubber.known.noteFolder(t.cwd, true);
     const last = this.lastWrite.get(t.id);
     if (!this.dirty.has(t.id) && last && now - last.at < PREVIEW_HOLD_MS && last.steady === steadyDigest(row)) {
       this.held.set(t.id, { doc, due: last.at + PREVIEW_HOLD_MS });
@@ -1233,6 +1573,14 @@ export class ConvexSync {
     }
     this.held.delete(t.id);
     this.dirty.set(t.id, doc);
+  }
+
+  private settled(): void {
+    this.settleTimer?.cancel();
+    this.settleTimer = undefined;
+    this.settling = false;
+    for (const t of this.deps.runner.list(ALL)) this.mark(t);
+    this.scheduleFlush();
   }
 
   private recordSent(row: ThreadDoc): void {
@@ -1292,6 +1640,9 @@ export class ConvexSync {
   private forgetSent(): void {
     this.deps.log.warn('this deployment has not seen this runner before: writing everything again', { url: this.deps.config.url });
     this.seeded = false;
+    this.settleTimer?.cancel();
+    this.settleTimer = undefined;
+    this.settling = false;
     // Now, not at the next save: a restart before the full write finishes
     // would find the file valid and firstSeen no longer true, and the
     // deployment would stay empty.
@@ -1357,7 +1708,7 @@ export class ConvexSync {
   // a deleted thread. If this write fails, the next flush tries again.
   private async writeRowNow(threadId: string): Promise<void> {
     try {
-      this.mark(this.deps.runner.get(threadId));
+      this.mark(this.deps.runner.get(threadId), true);
       const doc = this.dirty.get(threadId);
       if (!doc) return;
       const row = forBackend(doc, this.backendApiVersion ?? 0, this.deps.clock.now());
@@ -1485,29 +1836,68 @@ export class ConvexSync {
   // this is the first this runner knows of what it has; else what changed.
   // A reading's time isn't a change: Token Stats reads every few minutes
   // whether or not a window has moved, and nothing shows it from the mirror.
+  // Nor is which source it came from, on its own.
   private async sendAccounts(list: Account[], v: number): Promise<void> {
     const key = this.deps.key;
     const docs = list.map((a) => toAccountDoc(a, v));
     const entry = (d: (typeof docs)[number]) => {
       const u = d.usage as Record<string, unknown> | undefined;
       if (!u) return digest(JSON.stringify(d));
-      const { readAt: _readAt, ...usage } = u;
+      const { readAt: _readAt, source: _source, ...usage } = u;
       return digest(JSON.stringify({ ...d, usage }));
     };
     const sent = this.accountsSent;
-    const changed = sent ? docs.filter((d) => sent.get(d.id as string) !== entry(d)) : docs;
+    const now = this.deps.clock.now();
+    let copyWaits = Infinity;
+    const changed = sent
+      ? docs.filter((d) => {
+          const id = d.id as string;
+          const u = d.usage as { source?: string; blocked?: boolean } | undefined;
+          if (sent.get(id) === entry(d)) {
+            const heldOwn = this.accountCopyHeld.has(id) && u?.source !== 'shared';
+            this.accountCopyHeld.delete(id);
+            return heldOwn;
+          }
+          // Blocked goes at once: that's what a phone's picker most needs to know.
+          if (u?.source !== 'shared' || u.blocked) {
+            this.accountCopyHeld.delete(id);
+            return true;
+          }
+          const due = (this.accountCopiedAt.get(id) ?? -Infinity) + USAGE_COPY_MS;
+          if (now >= due) {
+            this.accountCopiedAt.set(id, now);
+            this.accountCopyHeld.delete(id);
+            return true;
+          }
+          this.accountCopyHeld.add(id);
+          copyWaits = Math.min(copyWaits, due);
+          return false;
+        })
+      : docs;
+    if (copyWaits !== Infinity && !this.accountsTimer) {
+      this.accountsTimer = this.deps.clock.setTimeout(() => {
+        this.accountsTimer = undefined;
+        this.dirtyLists.add('accounts');
+        this.scheduleFlush();
+      }, Math.max(0, copyWaits - now));
+    }
     const ids = new Set(docs.map((d) => d.id as string));
     const removed = sent ? [...sent.keys()].filter((id) => !ids.has(id)) : [];
     if (sent && !changed.length && !removed.length) return;
+    const went = new Set(changed.map((d) => d.id as string));
     if (sent && v >= ACCOUNTS_DIFF_API_VERSION) await this.post('mutation', 'sync:upsertAccounts', { key, runnerId: this.runnerId, accounts: changed, removed });
     else await this.post('mutation', 'sync:setAccounts', { key, runnerId: this.runnerId, accounts: docs });
-    this.accountsSent = new Map(docs.map((d) => [d.id as string, entry(d)]));
+    // A copy still waiting stays different from what's remembered, so it goes when due.
+    this.accountsSent = new Map(docs.filter((d) => !sent || went.has(d.id as string) || sent.has(d.id as string)).map((d) => [d.id as string, !sent || went.has(d.id as string) ? entry(d) : (sent.get(d.id as string) ?? entry(d))]));
     this.noteSent();
   }
 
   private scheduleFlush(): void {
     if (!this.running || this.flushTimer) return;
-    if (!this.dirty.size && !this.removed.size && !this.messages.length && !this.dirtyLists.size && !this.full && !this.catchUpDue && !this.imagesDue.size && !this.imagesDrop.size && !this.pendingImages.length && !this.replyDue.size && !this.pendingReplyImages.length) return;
+    // Project pictures waiting (picturesDue) count too: one an upload
+    // allowance held back goes once its pause is over, idle or not.
+    const picturesWaiting = this.picturesDue && (this.backendApiVersion ?? 0) >= ICONS_API_VERSION && !this.picturesPaused();
+    if (!picturesWaiting && !this.dirty.size && !this.removed.size && !this.messages.length && !this.dirtyLists.size && !this.full && !this.catchUpDue && !this.imagesDue.size && !this.imagesDrop.size && !this.pendingImages.length && !this.replyDue.size && !this.pendingReplyImages.length) return;
     const now = this.deps.clock.now();
     let delay = Math.max(0, this.lastFlushAt + SYNC_COALESCE_MS - now);
     if (this.retryAt !== undefined) delay = Math.max(delay, this.retryAt - now);
@@ -1522,11 +1912,12 @@ export class ConvexSync {
     this.flushing = true;
     this.lastFlushAt = this.deps.clock.now();
     const docs = [...this.dirty.values()];
-    this.removing = new Set(this.removed);
+    // Not while settling: a thread the file says went may yet come across.
+    this.removing = new Set(this.settling ? [] : this.removed);
     let messages = this.messages.splice(0);
     const lists = [...this.dirtyLists];
     this.dirty.clear();
-    this.removed.clear();
+    if (!this.settling) this.removed.clear();
     this.dirtyLists.clear();
     const key = this.deps.key;
     try {
@@ -1536,8 +1927,19 @@ export class ConvexSync {
       const v = this.backendApiVersion ?? 0;
       for (let i = 0; i < docs.length; i += SYNC_BATCH) {
         const batch = docs.slice(i, i + SYNC_BATCH).map((d) => forBackend(d, v, this.deps.clock.now()));
-        await this.post('mutation', 'sync:upsertThreads', { key, threads: batch });
-        for (const d of batch) this.recordSent(d);
+        for (const d of batch) this.writing.set(d.threadId, digest(JSON.stringify(d)));
+        const left = await this.writeRows('sync:upsertThreads', 'threads', batch, (d) => d.threadId, { key });
+        // A row left out isn't remembered as sent (nor in the cache kept
+        // across starts), so its next change, or the next start, tries it again.
+        for (const d of batch) {
+          this.writing.delete(d.threadId);
+          if (!left.has(d.threadId)) this.recordSent(d);
+          else {
+            this.sent.delete(d.threadId);
+            this.lastWrite.delete(d.threadId);
+            this.noteSent();
+          }
+        }
         this.written += batch.length;
       }
       if (this.removing.size) {
@@ -1562,7 +1964,18 @@ export class ConvexSync {
           continue;
         }
         const rows = (list as Schedule[]).map(toScheduleDoc);
-        await this.post('mutation', `sync:set${name[0]!.toUpperCase()}${name.slice(1)}`, { key, runnerId: this.runnerId, [name]: rows });
+        try {
+          await this.post('mutation', `sync:set${name[0]!.toUpperCase()}${name.slice(1)}`, { key, runnerId: this.runnerId, [name]: rows });
+        } catch (e) {
+          // setSchedules (mirroring a pre-API 9 schedules.json) is the main
+          // key's only: a runner key's runner stops mirroring them, quietly,
+          // rather than retrying the whole write for ever. Its scheduler
+          // puts them in the backend itself once a heartbeat says it can.
+          if (name !== 'schedules' || !forbiddenText(e)) throw e;
+          this.deps.log.info('not mirroring schedules.json: this runner has a runner key, and its scheduler keeps them in the backend', { error: forbiddenText(e) });
+          this.lists.schedules = undefined;
+          this.schedulesRefused = true;
+        }
       }
       if (this.picturesDue && (this.backendApiVersion ?? 0) >= ICONS_API_VERSION) await this.sendPictures();
       if (this.full) {
@@ -1585,8 +1998,8 @@ export class ConvexSync {
         seen.add(k);
         return true;
       });
-      await this.appendMessages(messages);
-      this.markFilled(filling);
+      const notFilled = await this.appendMessages(messages);
+      this.markFilled(filling.filter((id) => !notFilled.has(id)));
       if (v >= SHARE_API_VERSION) await this.sendShareImages();
       if (v >= REPLY_IMAGES_API_VERSION) await this.sendReplyImages();
       this.lastSyncAt = this.deps.clock.now();
@@ -1600,7 +2013,17 @@ export class ConvexSync {
     } catch (e) {
       // Put back what didn't get written, unless a newer version arrived
       // meanwhile, and try again later; one log line per distinct error.
-      for (const d of docs) if (!this.dirty.has(d.threadId) && this.sent.get(d.threadId) !== digest(JSON.stringify(forBackend(d, this.backendApiVersion ?? 0, this.deps.clock.now())))) this.dirty.set(d.threadId, d);
+      // Not written after all: what's due is the thread as it is now, which may
+      // have moved on from what failed, or back to what the mirror has. A thread
+      // not here any more keeps its row as it was, for the retry.
+      this.writing.clear();
+      for (const d of docs) {
+        try {
+          this.mark(this.deps.runner.get(d.threadId), true);
+        } catch {
+          if (!this.dirty.has(d.threadId) && this.sent.get(d.threadId) !== digest(JSON.stringify(forBackend(d, this.backendApiVersion ?? 0, this.deps.clock.now())))) this.dirty.set(d.threadId, d);
+        }
+      }
       for (const id of this.removing) this.removed.add(id);
       this.removing.clear();
       for (const name of lists) this.dirtyLists.add(name);
@@ -1646,10 +2069,15 @@ export class ConvexSync {
         this.deps.log.warn('project picture not sent', { projectId: p.id, path: image.path, error: String((e as Error)?.message ?? e) });
         continue;
       }
-      const url = (await this.post('mutation', 'sync:iconUploadUrl', { key })) as string;
-      const storageId = await this.upload(url, file.bytes, file.mediaType);
-      await this.post('mutation', 'sync:setProjectIcon', { key, runnerId: this.runnerId, projectId: p.id, picture, storageId, mediaType: file.mediaType });
+      if (this.picturesPaused()) return; // picturesDue stays: they go when the pause is over
+      const sent = await this.picture('sync:setProjectIcon', `project ${p.id}`, async () => {
+        const url = (await this.post('mutation', 'sync:iconUploadUrl', { key })) as string;
+        const storageId = await this.upload(url, file.bytes, file.mediaType);
+        await this.post('mutation', 'sync:setProjectIcon', { key, runnerId: this.runnerId, projectId: p.id, picture, storageId, mediaType: file.mediaType });
+      });
+      if (sent === 'later') return;
       this.pictures.set(p.id, picture);
+      if (sent === 'dropped') continue;
       this.deps.log.info('project picture sent', { projectId: p.id, picture, bytes: file.bytes.byteLength });
     }
     const keep = new Set(projects.map((p) => p.id));
@@ -1689,22 +2117,28 @@ export class ConvexSync {
       const img = this.pendingImages[0]!;
       const up = this.imagesUp.get(img.threadId) ?? new Set<string>();
       this.imagesUp.set(img.threadId, up);
-      const id = `${img.seq} ${img.path}`;
+      const id = `${img.seq} ${this.scrubber.safeText(img.path)}`;
       if (!up.has(id) && this.sharedNow.get(img.threadId)) {
         // Only real pictures from the thread's own places, typed by their
         // bytes: the page is public, and a path is only what the agent wrote.
-        const roots = shareRoots(this.cwdOf(img.threadId), this.deps.home ? paths.thread(this.deps.home, img.threadId) : undefined);
-        const file = readShareImage(img.path, roots);
+        // Only from the thread's media folder: a path in Markdown is only
+        // what the agent wrote (docs/protocol.md, "Sharing").
+        const file = readShareImage(img.path, this.deps.home ? paths.media(this.deps.home, img.threadId) : undefined);
         if ('skip' in file) {
           this.deps.log.warn('shared picture not sent', { threadId: img.threadId, path: img.path, why: file.skip });
         } else {
-          const url = (await this.post('mutation', 'sync:iconUploadUrl', { key })) as string;
-          const { mediaType } = file;
-          const storageId = await this.upload(url, file.bytes, mediaType);
-          const { threadId, seq, path: file_, src } = img;
-          const width = file.width ?? img.width;
-          const height = file.height ?? img.height;
-          await this.post('mutation', 'sync:addShareImage', { key, threadId, seq, path: file_, ...(src ? { src } : {}), storageId, mediaType, ...(width ? { width } : {}), ...(height ? { height } : {}) });
+          if (this.picturesPaused()) return;
+          const sent = await this.picture('sync:addShareImage', `${img.threadId} ${img.path}`, async () => {
+            const url = (await this.post('mutation', 'sync:iconUploadUrl', { key })) as string;
+            const { mediaType } = file;
+            const storageId = await this.upload(url, file.bytes, mediaType);
+            const { threadId, seq, path: file_, src } = img;
+            const width = file.width ?? img.width;
+            const height = file.height ?? img.height;
+            await this.post('mutation', 'sync:addShareImage', { key, threadId, seq, path: file_, ...(src ? { src } : {}), storageId, mediaType, ...(width ? { width } : {}), ...(height ? { height } : {}) });
+          });
+          // Still queued (this one stays first), for after the pause.
+          if (sent === 'later') return;
         }
         up.add(id);
       }
@@ -1761,16 +2195,20 @@ export class ConvexSync {
         up = new Set((rows ?? []).map((r) => `${r.seq} ${r.path}`));
         this.replyUp.set(threadId, up);
       }
-      const id = `${seq} ${file}`;
+      const id = `${seq} ${this.scrubber.safeText(file)}`;
       if (!up.has(id)) {
         const read = readReplyImage(file);
         if ('skip' in read) {
           this.deps.log.debug('reply picture not sent', { threadId, path: file, why: read.skip });
         } else {
-          const url = (await this.post('mutation', 'sync:iconUploadUrl', { key })) as string;
-          const storageId = await this.upload(url, read.bytes, read.mediaType);
-          const { mediaType, width, height } = read;
-          await this.post('mutation', 'sync:addReplyImage', { key, threadId, seq, path: file, ...(src ? { src } : {}), ...(pinned ? { pinned } : {}), storageId, mediaType, ...(width ? { width } : {}), ...(height ? { height } : {}) });
+          if (this.picturesPaused()) return;
+          const sent = await this.picture('sync:addReplyImage', `${threadId} ${file}`, async () => {
+            const url = (await this.post('mutation', 'sync:iconUploadUrl', { key })) as string;
+            const storageId = await this.upload(url, read.bytes, read.mediaType);
+            const { mediaType, width, height } = read;
+            await this.post('mutation', 'sync:addReplyImage', { key, threadId, seq, path: file, ...(src ? { src } : {}), ...(pinned ? { pinned } : {}), storageId, mediaType, ...(width ? { width } : {}), ...(height ? { height } : {}) });
+          });
+          if (sent === 'later') return;
         }
         up.add(id);
       }
@@ -1810,7 +2248,9 @@ export class ConvexSync {
     return out;
   }
 
-  private async appendMessages(all: MessageDoc[]): Promise<void> {
+  // The threads with a message left out, so their history isn't counted as up.
+  private async appendMessages(all: MessageDoc[]): Promise<Set<string>> {
+    const notFilled = new Set<string>();
     // A backend from before API 2 can't take tool rows; it's deployed before
     // the runner, so this only matters when that deploy was skipped.
     const v = this.backendApiVersion;
@@ -1821,11 +2261,22 @@ export class ConvexSync {
     if (v === undefined || v < WOKE_BY_API_VERSION) messages = messages.map((m) => (m.wokeBy ? (({ wokeBy, ...rest }) => rest)(m) : m));
     for (let i = 0; i < messages.length; i += MESSAGE_BATCH) {
       const batch = messages.slice(i, i + MESSAGE_BATCH);
-      await this.post('mutation', 'sync:appendMessages', { key: this.deps.key, messages: batch });
-      this.messagesWritten += batch.length;
-      for (const m of batch) if (m.seq > (this.heads.get(m.threadId) ?? 0)) this.heads.set(m.threadId, m.seq);
+      const left = await this.writeRows('sync:appendMessages', 'messages', batch, (m) => `${m.threadId}:${m.seq}`, { key: this.deps.key });
+      this.messagesWritten += batch.length - left.size;
+      // A message left out isn't sent: its thread's head stops before it, so
+      // the next start sends it (and what follows) again.
+      const stop = new Map<string, number>();
+      for (const id of left) {
+        const at = id.lastIndexOf(':');
+        const threadId = id.slice(0, at);
+        const seq = Number(id.slice(at + 1));
+        stop.set(threadId, Math.min(stop.get(threadId) ?? Infinity, seq));
+        notFilled.add(threadId);
+      }
+      for (const m of batch) if (m.seq < (stop.get(m.threadId) ?? Infinity) && m.seq > (this.heads.get(m.threadId) ?? 0)) this.heads.set(m.threadId, m.seq);
       this.noteSent();
     }
+    return notFilled;
   }
 
   // At start, what's newer than the mirror's newest message, for threads
@@ -1880,6 +2331,8 @@ export class ConvexSync {
   private messagesAfter(t: ThreadSummary, after: number, strict: true): MessageDoc[] | undefined;
   private messagesAfter(t: ThreadSummary, after: number): MessageDoc[];
   private messagesAfter(t: ThreadSummary, after: number, strict = false): MessageDoc[] | undefined {
+    // An archived thread's folder isn't watched, but its history still goes up.
+    if (t.lastSeq > after) this.scrubber.known.noteFolder(t.cwd, true);
     const out: MessageDoc[] = [];
     const woke = new WokeRows();
     while (t.lastSeq > after) {
@@ -1897,7 +2350,7 @@ export class ConvexSync {
       for (const e of events) {
         if (e.seq <= after || cuts.some((c) => e.seq >= c.from && e.seq <= c.to)) continue;
         woke.see(e);
-        const m = toMessageDoc(t.id, e);
+        const m = toMessageDoc(t.id, e, this.scrubber.safeText);
         if (m) out.push(woke.take(m, e));
       }
       after = next;
@@ -1971,6 +2424,7 @@ export class ConvexSync {
 
   private heartbeat(): void {
     if (!this.running) return;
+    this.scrubber.known.refreshIfDue();
     const runner = {
       runnerId: this.runnerId,
       name: this.name,
@@ -1981,17 +2435,32 @@ export class ConvexSync {
       threadCount: this.deps.runner.list(ALL).length,
       ...(this.deps.config.icon && (this.backendApiVersion ?? 0) >= RUNNER_ICON_API_VERSION ? { icon: this.deps.config.icon } : {}),
       ...(this.deps.config.rpcUrl && (this.backendApiVersion ?? 0) >= THREAD_INDEX_API_VERSION ? { rpcUrl: this.deps.config.rpcUrl } : {}),
+      ...(this.stats?.pressure && (this.backendApiVersion ?? 0) >= RUNNER_STATS_API_VERSION ? { pressure: this.stats.pressure } : {}),
     };
     void this.post('mutation', 'sync:heartbeat', { key: this.deps.key, runner }).then(
       (r) => {
         this.sawBackend(r);
+        this.keyRejected = false;
+        this.ownerKeyRotating = (r as { ownerKeyRotating?: unknown } | null)?.ownerKeyRotating === true;
         this.lookForReplyImages();
         if ((this.backendApiVersion ?? 0) >= SCHEDULES_API_VERSION && this.running) void this.deps.schedules?.attach(this.scheduleBackend());
         if ((this.backendApiVersion ?? 0) >= SHARED_POOLS_API_VERSION && this.running) this.deps.pools?.attach(this.poolBackend());
+        if ((this.backendApiVersion ?? 0) >= SHARED_USAGE_API_VERSION && this.running) this.followSharedUsage();
         if ((this.backendApiVersion ?? 0) >= THREAD_INDEX_API_VERSION && this.running) this.index?.start();
+        if ((this.backendApiVersion ?? 0) >= RUNNER_STATS_API_VERSION && this.running) this.startStats();
       },
       (e) => {
-        this.deps.log.debug('convex heartbeat failed', { error: String(e) });
+        // A key that isn't this runner's (runner.json's sync.runnerId isn't
+        // the one `tb runner add` made it for) fails every heartbeat: said
+        // once, loudly, as nothing else here would show it.
+        if (keyRejected(e)) this.onKeyRejected();
+        const refused = forbiddenText(e);
+        // Forbidden too: a runner moved onto its own key while the main key
+        // still works has its main-key heartbeat refused that way.
+        if (refused || this.keyRejected) this.restartIfNewKey();
+        if (refused && refused !== this.heartbeatRefused) this.deps.log.warn('convex heartbeat refused: this runner key is for another runner', { error: refused, runnerId: this.runnerId });
+        else if (!refused && !this.keyRejected) this.deps.log.debug('convex heartbeat failed', { error: String(e) });
+        this.heartbeatRefused = refused;
         // The version from the file may be why: a heartbeat with a field an
         // older backend's validator refuses can never learn better. Going
         // back to assuming nothing is what a start without the file does.
@@ -2001,6 +2470,108 @@ export class ConvexSync {
       },
     );
     this.heartbeatTimer = this.deps.clock.setTimeout(() => this.heartbeat(), HEARTBEAT_MS);
+  }
+
+  // The backend turned the key down. Said once (an error in the log, which
+  // reaches Sentry from a real install, and a notice for the app), not a
+  // warning a minute. Then, as for a forbidden heartbeat: if
+  // secrets/convex-key now holds another key (tb runner add wrote one over
+  // ssh), restart onto it, as the key is read at start and nobody may be
+  // at that Mac to restart it.
+  private onKeyRejected(): void {
+    if (!this.keyRejected) {
+      this.keyRejected = true;
+      this.deps.log.error('convex turned down this runner\'s key', { runnerId: this.runnerId });
+      this.deps.notice?.('error', KEY_REJECTED);
+    }
+  }
+
+  private restartIfNewKey(): void {
+    let now: string | undefined;
+    try {
+      now = this.deps.readKey?.();
+    } catch {
+      return;
+    }
+    if (now && now !== this.deps.key && !this.restartAsked) {
+      this.restartAsked = true;
+      this.deps.log.info('restarting onto the new key in secrets/convex-key', { runnerId: this.runnerId });
+      this.deps.restart?.('new convex key');
+    }
+  }
+
+  /** Other runners' threads as last heard, for relay.ts. */
+  remoteNow(): RemoteThreads {
+    return this.index?.current() ?? { runners: [], threads: [] };
+  }
+
+  /**
+   * What relay.ts reads and queues with: this runner's link to the backend,
+   * with the owner key only (a runner key can't read other runners' threads).
+   * Undefined with sync off or before the backend is at RELAY_API_VERSION.
+   */
+  relaySource(): { post: Post; subscribe?: Subscribe; key: string } | undefined {
+    if (this.off || !this.deps.key || (this.backendApiVersion ?? 0) < RELAY_API_VERSION) return undefined;
+    const subscriber = this.subscriber;
+    return {
+      post: (kind, fn, args) => this.post(kind, fn, args),
+      ...(subscriber ? { subscribe: (fn: string, args: Record<string, unknown>, onUpdate: (v: unknown) => void, onError: (e: Error) => void) => subscriber.subscribe(fn, args, onUpdate, onError) } : {}),
+      key: this.deps.key,
+    };
+  }
+
+  private startStats(): void {
+    const { sample, key } = this.deps;
+    const subscriber = this.subscriber;
+    if (!sample || !subscriber) return;
+    this.stats ??= new RunnerStats({
+      sample,
+      key,
+      runnerId: this.runnerId,
+      post: (fn, args) => this.post('mutation', fn, args),
+      subscribe: (fn, args, onUpdate, onError) => subscriber.subscribe(fn, args, onUpdate, onError),
+      clock: this.deps.clock,
+      log: this.deps.log,
+    });
+    this.stats.start();
+  }
+
+  // ------------------------------------------------------------ runner figures
+
+  private statsWatchSentAt = 0;
+  private statsForbidden = false;
+
+  /**
+   * runners.stats: each runner's latest CPU, memory and disk, for the Mac
+   * app's Runners panel while a runner's details are open. Asking marks the
+   * figures wanted, as the website's Runners view does (runner-stats.ts), so
+   * every runner reports every few seconds until nobody asks for a while.
+   * Empty with sync off, on an older backend, or on a runner key, which
+   * can't see other runners.
+   */
+  async runnerStats(): Promise<RunnerStatsRow[]> {
+    if (!this.running || this.statsForbidden || (this.backendApiVersion ?? 0) < MAC_RUNNER_STATS_API_VERSION) return [];
+    const key = this.deps.key;
+    const now = this.deps.clock.now();
+    // The watch lasts 45 s in the backend; once every 20 s keeps it going
+    // through a slow answer without a write on every ask.
+    if (now - this.statsWatchSentAt >= STATS_WATCH_EVERY_MS) {
+      this.statsWatchSentAt = now;
+      void this.post('mutation', 'sync:watchRunnersFromMac', { key }).catch((e) => {
+        this.statsWatchSentAt = 0;
+        this.deps.log.debug('runner watch failed', { error: String(e) });
+      });
+    }
+    try {
+      const rows = await this.post('query', 'sync:runnerStatsList', { key });
+      return Array.isArray(rows) ? (rows as RunnerStatsRow[]) : [];
+    } catch (e) {
+      if (forbiddenText(e)) {
+        this.statsForbidden = true;
+        return [];
+      }
+      throw e;
+    }
   }
 
   /** remoteThreads.list: other runners' threads, empty with sync off. */
@@ -2027,7 +2598,11 @@ export class ConvexSync {
           onError(new Error('sync is off'));
           return () => {};
         }
-        return this.subscriber.subscribe('sync:schedules', { key }, (v) => onRows(Array.isArray(v) ? (v as StoredSchedule[]) : []), onError);
+        const subscriber = this.subscriber;
+        if ((this.backendApiVersion ?? 0) >= SCHEDULES_FOLLOW_API_VERSION) {
+          return followSchedules<StoredSchedule>((fn, args, onUpdate, fail) => subscriber.subscribe(fn, args, onUpdate, fail), key, onRows, onError);
+        }
+        return subscriber.subscribe('sync:schedules', { key }, (v) => onRows(Array.isArray(v) ? (v as StoredSchedule[]) : []), onError);
       },
       save: async (sc) => {
         await call('mutation', 'sync:saveSchedule', { schedule: toOwnedScheduleDoc(sc, this.backendApiVersion ?? 0) });
@@ -2035,9 +2610,7 @@ export class ConvexSync {
       remove: async (scheduleId) => {
         await call('mutation', 'sync:deleteSchedule', { scheduleId });
       },
-      adopt: async (rows) => {
-        await call('mutation', 'sync:adoptSchedules', { runnerId, schedules: rows.map((r) => toOwnedScheduleDoc(r, this.backendApiVersion ?? 0)) });
-      },
+      adopt: async (rows) => (await call('mutation', 'sync:adoptSchedules', { runnerId, schedules: rows.map((r) => toOwnedScheduleDoc(r, this.backendApiVersion ?? 0)) })) as { held?: { id: string; why: string }[] } | null ?? undefined,
       claim: async (scheduleId, kind, expect) => (await call('mutation', 'sync:claimSchedule', { runnerId, scheduleId, holder, kind, expect })) === true,
       release: async (scheduleId) => {
         await call('mutation', 'sync:releaseSchedule', { scheduleId, holder });
@@ -2049,11 +2622,49 @@ export class ConvexSync {
       runners: async () => {
         const rows = await call('query', 'sync:runnersList', {});
         return Array.isArray(rows)
-          ? (rows as { runnerId: string; name: string; lastSeenAt: number; icon?: string }[]).map((r) => ({ id: r.runnerId, name: r.name, lastSeenAt: r.lastSeenAt, ...(r.icon ? { icon: r.icon } : {}) }))
+          ? (rows as { runnerId: string; name: string; lastSeenAt: number; icon?: string; version?: string; release?: string; startedAt?: string; draining?: boolean }[]).map((r) => ({
+              id: r.runnerId,
+              name: r.name,
+              lastSeenAt: r.lastSeenAt,
+              ...(r.icon ? { icon: r.icon } : {}),
+              ...(r.version ? { version: r.version } : {}),
+              ...(r.release ? { release: r.release } : {}),
+              ...(r.startedAt ? { startedAt: r.startedAt } : {}),
+              ...(r.draining ? { draining: true } : {}),
+            }))
           : [];
       },
     };
     return this.schedulesTable;
+  }
+
+  // ------------------------------------------------------------ shared usage
+
+  private unsubSharedUsage?: () => void;
+  private sharedUsageAsked?: string;
+
+  // Once: every runner's readings, less this runner's own, to the usage
+  // store. Each reading's readAt keeps a copy of a copy from winning over
+  // the reading it came from.
+  private followSharedUsage(): void {
+    if (!this.subscriber || !this.deps.sharedUsage) return;
+    // A heartbeat calls this each time: once, unless the backend has come to
+    // take the runner's id since.
+    const args = sharedUsageArgs(this.deps.key, this.runnerId, this.backendApiVersion ?? 0);
+    const asked = JSON.stringify(args);
+    if (this.unsubSharedUsage && this.sharedUsageAsked === asked) return;
+    this.unsubSharedUsage?.();
+    this.sharedUsageAsked = asked;
+    const mine = this.runnerId;
+    this.unsubSharedUsage = this.subscriber.subscribe(
+      'sync:sharedUsage',
+      args,
+      (v) => this.deps.sharedUsage?.setShared((Array.isArray(v) ? (v as SharedReading[]) : []).filter((r) => r.runnerId !== mine)),
+      (e) => {
+        this.deps.log.debug('shared usage subscription failed', { error: String(e) });
+        this.unsubSharedUsage = undefined;
+      },
+    );
   }
 
   // ------------------------------------------------------------ pools
@@ -2076,7 +2687,16 @@ export class ConvexSync {
       save: async (pools) => {
         await this.backend('mutation', 'sync:savePools', { key, runnerId, pools });
       },
-      adopt: async (pools) => (await this.backend('mutation', 'sync:adoptPools', { key, runnerId, pools })) === true,
+      // adoptPools is the main key's (docs/protocol.md, "Runner keys"): on a
+      // runner key it's "not taken", and this runner follows the main Mac's.
+      adopt: async (pools) => {
+        try {
+          return (await this.backend('mutation', 'sync:adoptPools', { key, runnerId, pools })) === true;
+        } catch (e) {
+          if (/runner's key can't/.test(String((e as Error)?.message))) return false;
+          throw e;
+        }
+      },
     };
     return this.poolsTable;
   }
@@ -2117,10 +2737,11 @@ export class ConvexSync {
         const taken = await this.post('mutation', 'sync:takeCommand', { key: this.deps.key, commandId: c.commandId });
         if (taken !== true) continue;
         let resultThreadId: string | undefined;
+        let result: unknown;
         let note: string | undefined;
         let ok = true;
         try {
-          resultThreadId = await this.apply(c);
+          ({ threadId: resultThreadId, result } = (await this.apply(c)) ?? {});
           this.applied++;
         } catch (e) {
           ok = false;
@@ -2133,7 +2754,7 @@ export class ConvexSync {
           else this.deps.log.warn('phone command failed', { kind: c.kind, threadId: c.threadId, error: note });
         }
         if (resultThreadId) await this.writeRowNow(resultThreadId);
-        await this.post('mutation', 'sync:finishCommand', { key: this.deps.key, commandId: c.commandId, ok, ...(note ? { note } : {}), ...(resultThreadId ? { resultThreadId } : {}) });
+        await this.post('mutation', 'sync:finishCommand', { key: this.deps.key, commandId: c.commandId, ok, ...(note ? { note } : {}), ...(resultThreadId ? { resultThreadId } : {}), ...(result !== undefined ? { result: JSON.stringify(result) } : {}) });
       } catch (e) {
         // Couldn't take or finish it: the next update of the list brings
         // it round again if it's still pending.
@@ -2170,11 +2791,39 @@ export class ConvexSync {
     }
   }
 
+  // The phone saw a question as it was scrubbed, so its answer may name the
+  // question, or pick an option, in scrubbed words. The CLI wants the real ones.
+  private realAnswers(threadId: string, answers: Record<string, string>): Record<string, string> {
+    const pending = this.pending.get(threadId);
+    if (pending?.kind !== 'question') return answers;
+    const out = { ...answers };
+    for (const q of pending.questions) {
+      const seen = this.scrubber.safeText(q.question);
+      if (seen !== q.question && out[seen] !== undefined && out[q.question] === undefined) {
+        out[q.question] = out[seen]!;
+        delete out[seen];
+      }
+      // Several picks arrive joined with ", ", and a label can hold a comma.
+      const picked = out[q.question];
+      if (picked === undefined) continue;
+      let answer = picked;
+      for (const o of q.options ?? []) {
+        const seenLabel = this.scrubber.safeText(o.label);
+        if (seenLabel !== o.label) answer = answer.split(seenLabel).join(o.label);
+      }
+      out[q.question] = answer;
+    }
+    return out;
+  }
+
   // Applies one command through the runner; returns the new thread's id
   // for a create or a quickAsk. Throws with a readable message for the phone.
-  private async apply(c: Command): Promise<string | undefined> {
+  private async apply(c: Command): Promise<{ threadId?: string; result?: unknown } | undefined> {
     const host = this.deps.commands!;
     const a = c.args ?? {};
+    // Sent from the main Mac through the backend (convex/relay.ts): Mike at a
+    // Mac, not the phone, so his message isn't marked as the phone's.
+    const origin = a.from === 'mac' ? {} : { origin: 'phone' as const };
     const threadId = c.threadId;
     const needThread = (): string => {
       if (!threadId) throw new Error('no thread');
@@ -2183,7 +2832,7 @@ export class ConvexSync {
     switch (c.kind) {
       case 'send': {
         const text = commandText(a);
-        await this.withPhoneImages(a.images, (images) => host.send(needThread(), text, images, { origin: 'phone', ...(phoneAnswers(a.answers) ? { answers: phoneAnswers(a.answers) } : {}) }));
+        await this.withPhoneImages(a.images, (images) => host.send(needThread(), text, images, { ...origin, ...(phoneAnswers(a.answers) ? { answers: phoneAnswers(a.answers) } : {}) }));
         return undefined;
       }
       case 'respond': {
@@ -2207,7 +2856,7 @@ export class ConvexSync {
           approvalId: String(a.approvalId),
           decision,
           ...(typeof a.message === 'string' ? { message: a.message } : {}),
-          ...(a.answers && typeof a.answers === 'object' ? { answers: a.answers as Record<string, string> } : {}),
+          ...(a.answers && typeof a.answers === 'object' ? { answers: this.realAnswers(needThread(), a.answers as Record<string, string>) } : {}),
         });
         return undefined;
       }
@@ -2217,7 +2866,11 @@ export class ConvexSync {
           const s = a.snooze as { until?: string; untilRestart?: boolean };
           await host.update({ threadId: id, snoozedUntil: s.untilRestart ? 'restart' : s.until ?? null });
         } else if (a.wake) await host.update({ threadId: id, snoozedUntil: null });
-        else if (a.archive) await host.update({ threadId: id, archived: true });
+        else if (a.archive) {
+          // The phone's done card asks how it went first (backend API 42).
+          const verdict = ARCHIVE_VERDICTS.includes(a.verdict as ArchiveVerdict) ? { verdict: a.verdict as ArchiveVerdict } : {};
+          await host.update({ threadId: id, archived: true, ...verdict });
+        }
         else if (a.unarchive) await host.update({ threadId: id, archived: false });
         else if (a.markSeen) await host.markSeen(id);
         else if (typeof a.star === 'boolean') await host.update({ threadId: id, starred: a.star });
@@ -2234,9 +2887,10 @@ export class ConvexSync {
           ...(typeof a.accountId === 'string' ? { accountId: a.accountId } : {}),
           ...(typeof a.model === 'string' ? { model: a.model } : {}),
           ...(isEffortLevel(a.effort) ? { effort: a.effort } : {}),
-          origin: 'phone',
+          ...(a.permissionMode === 'ask' || a.permissionMode === 'full' || a.permissionMode === 'auto' ? { permissionMode: a.permissionMode } : {}),
+          ...origin,
         }));
-        return thread.id;
+        return { threadId: thread.id };
       }
       case 'quickAsk': {
         // A quick ask the phone answered itself (API 9), kept as a thread.
@@ -2253,7 +2907,21 @@ export class ConvexSync {
           sources,
           ...(typeof a.askedAt === 'number' ? { askedAt: a.askedAt } : {}),
         });
-        return thread.id;
+        return { threadId: thread.id };
+      }
+      case 'interrupt': {
+        if (!host.interrupt) throw new Error("This runner can't stop a turn from another Mac.");
+        await host.interrupt(needThread());
+        return undefined;
+      }
+      case 'call': {
+        // Only what relay.ts CALLS allows, checked again here: the backend
+        // isn't trusted to have checked, and nothing here may answer with
+        // file contents or tool output (step 4 brings those, scrubbed).
+        if (a.method !== 'files.list') throw new Error(`${String(a.method)} can't be asked of this runner`);
+        const params = a.params && typeof a.params === 'object' ? (a.params as Record<string, unknown>) : {};
+        const list = listFolderFor({ path: params.path });
+        return { result: { ...list, entries: list.entries.slice(0, CALL_ENTRIES), truncated: list.truncated || list.entries.length > CALL_ENTRIES } };
       }
       case 'share': {
         // The website's Stop sharing, Share again and New link (API 8).
@@ -2274,11 +2942,18 @@ export class ConvexSync {
         const cuts = this.deps.runner.cuts?.(id) ?? [];
         const page = events
           .filter((e) => !cuts.some((c) => e.seq >= c.from && e.seq <= c.to))
-          .map((e) => toMessageDoc(id, e))
+          .map((e) => toMessageDoc(id, e, this.scrubber.safeText))
           .filter((m): m is MessageDoc => Boolean(m) && m!.role !== 'tool')
           .slice(-PAGE_SIZE)
           .map((m) => ({ ...m, pagedAt: now }));
         await this.appendMessages(page);
+        return undefined;
+      }
+      case 'schedule': {
+        if (!host.schedule) throw new Error('this runner can\'t change schedules');
+        if (typeof a.scheduleId !== 'string' || !a.scheduleId) throw new Error('no schedule');
+        if (a.action !== 'pause' && a.action !== 'resume' && a.action !== 'run') throw new Error('action is "pause", "resume" or "run"');
+        await host.schedule({ scheduleId: a.scheduleId, action: a.action });
         return undefined;
       }
       default:

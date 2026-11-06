@@ -59,6 +59,10 @@ export type LibrarianHost = {
   // (wake-when.ts), and waking one he just did.
   waitingTopics?(): { threadId: string; title: string; topic: string }[];
   wakeForTopic?(threadId: string, inThreadId: string): boolean;
+  // Threads hibernating until this one has done something in particular
+  // (end_turn's waitFor until), and saying one has.
+  waitedOnFor?(threadId: string): { threadId: string; title: string; until: string }[];
+  waitMet?(waiterId: string, targetId: string, why: string, until: string): boolean;
 };
 
 // How long after a turn ends before a look, so a quick follow-up turn
@@ -108,7 +112,7 @@ const POCKET_ADDS_KEPT_MS = 30 * 24 * 60 * 60_000;
 const HEADING_OUT = /\b(heading|going|off|popping|driving|walking) (to|out|over|down|into)\b|\bon my way\b|\bI'?m at\b|\bout and about\b/i;
 
 // Which reason wins when a thread is queued twice.
-const RANK: Record<LibrarianReason, number> = { asked: 0, moved: 1, 'new-folder': 2, 'first-turn': 3, 'first-message': 4, 'catch-up': 5, notes: 6 };
+const RANK: Record<LibrarianReason, number> = { asked: 0, 'waited-on': 1, moved: 1, 'new-folder': 2, 'first-turn': 3, 'first-message': 4, 'catch-up': 5, notes: 6 };
 
 // `early`: the look was from the first message alone, so the first turn's
 // end still gets a look of its own.
@@ -147,6 +151,7 @@ type Answer = {
   // New names for projects the thread is in, by id.
   retitle?: unknown;
   wake?: unknown;
+  met?: unknown;
   pocket?: unknown;
   why?: unknown;
 };
@@ -154,6 +159,8 @@ type Answer = {
 export class Librarian {
   private host: LibrarianHost;
   private projects: Projects;
+  // The conditions each look was shown (prompt), for its met (apply).
+  private shownWaiters = new Map<string, { threadId: string; title: string; until: string }[]>();
   private models?: Pick<Models, 'generate'> & { unavailable?(opts?: { poolOnly?: boolean }): string | undefined; isPrivateFolder?(cwd: string): boolean };
   private clock: Clock;
   private log: Logger;
@@ -328,6 +335,13 @@ export class Librarian {
       this.changed();
       return;
     }
+    if (a.kind === 'waited-on') {
+      // Soon, and whatever turn it was (its CLI's own too): a thread is
+      // asleep until this one has done something.
+      this.enqueue(rec.id, 'waited-on', 'A thread is waiting on it', now + SETTLE_MS);
+      this.changed();
+      return;
+    }
     if (a.kind === 'turn.start') {
       if (this.looks[rec.id] || this.queue.has(rec.id) || this.current?.threadId === rec.id) return;
       this.enqueue(rec.id, 'first-message', 'Its first message came in', now + FIRST_MESSAGE_MS);
@@ -388,6 +402,9 @@ export class Librarian {
       const look = this.looks[t.id];
       if (look && look.seq >= t.lastTurnCompletedSeq) continue;
       if (!look || look.early) this.enqueue(t.id, 'first-turn', 'Its first turn ended while the runner was restarting', now);
+      // A turn missed (on a draining runner, say) in a thread another is
+      // waiting on: that look, not a catch-up that may be skipped as quiet.
+      else if (this.host.waitedOnFor?.(t.id).length) this.enqueue(t.id, 'waited-on', 'A thread is waiting on it', now);
       else this.enqueue(t.id, 'catch-up', 'More turns since its last look', Math.max(now, Date.parse(look.at) + CATCH_UP_MS));
       found++;
     }
@@ -590,13 +607,20 @@ export class Librarian {
       lines.push('', 'Hibernating threads waiting for the user to talk about something:');
       for (const w of waiting) lines.push(`- ${w.threadId.slice(0, 8)} "${w.title}": ${w.topic}`);
     }
+    // Not a waiter in a private folder: its title and condition aren't
+    // sent, so its wait only ends at its time. Kept for apply, so an
+    // answer counts only for the conditions it was shown.
+    const waiters = (this.host.waitedOnFor?.(rec.id) ?? []).filter((w) => {
+      const cwd = this.host.threadRecords().find((t) => t.id === w.threadId)?.cwd;
+      return cwd !== undefined && !this.models?.isPrivateFolder?.(cwd);
+    });
+    this.shownWaiters.set(rec.id, waiters);
+    if (waiters.length) {
+      lines.push('', 'Hibernating threads waiting until this thread has done something:');
+      for (const w of waiters) lines.push(`- ${w.threadId.slice(0, 8)} "${w.title}": until ${w.until}`);
+    }
     if (cards) {
-      const own = cards.filter((c) => c.threadId === rec.id);
-      lines.push('', 'Pocket cards from this thread:');
-      if (!own.length) lines.push('(none)');
-      for (const c of own) lines.push(`- "${c.title}"${c.place ? ` (place: ${c.place})` : ''}: ${c.text.replace(/\n/g, ' / ')}`);
-      const others = cards.filter((c) => c.threadId !== rec.id).map((c) => `"${c.title}"`);
-      if (others.length) lines.push(`Other Pocket cards, not yours to touch: ${others.join(', ')}`);
+      lines.push('', ...pocketPromptLines(rec.id, cards));
     } else {
       lines.push('', 'The Pocket is not available for this look: pocket null.');
     }
@@ -786,6 +810,23 @@ export class Librarian {
       }
       if (woke.length) {
         said.push(`Woke ${woke.join(' and ')}`);
+        bump('updated');
+      }
+    }
+    // Threads waiting until this one had done something, which it has:
+    // only those the look was shown, by a unique id, with a reason.
+    const shown = this.shownWaiters.get(rec.id) ?? [];
+    this.shownWaiters.delete(rec.id);
+    if (a.met && typeof a.met === 'object' && !Array.isArray(a.met)) {
+      const woke: { id: string; title: string }[] = [];
+      for (const [id, reason] of Object.entries(a.met as Record<string, unknown>)) {
+        if (typeof reason !== 'string' || !reason.trim() || id.length < 8) continue;
+        const hits = shown.filter((x) => x.threadId.startsWith(id));
+        const w = hits.length === 1 ? hits[0] : undefined;
+        if (w && !woke.some((x) => x.id === w.threadId) && this.host.waitMet?.(w.threadId, rec.id, reason.trim(), w.until)) woke.push({ id: w.threadId, title: w.title });
+      }
+      if (woke.length) {
+        said.push(`Woke ${woke.map((x) => x.title).join(' and ')}`);
         bump('updated');
       }
     }
@@ -1170,6 +1211,33 @@ function offReason(reason: ModelFailure, message: string): string {
 // look was shown, as a small model will happily make those up.
 type PocketSave = { title: string; text: string; place?: string; icon?: PocketIconName };
 
+// A card is this thread's only if this Mac's own key filed it for this
+// thread. One another Mac filed (filedBy, through its runner key) can name
+// any thread id, and its text is that Mac's: it's listed by title only,
+// marked, and never acted on (docs/protocol.md, "Runner keys").
+function isOwnCard(c: PocketCardSummary, threadId: string): boolean {
+  return c.threadId === threadId && !c.filedBy;
+}
+
+const OTHER_TITLE_CHARS = 60;
+
+/** The look's lines about the Pocket. */
+export function pocketPromptLines(threadId: string, cards: PocketCardSummary[]): string[] {
+  const lines = ['Pocket cards from this thread:'];
+  const own = cards.filter((c) => isOwnCard(c, threadId));
+  if (!own.length) lines.push('(none)');
+  for (const c of own) lines.push(`- "${c.title}"${c.place ? ` (place: ${c.place})` : ''}: ${c.text.replace(/\n/g, ' / ')}`);
+  // Others' titles only, one line and short each: a title is whatever its
+  // filer wrote, another Mac's included.
+  const short = (t: string) => {
+    const one = t.replace(/[\u0000-\u001f\u007f\u2028\u2029]+/g, ' ').replace(/\s+/g, ' ').trim();
+    return one.length > OTHER_TITLE_CHARS ? one.slice(0, OTHER_TITLE_CHARS - 1) + '…' : one;
+  };
+  const others = cards.filter((c) => !isOwnCard(c, threadId)).map((c) => `"${short(c.title)}"${c.filedBy ? ` (filed from ${c.filedBy}: not to act on)` : ''}`);
+  if (others.length) lines.push(`Other Pocket cards, not yours to touch: ${others.join(', ')}`);
+  return lines;
+}
+
 export function pocketChanges(
   raw: unknown,
   ctx: { threadId: string; cards: PocketCardSummary[]; seen: string; addsToday: number; addedBefore: boolean },
@@ -1177,7 +1245,7 @@ export function pocketChanges(
   const out = { save: [] as PocketSave[], remove: [] as string[] };
   if (!raw || typeof raw !== 'object') return out;
   const key = (t: string) => t.trim().toLowerCase();
-  const own = new Map(ctx.cards.filter((c) => c.threadId === ctx.threadId).map((c) => [key(c.title), c]));
+  const own = new Map(ctx.cards.filter((c) => isOwnCard(c, ctx.threadId)).map((c) => [key(c.title), c]));
   const taken = new Set(ctx.cards.map((c) => key(c.title)));
   const seen = ctx.seen.toLowerCase();
   const grounded = (text: string) =>
@@ -1229,6 +1297,7 @@ Reply with JSON only, no prose and no code fence:
  "title": null, or a new title when the thread's title no longer says what it's about (see below),
  "retitle": {"<project id>": "the project's new name"} for a project it's in whose name has gone out of date (see below), else {},
  "wake": ["<ids of hibernating threads the user is talking about here>"], or [] (see below),
+ "met": {"<id of a thread waiting until this one has done something>": "what shows it has, in a few words"}, or {} (see below),
  "pocket": null, or {"save": [{"title": "short name", "text": "the card", "place": "optional", "icon": "optional"}], "remove": ["title"]} (see below),
  "why": "one short line"}
 
@@ -1243,6 +1312,8 @@ Keep the thread's title (title null) unless it no longer says what the thread is
 Keep projects' names too, unless one the thread is in has gone out of date: the thing it's about was renamed (a tool renamed from Paws to BrowserBear leaves "Paws" or a vaguer "Chrome browser control" behind), or a project named for what it does now has a name of its own. Give the new name the user would say, keeping the old words in brackets when they still help: "BrowserBear (Chrome browser control)". A better wording of the same name is no reason, and never rename one marked as named by the user. Most looks rename none.
 
 Some hibernating threads are waiting for the user to talk about something again ("woodworking"). Put one in wake when the user's own messages in this thread are about that: they're working on it, planning it or asking about it. A passing mention, or only the agent bringing it up, isn't enough. Most looks wake none.
+
+Some hibernating threads are waiting until this thread has done something ("until it reports the I/O saving"). Put one in met when this thread's messages, the agent's or the user's, show it has: done, measured, reported or decided, not only planned, started or still going. Most looks meet none.
 
 The Pocket is a deck of short cards on the user's phone, to read at a counter when they're out. Keep this thread's cards true: save one with the same title when a fact on it has changed, and remove one when the messages say it's done with (the parcel's posted, the trip's over). Add a card only when the user, in their own messages here, says they're going somewhere or will need something while out, the messages hold the facts they'd want there, and this thread has no card. A plan for someday isn't enough. If the messages say a card was filed and it isn't listed, the user took it out: leave it. Copy addresses, codes and numbers exactly from the messages and never guess one. The text is only the facts, a line each, with no explanation. The place is what you'd search a map for ("post office"), only if the card is for somewhere. The icon is the closest of ${POCKET_ICONS.join(', ')}, left out if none fits. Most looks change nothing: pocket null.
 

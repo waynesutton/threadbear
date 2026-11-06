@@ -246,6 +246,20 @@ final class AppModel {
         didSet { UserDefaults.standard.set(defaultRunnerId, forKey: Self.defaultRunnerKey) }
     }
     static let defaultRunnerKey = "defaultRunnerId"
+
+    /// Settings > Runners, "Connect to other machines directly": open other
+    /// runners' threads over the tailnet, as before 5 Nov, rather than
+    /// through this Mac's runner and Convex (docs/protocol.md, "Other
+    /// runners' threads through the backend"). Off by default; it goes once
+    /// the Convex way has been used for a while.
+    var directRemoteLink: Bool = UserDefaults.standard.bool(forKey: AppModel.directRemoteLinkKey) {
+        didSet {
+            guard directRemoteLink != oldValue else { return }
+            UserDefaults.standard.set(directRemoteLink, forKey: Self.directRemoteLinkKey)
+            switchedRemoteLink()
+        }
+    }
+    static let directRemoteLinkKey = "directRemoteLink"
     /// Mike picked this draft's runner himself, so the default doesn't
     /// move it when the runner list next changes.
     var newThreadRunnerPicked = false
@@ -316,6 +330,11 @@ final class AppModel {
     /// reach them. Their threads are in `threads`, marked with `runnerId`
     /// (RemoteRunners.swift).
     var remoteRunners: [RemoteRunner] = []
+    /// Each runner's machine figures by runner id (`runners.stats`), asked
+    /// every 10 s while a runner's details are open in the Runners panel.
+    var runnerStats: [String: RunnerMachineStats] = [:]
+    /// The runner has answered `runners.stats` at least once since then.
+    var runnerStatsAsked = false
     /// The last `remoteThreads` list, kept to put the sidebar table's rows
     /// back once a runner's own connection closes.
     @ObservationIgnored var remoteIndex = RemoteThreads()
@@ -323,6 +342,9 @@ final class AppModel {
     /// connection, which is fuller and fresher than the sidebar table's
     /// row, until that connection closes.
     @ObservationIgnored var liveRemote: Set<String> = []
+    /// Threads made on another runner through Convex that the sidebar table
+    /// doesn't list yet: kept until it does.
+    @ObservationIgnored var madeRemote: Set<String> = []
     /// One connection per other runner, made when one of its threads is
     /// opened.
     @ObservationIgnored var remoteClients = RemoteClients(version: Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "dev")

@@ -1,5 +1,6 @@
 import AppKit
 import BearDock
+import Network
 import SwiftUI
 import ThreadbearCore
 import WebKit
@@ -227,8 +228,13 @@ struct PanelRail: View {
                     app.clickRail(.panel(AgentBrowser.panelId), in: thread)
                 }
                 // The agent handing a page over is the one time it opens by itself.
-                .onChange(of: tabs.reduce(0) { $0 + ($1.handoffs ?? 0) }) { old, new in
-                    if new > old { app.showPane(.panel(AgentBrowser.panelId)) }
+                // A message can clear the runner's one-shot panelRequest. The
+                // waiting tab remains the authority when this thread is opened.
+                .onChange(of: thread.id + tabs.filter { $0.state == "yours" }.map { "\($0.id):\($0.handoffs ?? 0)" }.joined(separator: ",")) { _, _ in
+                    if tabs.contains(where: { $0.state == "yours" }) { app.showPane(.panel(AgentBrowser.panelId)) }
+                }
+                .onAppear {
+                    if tabs.contains(where: { $0.state == "yours" }) { app.showPane(.panel(AgentBrowser.panelId)) }
                 }
             }
             Spacer(minLength: zoomed(8))
@@ -810,12 +816,92 @@ final class WebPanelPool: NSObject, ObservableObject, WKNavigationDelegate, WKUI
             return existing
         }
         let config = WKWebViewConfiguration()
-        config.websiteDataStore = .default()
+        if url.isFileURL {
+            // A local page is served through the preview scheme, which hands
+            // it only itself and the assets it names (LocalPreviewSite), in
+            // a store of its own so it shares nothing with dashboards' logins.
+            config.setURLSchemeHandler(previews, forURLScheme: LocalPreviewSchemeHandler.scheme)
+            let store = WKWebsiteDataStore.nonPersistent()
+            // Every connection the store would make goes to a proxy on this
+            // Mac that isn't there. The rule list and the navigation policy
+            // stop loads, but WebKit opens a connection for a clicked link
+            // (and looks its host up) before asking; through the proxy, no
+            // name is looked up and nothing leaves (the egress test caught it).
+            store.proxyConfigurations = [ProxyConfiguration(httpCONNECTProxy: previewProxy)]
+            // Loopback skips any proxy, so a click on a link away from the
+            // preview is stopped in the page, before WebKit would connect.
+            config.userContentController.addUserScript(WKUserScript(
+                source: LocalPreviewSchemeHandler.linkGuard, injectionTime: .atDocumentStart, forMainFrameOnly: false))
+            config.websiteDataStore = store
+            config.preferences.javaScriptCanOpenWindowsAutomatically = false
+            // A local preview is static: the page's own scripts never run.
+            // Whatever its markup names it can show, but no script can read
+            // those bytes back (verify-fix: `<a href="private.png">` let a
+            // page's script fetch the file). Other panels keep JavaScript.
+            // The app's own scripts (the link guard) still run.
+            config.defaultWebpagePreferences.allowsContentJavaScript = false
+            // WebRTC goes round proxies and content rules alike. WebKit only
+            // offers the switch privately; KVC finds `_setPeerConnectionEnabled:`.
+            if config.preferences.responds(to: NSSelectorFromString("_setPeerConnectionEnabled:")) {
+                config.preferences.setValue(false, forKey: "peerConnectionEnabled")
+            }
+        } else {
+            config.websiteDataStore = .default()
+        }
         let view = makeView(config)
-        load(url, in: view)
         keep(view, as: url)
+        if url.isFileURL {
+            // No load until the rule list blocking the network is on it.
+            withPreviewRules { [weak self, weak view] rules in
+                guard let self, let view else { return }
+                guard let rules else {
+                    // Without it the page could reach the network: show nothing.
+                    view.loadHTMLString("<p>This preview couldn't be shown safely.</p>", baseURL: nil)
+                    return
+                }
+                view.configuration.userContentController.add(rules)
+                self.load(url, in: view)
+            }
+        } else {
+            load(url, in: view)
+        }
         return view
     }
+
+    /// Where a local preview's connections go: a port on this Mac nothing
+    /// listens on (the discard port), so they go nowhere. Tests put a
+    /// listener here to see that only bare CONNECTs ever arrive.
+    var previewProxy: NWEndpoint = .hostPort(host: "127.0.0.1", port: 9)
+
+    /// A local preview's view, which may only show the preview scheme: told
+    /// by its configuration, the only kind with the preview scheme's handler.
+    private func isPreviewView(_ view: WKWebView) -> Bool {
+        view.configuration.urlSchemeHandler(forURLScheme: LocalPreviewSchemeHandler.scheme) != nil
+    }
+
+    /// The content rule list that keeps a local preview off the network,
+    /// compiled once (WebKit keeps it in its own store for next time).
+    private var previewRules: WKContentRuleList?
+    private var previewRulesWaiting: [(WKContentRuleList?) -> Void]?
+    private func withPreviewRules(_ use: @escaping (WKContentRuleList?) -> Void) {
+        if let previewRules { return use(previewRules) }
+        if previewRulesWaiting != nil { previewRulesWaiting?.append(use); return }
+        previewRulesWaiting = [use]
+        WKContentRuleListStore.default().compileContentRuleList(
+            forIdentifier: "threadbear-local-preview", encodedContentRuleList: LocalPreviewSchemeHandler.ruleList
+        ) { [weak self] rules, _ in
+            MainActor.assumeIsolated {
+                guard let self else { return }
+                self.previewRules = rules
+                let waiting = self.previewRulesWaiting ?? []
+                self.previewRulesWaiting = nil
+                waiting.forEach { $0(rules) }
+            }
+        }
+    }
+
+    /// Serves every local HTML preview (Daybreak finding 6).
+    let previews = LocalPreviewSchemeHandler()
 
     /// Convex's embedded dashboard for one deployment, given its deploy key
     /// by a script that answers the page's own request for it. The store
@@ -908,6 +994,14 @@ final class WebPanelPool: NSObject, ObservableObject, WKNavigationDelegate, WKUI
     /// the browser, so the page holding the key stays the only one in its view.
     func webView(_ webView: WKWebView, decidePolicyFor navigationAction: WKNavigationAction,
                  decisionHandler: @escaping @MainActor (WKNavigationActionPolicy) -> Void) {
+        // A local preview never leaves its own scheme, by a click, a form or
+        // a script, in any frame, and nothing opens outside either: it may
+        // have read a file beside it (LocalPreviewSchemeHandler).
+        if isPreviewView(webView) {
+            let allowed = LocalPreviewSchemeHandler.isPreview(navigationAction.request.url) && !navigationAction.shouldPerformDownload
+            decisionHandler(allowed ? .allow : .cancel)
+            return
+        }
         if isConvexView(webView), navigationAction.targetFrame?.isMainFrame ?? true,
            let url = navigationAction.request.url, url.host != Self.convexEmbedded.host,
            ["http", "https"].contains(url.scheme) {
@@ -925,20 +1019,34 @@ final class WebPanelPool: NSObject, ObservableObject, WKNavigationDelegate, WKUI
         load(url, in: view)
     }
 
-    /// A local file (a mockup in the pane's preview) may read the files
-    /// beside it, its styles and pictures, and nothing further up.
+    /// A local file (a mockup in the pane's preview) may read itself and the
+    /// styles, scripts and pictures it names in its folder, nothing else
+    /// beside it: it was loaded with read access to the whole folder, so a
+    /// project's page could read a `.env` next to it (Daybreak finding 6).
     private func load(_ url: URL, in view: WKWebView) {
         if url.isFileURL {
-            view.loadFileURL(url, allowingReadAccessTo: url.deletingLastPathComponent())
+            if let page = previews.address(for: url) { view.load(URLRequest(url: page)) }
         } else {
             view.load(URLRequest(url: url))
         }
     }
 
+    /// A local preview downloads nothing, and shows only what a page can.
+    func webView(_ webView: WKWebView, decidePolicyFor navigationResponse: WKNavigationResponse,
+                 decisionHandler: @escaping @MainActor (WKNavigationResponsePolicy) -> Void) {
+        if isPreviewView(webView), !navigationResponse.canShowMIMEType || !LocalPreviewSchemeHandler.isPreview(navigationResponse.response.url) {
+            decisionHandler(.cancel)
+            return
+        }
+        decisionHandler(.allow)
+    }
+
     /// Links that want a new window (OAuth sign-in pages, "open in new tab")
-    /// load in the same view: there is no other window to give them.
+    /// load in the same view: there is no other window to give them. Not from
+    /// a local preview, which opens nothing.
     func webView(_ webView: WKWebView, createWebViewWith configuration: WKWebViewConfiguration,
                  for navigationAction: WKNavigationAction, windowFeatures: WKWindowFeatures) -> WKWebView? {
+        if isPreviewView(webView) { return nil }
         guard let url = navigationAction.request.url else { return nil }
         if isConvexView(webView) { NSWorkspace.shared.open(url) } else { webView.load(URLRequest(url: url)) }
         return nil
@@ -1013,7 +1121,9 @@ private struct ListPanel: View {
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: 0) {
                         let reserves = items.contains { ListPanel.icon($0) != nil }
-                        ForEach(Array(items.enumerated()), id: \.offset) { _, item in
+                        let headings = PanelItem.headings(items)
+                        ForEach(Array(items.enumerated()), id: \.offset) { index, item in
+                            if let heading = headings[index] { SectionHeading(title: heading) }
                             row(item, reservesIcon: reserves)
                         }
                     }
@@ -1046,9 +1156,13 @@ private struct ListPanel: View {
         } else {
             nil
         }
+        // A patch's detail is usually a sentence (what changed, why it
+        // failed), so it gets two lines and keeps its start.
         return PaneRow(icon: ListPanel.icon(item), iconColor: ListPanel.colour(item.tone), title: item.title,
+                       trailing: item.trailing,
                        trailingSymbol: item.tone == .done && item.icon != nil ? "checkmark" : nil,
-                       detail: item.detail, reservesIcon: reservesIcon, action: open)
+                       detail: item.detail, reservesIcon: reservesIcon, detailTruncation: .tail,
+                       detailLines: 2, action: open)
             .iconContextMenu {
                 if let path = item.path {
                     FileMenu(path: path, thread: thread, title: item.title)

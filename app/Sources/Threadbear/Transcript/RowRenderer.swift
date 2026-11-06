@@ -1142,9 +1142,9 @@ enum RowRenderer {
         cardChips(pictureChips(userWords(message), images: message.images))
     }
 
-    /// Notion cards mentioned in his words drawn as chips, rather than the
-    /// raw Markdown link the message holds. A click opens the card like any
-    /// other link, and the card's title is what the hover card and a Quote
+    /// Notion cards and threads mentioned in his words drawn as chips,
+    /// rather than the raw Markdown link the message holds. A click opens
+    /// the card like any other link, or the thread in the app, and the card's title is what the hover card and a Quote
     /// or Explain of it read.
     private static func cardChips(_ text: NSAttributedString) -> NSAttributedString {
         let found = CardMentions.find(in: text.string)
@@ -1153,9 +1153,11 @@ enum RowRenderer {
         for mention in found.reversed() {
             guard let url = URL(string: mention.url) else { continue }
             var attributes = out.attributes(at: mention.range.location, effectiveRange: nil)
-            attributes[.attachment] = CardChip.attachment(title: mention.title, font: attributes[.font] as? NSFont ?? Theme.bodyFont)
+            attributes[.attachment] = CardChip.attachment(title: mention.title, kind: mention.kind, font: attributes[.font] as? NSFont ?? Theme.bodyFont)
+            // A thread: link opens that thread (WorkLinks); it has no page
+            // for the hover card to show.
             attributes[.link] = url
-            attributes[.tbPeek] = LinkPeek(url: url, title: mention.title)
+            if mention.kind == .card { attributes[.tbPeek] = LinkPeek(url: url, title: mention.title) }
             attributes[.tbCardChip] = mention.title
             out.replaceCharacters(in: mention.range, with: NSAttributedString(string: "\u{FFFC}", attributes: attributes))
         }
@@ -1519,8 +1521,10 @@ enum RowRenderer {
     }
 
     /// The done card: the agent said nothing waits on Mike, so it says
-    /// Done, with Archive (`archive`, as ⌘E does) at the right of that
-    /// line. Any follow-ups it suggested sit under "Or carry on", one
+    /// Done, with Archive (`archive`) at the right of that line, which
+    /// opens a menu asking how it went before it archives (Mike picked
+    /// that from mockups, 5 Nov, so a sweep can tell a thread he put away
+    /// on purpose from one that was just cleared). Any follow-ups it suggested sit under "Or carry on", one
     /// row each with a tick circle, and a click ticks or unticks one
     /// (`next:<n>`): ticked ones go with his next message, so he can pick
     /// several and add to them (30 Oct). Mike found
@@ -1548,7 +1552,8 @@ enum RowRenderer {
         ]
         output.append(symbol("checkmark", label: "Done", font: title, attributes: titleAttributes, color: .systemGreen))
         output.append(NSAttributedString(string: " Done\t", attributes: titleAttributes))
-        output.append(NSAttributedString(string: "\u{00A0}\u{00A0}\u{00A0}Archive\u{00A0}\u{00A0}\u{00A0}", attributes: [
+        // The ▾ says it opens a menu: Archive asks how it went first.
+        output.append(NSAttributedString(string: "\u{00A0}\u{00A0}\u{00A0}Archive\u{00A0}\u{00A0}\u{25BE}\u{00A0}\u{00A0}\u{00A0}", attributes: [
             .font: button, .foregroundColor: AskButtonStyle.plain.textColor, .paragraphStyle: lineStyle, .baselineOffset: buttonOffset,
             .tbAction: "archive", .tbButton: AskButtonStyle.plain.rawValue,
         ]))

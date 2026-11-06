@@ -355,9 +355,18 @@ enum Automation {
                                    windowNumber: window.windowNumber, context: nil, eventNumber: 0, clickCount: 1, pressure: 1)
             }
             guard let down = mouse(.leftMouseDown, at(x)) else { return "error no event" }
+            let end = (c["toX"] as? Double) ?? x
+            // A text view's mouseDown waits in its own loop for the button to
+            // come up, so a click on its words (a link, a chip) has the up
+            // queued first, or the main thread sits there for good.
+            if end == x, window.contentView?.superview?.hitTest(at(x)) is NSTextView, let up = mouse(.leftMouseUp, at(x)) {
+                NSApp.postEvent(up, atStart: false)
+                window.sendEvent(down)
+                try? await Task.sleep(for: .milliseconds(350))
+                return "ok"
+            }
             window.sendEvent(down)
             try? await Task.sleep(for: .milliseconds(40))
-            let end = (c["toX"] as? Double) ?? x
             if end != x {
                 for step in 1...8 {
                     if let drag = mouse(.leftMouseDragged, at(x + (end - x) * Double(step) / 8)) { window.sendEvent(drag) }
@@ -404,6 +413,18 @@ enum Automation {
             let range = c["replace"] as? Bool == true ? NSRange(location: 0, length: (composer.string as NSString).length) : composer.selectedRange()
             composer.insertText(c["text"] as? String ?? "", replacementRange: range)
             return "ok"
+        case "paste":
+            // `text` pasted into the composer as ⌘V would, through a private
+            // pasteboard so Mike's clipboard is left alone.
+            guard let composer = findComposer(in: window?.contentView) else { return "error no composer" }
+            window?.makeFirstResponder(composer)
+            let board = NSPasteboard(name: .init("com.mikerosoft.threadbear.automation-paste"))
+            board.clearContents()
+            board.setString(c["text"] as? String ?? "", forType: .string)
+            defer { board.releaseGlobally() }
+            // The type-less call, as ⌘V makes it: it picks the type itself,
+            // which isn't `.string` (ComposerTextView.isPlainText).
+            return composer.readSelection(from: board) ? "ok" : "error paste refused"
         case "return":
             // `"shift": true` for Shift-Return (a new line, carrying a list on).
             // `"focused": true` presses it where the cursor is, as `type` does.
@@ -492,7 +513,7 @@ enum Automation {
         case "ask":
             // {"cmd":"ask","row":"ak:6","action":"pick:0:1"} clicks an open
             // asks card's button: "pick:<ask>:<choice>" or "link:<ask>:<link>",
-            // 0-based, "page:<n>" on a paged card, "collapse", or the done card's "next:<n>", "explain:<n>" or "archive".
+            // 0-based, "page:<n>" on a paged card, "collapse", or the done card's "next:<n>", "explain:<n>" or "archive:<verdict>" (worked, didntWork, notNeeded; plain "archive" opens the menu).
             guard let id = c["row"] as? String, let action = c["action"] as? String,
                   case .asks(let card)? = app.transcript.session?.model.row(id: id)?.content else { return "error no asks card" }
             guard card.isOpen else { return "error that card is closed" }
@@ -544,7 +565,7 @@ enum Automation {
             // {"cmd":"panel"} toggles. On a project's page, the project's.
             guard let thread = app.paneThread else { return "error no thread selected" }
             if let id = c["id"] as? String {
-                let ids = (app.openProject == nil ? [PaneSection.highlightsId] : []) + thread.panels.map(\.id) + (thread.patches.isEmpty ? [] : [PaneSection.patchesId])
+                let ids = (app.openProject == nil ? [PaneSection.highlightsId, AgentBrowser.panelId] : []) + thread.panels.map(\.id) + (thread.patches.isEmpty ? [] : [PaneSection.patchesId])
                 guard ids.contains(id) else { return "error no panel \(id); this thread has \(ids.joined(separator: ", "))" }
                 app.choosePanel(id, in: thread.id)
             } else if let show = c["show"] as? Bool {
@@ -1272,6 +1293,38 @@ enum Automation {
             app.projectWhyShown = m.id
             let (who, reason) = HighlightProjects.why(m)
             return "ok " + json([reason ?? "(no reason)", who] + (HighlightProjects.canKeep(m) ? ["Keep"] : []) + ["Take out", "Open project"])
+        case "runners":
+            // The Runners panel: {"show": true} opens it ({"show": false}
+            // closes it), {"open": "<runner id or name>"} opens or closes
+            // that runner's details. With neither, the icon's tooltip and
+            // each runner's line.
+            // {"stats": true} asks for the figures now, as the panel does
+            // every 10 s while it can be seen (a scripted window can't).
+            if c["stats"] as? Bool == true {
+                app.loadRunnerStats()
+                try? await Task.sleep(for: .milliseconds(500))
+                return "ok " + json(app.runnerStats.values.sorted { $0.runnerId < $1.runnerId }.map { s in
+                    "\(s.runnerId): " + RunnersText.gauges(s).map { "\($0.title) \($0.text)" }.joined(separator: ", ")
+                })
+            }
+            if let which = c["open"] as? String {
+                guard let r = app.runners.first(where: { $0.id == which || $0.name == which }) else { return "error no runner \(which)" }
+                var ids = Set((UserDefaults.standard.string(forKey: "runnersPanelOpen") ?? "").split(separator: ",").map(String.init))
+                if ids.contains(r.id) { ids.remove(r.id) } else { ids.insert(r.id) }
+                UserDefaults.standard.set(ids.sorted().joined(separator: ","), forKey: "runnersPanelOpen")
+                return "ok " + (ids.contains(r.id) ? "open" : "closed")
+            }
+            if let show = c["show"] as? Bool {
+                app.runnersShown = show
+                guard show else { return "ok closed" }
+                try? await Task.sleep(for: .milliseconds(500))
+                return app.runnersShown ? "ok shown" : "error the panel didn't open"
+            }
+            let running = app.sections.running
+            return "ok " + json([RunnersText.tooltip(app.runners)] + app.runners.map { r in
+                let count = RunnersText.running(on: r, in: running).count
+                return "\(r.name): \(RunnersText.stateLine(r, now: Date()))\(RunnersText.build(r).map { ", " + $0 } ?? "")\(count > 0 ? ", \(count) running" : "")"
+            })
         case "connectors":
             // The Connectors panel: {"show": true} opens it ({"show":
             // false} closes it), {"click": "<service id>"} presses its
