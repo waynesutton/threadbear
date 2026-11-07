@@ -15,11 +15,13 @@ const KEEP_MS = 15 * 60 * 1000;
 let cached: { at: number; value: Version[] } | undefined;
 let pending: Promise<Version[]> | undefined;
 
+// None on a Mac without the script (anyone's copy but Mike's), without running it: a missing
+// script made node fail on every refresh, which showed as an error on this patch.
 function versions(sh: Ctx["sh"]): Promise<Version[]> {
   if (cached && Date.now() - cached.at < KEEP_MS) return Promise.resolve(cached.value);
-  pending ??= sh(`node ~/dev/me/poddle/scripts/asc-status.mjs ${APP_ID}`)
-    .then((out) => {
-      const value = JSON.parse(out).versions as Version[];
+  pending ??= onMikesMac({ sh })
+    .then(async (here) => (here ? (JSON.parse(await sh(`node ~/dev/me/poddle/scripts/asc-status.mjs ${APP_ID}`)).versions as Version[]) : []))
+    .then((value) => {
       cached = { at: Date.now(), value };
       return value;
     })
@@ -85,7 +87,15 @@ export default {
           return false;
         }
       },
-      badge: async ({ sh }: Ctx) => ((await versions(sh))[0] && needsMike((await versions(sh))[0].state) ? 1 : 0),
+      // Runs alongside `when`, so it catches Apple being unreachable too rather than erroring.
+      badge: async ({ sh }: Ctx) => {
+        try {
+          const latest = (await versions(sh))[0];
+          return latest && needsMike(latest.state) ? 1 : 0;
+        } catch {
+          return 0;
+        }
+      },
       items: async ({ sh }: Ctx) =>
         (await versions(sh)).slice(0, 3).map((v) => ({
           title: v.version,
