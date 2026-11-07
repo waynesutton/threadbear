@@ -69,7 +69,7 @@ public enum RPCNotification: Sendable {
     /// spend going up).
     case settingsUpdated(RunnerSettings)
     case skillsUpdated([Skill], enabled: Bool?)
-    case standingInstructions(String)
+    case standingInstructions(StandingInstructions)
     case runnerNotice(level: String, message: String)
     /// The runner's own update, whole each time.
     case runnerUpdates(RunnerUpdates)
@@ -285,10 +285,6 @@ public final class RPCClient: Sendable {
             guard let params = try? decoder.decode(RPCNotificationEnvelope<ConnectorsResult>.self, from: data).params
             else { return nil }
             return .connectorsUpdated(params.connectors)
-        case "skills.instructions":
-            guard let params = try? decoder.decode(RPCNotificationEnvelope<SkillsInstructions>.self, from: data).params
-            else { return nil }
-            return .standingInstructions(params.instructions)
         case "skills.updated":
             guard let params = try? decoder.decode(RPCNotificationEnvelope<SkillsResult>.self, from: data).params
             else { return nil }
@@ -297,6 +293,10 @@ public final class RPCClient: Sendable {
             guard let params = try? decoder.decode(RPCNotificationEnvelope<SettingsResult>.self, from: data).params
             else { return nil }
             return .settingsUpdated(params.settings)
+        case "instructions.updated":
+            guard let params = try? decoder.decode(RPCNotificationEnvelope<StandingInstructionsResult>.self, from: data).params
+            else { return nil }
+            return .standingInstructions(params.instructions)
         case "runner.updates":
             guard let params = try? decoder.decode(RPCNotificationEnvelope<RunnerUpdatesParams>.self, from: data).params
             else { return nil }

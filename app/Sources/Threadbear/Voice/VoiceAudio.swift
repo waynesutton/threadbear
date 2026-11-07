@@ -25,6 +25,9 @@ final class VoiceAudio {
     private var speakTask: Task<Void, Never>?
     private var queued = 0
     private var speakId: UUID?
+    /// Goes up each time he talks over it or Voice stops: what was fetched or
+    /// queued for an earlier round is dropped, however it was chained.
+    private var speakRound = 0
 
     /// A result from the recogniser (text, audio seconds, final or not).
     var onResult: ((UtteranceTracker.Result) -> Void)?
@@ -36,6 +39,14 @@ final class VoiceAudio {
     var onSpeaking: ((Bool) -> Void)?
 
     private(set) var isSpeaking = false
+    private let audioClock = AudioClock()
+
+    /// The clock time (CACurrentMediaTime's) that a time in the audio stream
+    /// was captured: the recogniser counts from the first buffer it was fed.
+    /// Nil before there's been one.
+    func hostTime(ofAudio seconds: Double) -> Double? {
+        audioClock.start.map { $0 + seconds }
+    }
 
     // MARK: Listening
 
@@ -61,7 +72,10 @@ final class VoiceAudio {
                 for try await result in transcriber.results {
                     let text = String(result.text.characters)
                     let range = result.range
-                    let r = UtteranceTracker.Result(text: text, start: range.start.seconds.finite, end: range.end.seconds.finite, isFinal: result.isFinal)
+                    // Its first word's time if it says: a result's range can
+                    // begin with the silence before him.
+                    let firstWord = result.text.runs.compactMap { $0.audioTimeRange }.first?.start.seconds
+                    let r = UtteranceTracker.Result(text: text, start: (firstWord ?? range.start.seconds).finite, end: range.end.seconds.finite, isFinal: result.isFinal)
                     self?.onResult?(r)
                 }
             } catch {
@@ -81,7 +95,7 @@ final class VoiceAudio {
             } catch {
                 VoiceLog.write("the microphone wouldn't start: \(Self.describe(error))")
                 resetEngine()
-                throw VoiceError("The microphone wouldn't start (Core Audio error \((error as NSError).code)). Try another microphone in Settings > Voice & Audio.")
+                throw VoiceError("The microphone wouldn't start (Core Audio error \((error as NSError).code)). Try another microphone in Settings > Voice.")
             }
             echoCancels = false
         }
@@ -115,11 +129,16 @@ final class VoiceAudio {
         // processing's can differ from what the node reports beforehand).
         // The converter is made from the first buffer, on the audio thread.
         let converter = ConverterBox(to: analyzerFormat)
-        engine.inputNode.installTap(onBus: 0, bufferSize: 2048, format: nil) { [weak self] buffer, _ in
-            let level = Self.level(buffer)
+        let gate = LevelGate()
+        let clock = audioClock
+        engine.inputNode.installTap(onBus: 0, bufferSize: 2048, format: nil) { [weak self] buffer, when in
+            clock.begin(at: when)
             if let converted = converter.convert(buffer) {
                 feed.yield(AnalyzerInput(buffer: converted))
             }
+            // Not each buffer (about 23 a second): the bars only need a few,
+            // and each one is a hop to the main thread.
+            guard let level = gate.take(Self.level(buffer)) else { return }
             Task { @MainActor in self?.onInputLevel?(level) }
         }
         engine.prepare()
@@ -139,7 +158,11 @@ final class VoiceAudio {
         address.mSelector = kAudioDevicePropertyTransportType
         if AudioObjectGetPropertyData(device, &address, 0, nil, &size, &transport) == noErr,
            transport == kAudioDeviceTransportTypeBluetooth || transport == kAudioDeviceTransportTypeBluetoothLE {
-            return true
+            // With a microphone of its own: a Bluetooth speaker's sound is in
+            // the room for this Mac's microphone to hear.
+            var input = AudioObjectPropertyAddress(mSelector: kAudioDevicePropertyStreams, mScope: kAudioDevicePropertyScopeInput, mElement: kAudioObjectPropertyElementMain)
+            var inputSize: UInt32 = 0
+            return AudioObjectGetPropertyDataSize(device, &input, 0, nil, &inputSize) == noErr && inputSize > 0
         }
         var source: UInt32 = 0
         address = AudioObjectPropertyAddress(mSelector: kAudioDevicePropertyDataSource, mScope: kAudioDevicePropertyScopeOutput, mElement: kAudioObjectPropertyElementMain)
@@ -175,26 +198,36 @@ final class VoiceAudio {
 
     // MARK: Speaking
 
-    /// Says the sentences in order, in `voice` at `speed`, from the server at `base`.
-    func speak(_ sentences: [String], voice: String, speed: Double, base: URL) {
+    /// Says the sentences in order, in `voice` at `speed`, from the server at
+    /// `base`. `played` runs once the last of them has come out of the
+    /// speakers, and never if any was cut off (he talked over it, it failed).
+    func speak(_ sentences: [String], voice: String, speed: Double, base: URL, played: (() -> Void)? = nil) {
         guard !sentences.isEmpty else { return }
         pitch.rate = Float(speed)
         let previous = speakTask
         let id = UUID()
+        let round = speakRound
         speakId = id
         speakTask = Task { [weak self] in
             await previous?.value
+            var whole = true
             for sentence in sentences {
-                guard !Task.isCancelled, let self else { return }
+                guard let self, !Task.isCancelled, self.speakRound == round else { return }
                 do {
-                    try await self.stream(sentence, voice: voice, base: base)
+                    let samples = try await self.stream(sentence, voice: voice, base: base, round: round)
+                    // A 200 with little or no sound in it isn't that sentence
+                    // said, and "played" mustn't say it was.
+                    if samples < Self.fewestSamples(for: sentence) { whole = false }
                 } catch {
                     if !Task.isCancelled { VoiceLog.write("couldn't speak: \(error.localizedDescription)") }
+                    whole = false
                     break
                 }
             }
+            guard let self else { return }
+            if whole, let played, !Task.isCancelled, self.speakRound == round { self.markPlayed(round: round, played) }
             // Everything's been fetched; once it's played, it's said.
-            guard let self, self.speakId == id else { return }
+            guard self.speakId == id else { return }
             self.speakTask = nil
             if self.queued == 0 { self.setSpeaking(false) }
         }
@@ -202,6 +235,7 @@ final class VoiceAudio {
 
     /// Stops talking now: he's started speaking, or Voice was turned off.
     func stopSpeaking() {
+        speakRound += 1
         speakTask?.cancel()
         speakTask = nil
         player.stop()
@@ -210,50 +244,117 @@ final class VoiceAudio {
         setSpeaking(false)
     }
 
-    private func stream(_ text: String, voice: String, base: URL) async throws {
+    /// Far fewer than any voice takes over it (40 ms a letter, when speech
+    /// is around 70), to catch a reply that came back with little in it. It
+    /// can't prove every word was said; that's trusting pocket-tts.
+    static func fewestSamples(for sentence: String) -> Int {
+        sentence.count * 960
+    }
+
+    /// Plays it as it arrives. The samples scheduled.
+    @discardableResult
+    private func stream(_ text: String, voice: String, base: URL, round: Int) async throws -> Int {
         var request = URLRequest(url: base.appendingPathComponent("tts"))
         request.httpMethod = "POST"
         let boundary = "tb-\(UUID().uuidString)"
         request.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
         request.httpBody = Self.form(["text": text, "voice_url": voice], boundary: boundary)
-        let (bytes, response) = try await URLSession.shared.bytes(for: request)
-        guard (response as? HTTPURLResponse)?.statusCode == 200 else { throw VoiceError("the voice engine said \((response as? HTTPURLResponse)?.statusCode ?? 0)") }
-        var wav = WAVStream()
-        var chunk = Data()
-        for try await byte in bytes {
+        var samples = 0
+        for try await piece in Self.speech(request) {
             try Task.checkCancellation()
-            chunk.append(byte)
-            // About a tenth of a second at a time.
-            if chunk.count >= 4800 {
-                schedule(wav.samples(from: chunk))
-                chunk.removeAll(keepingCapacity: true)
-            }
+            guard speakRound == round else { return samples }
+            schedule(piece, round: round)
+            samples += piece.samples.count
         }
-        if !chunk.isEmpty { schedule(wav.samples(from: chunk)) }
+        return samples
     }
 
-    private func schedule(_ samples: [Int16]) {
-        guard !samples.isEmpty, let buffer = AVAudioPCMBuffer(pcmFormat: speechFormat, frameCapacity: AVAudioFrameCount(samples.count)) else { return }
-        buffer.frameLength = AVAudioFrameCount(samples.count)
-        let out = buffer.floatChannelData![0]
-        var peak: Float = 0
-        for (i, s) in samples.enumerated() {
-            let v = Float(s) / 32768
-            out[i] = v
-            peak = max(peak, abs(v))
+    /// A stretch of speech, ready to play.
+    struct SpeechPiece: Sendable {
+        let samples: [Float]
+        let peak: Float
+    }
+
+    /// The reply as it arrives, read and decoded off the main thread, which
+    /// only gets a finished piece about ten times a second. It used to step
+    /// through the stream byte by byte on the main actor (review, 7 Nov).
+    /// Ending the stream, by cancelling whoever reads it, cancels the read.
+    private nonisolated static func speech(_ request: URLRequest) -> AsyncThrowingStream<SpeechPiece, Error> {
+        AsyncThrowingStream { continuation in
+            let task = Task.detached(priority: .userInitiated) {
+                do {
+                    let (bytes, response) = try await URLSession.shared.bytes(for: request)
+                    let status = (response as? HTTPURLResponse)?.statusCode ?? 0
+                    guard status == 200 else { throw VoiceError("the voice engine said \(status)") }
+                    var wav = WAVStream()
+                    var chunk = Data()
+                    chunk.reserveCapacity(4800)
+                    for try await byte in bytes {
+                        try Task.checkCancellation()
+                        chunk.append(byte)
+                        // About a tenth of a second at a time.
+                        if chunk.count >= 4800 {
+                            continuation.yield(Self.piece(wav.samples(from: chunk)))
+                            chunk.removeAll(keepingCapacity: true)
+                        }
+                    }
+                    if !chunk.isEmpty { continuation.yield(Self.piece(wav.samples(from: chunk))) }
+                    continuation.finish()
+                } catch {
+                    continuation.finish(throwing: error)
+                }
+            }
+            continuation.onTermination = { _ in task.cancel() }
         }
+    }
+
+    private nonisolated static func piece(_ samples: [Int16]) -> SpeechPiece {
+        var peak: Float = 0
+        let floats = samples.map { sample -> Float in
+            let value = Float(sample) / 32768
+            peak = max(peak, abs(value))
+            return value
+        }
+        return SpeechPiece(samples: floats, peak: peak)
+    }
+
+    private func schedule(_ piece: SpeechPiece, round: Int) {
+        let count = piece.samples.count
+        guard count > 0, let buffer = AVAudioPCMBuffer(pcmFormat: speechFormat, frameCapacity: AVAudioFrameCount(count)) else { return }
+        buffer.frameLength = AVAudioFrameCount(count)
+        piece.samples.withUnsafeBufferPointer { buffer.floatChannelData![0].update(from: $0.baseAddress!, count: count) }
+        let level = min(1, piece.peak * 1.4)
         queued += 1
         setSpeaking(true)
-        onOutputLevel?(min(1, peak * 1.4))
-        player.scheduleBuffer(buffer) { [weak self] in
+        onOutputLevel?(level)
+        // Played back, not just taken: the app isn't done talking, and his
+        // words can't be an answer, while it's still coming out of a speaker.
+        player.scheduleBuffer(buffer, completionCallbackType: .dataPlayedBack) { [weak self] _ in
             Task { @MainActor in
-                guard let self else { return }
+                // A buffer from before he talked over it: the count started again.
+                guard let self, self.speakRound == round else { return }
                 self.queued = max(0, self.queued - 1)
-                self.onOutputLevel?(self.queued == 0 ? 0 : min(1, peak * 1.4))
+                self.onOutputLevel?(self.queued == 0 ? 0 : level)
                 if self.queued == 0, self.speakTask == nil { self.setSpeaking(false) }
             }
         }
         if !player.isPlaying { player.play() }
+    }
+
+    /// `played` once all that's queued now has really been heard: a moment of
+    /// silence after it, with AVAudioPlayerNode's played-back callback (the
+    /// plain one fires when a buffer is taken, ahead of the speakers). Stopping
+    /// the player fires it too, which the round check turns away.
+    private func markPlayed(round: Int, _ played: @escaping () -> Void) {
+        guard let silence = AVAudioPCMBuffer(pcmFormat: speechFormat, frameCapacity: 240) else { return }
+        silence.frameLength = 240
+        silence.floatChannelData![0].update(repeating: 0, count: 240)
+        player.scheduleBuffer(silence, completionCallbackType: .dataPlayedBack) { [weak self] _ in
+            Task { @MainActor in
+                guard let self, self.speakRound == round else { return }
+                played()
+            }
+        }
     }
 
     private func setSpeaking(_ on: Bool) {
@@ -347,6 +448,45 @@ final class VoiceAudio {
         var device = device
         let status = AudioUnitSetProperty(unit, kAudioOutputUnitProperty_CurrentDevice, kAudioUnitScope_Global, 0, &device, UInt32(MemoryLayout<AudioDeviceID>.size))
         if status != noErr { VoiceLog.write("couldn't pick that microphone (\(status)); using the default") }
+    }
+}
+
+/// When the microphone's first buffer was captured, from the audio thread,
+/// read on the main one. Only ever the first: a later one's time would make
+/// everything heard look more recent than it was. A first with no time leaves
+/// it unknown, and an unknown time can't answer a card.
+final class AudioClock: @unchecked Sendable {
+    private let lock = NSLock()
+    private var began = false
+    private var first: Double?
+
+    func begin(at when: AVAudioTime) {
+        lock.lock()
+        defer { lock.unlock() }
+        guard !began else { return }
+        began = true
+        if when.isHostTimeValid { first = AVAudioTime.seconds(forHostTime: when.hostTime) }
+    }
+
+    var start: Double? {
+        lock.lock()
+        defer { lock.unlock() }
+        return first
+    }
+}
+
+/// Lets a level through about twelve times a second, the loudest since the
+/// last. Only the audio thread uses it.
+final class LevelGate: @unchecked Sendable {
+    private var last: CFTimeInterval = 0
+    private var loudest: Float = 0
+
+    func take(_ level: Float) -> Float? {
+        loudest = max(loudest, level)
+        let now = CACurrentMediaTime()
+        guard now - last >= 0.08 else { return nil }
+        defer { last = now; loudest = 0 }
+        return loudest
     }
 }
 

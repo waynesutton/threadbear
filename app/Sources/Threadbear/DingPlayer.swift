@@ -12,10 +12,8 @@ enum DingPlayer {
     static var isOn: Bool { UserDefaults.standard.bool(forKey: CompletionSound.enabledKey) }
 
     /// After a thread's summary changes: the ding, if it just finished.
-    static func threadChanged(from previous: ThreadStatus?, to now: ThreadStatus, threadId: String) {
+    static func threadChanged(from previous: ThreadStatus?, to now: ThreadStatus) {
         guard isOn, CompletionSound.finished(from: previous, to: now) else { return }
-        // Voice reads the reply out already.
-        if VoiceMode.shared.isOn(for: threadId) { return }
         guard Date().timeIntervalSince(lastPlayed) > 1.5 else { return }
         play()
     }

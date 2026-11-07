@@ -1,7 +1,7 @@
 import Foundation
 
-/// The soft ding that says a thread is done (Settings > Voice & Audio >
-/// Sounds), off until it's turned on. It plays when a thread stops
+/// The soft ding that says a thread is done (Settings > General >
+/// Notifications), off until it's turned on. It plays when a thread stops
 /// working: its turn finished, it's waiting for an answer, or it failed.
 /// Not when it was stopped, as whoever stopped it knows. The three dings
 /// are made here as WAV data, so there's no sound file to ship.

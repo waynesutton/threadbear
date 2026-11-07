@@ -3,13 +3,6 @@ import SwiftTerm
 import SwiftUI
 import ThreadbearCore
 
-/// The rail's built-in Files and Terminal (below the folder's own panels,
-/// such as Worktrees): the thread's folder to look through, and a shell in it.
-enum BuiltinPanels {
-    static let files = "threadbear.files"
-    static let terminal = "threadbear.terminal"
-}
-
 /// A real terminal (SwiftTerm) for the thread, running his login shell in
 /// the thread's folder, as Terminal.app would: his PATH, nvm and aliases,
 /// colours, and anything full-screen (vim, top). One per thread, kept for

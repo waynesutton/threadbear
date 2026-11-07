@@ -17,6 +17,7 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import type { ThreadState } from '../runner.ts';
 import { checkImages, effortTitle, isClaudeModel, modelRow, modelTitle, newRuntime, oneLine, providerName, titleFrom, userMessage } from '../runner.ts';
+import { cutSafely } from '../safe-cut.ts';
 
 export const newThreadsPart = {
   create(this: Runner, params: {
@@ -40,6 +41,9 @@ export const newThreadsPart = {
     // Projects it starts in (New Thread on a project's page), joined
     // before its first turn, so that turn already has the project's brief.
     projectIds?: string[];
+    // Started by a sandboxed thread's agent in a sandbox folder: shut in
+    // one too (ThreadRecord.confined).
+    confined?: boolean;
   }): { thread: ThreadSummary; turnId: string } {
     if (!params.text && !params.images?.length) throw new RpcError(ErrorCode.badParams, 'text or images required');
     checkImages(params.images ?? []);
@@ -165,6 +169,7 @@ export const newThreadsPart = {
     scheduleId?: string;
     worktree?: boolean;
     startedBy?: ThreadStartedBy;
+    confined?: boolean;
   }): { st: ThreadState; notes: string[] } {
     this.checkAccepting();
     // New threads belong on the new release.
@@ -185,17 +190,25 @@ export const newThreadsPart = {
     if (!account) throw new RpcError(ErrorCode.accountNotFound, `No account called ${accountId}`);
     this.checkProvider(account);
     if (!isDirectory(cwd)) throw new RpcError(ErrorCode.badParams, `Folder not found: ${cwd}`);
+    // In a sandbox folder a Claude thread is shut in it from the start. One
+    // asked for that which can't be (a Codex login, a folder outside) is
+    // refused rather than started outside (sandbox.ts).
+    const sandboxed = account.provider === 'claude' && this.sandboxed(cwd);
+    if (params.confined && !sandboxed) {
+      throw new RpcError(ErrorCode.badParams, account.provider === 'claude' ? `${cwd} isn't in a sandbox folder, and a sandboxed thread can only start threads in one without asking.` : "A sandboxed thread can only start Claude threads, as Codex doesn't run in the sandbox.");
+    }
     const now = this.isoNow();
     const id = crypto.randomUUID();
     const rec: ThreadRecord = {
       id,
-      title: params.title?.trim() ? params.title.trim().slice(0, 200) : titleFrom(params.text),
+      title: params.title?.trim() ? cutSafely(params.title.trim(), 200) : titleFrom(params.text),
       titleSet: Boolean(params.title?.trim()),
       cwd,
       accountId,
       ...(poolId ? { poolId } : {}),
       provider: account.provider,
       permissionMode: params.permissionMode ?? 'full',
+      ...(sandboxed ? { confined: true as const } : {}),
       status: 'idle',
       createdAt: now,
       updatedAt: now,
