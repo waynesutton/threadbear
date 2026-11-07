@@ -13,7 +13,7 @@ import ThreadbearCore
 ///
 /// The key was a Keychain item until 7 Nov. macOS ties an item's access to
 /// the app's signature, and Threadbear re-signs itself on every update, so
-/// each update asked for the Mac password before Notes would open (Wayne).
+/// each update asked for the Mac password before Notes would open.
 /// The first load moves it into the file and deletes the Keychain item.
 @MainActor
 @Observable
