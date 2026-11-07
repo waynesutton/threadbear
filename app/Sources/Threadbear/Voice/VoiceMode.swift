@@ -88,6 +88,8 @@ final class VoiceMode {
     func start(threadId: String) {
         guard Self.available else { return }
         stop()
+        // The microphone is one thing at a time.
+        if NoteDictation.shared.isOn { NoteDictation.shared.stop() }
         let startId = UUID()
         self.startId = startId
         self.threadId = threadId

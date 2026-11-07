@@ -1274,6 +1274,19 @@ never asks for your Mac password. Notes are for ideas and to-dos, not
 passwords: keep those in a password manager. To hide Notes, turn off Show Notes in Settings >
 General; the notes are kept.
 
+You can talk into a note too, once Voice is on (see Talking with a thread):
+turn on Use with Notes in Settings (⌘,) > Voice, and a waveform button
+shows beside the note's bin. Press it (it turns red) and talk; each time
+you pause, what you said is typed in at the cursor, as if you'd typed it,
+so it saves and undoes the same way. The words you're saying show under
+the note until they go in. Say "new line" or "new paragraph" on its own
+for a line break. Press the button again, Done, or Esc to stop; going to
+another note or closing Notes stops it too. Speech is turned into text on
+your Mac by macOS, so a note's words still never leave it, and nothing is
+downloaded for it beyond macOS's own speech files. Talking into a note
+ends Voice on a thread, and starting Voice on a thread ends it, as there's
+one microphone.
+
 ## Self-hosting your backend
 <!-- slug: self-hosting -->
 
@@ -1543,7 +1556,8 @@ tells you they're on screen. Press the button again, or go to another
 thread, to end Voice.
 
 Use Voice in Settings (⌘,) > Voice turns it off, which takes the
-waveform button away everywhere. The same tab picks who it sounds like (Emily, Mike and about
+waveform button away everywhere. Use with Notes, under it, lets you talk
+into a note (see Notes); it's off until you turn it on. The same tab picks who it sounds like (Emily, Mike and about
 twenty more), how fast it talks, the language, and the microphone. Play
 a Sample tries a voice. The first time you use Voice, Threadbear
 downloads its voice engine (Kyutai's pocket-tts) and a voice model of
