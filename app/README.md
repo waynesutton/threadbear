@@ -530,6 +530,7 @@ is an error. Commands marked "the open thread" act on `id` when it's given
 | `refusal` | `continue` | the selected thread's Codex Sol recovery offer (`ok none` without one); `continue: true` presses Continue with Codex Sol. A message containing `mock refusal` makes a Claude turn fail with a safeguards refusal on the mock runner |
 | `select` | `id` | selects it without waiting |
 | `subagent` | `thread` (default: the open one), `id`, `timeout` | shows a sub-agent's transcript, as clicking its row under the thread does, and waits until its rows are on screen |
+| `app-menu` | none | the app menu's items as macOS has them: each title, key and action, so a duplicate (two Settings…) shows |
 | `menu-key` | `key` (a letter, or `down`, `up`, `left`, `right`), `modifiers` (`cmd`, `opt`, `ctrl`, `shift`) | a key equivalent through the main menu, as pressing it would; says whether an item took it, the open thread and any end-of-inbox note |
 | `click-at` | `x`, `y` | a click at a point in the main window, in points from its top left, without moving the pointer |
 | `mouse-button` | `button` (`back`, `forward`) | a mouse's side-button click over the window, through the same handler as a real one; says the sidebar view, the thread and whether back and forward can go further |

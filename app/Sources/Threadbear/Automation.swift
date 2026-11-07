@@ -1249,6 +1249,15 @@ enum Automation {
             return composer.debugHoverChip(number).map { "ok window \($0)" } ?? "error no chip \(number) with a card"
         case "select-text":
             return select(c, app: app)
+        case "app-menu":
+            // The app menu's items as macOS has them: title, key and what
+            // each does, so a duplicate (two Settings…) shows.
+            guard let menu = NSApp.mainMenu?.items.first?.submenu else { return "error no app menu" }
+            menu.update()
+            let items = menu.items.filter { !$0.isSeparatorItem }.map { item in
+                "\(item.title) [\(item.keyEquivalentModifierMask.contains(.command) ? "⌘" : "")\(item.keyEquivalent)] \(item.action.map(NSStringFromSelector) ?? "-")"
+            }
+            return "ok " + items.joined(separator: " | ")
         case "den":
             // Threadbear > About Threadbear, through the menu item itself.
             guard let menu = NSApp.mainMenu?.items.first?.submenu,

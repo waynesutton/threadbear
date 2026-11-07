@@ -292,6 +292,12 @@ final class AppShortcutsTests: XCTestCase {
             XCTAssertLessThanOrEqual(uses, 1, "\(command.rawValue) is on \(uses) menu items")
         }
         XCTAssertEqual(app.components(separatedBy: "CommandGroup(replacing: .appSettings)").count - 1, 1, "one Settings… in the app menu")
+        // Replaced from the main window's commands, the Settings scene still
+        // adds a Settings… of its own: the replacement has to be on that
+        // scene (checked in the dev app with `app-menu`, 7 Nov).
+        let scene = try XCTUnwrap(app.range(of: "        Settings {"), "the Settings scene")
+        let group = try XCTUnwrap(app.range(of: "CommandGroup(replacing: .appSettings)"))
+        XCTAssertGreaterThan(group.lowerBound, scene.lowerBound, "Settings… is replaced on the Settings scene's own commands")
     }
 
     /// Text that names a key has to change when the key does.

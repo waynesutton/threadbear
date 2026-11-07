@@ -63,16 +63,6 @@ struct ThreadbearApp: App {
                     }
                 }
             }
-            // The app menu's one Settings…, made here rather than left to the
-            // Settings scene, so its key comes from the shortcut list
-            // (Settings > Keyboard can change it). ⌘, opens Settings where
-            // Settings > General says: over the main panel or in its window.
-            CommandGroup(replacing: .appSettings) {
-                IconMenuItems {
-                    Button("Settings…", systemImage: "gearshape") { app.openSettings() }
-                        .shortcut(.settings)
-                }
-            }
             CommandGroup(replacing: .newItem) {
                 IconMenuItems {
                     Button("New Thread", systemImage: "square.and.pencil") { app.newThread() }
@@ -189,6 +179,21 @@ struct ThreadbearApp: App {
         Settings {
             SettingsView()
                 .environment(app)
+        }
+        // The app menu's Settings… is replaced on the Settings scene itself:
+        // replaced from the main window's commands, the scene still added its
+        // own, and the menu had two (Wayne, 7 Nov).
+        .commands {
+            // The app menu's one Settings…, made here rather than left to the
+            // Settings scene, so its key comes from the shortcut list
+            // (Settings > Keyboard can change it). ⌘, opens Settings where
+            // Settings > General says: over the main panel or in its window.
+            CommandGroup(replacing: .appSettings) {
+                IconMenuItems {
+                    Button("Settings…", systemImage: "gearshape") { app.openSettings() }
+                        .shortcut(.settings)
+                }
+            }
         }
     }
 }
