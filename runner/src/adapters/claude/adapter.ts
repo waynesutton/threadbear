@@ -432,14 +432,14 @@ class ClaudeSession implements AgentSession {
           // mode it ran on is recorded, and where one that writes code is
           // made to ask outside Full access (onEditCall).
           { matcher: [...EDIT_TOOLS].join('|'), hooks: [async (input) => this.onEditCall(input)] },
-          // Plan and Ask mode turns change nothing (modes.ts). PreToolUse runs
-          // whatever the permission mode, full access included; a refusal
-          // from either hook stops the call.
-          { hooks: [async (input) => this.readOnlyCheck(input)] },
-          // A hook's ask comes before allow rules, so it's how a folder's
-          // untrusted ones stop applying once the thread leaves Full
-          // (askBeforeEveryTool). Only on a session that may need it.
-          ...(opts.heldGrants ? [{ hooks: [async () => (this.askEvery ? { hookSpecificOutput: { hookEventName: 'PreToolUse' as const, permissionDecision: 'ask' as const, permissionDecisionReason: "The folder's permission rules aren't trusted for this thread." } } : {})] }] : []),
+          // One hook for every other tool, so each call costs one round
+          // trip. Plan and Ask mode turns change nothing (modes.ts):
+          // PreToolUse runs whatever the permission mode, full access
+          // included, and a refusal stops the call. And a hook's ask comes
+          // before allow rules, so it's how a folder's untrusted ones stop
+          // applying once the thread leaves Full (askBeforeEveryTool), on a
+          // session that may need it.
+          { hooks: [async (input) => this.everyToolCheck(input, Boolean(opts.heldGrants))] },
         ],
         SessionStart: [{ hooks: [async (input) => this.onCompact(input)] }],
       },
@@ -754,6 +754,13 @@ class ClaudeSession implements AgentSession {
 
   /** The turn is in Plan or Ask mode (UserInput.readOnly). */
   private readOnly = false;
+
+  /** The read-only check, then the ask for a folder's held rules. */
+  private everyToolCheck(input: HookInput, heldGrants: boolean): Record<string, unknown> {
+    const refused = this.readOnlyCheck(input);
+    if (Object.keys(refused).length || !heldGrants || !this.askEvery) return refused;
+    return { hookSpecificOutput: { hookEventName: 'PreToolUse' as const, permissionDecision: 'ask' as const, permissionDecisionReason: "The folder's permission rules aren't trusted for this thread." } };
+  }
 
   /** Refuses tools that change files while the turn is read-only. */
   private readOnlyCheck(input: HookInput): Record<string, unknown> {

@@ -122,10 +122,13 @@ test("a folder's own settings load normally; with untrusted Claude settings, onl
 
 test("F2/F8: a session started in Full with a folder's untrusted permission rules can make every tool ask once the thread leaves Full", async () => {
   const plain = start();
-  assert.equal(plain.state.options.hooks.PreToolUse.length, 1, "only the edit check's hook, and no round trip per tool, where none is needed");
+  // The edit check's hook, and one for every tool: Plan and Ask's read-only
+  // check, which the held rules' ask shares, so it's never two round trips.
+  assert.equal(plain.state.options.hooks.PreToolUse.length, 2, "the edit check's hook, and one round trip per tool, never two");
   plain.state.close!();
   const held = start([], { permissionMode: 'full', heldGrants: true });
   assert.ok(held.state.options.hooks.PreToolUse[0].matcher, 'the edit check stays');
+  assert.equal(held.state.options.hooks.PreToolUse.length, 2);
   const pre = held.state.options.hooks.PreToolUse[1].hooks[0];
   assert.deepEqual(await pre({ hook_event_name: 'PreToolUse', tool_name: 'Bash', tool_input: {} }), {});
   held.session.askBeforeEveryTool!();

@@ -144,7 +144,7 @@ final class FileEditorModeTests: XCTestCase {
     func testOffItSavesAsYouType() {
         let (controller, window) = editor(mode: false)
         defer { controller.stop(); window.close() }
-        XCTAssertFalse(controller.scroll.hasVerticalRuler)
+        // Line numbers show while editing either way (Mike's port of the editor).
         controller.insertAtEnd("let c = 3;\n")
         XCTAssertTrue(controller.dirty, "marked until the save lands")
         RunLoop.main.run(until: Date().addingTimeInterval(1.2))

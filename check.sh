@@ -52,6 +52,8 @@ set -uo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 NODE="${THREADBEAR_NODE:-$HOME/.nvm/versions/node/v24.22.1/bin/node}"
+# A Mac without that nvm Node (any copy but Mike's): the node on the PATH.
+if [ -z "${THREADBEAR_NODE:-}" ] && [ ! -x "$NODE" ] && command -v node >/dev/null; then NODE="$(command -v node)"; fi
 QUICK=0
 APP_ONLY=0
 ALL=0

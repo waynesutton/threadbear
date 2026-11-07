@@ -201,7 +201,7 @@ private struct SkillRow: View {
                     Button("Update to the Latest", systemImage: "arrow.down.circle") { app.updateSkill(skill.name) }
                 }
                 if let url = skill.sourceURL {
-                    Button("View on GitHub", systemImage: "safari") { NSWorkspace.shared.open(url) }
+                    Button("View on GitHub", systemImage: "safari") { _ = OpenGate.openWeb(url) }
                 }
                 Button("Show in Finder", systemImage: "folder") {
                     NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: skill.dir).appendingPathComponent("SKILL.md")])
