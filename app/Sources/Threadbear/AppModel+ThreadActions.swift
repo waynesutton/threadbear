@@ -14,6 +14,7 @@ extension AppModel {
         // A new thread is never the bear's chat unless the bear opened it
         // (BearChat.open aims it there after this).
         if newThreadCwd == BearChat.folder.path { newThreadCwd = nil }
+        newThreadProjectId = nil
         showsSettingsPage = false
         showsSkillsPage = false
         showsNotesPage = false
@@ -25,6 +26,21 @@ extension AppModel {
         stopShowingSubagent()
         sidebarMode = .inbox
         focusComposer("new")
+    }
+
+    /// New Thread on a project's page: the new-thread box, in the project's
+    /// first folder (the default folder if it has none), the thread joining
+    /// the project as it's made. The folder can still be changed there.
+    func newThread(in project: Project) {
+        newThread()
+        guard selection == nil else { return }
+        newThreadProjectId = project.id
+        if let folder = project.folders.first { newThreadCwd = folder }
+        // A project is this Mac's runner's.
+        if newThreadRunnerId != nil {
+            newThreadRunnerPicked = true
+            newThreadRunnerId = nil
+        }
     }
 
     /// Collapses the thread's card of asks, or brings it back. The cursor
@@ -268,6 +284,7 @@ extension AppModel {
             let account = newThreadAccountId
             var request = newThreadRequest(text: trimmed, images: draft.images)
             request.turnMode = turnMode(for: "new")
+            if let project = newThreadProjectId, projects.contains(where: { $0.id == project }) { request.projectIds = [project] }
             creatingThread = true
             Task {
                 defer { creatingThread = false }
@@ -283,6 +300,7 @@ extension AppModel {
                     // from the defaults again, on whichever account then
                     // has the most room. The model and effort stick.
                     newThreadCwd = nil
+                    newThreadProjectId = nil
                     newThreadPermission = .full
                     // Plan or Ask mode carries on in the thread it started.
                     if let mode = turnModes.removeValue(forKey: "new") { turnModes[thread.id] = mode }

@@ -37,6 +37,7 @@ public extension RPCClient {
         if let turnMode = request.turnMode { params["mode"] = .string(turnMode.rawValue) }
         if let title = request.title { params["title"] = .string(title) }
         if let runnerId = request.runnerId { params["runnerId"] = .string(runnerId) }
+        if !request.projectIds.isEmpty { params["projectIds"] = .array(request.projectIds.map { .string($0) }) }
         return try await call("threads.create", .object(params), as: ThreadResult.self, timeout: RPCClient.sendTimeout).thread
     }
 
@@ -348,6 +349,9 @@ public struct NewThreadRequest: Sendable, Hashable {
     /// Another runner, when this Mac's runner makes it there through
     /// Convex (docs/protocol.md, "Other runners' threads through the backend").
     public var runnerId: String?
+    /// Projects it starts in, joined before its first turn (New Thread on
+    /// a project's page).
+    public var projectIds: [String] = []
 
     public init(text: String, images: [ImageRef] = [], cwd: String? = nil, accountId: String? = nil, poolId: String? = nil, model: String? = nil, effort: String? = nil, permissionMode: PermissionMode? = nil, title: String? = nil) {
         self.text = text

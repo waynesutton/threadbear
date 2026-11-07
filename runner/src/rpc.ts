@@ -531,6 +531,7 @@ export class RpcServer {
           ...(p.worktree === false ? { worktree: false } : {}),
           ...optStartedBy(p),
           ...optTurnMode(p),
+          ...optProjectIds(p),
         });
         return { thread: res.thread, turnId: res.turnId };
       }
@@ -864,6 +865,14 @@ function optImages(p: Record<string, unknown>): ImageRef[] | undefined {
 
 // Ask mode for the message (modes.ts); anything else is -32602. "plan"
 // from an app before Plan first took over planning reads as Ask: read-only.
+// threads.create's projectIds: project ids, the thread joining each before its first turn.
+function optProjectIds(p: Record<string, unknown>): { projectIds?: string[] } {
+  const v = p.projectIds;
+  if (v === undefined || v === null) return {};
+  if (!Array.isArray(v) || v.some((x) => typeof x !== 'string' || !x)) throw bad('projectIds must be a list of project ids');
+  return v.length ? { projectIds: v as string[] } : {};
+}
+
 function optTurnMode(p: Record<string, unknown>): { mode?: 'ask' } {
   if (p.mode === undefined || p.mode === null) return {};
   if (p.mode !== 'plan' && p.mode !== 'ask') throw new RpcError(ErrorCode.badParams, 'mode must be "ask"');
