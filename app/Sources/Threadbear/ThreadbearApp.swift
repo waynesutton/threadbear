@@ -53,15 +53,6 @@ struct ThreadbearApp: App {
         .defaultLaunchBehavior(.presented)
         .restorationBehavior(.disabled)
         .commands {
-            // The app menu's Settings… made here rather than left to the
-            // Settings scene, so its key comes from the shortcut list and
-            // Settings > Keyboard can change it. It opens the same window.
-            CommandGroup(replacing: .appSettings) {
-                IconMenuItems {
-                    SettingsLink { Label("Settings…", systemImage: "gearshape") }
-                        .shortcut(.settings)
-                }
-            }
             // The Den, in place of the stock About panel.
             CommandGroup(replacing: .appInfo) {
                 IconMenuItems {
@@ -72,8 +63,10 @@ struct ThreadbearApp: App {
                     }
                 }
             }
-            // ⌘, opens Settings where Settings > General says: over the
-            // main panel or in its window.
+            // The app menu's one Settings…, made here rather than left to the
+            // Settings scene, so its key comes from the shortcut list
+            // (Settings > Keyboard can change it). ⌘, opens Settings where
+            // Settings > General says: over the main panel or in its window.
             CommandGroup(replacing: .appSettings) {
                 IconMenuItems {
                     Button("Settings…", systemImage: "gearshape") { app.openSettings() }

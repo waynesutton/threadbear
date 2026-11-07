@@ -283,6 +283,17 @@ final class AppShortcutsTests: XCTestCase {
         }
     }
 
+    /// One menu item per command: a merge once left two Settings… in the
+    /// app menu (one for the window, one for the page), both on ⌘,.
+    func testEachCommandIsOnOneMenuItem() throws {
+        let app = try source("ThreadbearApp.swift")
+        for command in ShortcutCommand.allCases {
+            let uses = app.components(separatedBy: ".shortcut(.\(command.rawValue))").count - 1
+            XCTAssertLessThanOrEqual(uses, 1, "\(command.rawValue) is on \(uses) menu items")
+        }
+        XCTAssertEqual(app.components(separatedBy: "CommandGroup(replacing: .appSettings)").count - 1, 1, "one Settings… in the app menu")
+    }
+
     /// Text that names a key has to change when the key does.
     func testHintsAndTipsDontSpellOutAKeyTheListHas() throws {
         let files = ["Views/ActivityBar.swift", "Views/SidebarView.swift", "Views/ComposerControls.swift", "Views/SetupChecklist.swift"]
