@@ -39,7 +39,7 @@ struct SettingsView: View {
             DevicesSettings()
                 .tabItem { Label("Phone & browser", systemImage: "iphone") }
                 .tag(SettingsTab.devices)
-            KeyboardSettings()
+            KeyboardSettings(inPanel: inPanel)
                 .tabItem { Label("Keyboard", systemImage: "keyboard") }
                 .tag(SettingsTab.keyboard)
         }
@@ -281,6 +281,23 @@ private struct GeneralSettings: View {
                             }
                         }
                         .tip("How often a thread starts to bring in Mike's new releases")
+                    }
+                }
+
+                // runner.json's `experiments`, so nobody has to edit it by
+                // hand. Each switch is read at the runner's next use of it,
+                // so nothing restarts; Voice mode lives in the app, which
+                // reads it when it connects (hello's `experiments`).
+                if !settings.experiments.isEmpty {
+                    SettingsSection("Experiments",
+                                    about: "New features still being tried out. Each starts off; turn one on to try it, and off again whenever you like. Once one has proved itself it becomes a standard part of Threadbear and its switch goes. The ⓘ beside each says what it does.",
+                                    ask: "explain an experiment, or turn one on or off for you.") {
+                        ForEach(settings.experiments) { experiment in
+                            ExperimentRow(experiment: experiment,
+                                          needsReopen: experiment.id == VoiceMode.experiment && experiment.on != app.experiments.contains(experiment.id)) { on in
+                                app.updateSettings(SettingsUpdate(experiments: [experiment.id: on]))
+                            }
+                        }
                     }
                 }
 
@@ -789,6 +806,32 @@ private struct LoginToggleRow: View {
 /// agent first (Mike, 5 Nov). Taking `ask` as the end of a sentence keeps
 /// that line in every one. Sections with only a message or an error in them
 /// stay plain `Section`s (SettingsInfoTests checks).
+/// One experiment's switch in Settings > General, with what it does behind
+/// its ⓘ.
+private struct ExperimentRow: View {
+    let experiment: RunnerSettings.Experiment
+    /// It lives in the app, which picks a change up when it next connects.
+    let needsReopen: Bool
+    let set: (Bool) -> Void
+
+    var body: some View {
+        Toggle(isOn: Binding(get: { experiment.on }, set: set)) {
+            VStack(alignment: .leading, spacing: 2) {
+                HStack(spacing: 6) {
+                    Text(experiment.name)
+                    if !experiment.does.isEmpty { InfoTip(SettingsText.experimentAbout(experiment.does)) }
+                }
+                if needsReopen {
+                    Text("Takes effect when you quit and reopen Threadbear")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+        }
+        .tip(experiment.on ? "Turn \(experiment.name) off" : "Try \(experiment.name)")
+    }
+}
+
 struct SettingsSection<Content: View>: View {
     let title: String
     let about: String

@@ -7,6 +7,11 @@ import ThreadbearCore
 /// Settings' usual ask-your-agent sections because starting a thread to change
 /// one key is slow. The keys are still in a file an agent can change.
 struct KeyboardSettings: View {
+    /// Over the main panel (SettingsPage), whose page scrolls as a whole, so
+    /// the list grows to its full height like the other tabs. In the window,
+    /// which has no scroller of its own, the list scrolls in a fixed height:
+    /// every shortcut at once is taller than a screen.
+    var inPanel = false
     @State private var search = ""
 
     var body: some View {
@@ -15,20 +20,14 @@ struct KeyboardSettings: View {
             SearchField(text: $search, prompt: "Search shortcuts")
                 .padding(.horizontal, 20)
                 .padding(.top, 14)
-            Form {
-                if VoiceMode.available { VoiceShortcutsSection(search: search) }
-                ForEach(ShortcutGroup.allCases, id: \.self) { group in
-                    let commands = group.commands.filter(matches)
-                    if !commands.isEmpty {
-                        SettingsSection(group.title,
-                                        about: "The keys for what's in the \(group.title) menu. Click one, then press the new keys. Esc cancels, and Delete removes it.",
-                                        ask: "change them for you, or tell you what's free. They're in shortcuts.json in Threadbear's data folder, which holds only what you've changed.") {
-                            ForEach(commands, id: \.self) { ShortcutRow(command: $0) }
-                        }
-                    }
-                }
+            if inPanel {
+                list
+                    .fixedSize(horizontal: false, vertical: true)
+                    .scrollIndicators(.never)
+                    .scrollDisabled(true)
+            } else {
+                list
             }
-            .formStyle(.grouped)
             VStack(alignment: .leading, spacing: 6) {
                 if let problem = shortcuts.problem {
                     Label(problem, systemImage: "exclamationmark.triangle")
@@ -53,8 +52,26 @@ struct KeyboardSettings: View {
             .padding(.top, 8)
             .padding(.bottom, 14)
         }
-        .frame(height: 620)
+        .frame(height: inPanel ? nil : 620)
         .onDisappear { ShortcutRecorder.shared.cancel() }
+    }
+
+    /// Every command with its key, in the menus' groups, filtered by the search.
+    private var list: some View {
+        Form {
+            if VoiceMode.available { VoiceShortcutsSection(search: search) }
+            ForEach(ShortcutGroup.allCases, id: \.self) { group in
+                let commands = group.commands.filter(matches)
+                if !commands.isEmpty {
+                    SettingsSection(group.title,
+                                    about: "The keys for what's in the \(group.title) menu. Click one, then press the new keys. Esc cancels, and Delete removes it.",
+                                    ask: "change them for you, or tell you what's free. They're in shortcuts.json in Threadbear's data folder, which holds only what you've changed.") {
+                        ForEach(commands, id: \.self) { ShortcutRow(command: $0) }
+                    }
+                }
+            }
+        }
+        .formStyle(.grouped)
     }
 
     private func matches(_ command: ShortcutCommand) -> Bool {
