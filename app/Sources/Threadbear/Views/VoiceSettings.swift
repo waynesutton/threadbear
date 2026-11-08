@@ -49,7 +49,8 @@ struct VoiceSettings: View {
                             .fixedSize(horizontal: false, vertical: true)
                         Spacer(minLength: 4)
                         Button("Open Keyboard Settings") {
-                            NSWorkspace.shared.open(URL(string: "x-apple.systempreferences:com.apple.Keyboard-Settings.extension")!)
+                            // A fixed address of the code's own, so OpenGate's openOwn.
+                            OpenGate.openOwn(URL(string: "x-apple.systempreferences:com.apple.Keyboard-Settings.extension")!)
                         }
                         .controlSize(.small)
                         .tip("Open System Settings > Keyboard, where Press 🌐 key to is")
