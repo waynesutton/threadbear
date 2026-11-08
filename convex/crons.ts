@@ -10,5 +10,5 @@ crons.interval('prune old files', { hours: 6 }, internal.sync.pruneFiles, {});
 // Tool output past its 30 days, a batch at a time (each row is read to be deleted).
 crons.interval('prune old tool output', { minutes: 15 }, internal.sync.pruneBodies, {});
 // Outside agents' call log and bad-key rows past their time, and ended keys (mcp.ts).
-crons.interval('prune agent calls', { hours: 6 }, internal.mcp.prune, {});
+crons.interval('prune agent calls', { hours: 1 }, internal.mcp.prune, {});
 export default crons;
