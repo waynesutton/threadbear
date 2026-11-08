@@ -596,14 +596,6 @@ enum Automation {
             target.concludeDragOperation(drag)
             target.draggingEnded(drag)
             return dropped ? "ok dropped on \(type(of: target))" : "error \(type(of: target)) turned it away"
-        case "browser":
-            // {"cmd":"browser","do":"click|right|scroll|key|type","x":,"y":,...}: real
-            // NSEvents to the Browser panel's page, in the page's own points,
-            // through the window as Mike's would go, without the pointer.
-            guard let window = mainWindow, let content = window.contentView,
-                  let view = all(AgentSurfaceView.self, in: content).last(where: { !$0.isHiddenOrHasHiddenAncestor })
-            else { return "error no browser panel" }
-            return view.automate(c, in: window)
         case "click":
             // A visible, enabled button in the transcript with this title,
             // or this accessibility label for an icon-only one. `tip` instead
@@ -1303,14 +1295,13 @@ enum Automation {
         case "select-text":
             return select(c, app: app)
         case "app-menu":
-            // The app menu's items as macOS has them: title, key and what
-            // each does, so a duplicate (two Settings…) shows.
+            // The Threadbear menu's items, as it opens: titles with their
+            // keys, separators as "-".
             guard let menu = NSApp.mainMenu?.items.first?.submenu else { return "error no app menu" }
             menu.update()
-            let items = menu.items.filter { !$0.isSeparatorItem }.map { item in
-                "\(item.title) [\(item.keyEquivalentModifierMask.contains(.command) ? "⌘" : "")\(item.keyEquivalent)] \(item.action.map(NSStringFromSelector) ?? "-")"
-            }
-            return "ok " + items.joined(separator: " | ")
+            return "ok " + json(menu.items.map { item in
+                item.isSeparatorItem ? "-" : item.title + (item.keyEquivalent.isEmpty ? "" : " [\(item.keyEquivalent)]")
+            })
         case "den":
             // Threadbear > About Threadbear, through the menu item itself.
             guard let menu = NSApp.mainMenu?.items.first?.submenu,
@@ -1446,6 +1437,20 @@ enum Automation {
             return "ok \(window.windowNumber) \(Int(size.width))x\(Int(size.height))"
         case "settings":
             return await settings(c, app: app)
+        case "runners-front":
+            // The Runners panel open and the main window floating in front
+            // and key, for real events on a desktop nobody's using (Tinker
+            // Desk, app/README.md "A real drag"). Says the window's number
+            // and top left in screen points.
+            guard let window else { return "error no window" }
+            app.runnersShown = true
+            window.level = .floating
+            NSApp.activate()
+            window.makeKeyAndOrderFront(nil)
+            window.orderFrontRegardless()
+            try? await Task.sleep(for: .milliseconds(400))
+            let top = (NSScreen.screens.first?.frame.height ?? 0) - window.frame.maxY
+            return "ok \(window.windowNumber) \(Int(window.frame.minX)) \(Int(top))"
         case "shortcuts":
             return await shortcuts(c)
         case "focus":

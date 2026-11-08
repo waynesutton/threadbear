@@ -26,7 +26,7 @@ final class EveryClickShowsTests: XCTestCase {
         "interrupt", "updateThread", "share", "tickAsk", "respond", "answerStartRequest", "approvePlan",
         "answerSecret", "checkClis", "updateCli", "setCliPolicy", "createSchedule", "updateSchedule",
         "deleteSchedule", "setRunnerOrder", "runSchedule", "createProject", "updateProject", "setProjectIcon",
-        "mergeProject", "deleteProject", "setThreadProjects", "runLibrarian", "updateLibrarian", "savePools",
+        "mergeProject", "deleteProject", "deleteThread", "setThreadProjects", "runLibrarian", "updateLibrarian", "savePools",
         // Connectors setup and Outside agents (Protocol/Connectors.swift).
         "connectorsSetup", "connectorsAdd", "agentsConnect", "agentsRevoke",
     ]

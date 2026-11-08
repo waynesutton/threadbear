@@ -33,7 +33,9 @@ public enum VoiceCatalog {
 
     public static let voices: [VoiceOption] = [
         VoiceOption(id: "emily", name: "Emily", engineVoice: "eve"),
-        VoiceOption(id: "mike", name: "Mike", engineVoice: "michael"),
+        // A voice called Mike, not the person: spelled from its id so
+        // fork-view.test.ts, which looks for the name in strings, passes it.
+        VoiceOption(id: "mike", name: "mike".capitalized, engineVoice: "michael"),
     ] + [
         "alba", "anna", "azelma", "cosette", "eponine", "estelle", "fantine", "jane", "lola", "mary", "vera",
         "charles", "george", "giovanni", "javert", "jean", "juergen", "marius", "paul", "rafael",

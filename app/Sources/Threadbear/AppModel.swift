@@ -421,6 +421,9 @@ final class AppModel {
     /// Screenshots only: holds the top runner mid-drag by this much, as a
     /// script can't hold a real drag still to photograph it.
     @ObservationIgnored var runnerDragPreview: CGSize?
+    /// The same for the Runners panel's top card. Watched, as the panel stays
+    /// put while it's hidden, so it never appears afresh to pick it up.
+    var runnerPanelDragPreview: CGSize?
     /// Each runner's machine figures by runner id (`runners.stats`), asked
     /// every 10 s while a runner's details are open in the Runners panel.
     var runnerStats: [String: RunnerMachineStats] = [:]
@@ -453,6 +456,7 @@ final class AppModel {
     var projects: [Project] = [] {
         didSet { projectsVersion &+= 1 }
     }
+    @ObservationIgnored let projectFilePicker = ProjectFilePicker()
     /// The runner knows about projects: an older one answers
     /// `projects.list` with -32601, and then the activity bar has no
     /// Projects or Librarian button and threads show no project chips.
@@ -654,7 +658,6 @@ final class AppModel {
     /// Bumped by each request for a thread's highlights, so a change that
     /// lands while a fetch is out gets fetched again after it.
     @ObservationIgnored var highlightWanted: [String: Int] = [:]
-    @ObservationIgnored var highlightAutoShow = HighlightAutoShow()
     /// The agents' show_panel requests shown this run (PanelRequestModel).
     @ObservationIgnored var panelRequestGate = PanelRequestGate()
     /// What's waiting on the runner, by `BusyKey`, with how many of each

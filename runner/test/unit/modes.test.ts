@@ -38,7 +38,9 @@ test('a Plan first plan is saved, pinned and opened; a revision overwrites it; a
   const first = path.join(cwd, 'plans', plans()[0]);
   assert.match(fs.readFileSync(first, 'utf8'), /^# Plan: [\s\S]*1\. Stripe/);
   assert.ok(h.events(thread.id).some((e) => e.type === 'system.note' && /^Saved the plan in \[plans\/[^\]]+\]\(<\/.+>\)\.$/.test(e.text)));
-  assert.equal(h.runner.highlights(thread.id).highlights.find((i) => i.path === first)?.show, true);
+  const pinned = h.runner.highlights(thread.id).highlights.find((i) => i.path === first);
+  assert.ok(pinned, 'pinned');
+  assert.equal(h.runner.get(thread.id).panelRequest?.highlight, pinned.id, 'and asked to be opened in the pane');
   // Sent back and proposed again: the same file, said as updated.
   s.out({ kind: 'planProposed', itemId: 'p2', text: '## Plan\n\n1. Stripe\n2. Webhooks' } as never);
   await tick();

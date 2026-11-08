@@ -775,6 +775,12 @@ final class ThreadSession {
             } catch {
                 self.stopAnswering(approvalId)
                 app?.show(error)
+                // Read it again, so the card shows what's true now and a
+                // second click answers that: a request refused as changed
+                // since the card showed it (a folder made since, or a
+                // runner updated in between) never starts on the old card,
+                // which would otherwise be all a retry could send.
+                self.loadStartRequest(approvalId)
             }
         }
         return true
@@ -798,16 +804,47 @@ final class ThreadSession {
         view?.refreshCard(approvalId)
     }
 
+    /// Calls Mike has unticked on a card with queued calls (docs/protocol.md,
+    /// "Queued calls"), by approval id: the card's own call's item id and
+    /// any queued ones'. Everything else on the card is ticked.
+    private(set) var untickedCalls: [String: Set<String>] = [:]
+
+    func toggleQueuedCall(approvalId: String, itemId: String) {
+        guard !answering.contains(approvalId) else { return }
+        var unticked = untickedCalls[approvalId] ?? []
+        if unticked.remove(itemId) == nil { unticked.insert(itemId) }
+        untickedCalls[approvalId] = unticked
+        view?.refreshCard(approvalId)
+    }
+
+    /// What Allow on a card with a queue sends: its own call's answer, and
+    /// each queued call's, from the ticks. Deny denies the lot. Nil for a
+    /// card with nothing queued.
+    func queuedDecisions(approvalId: String, decision: ApprovalDecision) -> (own: ApprovalDecision, queued: [String: ApprovalDecision])? {
+        guard case .approval(let item)? = feed.model.item(id: "ap:\(approvalId)")?.content, !item.queued.isEmpty else { return nil }
+        let unticked = untickedCalls[approvalId] ?? []
+        let allow = decision == .allow || decision == .allowAlways
+        var queued: [String: ApprovalDecision] = [:]
+        for call in item.queued { queued[call.approvalId] = allow && !unticked.contains(call.approvalId) ? .allow : .deny }
+        let own: ApprovalDecision = allow && !unticked.contains(item.request.itemId ?? "") ? .allow : .deny
+        return (own, queued)
+    }
+
     func respond(approvalId: String, decision: ApprovalDecision, answers: [String: String]?, message: String?) {
         guard !answering.contains(approvalId) else { return }
         if decision != .answered, answerStartRequest(approvalId: approvalId, allow: decision != .deny) { return }
         guard let client = app?.client(for: threadId) else { return }
         let threadId = threadId
+        // A card with queued calls answers them all at once, by the ticks.
+        let stacked = decision == .answered ? nil : queuedDecisions(approvalId: approvalId, decision: decision)
+        // Nothing ticked: Allow has nothing to allow.
+        if let stacked, decision != .deny, stacked.own == .deny, !stacked.queued.values.contains(.allow) { return }
+        let decision = stacked?.own ?? decision
         ActivityRecorder.shared.answered(threadId: threadId, decision: decision)
         startAnswering(approvalId)
         Task {
             do {
-                try await client.respond(threadId: threadId, approvalId: approvalId, decision: decision, message: message, answers: answers)
+                try await client.respond(threadId: threadId, approvalId: approvalId, decision: decision, message: message, answers: answers, queued: stacked?.queued)
             } catch {
                 self.stopAnswering(approvalId)
                 app?.show(error)

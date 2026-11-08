@@ -25,7 +25,10 @@ Mike's copy (reporting to his Sentry, uploading his debug symbols).
 | Mike's deployments in docs | `docs/convex-backend.md`, `docs/website.md`, `docs/push-relay.md` | Names of Mike's Convex deployments, for his own use. The code never reads them; yours come from setup. |
 
 Code comments that say "Mike's releases" or tell a story from Mike's
-setup are kept on purpose, as the history of why a line is there.
+setup are kept on purpose, as the history of why a line is there. Text
+the app shows or sends to an agent says "the user" instead, except where
+it means Mike himself (his releases, the About credit);
+`runner/test/unit/fork-view.test.ts` checks that too.
 
 ## 2. Where each feature lives, and how to take it out
 
@@ -108,7 +111,7 @@ gone from your fork, not just quiet.
 | Skills | `runner/src/skills.ts`, `runner/skills/` (built-in Pele), `skills` in `RELEASE_PATHS` (`update.ts`, `deploy.mjs`), `plugins` in the Claude adapter; app `SkillsModel.swift`, `Views/SkillsPage.swift`, Core `Protocol/Skills.swift`, its bar button in `ActivityBar.swift` | Nothing happens until a skill is added | Self-contained: drop the module, its methods in `main.ts` and the page. Suggested skills are `SUGGESTED` in `skills.ts`. |
 | The bear (sidebar chat) | app `Voice/BearChat.swift`, `BearButton` in `Voice/VoiceBear.swift`, one line in `Views/SidebarView.swift`, the switch in `Views/SettingsView.swift`, one line in `newThread()` | Settings > General, Show the bear in the sidebar | Self-contained: drop the file, the button and the switch. |
 | BrowserBear link hand-off | `app/Sources/Threadbear/BrowserBear.swift`, called from `PaneModel.swift` | Inert unless BrowserBear (Mike's own tool) is running | Self-contained: one file, one call. |
-| The Browser panel | `app/Sources/Threadbear/Views/AgentBrowserPanel.swift`, and `BrowserBearPipe.swift`, with cases in `PanelsView.swift`, `WindowDock.swift`, `PanelRequests.swift` and `Automation.swift` | Inert without BrowserBear; existing profiles use its private socket, separate agent Chrome retains its CDP path | Self-contained. |
+| The Browser panel | `app/Sources/Threadbear/Views/AgentBrowserPanel.swift`, and `BrowserBearPipe.swift`, with cases in `PanelsView.swift`, `WindowDock.swift`, and `PanelRequests.swift` | Inert without BrowserBear; lists pages, stills and Show window over its private socket | Self-contained. |
 
 ### Core, no switch
 

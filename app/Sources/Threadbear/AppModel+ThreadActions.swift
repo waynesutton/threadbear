@@ -36,13 +36,15 @@ extension AppModel {
     func newThread(in project: Project) {
         newThread()
         guard selection == nil else { return }
+        // A project is this Mac's runner's: back to it the way the machine
+        // menu goes, so another Mac's login and folder don't come along. Even
+        // when it's on this Mac already: picked, so a default Mac coming
+        // online doesn't take the draft over.
+        chooseNewThreadRunner(nil)
         newThreadProjectId = project.id
-        if let folder = project.folders.first { newThreadCwd = folder }
-        // A project is this Mac's runner's.
-        if newThreadRunnerId != nil {
-            newThreadRunnerPicked = true
-            newThreadRunnerId = nil
-        }
+        // Its first folder, or the default one: never a folder left from
+        // another draft.
+        newThreadCwd = project.folders.first
     }
 
     /// Collapses the thread's card of asks, or brings it back. The cursor
@@ -92,10 +94,8 @@ extension AppModel {
     /// imported as the composer's are and added to that ask's answer.
     func addNoteImages(thread: ThreadSummary, ask: Int, urls: [URL]) {
         guard !urls.isEmpty else { return }
-        // A picture this Mac's runner keeps would be a path another
-        // runner hasn't got (as in the composer).
-        if let name = runnerName(of: thread) {
-            errorMessage = "Pictures can't go to \(name) from this Mac yet."
+        if let why = picturesRefusal(for: thread) {
+            errorMessage = why
             return
         }
         let threadId = thread.id
@@ -262,6 +262,12 @@ extension AppModel {
         guard !trimmed.isEmpty || !images.isEmpty else { return }
         // A second Return while the first new thread is still being made.
         if threadId == nil, creatingThread { return }
+        // Pictures pasted before the direct link was turned on, or before
+        // the draft moved to another runner: they'd go as paths on this Mac.
+        if !images.isEmpty, threadId == nil || thread != nil, let why = picturesRefusal(for: thread) {
+            errorMessage = why
+            return
+        }
         // A new thread on another runner goes over that runner's connection.
         if threadId == nil, let runnerId = newThreadRunnerId {
             return sendNewThread(on: runnerId, text: trimmed, draft: stored)
@@ -310,7 +316,7 @@ extension AppModel {
                     newThreadPool = nil
                     newThreadProvider = nil
                     threads[thread.id] = thread
-                    select(thread.id)
+                    showStartedThread(thread.id)
                     // "This Mac" was for this thread; the next starts on
                     // the default runner again.
                     newThreadRunnerPicked = false
@@ -648,6 +654,27 @@ extension AppModel {
     /// Stars it, or takes the star off (the Starred section above the Inbox).
     func setStarred(_ threadId: String, _ starred: Bool) {
         update(threadId, ThreadUpdate(starred: starred))
+    }
+
+    /// Delete from the sidebar, only for an archived chat, after asking:
+    /// the runner moves its folder to its trash.
+    func deleteThread(_ threadId: String) {
+        guard !isBusy(BusyKey.deleteThread(threadId)), let thread = threads[threadId], thread.isArchived,
+              let client = client(for: threadId) else { return }
+        let alert = NSAlert()
+        alert.alertStyle = .warning
+        alert.messageText = "Delete \u{201C}\(thread.title)\u{201D}?"
+        alert.informativeText = "This removes the chat from Threadbear and moves it to the runner's trash. It can't be undone in the app."
+        alert.addButton(withTitle: "Delete")
+        alert.addButton(withTitle: "Cancel")
+        // It may have been unarchived while the alert was up.
+        guard alert.runModal() == .alertFirstButtonReturn, threads[threadId]?.isArchived == true else { return }
+        whileBusy(BusyKey.deleteThread(threadId), note: "Deleting chat…") { [self] in
+            do {
+                try await client.deleteThread(threadId)
+                forget(threadId)
+            } catch { show(error) }
+        }
     }
 
     /// Archive (Mike calls it settling): leaves the inbox, stops its CLI.
