@@ -165,13 +165,80 @@ function firstLine(body: string, name: string): string {
   return (line ?? `Use when asked to ${name.replace(/-/g, ' ')}.`).slice(0, 300);
 }
 
-/** The SKILL.md as the plugin gives it: `disable-model-invocation: true` when it's slash-only. */
+// The frontmatter keys a skill keeps in the plugin: what it says and how
+// it's called up. Everything else is left out, above all what runs or
+// grants something (`hooks`, `allowed-tools`, `mcpServers`,
+// `permissionMode`): the plugin isn't a folder Mike trusted, so a skill
+// fetched from GitHub or pasted into New Skill can't pre-approve Bash or
+// start a hook through it, in any mode, Ask included. By name in lower
+// case with `-` and `_` left out, as claude-trust.ts compares, so every
+// spelling counts.
+const SKILL_KEYS_KEPT = new Set([
+  'name',
+  'description',
+  'whentouse',
+  'argumenthint',
+  'arguments',
+  'userinvocable',
+  'license',
+  'compatibility',
+  'metadata',
+  'version',
+  'model',
+  'effort',
+  'context',
+  'agent',
+  'paths',
+]);
+
+/**
+ * The SKILL.md as the plugin gives it: only SKILL_KEYS_KEPT from its
+ * frontmatter, and `disable-model-invocation: true` when it's slash-only.
+ * Frontmatter that isn't plain YAML, one key to a line (a quoted key, a
+ * flow mapping, an anchor, alias or tag), or that doesn't close, can't be
+ * told apart key by key, so it's replaced by just its name and description.
+ */
 export function pluginSkillText(text: string, always: boolean): string {
-  const m = /^---\r?\n([\s\S]*?)\r?\n---/.exec(text);
-  if (!m) return always ? text : `---\ndisable-model-invocation: true\n---\n\n${text}`;
-  const body = m[1].split(/\r?\n/).filter((l) => !/^disable-model-invocation:/.test(l));
-  if (!always) body.push('disable-model-invocation: true');
-  return `---\n${body.join('\n')}\n---` + text.slice(m[0].length);
+  // A BOM or blank lines before the frontmatter: Claude may still read it.
+  const src = text.replace(/^﻿/, '');
+  const m = /^\s*---[ \t]*\r?\n([\s\S]*?)\r?\n---[ \t]*(?=\r?\n|$)/.exec(src);
+  const kept = m ? keptFrontmatter(m[1]) : undefined;
+  const lines =
+    kept ??
+    (() => {
+      const fm = readFrontmatter(src.trimStart());
+      return [...(fm.name ? [`name: ${JSON.stringify(fm.name)}`] : []), ...(fm.description ? [`description: ${JSON.stringify(fm.description)}`] : [])];
+    })();
+  if (!always) lines.push('disable-model-invocation: true');
+  const rest = m ? src.slice(m[0].length) : /^\s*---/.test(src) ? `\n\n${src}` : null;
+  if (rest === null) return lines.length ? `---\n${lines.join('\n')}\n---\n\n${src}` : src;
+  return `---\n${lines.join('\n')}\n---${rest}`;
+}
+
+/** A frontmatter's lines for the kept keys, or undefined when it isn't in the one shape read here. */
+function keptFrontmatter(yaml: string): string[] | undefined {
+  // An anchor, alias or tag could give a kept key a value from elsewhere.
+  if (/(^[ \t]*|:[ \t]+|-[ \t]+|[[{,][ \t]*)[&*!][^\s[\]{},]/m.test(yaml)) return undefined;
+  const out: string[] = [];
+  let started = false;
+  let keep = false;
+  for (const line of yaml.split(/\r?\n/)) {
+    if (/^\s*(#.*)?$/.test(line) || /^[ \t]/.test(line)) {
+      // An indented line before any key isn't a key's value.
+      if (!started && line.trim() && !line.trim().startsWith('#')) return undefined;
+      if (keep) out.push(line);
+      continue;
+    }
+    const key = /^([A-Za-z0-9_-]+)[ \t]*:(?=[ \t]|$)/.exec(line);
+    if (!key) return undefined;
+    started = true;
+    const name = key[1].toLowerCase().replace(/[-_]/g, '');
+    keep = SKILL_KEYS_KEPT.has(name);
+    if (keep) out.push(line);
+  }
+  // Trailing blank lines of a dropped key's block aren't wanted.
+  while (out.length && !out[out.length - 1].trim()) out.pop();
+  return out;
 }
 
 /** Codex's agents/openai.yaml for a slash-only skill, keeping what the skill's own has. */

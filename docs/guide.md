@@ -411,9 +411,12 @@ and Send back. Threadbear also saves each plan in the thread's folder as
 `plans/<date>-<project>.md` (the folder's name if the thread isn't in a
 project), opens it in the panel beside the thread, and pins it in
 Highlights; a revised plan updates the same file until you say Go ahead.
-Stepping on from Plan first puts back the access the thread had. In Ask,
-the agent reads what it needs but changes nothing, whatever the access
-chip says, and just answers; it shows as an Ask chip beside the access
+Stepping on from Plan first puts back the access the thread had, or Ask
+before edits if Threadbear can't tell what that was (after a restart). In
+Ask, the agent reads what it needs but changes nothing, whatever the access
+chip says, and just answers: on Claude, shell commands and other tools that
+could change something (another MCP server's, most of Threadbear's own)
+are switched off for that turn, so it reads files and the web instead; it shows as an Ask chip beside the access
 chip (click it to turn it off) and stays on for the thread until you
 change it. Off, nothing shows and messages work as always. Settings (⌘,)
 > General can turn Shift-Tab's modes off.
@@ -1269,6 +1272,13 @@ otherwise), and paste or type its text: plain instructions, or a whole
 SKILL.md, which keeps its own header. Save (or ⌘Return) adds it, Always
 on, and it works like any other skill. Edit in its ... menu changes it,
 name and all.
+
+A skill only brings instructions. Anything in its header that would run
+or allow something by itself (`hooks`, `allowed-tools`, `mcpServers`,
+`permissionMode`) is left out of what threads get, for imported skills
+and your own alike, so a skill can't pre-approve shell commands or start a
+hook. A header Threadbear can't read line by line keeps only its name and
+description.
 
 Every skill works in every thread, on every login, Claude and Codex alike.
 With Always on, agents use it whenever it fits what you ask. Turn it off

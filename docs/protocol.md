@@ -3836,9 +3836,13 @@ rest of the running turn it goes into, changes nothing (`src/modes.ts`):
 - The agent gets the message after a line saying what the mode means:
   read what it needs but change nothing, and just answer.
 - Claude: a `PreToolUse` hook (the second, after the edit-mode one)
-  refuses `Edit`, `MultiEdit`, `Write` and `NotebookEdit`, whatever the
-  permission mode (full access included). Shell commands are left to the
-  instructions. Codex: the turn runs with `approvalPolicy: "never"` and a
+  refuses every tool but the ones that only read, look up or ask
+  (`READ_ONLY_ALLOWED` in `src/adapters/claude/adapter.ts`: Read, Glob,
+  Grep, the web tools, ToolSearch, Skill, subagents, todos, questions)
+  and the threadbear tools that never ask (`NEVER_ASK_TOOLS`), whatever
+  the permission mode (full access included). So Bash and the other
+  shells, edits, other MCP servers' tools and any tool not named are
+  refused; a subagent's calls go through the same hook. Codex: the turn runs with `approvalPolicy: "never"` and a
   read-only sandbox (network allowed).
 - The next message without a `mode` is an ordinary turn again. The mode is
   the app's to remember; the runner only sees it on each message.
@@ -3848,7 +3852,9 @@ planning: it's still taken, as Ask, and a logged `user.message` may carry
 it. Planning is Plan first (`permissionMode: "plan"`, see Plan first).
 Shift-Tab steps a composer through Plan first (setting the thread's
 permission mode, and putting the earlier one back when it steps on), Ask,
-then off.
+then off. The earlier mode is the app's note, made when the composer goes
+into Plan first from Shift-Tab or the access menu; with none (after a
+restart, or a mode the runner set), stepping on goes to `ask`, never `full`.
 
 **Plans as files.** Each `plan.proposed` is also saved as
 `plans/<YYYY-MM-DD>-<project or folder>.md` in the thread's folder (`-2`,
@@ -3889,7 +3895,15 @@ once nothing points at it.
 **Claude.** `plugin/` is a Claude Code plugin (`.claude-plugin/plugin.json`,
 name `threadbear`) with one folder per skill under `skills/`: its
 `SKILL.md` copied with `disable-model-invocation: true` added when `always`
-is false, and every other file a link into the store. Every Claude session
+is false, and every other file a link into the store. The copy keeps only
+the frontmatter keys that describe the skill (`SKILL_KEYS_KEPT` in
+`src/skills.ts`: name, description, when_to_use, argument-hint, license,
+metadata and the like); `hooks`, `allowed-tools`, `mcpServers`,
+`permissionMode` and anything else are left out, in every spelling, as
+the plugin is outside folder trust (Trusting a folder's Claude Code
+hooks). Frontmatter that isn't plain YAML with one key to a line (a quoted
+key, a flow mapping, an anchor, alias or tag) or that never closes is
+replaced by just its name and description. Every Claude session
 gets it (the SDK's `plugins`, i.e. `--plugin-dir`), whichever login and
 `CLAUDE_CONFIG_DIR` it runs on, so a skill reaches every login. `/name`
 and `/threadbear:name` both run it.

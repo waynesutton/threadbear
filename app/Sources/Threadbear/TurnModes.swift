@@ -49,13 +49,16 @@ extension AppModel {
         guard TurnModes.enabled else { return false }
         let mode = permission(for: key)
         if mode == .plan {
-            // Plan first to Ask: back to the access it had before.
-            setPermission(for: key, planPutBack.removeValue(forKey: key) ?? .full)
+            // Plan first to Ask: back to the access it had before. When this
+            // app never saw it go into Plan first (it was put there before a
+            // restart, or by the runner), Ask before edits: never more
+            // access than it may have had. Falling back to Full access
+            // raised it (Wayne, 7 Nov 2026).
+            setPermission(for: key, planPutBack[key] ?? .ask)
             turnModes[key] = .ask
         } else if turnModes[key] == .ask {
             turnModes[key] = nil
         } else {
-            planPutBack[key] = mode
             setPermission(for: key, .plan)
         }
         return true
@@ -65,7 +68,15 @@ extension AppModel {
         key == "new" ? newThreadPermission : threads[key]?.permissionMode ?? .full
     }
 
-    private func setPermission(for key: String, _ mode: PermissionMode) {
+    /// A composer's permission mode, from Shift-Tab or the access menu
+    /// alike, so going into Plan first either way notes the mode to put back.
+    func setPermission(for key: String, _ mode: PermissionMode) {
+        let from = permission(for: key)
+        if mode == .plan {
+            if from != .plan { planPutBack[key] = from }
+        } else {
+            planPutBack.removeValue(forKey: key)
+        }
         if key == "new" { newThreadPermission = mode } else { setPermission(key, mode) }
     }
 }

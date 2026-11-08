@@ -10,7 +10,7 @@ import type { TurnMode } from './store.ts';
 export function modeInstructions(_mode: TurnMode): string {
   return [
     '[Ask mode] The user just wants an answer. Read whatever you need, but change nothing:',
-    'no file edits and no commands that change files, data or state. Answer the question directly.',
+    'no file edits and no commands that change files, data or state (on Claude, shell commands and other tools that could change something are switched off for this turn). Answer the question directly.',
   ].join(' ');
 }
 

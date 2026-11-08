@@ -701,7 +701,7 @@ struct ThreadSettings {
     }
 
     private func setPermission(_ mode: PermissionMode) {
-        if let thread { app.setPermission(thread.id, mode) } else { app.newThreadPermission = mode }
+        app.setPermission(for: thread?.id ?? "new", mode)
     }
 }
 

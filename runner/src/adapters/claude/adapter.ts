@@ -274,8 +274,38 @@ export class ClaudeAdapter implements AgentAdapter {
 // (set by the caller), brings CLAUDE.md back without its settings (tried
 // on CLI 2.1.318, 5 Nov 2026), and the rest of the settings come in as flag
 // settings, which sit above user settings as project ones do.
-// What Plan and Ask mode turns may not use (modes.ts).
-const READ_ONLY_REFUSED = new Set(['Edit', 'MultiEdit', 'Write', 'NotebookEdit']);
+// What an Ask mode turn may use (modes.ts): Claude's tools that only read,
+// look things up or talk to Mike, and the threadbear tools that never ask
+// (NEVER_ASK_TOOLS). Everything else is refused, whatever the permission
+// mode: Bash and the other shells, every other MCP server's tools, and
+// any tool a newer CLI adds, until it's named here. Refusing only the
+// edit tools left Bash and MCP running (Wayne, 7 Nov 2026). A subagent's
+// calls come through the same hook, so it's held to the same.
+const READ_ONLY_ALLOWED = new Set([
+  'Read',
+  'Glob',
+  'Grep',
+  'LS',
+  'NotebookRead',
+  'WebFetch',
+  'WebSearch',
+  'ToolSearch',
+  'Skill',
+  'Task',
+  'Agent',
+  'TodoWrite',
+  'TodoRead',
+  'TaskCreate',
+  'TaskGet',
+  'TaskList',
+  'TaskUpdate',
+  'AskUserQuestion',
+  'ExitPlanMode',
+  'BashOutput',
+  'TaskOutput',
+  'ListMcpResourcesTool',
+  'ReadMcpResourceTool',
+]);
 
 export function untrustedSettings(cwd: string, settings: Record<string, unknown>): Pick<Options, 'settingSources' | 'settings' | 'additionalDirectories'> {
   return { settingSources: ['user'], additionalDirectories: [cwd], ...(Object.keys(settings).length ? { settings } : {}) };
@@ -762,16 +792,16 @@ class ClaudeSession implements AgentSession {
     return { hookSpecificOutput: { hookEventName: 'PreToolUse' as const, permissionDecision: 'ask' as const, permissionDecisionReason: "The folder's permission rules aren't trusted for this thread." } };
   }
 
-  /** Refuses tools that change files while the turn is read-only. */
+  /** Refuses every tool but READ_ONLY_ALLOWED and the never-ask ones while the turn is read-only. */
   private readOnlyCheck(input: HookInput): Record<string, unknown> {
     if (!this.readOnly || input.hook_event_name !== 'PreToolUse') return {};
     const tool = (input as { tool_name?: string }).tool_name ?? '';
-    if (!READ_ONLY_REFUSED.has(tool)) return {};
+    if (READ_ONLY_ALLOWED.has(tool) || (this.deps.neverAsk?.has(tool) && !this.deps.alwaysAsk?.has(tool))) return {};
     return {
       hookSpecificOutput: {
         hookEventName: 'PreToolUse',
         permissionDecision: 'deny',
-        permissionDecisionReason: "This turn is in Plan or Ask mode, so nothing may change: reply instead (in Plan mode, with the plan).",
+        permissionDecisionReason: `This turn is in Ask mode, so nothing may run or change: ${tool} is off for it. Answer from what you can read (Read, Grep, Glob, the web), and if a command would help, say which one rather than running it.`,
       },
     };
   }

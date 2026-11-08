@@ -138,6 +138,25 @@ test("F2/F8: a session started in Full with a folder's untrusted permission rule
   held.state.close!();
 });
 
+test('an Ask mode turn refuses Bash, MCP and every other tool that could change something, even in Full; only reading tools run', async () => {
+  const { session, state } = start([], { permissionMode: 'full' }, { neverAsk: NEVER_ASK_TOOLS, alwaysAsk: ALWAYS_ASK_TOOLS });
+  const pre = state.options.hooks.PreToolUse[1].hooks[0];
+  const decision = async (tool: string) => (await pre({ hook_event_name: 'PreToolUse', tool_name: tool, tool_input: {} }))?.hookSpecificOutput?.permissionDecision;
+  assert.equal(await decision('Bash'), undefined, 'an ordinary turn is left alone');
+  session.send({ id: 'turn-1', text: 'What does this do?', images: [], readOnly: true });
+  for (const tool of ['Bash', 'PowerShell', 'Edit', 'Write', 'NotebookEdit', 'KillShell', 'Monitor', 'CronCreate', 'mcp__convex__run', 'mcp__threadbear__send_message', 'mcp__threadbear__create_thread', 'mcp__threadbear__delete_thread', 'SomeNewTool']) {
+    assert.equal(await decision(tool), 'deny', `${tool} is refused in Ask`);
+  }
+  for (const tool of ['Read', 'Grep', 'Glob', 'WebFetch', 'WebSearch', 'Agent', 'Skill', 'ToolSearch', 'mcp__threadbear__end_turn', 'mcp__threadbear__read_thread']) {
+    assert.equal(await decision(tool), undefined, `${tool} runs in Ask`);
+  }
+  // The turn's over: the next ordinary message gets its tools back.
+  await state.frame!({ type: 'result', subtype: 'success', is_error: false, duration_ms: 1, session_id: 's', result: '' });
+  session.send({ id: 'turn-2', text: 'Now fix it', images: [] });
+  assert.equal(await decision('Bash'), undefined);
+  state.close!();
+});
+
 test('effort: sent at start, changed through flag settings, and read back from the Stop hook', async () => {
   const { session, state, outputs } = start([], { effort: 'low' });
   assert.equal(state.options.effort, 'low');
