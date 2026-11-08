@@ -142,6 +142,12 @@ Notes opens after that changed, the key moves to the file and the Keychain
 item is deleted. In the Keychain, macOS asked for your password after every
 update, as each update re-signs the app.
 They're never sent anywhere, and the runner never reads them.
+Pictures you choose under Settings > General > Look (the main window's
+background, and the Librarian page's picture and background when Customize
+the Librarian page is on; both off by default) are copied, scaled down,
+into `looks/` in the data folder; removing or replacing one deletes its
+copy. The rest of those settings are in the app's own settings. Neither
+is ever sent anywhere (`app/Sources/Threadbear/Looks.swift`).
 The bear at the top right of the sidebar, the first time it's clicked,
 makes `~/ThreadbearThreads/Bear` with a `CLAUDE.md` of instructions for
 its chats (never rewritten once it's there); Claude Code keeps the bear's
@@ -324,6 +330,7 @@ shared. Notifications say which profile they're from.
 | A Connectors gateway | whoever runs it | Only if one is set in `runner.json` or `~/.claude.json`. Its `/health` every few minutes (and once more at the end of a turn where a call to one of its services failed, to see if it needs signing in), and for a project with a Notion page, a Notion read or two every 5 minutes for its task board (`runner/src/notion-tasks.ts`), signed with the header the `headersHelper` command in that `connectors` entry prints, which it runs for each read |
 | GitHub | the skill's author | Only when you import or update a skill: the repo's commit and files, read without signing in. Nothing of yours is sent. |
 | GitHub, Hugging Face | Kyutai's | Only with the `voiceMode` experiment on, the first time Voice is used: the pocket-tts download, then its model and voices. Nothing of yours is sent. |
+| GitHub Contributions API (github-contributions-api.jogruber.de) | Jonathan Gruber's, a free public service | Only with Customize the Librarian page on (Settings > General > Look, off by default) and a GitHub user name typed in its GitHub activity: that user name and a year, when the page shows, at most once an hour for the current year. It answers with that profile's public contribution calendar. No token, nothing else of yours (`GitHubActivity` in `app/Sources/Threadbear/Looks.swift`). |
 | Sentry | Mike's | Nothing from your copy. Only a copy whose `origin` is Mike's own repo reports errors or uploads the app's debug symbols (`runner/src/sentry.ts`, `app/Sources/Threadbear/CrashReporting.swift`, `app/build-app.sh`). The App Store iPhone app sends anonymous crash reports. |
 
 An HTML file opened in the side pane (a mockup or report an agent made,
