@@ -96,6 +96,25 @@ File references are where to look.
   `mac-screen.json` in the data folder
   remembers what it's said about dialogs on the screen (below).
 
+Connectors setup is an experiment, off by default (`connectorsSetup`).
+Only when you press Set up in the Connectors panel, a thread clones
+plugbear (github.com/mikecann/plugbear, at the one commit
+`runner/src/connectors-catalog.ts` pins) into
+`~/Library/Application Support/Threadbear/plugbear-src` and runs its own
+installer, which puts the gateway and its config, secrets and state in
+`~/Library/Application Support/Connectors/`, a LaunchAgent
+(`local.connectors`) that keeps it listening on 127.0.0.1:8795 only, and a
+`connectors` command in `~/.local/bin`. Its `install-clients.sh` adds a
+`connectors` MCP server to each login's Claude Code config (and Codex's
+and the Grok CLI's), with a helper that reads each login's token from the
+Keychain. The thread also sets `connectors.url` in `runner.json`. Each Add
+in the panel is a thread that edits the gateway's `upstreams.json` and
+restarts it. plugbear's README says how to take it all out.
+
+With Outside agents on (`outsideAgents`), the runner keeps which agent key
+started which thread in `runner/agent-threads.json` (0600) in the data
+folder.
+
 Voice mode is an experiment, off by default: while it's off (`voiceMode`
 in `runner.json`'s `experiments`) there's no button, nothing below happens
 and macOS never asks for the microphone. On, the first time you use it
@@ -328,6 +347,7 @@ shared. Notifications say which profile they're from.
 | Anthropic, OpenAI | yours | Your threads, through the official CLIs on your own logins. With the `labReview` experiment on (off by default), a thread's code change, with your message and the agent's reply, goes to your other provider's CLI as a review thread, as if you'd started one. After a turn fails because the API couldn't be reached, the runner itself opens (and straight away closes) a connection to api.anthropic.com or chatgpt.com on port 443, at most once a minute, until one opens and the thread carries on. Nothing is sent over it (`runner/src/net-probe.ts`). |
 | Mike's push relay | Mike's | Only when a paired iPhone gets a notification. It's sent from your Convex deployment, not the Mac. The text is encrypted for the phone; the relay sees the device token and thread id (`convex/push.ts`, `docs/push-relay.md`). The first time, your deployment registers with it, giving its own address; the relay keeps that address and checks it by posting a one-time code back to your deployment's `/relay/verify` (`convex/http.ts`). |
 | A Connectors gateway | whoever runs it | Only if one is set in `runner.json` or `~/.claude.json`. Its `/health` every few minutes (and once more at the end of a turn where a call to one of its services failed, to see if it needs signing in), and for a project with a Notion page, a Notion read or two every 5 minutes for its task board (`runner/src/notion-tasks.ts`), signed with the header the `headersHelper` command in that `connectors` entry prints, which it runs for each read |
+| Your backend's `/mcp`, from outside agents | Convex, and the agents you give a key (Grok Bot runs at xAI) | Only with the Outside agents experiment on and a key made in the Connectors panel. An agent with a key can list and read threads (only ones it started, unless you allow all), and with a write key start Ask-mode threads and message those. What it reads goes to that agent's company. Keys are stored as hashes, expire, and are revoked from the panel |
 | GitHub | the skill's author | Only when you import or update a skill: the repo's commit and files, read without signing in. Nothing of yours is sent. |
 | GitHub, Hugging Face | Kyutai's | Only with the `voiceMode` experiment on, the first time Voice is used: the pocket-tts download, then its model and voices. Nothing of yours is sent. |
 | GitHub Contributions API (github-contributions-api.jogruber.de) | Jonathan Gruber's, a free public service | Only with Customize the Librarian page on (Settings > General > Look, off by default) and a GitHub user name typed in its GitHub activity: that user name and a year, when the page shows, at most once an hour for the current year. It answers with that profile's public contribution calendar. No token, nothing else of yours (`GitHubActivity` in `app/Sources/Threadbear/Looks.swift`). |
