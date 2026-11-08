@@ -1044,12 +1044,13 @@ test("R10: a live command's `&` can't outlive it: its process group gets SIGTERM
   const out = await runCommand('sleep 30 >/dev/null 2>&1 & echo $!', { cwd: dir, env: process.env, shell: ['/bin/sh', '-c'], killGroup: true });
   assert.equal(await gone(Number(out.text.trim()), 1000), true, 'the background sleep ended with the shell (SIGTERM)');
   // One that ignores SIGTERM gets SIGKILL once the grace is up.
-  const stubborn = await runCommand("trap '' TERM; sleep 30 >/dev/null 2>&1 & echo $!", { cwd: dir, env: process.env, shell: ['/bin/sh', '-c'], killGroup: true, killGraceMs: 300 });
+  const stubborn = await runCommand("trap '' TERM; sleep 30 >/dev/null 2>&1 & echo $!", { cwd: dir, env: process.env, shell: ['/bin/sh', '-c'], killGroup: true, killGraceMs: 1000 });
   const pid = Number(stubborn.text.trim());
   assert.ok(pid > 0);
   await new Promise((r) => setTimeout(r, 100));
   assert.equal(await gone(pid, 50), false, 'SIGTERM alone left it');
-  assert.equal(await gone(pid, 2000), true, 'SIGKILL ended it');
+  // Generous: on a loaded Mac the kill and the reaping both lag (7 Nov).
+  assert.equal(await gone(pid, 15_000), true, 'SIGKILL ended it');
   // And on a timeout: the shell itself ignoring SIGTERM, holding the output open.
   const started = Date.now();
   const timed = await runCommand("trap '' TERM; sleep 30", { cwd: dir, env: process.env, shell: ['/bin/sh', '-c'], killGroup: true, killGraceMs: 200, timeoutMs: 200 });

@@ -1936,7 +1936,7 @@ export function ownedPathProblem(p: string): string | undefined {
 function aclProblem(paths: string[]): string | undefined {
   let out: string;
   try {
-    out = execFileSync('/bin/ls', ['-led', '--', ...paths], { stdio: ['ignore', 'pipe', 'pipe'], timeout: 5000, maxBuffer: 1024 * 1024 }).toString();
+    out = execFileSync('/bin/ls', ['-led', '--', ...paths], { stdio: ['ignore', 'pipe', 'pipe'], timeout: 20_000, maxBuffer: 1024 * 1024 }).toString();
   } catch {
     return "its folders' access lists can't be read";
   }
@@ -1984,7 +1984,7 @@ function gitNewEnough(): boolean {
   if (gitVersion && Date.now() - gitVersion.at < 10 * 60_000) return gitVersion.ok;
   let ok = false;
   try {
-    const m = /git version (\d+)\.(\d+)/.exec(execFileSync('git', ['--version'], { stdio: ['ignore', 'pipe', 'ignore'], timeout: 5000 }).toString());
+    const m = /git version (\d+)\.(\d+)/.exec(execFileSync('git', ['--version'], { stdio: ['ignore', 'pipe', 'ignore'], timeout: 20_000 }).toString());
     ok = !!m && (Number(m[1]) > 2 || (Number(m[1]) === 2 && Number(m[2]) >= 31));
   } catch {
     ok = false;
@@ -1994,8 +1994,10 @@ function gitNewEnough(): boolean {
 }
 
 // git config --list --show-scope -z: scope, then key and value.
+// A long timeout: on a loaded Mac git took over 5s to start, and the
+// repo was refused as unreadable (7 Nov).
 function gitConfig(cwd: string, env: Record<string, string | undefined> = process.env): { scope: string; key: string; value?: string }[] {
-  const out = execFileSync('git', ['config', '--list', '--show-scope', '--includes', '-z'], { cwd, env: env as NodeJS.ProcessEnv, stdio: ['ignore', 'pipe', 'pipe'], timeout: 5000, maxBuffer: 4 * 1024 * 1024 }).toString();
+  const out = execFileSync('git', ['config', '--list', '--show-scope', '--includes', '-z'], { cwd, env: env as NodeJS.ProcessEnv, stdio: ['ignore', 'pipe', 'pipe'], timeout: 20_000, maxBuffer: 4 * 1024 * 1024 }).toString();
   const items = out.split('\0');
   const list: { scope: string; key: string; value?: string }[] = [];
   for (let i = 0; i + 1 < items.length; i += 2) {
