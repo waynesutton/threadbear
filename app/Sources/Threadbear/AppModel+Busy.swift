@@ -33,6 +33,7 @@ enum BusyKey {
     static let connectAgent = "connectAgent"
     static func revokeAgent(_ id: String?) -> String { "revokeAgent/\(id ?? "all")" }
     static let startRunner = "startRunner"
+    static let saveProfilePage = "saveProfilePage"
 }
 
 /// A busy key's words, for the banner.
