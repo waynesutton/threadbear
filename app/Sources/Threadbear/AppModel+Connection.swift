@@ -48,7 +48,7 @@ extension AppModel {
                 experiments = hello.experiments
                 // Voice mode is an experiment: turned off in runner.json
                 // since it started, it ends here.
-                if !VoiceMode.available { VoiceMode.shared.stop(); NoteDictation.shared.stop() }
+                if !VoiceMode.available { VoiceMode.shared.stop(); NoteDictation.shared.stop(); KeyDictation.shared.cancel() }
                 if hello.clis.isEmpty { loadClis() }
                 // Maybe a newer runner than last time.
                 highlightsUnsupported = false
