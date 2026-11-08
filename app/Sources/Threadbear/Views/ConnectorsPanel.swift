@@ -10,12 +10,14 @@ import ThreadbearCore
 /// itself out (as Updates' dots go).
 struct ConnectorsActivityButton: View {
     @Environment(AppModel.self) private var app
+    @AppStorage(ConnectorsText.Hidden.defaultsKey) private var hiddenRaw = ""
 
     var body: some View {
         let status = app.connectors
+        let hidden = ConnectorsText.Hidden.decode(hiddenRaw)
         ActivityButton(symbol: WindowDock.connectorsSymbol, title: "Connectors",
-                       tip: ConnectorsText.tooltip(status),
-                       dot: ConnectorsText.needsYou(status), quietDot: ConnectorsText.quiet(status),
+                       tip: ConnectorsText.tooltip(status, hiding: hidden),
+                       dot: ConnectorsText.needsYou(status, hiding: hidden), quietDot: ConnectorsText.quiet(status, hiding: hidden),
                        active: app.connectorsShown) {
             app.connectorsShown.toggle()
         }
@@ -32,9 +34,11 @@ struct ConnectorsActivityButton: View {
 struct ConnectorsPanel: View {
     @Environment(AppModel.self) private var app
     @State private var aboutShown = false
+    @AppStorage(ConnectorsText.Hidden.defaultsKey) private var hiddenRaw = ""
 
     var body: some View {
         let status = app.connectors
+        let hidden = ConnectorsText.Hidden.decode(hiddenRaw)
         ScrollView {
             VStack(alignment: .leading, spacing: zoomed(12)) {
                 HStack(alignment: .firstTextBaseline, spacing: zoomed(6)) {
@@ -75,17 +79,21 @@ struct ConnectorsPanel: View {
                         .foregroundStyle(status?.state == "unreachable" ? .primary : .secondary)
                         .fixedSize(horizontal: false, vertical: true)
                 }
-                ForEach(status?.services ?? []) { service in
+                ForEach(ConnectorsText.shown(status?.services ?? [], hiding: hidden)) { service in
                     ConnectorRow(service: service)
                 }
                 if let status, status.state == "ok", !status.catalog.isEmpty {
                     Divider().padding(.vertical, zoomed(2))
-                    AddServiceSection(catalog: status.catalog)
+                    AddServiceSection(catalog: ConnectorsText.shown(status.catalog, hiding: hidden))
                 }
-                if let agents = app.outsideAgents, agents.on {
+                // Hiding Connect an agent hides the section, unless a key
+                // is live: its Revoke is never out of reach.
+                if let agents = app.outsideAgents, agents.on,
+                   !hidden.contains(ConnectorsText.Hidden.grokBot) || !agents.keys.isEmpty {
                     Divider().padding(.vertical, zoomed(2))
-                    OutsideAgentsSection(agents: agents)
+                    OutsideAgentsSection(agents: agents, offerHidden: hidden.contains(ConnectorsText.Hidden.grokBot))
                 }
+                ShowHiddenMenu(items: ConnectorsText.Hidden.items(hidden, status: status, agents: app.outsideAgents))
             }
             .padding(zoomed(16))
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -146,6 +154,8 @@ private struct ConnectorRow: View {
                 .opacity(hovered ? 1 : 0.35)
                 .tip("Open \(service.title)'s page on \(ConnectorsText.host(app.connectors) ?? "the gateway") to sign out or reconnect")
             }
+            HideButton(id: ConnectorsText.Hidden.service(service.id), shown: hovered,
+                       tip: "Hide \(service.title) from this panel. Agents can still use it; the + below brings it back.")
         }
         .contentShape(Rectangle())
         .onHover { hovered = $0 }
@@ -171,6 +181,7 @@ private struct ConnectorsAbout: View {
         VStack(alignment: .leading, spacing: zoomed(8)) {
             Text("These are the services your agents get from the Connectors gateway\(host.map { " on \($0)" } ?? ""). Connect opens a service's sign-in page in your browser. The arrows open the gateway's own pages, to sign a service out or reconnect it.")
             Text("The runner checks every few minutes and when this panel opens. When an agent runs into a service that needs signing in, it asks you with a link to the page.")
+            Text("A row's × hides it from this panel only; agents can still use the service. The + hidden menu at the bottom brings it back.")
             Text("claude.ai's own connectors are signed in on claude.ai, for each login.")
             if let checked = status?.checkedAt {
                 Text("Last checked \(checked.formatted(date: .omitted, time: .shortened)).")
@@ -282,6 +293,7 @@ private struct CatalogRow: View {
     @Environment(AppModel.self) private var app
     let entry: ConnectorCatalogEntry
     @State private var noteShown = false
+    @State private var hovered = false
 
     var body: some View {
         HStack(alignment: .firstTextBaseline, spacing: zoomed(8)) {
@@ -310,19 +322,28 @@ private struct CatalogRow: View {
                 .controlSize(.small)
                 .busy(app.isBusy(BusyKey.addConnector(entry.id)))
                 .tip("Start a thread that adds \(entry.title) to the gateway")
+            HideButton(id: ConnectorsText.Hidden.catalog(entry.id), shown: hovered,
+                       tip: "Hide the \(entry.title) suggestion. The + below brings it back.")
         }
+        .contentShape(Rectangle())
+        .onHover { hovered = $0 }
     }
 }
 
 // MARK: Outside agents (an experiment)
 
-/// Agents in the cloud that use Threadbear through the backend's /mcp:
-/// each key with what it may do and Revoke, and Connect Grok Bot, which
+/// each key with what it may do and Revoke, and Connect an agent, which
+/// picks the app (Grok Bot, Notion, Slack: OutsideAgentApp), makes a key
+/// named for it and shows it once.
 /// makes a key and shows it once.
 private struct OutsideAgentsSection: View {
     @Environment(AppModel.self) private var app
     let agents: AgentsList
+    /// Mike hid Connect an agent; the section is only here for live keys.
+    var offerHidden = false
+    @State private var picked = OutsideAgentApp.grokBot.id
     @State private var write = false
+    @State private var offerHovered = false
     @State private var readAll = false
     @State private var formShown = false
 
@@ -343,30 +364,20 @@ private struct OutsideAgentsSection: View {
             }
             if let made = app.agentJustConnected {
                 NewKeyBox(made: made)
-            } else if agents.reason == nil {
+            } else if agents.reason == nil, !offerHidden {
                 if formShown {
-                    VStack(alignment: .leading, spacing: zoomed(6)) {
-                        Toggle("Can start Ask threads and message them", isOn: $write)
-                            .toggleStyle(.checkbox)
-                            .tip("Threads it starts always ask you before any tool runs")
-                        Toggle("Can read all my threads", isOn: $readAll)
-                            .toggleStyle(.checkbox)
-                            .tip("Without this it reads only threads it started. Archived threads are never shown.")
-                        HStack(spacing: zoomed(6)) {
-                            Button("Make key") { app.connectAgent(name: "Grok Bot", write: write, readAll: readAll) }
-                                .controlSize(.small)
-                                .busy(app.isBusy(BusyKey.connectAgent))
-                                .tip("Make a key for Grok Bot, shown once")
-                            Button("Cancel") { formShown = false }
-                                .controlSize(.small)
-                                .tip("Don't make a key")
-                        }
-                    }
-                    .font(.system(size: zoomed(12)))
+                    ConnectAgentForm(picked: $picked, write: $write, readAll: $readAll) { formShown = false }
                 } else {
-                    Button("Connect Grok Bot") { formShown = true }
-                        .controlSize(.small)
-                        .tip("Let Grok Bot list, read and start threads here through your backend")
+                    HStack(spacing: zoomed(6)) {
+                        Button("Connect an agent") { formShown = true }
+                            .controlSize(.small)
+                            .tip("Let Grok Bot, Notion or another agent list, read and start threads here through your backend")
+                        Spacer(minLength: 0)
+                        HideButton(id: ConnectorsText.Hidden.grokBot, shown: offerHovered,
+                                   tip: "Hide Connect an agent. The + below brings it back.")
+                    }
+                    .contentShape(Rectangle())
+                    .onHover { offerHovered = $0 }
                 }
             }
             if agents.keys.count > 1 {
@@ -378,6 +389,56 @@ private struct OutsideAgentsSection: View {
             }
         }
         .onChange(of: app.agentJustConnected == nil) { _, gone in if !gone { formShown = false } }
+    }
+}
+
+/// Which app, what it needs, its own guide, and what the key may do.
+/// Slack can't take a key, so it says why and has no Make key (8 Nov).
+private struct ConnectAgentForm: View {
+    @Environment(AppModel.self) private var app
+    @Binding var picked: String
+    @Binding var write: Bool
+    @Binding var readAll: Bool
+    let close: () -> Void
+
+    var body: some View {
+        let agent = OutsideAgentApp.all.first { $0.id == picked } ?? .grokBot
+        VStack(alignment: .leading, spacing: zoomed(8)) {
+            Picker("Agent", selection: $picked) {
+                ForEach(OutsideAgentApp.all) { Text($0.name).tag($0.id) }
+            }
+            .pickerStyle(.segmented)
+            .labelsHidden()
+            .tip("Which app to connect to Threadbear")
+            Text(agent.needs)
+                .font(.system(size: zoomed(11)))
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            Button("\(agent.name)'s guide") { OpenGate.openWeb(agent.docs) }
+                .buttonStyle(.link)
+                .font(.system(size: zoomed(11)))
+                .tip("Open \(agent.name)'s own page on adding an MCP server")
+            if agent.canConnect {
+                Toggle("Can start Ask threads and message them", isOn: $write)
+                    .toggleStyle(.checkbox)
+                    .tip("Threads it starts always ask you before any tool runs")
+                Toggle("Can read all my threads", isOn: $readAll)
+                    .toggleStyle(.checkbox)
+                    .tip("Without this it reads only threads it started. Archived threads are never shown.")
+            }
+            HStack(spacing: zoomed(6)) {
+                if agent.canConnect {
+                    Button("Make key") { app.connectAgent(name: agent.name, write: write, readAll: readAll) }
+                        .controlSize(.small)
+                        .busy(app.isBusy(BusyKey.connectAgent))
+                        .tip("Make a key for \(agent.name), shown once")
+                }
+                Button(agent.canConnect ? "Cancel" : "Close") { close() }
+                    .controlSize(.small)
+                    .tip(agent.canConnect ? "Don't make a key" : "Put this away")
+            }
+        }
+        .font(.system(size: zoomed(12)))
     }
 }
 
@@ -407,19 +468,27 @@ private struct AgentKeyRow: View {
     }
 }
 
-/// The address and the key, once, with what to do in Grok Bot.
+/// A new key, once, as the boxes of its app's form (Grok Bot's "Add a
+/// custom connector", Notion's Custom MCP server), each with what to put
+/// there. The key is copied, never shown.
 private struct NewKeyBox: View {
     @Environment(AppModel.self) private var app
     let made: AgentConnected
 
     var body: some View {
+        let agent = OutsideAgentApp.forKey(named: made.key.name)
         VStack(alignment: .leading, spacing: zoomed(8)) {
-            Text("Copy both now. The key isn't shown again once this panel closes.")
+            Text("Copy these now. The key can't be copied again once this panel closes.")
                 .font(.system(size: zoomed(12), weight: .medium))
                 .fixedSize(horizontal: false, vertical: true)
-            CopyLine(label: "Server", value: made.url, tip: "Copy the server address")
-            CopyLine(label: "Key", value: made.secret, tip: "Copy the key")
-            Text("In Grok Bot, open Connect apps, add a custom MCP server by its address, and give it the key as a bearer token. Then ask it to list your Threadbear threads.")
+            Text(agent.intro)
+                .font(.system(size: zoomed(11)))
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            ForEach(agent.form(url: made.url, secret: made.secret), id: \.label) { field in
+                FormLine(field: field)
+            }
+            Text(agent.outro)
                 .font(.system(size: zoomed(11)))
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
@@ -432,31 +501,99 @@ private struct NewKeyBox: View {
     }
 }
 
-private struct CopyLine: View {
+/// One box of an agent's form: its name, what goes in it, and a copy
+/// button for what's pasted.
+private struct FormLine: View {
     @Environment(AppModel.self) private var app
-    let label: String
-    let value: String
-    let tip: String
+    let field: ConnectorsText.AgentFormField
 
     var body: some View {
         HStack(spacing: zoomed(6)) {
-            Text(label)
+            Text(field.label)
                 .font(.system(size: zoomed(11)))
                 .foregroundStyle(.secondary)
-                .frame(width: zoomed(42), alignment: .leading)
-            Text(value)
-                .font(.system(size: zoomed(11), design: .monospaced))
+                .frame(width: zoomed(84), alignment: .leading)
+            Text(field.shown)
+                .font(.system(size: zoomed(11), design: field.copies ? .monospaced : .default))
+                .foregroundStyle(field.copies ? .primary : .secondary)
                 .lineLimit(1)
                 .truncationMode(.middle)
-                .textSelection(.enabled)
+                .tip(field.tip)
             Spacer(minLength: 0)
-            Button { app.copyToPasteboard(value) } label: {
-                Image(systemName: "doc.on.doc").font(.system(size: zoomed(11)))
+            if field.copies {
+                Button { app.copyToPasteboard(field.value) } label: {
+                    Image(systemName: "doc.on.doc").font(.system(size: zoomed(11)))
+                }
+                .buttonStyle(.borderless)
+                .foregroundStyle(.secondary)
+                .tip(field.tip)
             }
-            .buttonStyle(.borderless)
-            .foregroundStyle(.secondary)
-            .tip(tip)
         }
+    }
+}
+
+// MARK: Hiding rows
+
+/// The × at the end of a row: hides it from this panel only (nothing is
+/// signed out or removed). Shown while the row's hovered, and always there
+/// for VoiceOver and the keyboard.
+private struct HideButton: View {
+    let id: String
+    let shown: Bool
+    let tip: String
+    @AppStorage(ConnectorsText.Hidden.defaultsKey) private var hiddenRaw = ""
+    @FocusState private var focused: Bool
+
+    var body: some View {
+        Button {
+            var hidden = ConnectorsText.Hidden.decode(hiddenRaw)
+            hidden.insert(id)
+            hiddenRaw = ConnectorsText.Hidden.encode(hidden)
+        } label: {
+            Image(systemName: "xmark").font(.system(size: zoomed(9), weight: .semibold))
+        }
+        .buttonStyle(.borderless)
+        .foregroundStyle(.tertiary)
+        .focused($focused)
+        .opacity(shown || focused ? 1 : 0)
+        .accessibilityLabel("Hide")
+        .tip(tip)
+    }
+}
+
+/// The + under everything once something's hidden: each hidden row, to
+/// show it again, and Show all.
+private struct ShowHiddenMenu: View {
+    let items: [ConnectorsText.Hidden.Item]
+    @AppStorage(ConnectorsText.Hidden.defaultsKey) private var hiddenRaw = ""
+
+    var body: some View {
+        if !items.isEmpty {
+            IconMenu {
+                ForEach(items) { item in
+                    Button("Show \(item.title)", systemImage: "eye") { show([item.id]) }
+                }
+                if items.count > 1 {
+                    Divider()
+                    Button("Show all", systemImage: "eye") { show(items.map(\.id)) }
+                }
+            } label: {
+                Label(items.count == 1 ? "1 hidden" : "\(items.count) hidden", systemImage: "plus.circle")
+                    .font(.system(size: zoomed(11)))
+            }
+            .menuStyle(.borderlessButton)
+            .menuIndicator(.hidden)
+            .fixedSize()
+            .foregroundStyle(.secondary)
+            .tip("Bring back a connector you hid")
+            .padding(.top, zoomed(2))
+        }
+    }
+
+    private func show(_ ids: [String]) {
+        var hidden = ConnectorsText.Hidden.decode(hiddenRaw)
+        hidden.subtract(ids)
+        hiddenRaw = ConnectorsText.Hidden.encode(hidden)
     }
 }
 

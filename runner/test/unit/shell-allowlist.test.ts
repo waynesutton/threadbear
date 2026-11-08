@@ -833,8 +833,11 @@ test("R5: a repo's filter drivers don't run: its own are refused, and your own d
     spawnSync('/bin/sh', ['-c', cmd], { cwd: repo, env: e, timeout: 20_000 });
     assert.equal(fs.existsSync(marker), false, cmd);
   }
-  // (The same global filter does run for git status, which isn't on the list.)
-  spawnSync('/bin/sh', ['-c', 'git status --porcelain'], { cwd: repo, env: e, timeout: 20_000 });
+  // (The same global filter does run for git diff, which isn't on the
+  // list. Not git status: whether it reads the file again depends on the
+  // file's timestamps against the index's, and on a loaded Mac it didn't
+  // (8 Nov). git diff reads it through the filter every time.)
+  spawnSync('/bin/sh', ['-c', 'git diff'], { cwd: repo, env: e, timeout: 20_000 });
   assert.equal(fs.existsSync(marker), true, 'the test plays it right');
 });
 
