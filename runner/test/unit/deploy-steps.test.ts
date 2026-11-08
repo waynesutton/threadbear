@@ -23,6 +23,8 @@ function fakeIo(runs: Run[]) {
     say: (s: string) => said.push(s),
     write: (s: string) => said.push(s),
     error: () => {},
+    // A quiet Mac, so a rerun doesn't wait on the real load.
+    loadPerCore: () => 0,
     spawn: (cmd: string, args: string[], opts: { stdio: [unknown, number, number] }) => {
       calls.push({ cmd, args });
       const r = runs.shift();
@@ -109,4 +111,25 @@ test('the smoke test waits longer for a release to listen while the Mac is overl
   assert.equal(steps.smokeTimedOut(91_000, 5.2), false);
   assert.equal(steps.smokeTimedOut(9 * 60_000, 5.2), false);
   assert.equal(steps.smokeTimedOut(10 * 60_000 + 1, 5.2), true);
+});
+
+test('unitTests: the rerun waits for a loaded Mac to ease first', () => {
+  // 7 Nov: at a load of 60 on 12 cores, seven files failed alone too, on timing.
+  const output = 'test at test/unit/flaky.test.ts:12:3\n';
+  const { io, said, calls } = fakeIo([{ status: 1, output }, { status: 0 }]);
+  const loads = [5, 4, 1];
+  const slept: number[] = [];
+  steps.unitTests(c, {}, { ...io, loadPerCore: () => loads.shift() ?? 1, sleep: (ms: number) => slept.push(ms) });
+  assert.equal(calls.length, 2);
+  assert.equal(slept.length, 2, 'slept until the load fell');
+  assert.ok(said.some((s) => /busy/.test(s)), said.join('\n'));
+});
+
+test('unitTests: a Mac that stays loaded gets its rerun anyway, after the longest wait', () => {
+  const output = 'test at test/unit/flaky.test.ts:12:3\n';
+  const { io, calls } = fakeIo([{ status: 1, output }, { status: 0 }]);
+  let t = 0;
+  steps.unitTests(c, {}, { ...io, loadPerCore: () => 9, sleep: (ms: number) => (t += ms), now: () => t });
+  assert.equal(calls.length, 2);
+  assert.ok(t >= steps.CALM_WAIT_MS && t < steps.CALM_WAIT_MS + 60_000, String(t));
 });

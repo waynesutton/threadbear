@@ -92,9 +92,34 @@ export function unitTests(c, opts, io = {}) {
       say(`The second run passed (first run's output: ${e.logFile})`);
       return;
     }
+    waitForCalm(io);
     step(`Rerunning ${files.join(', ')}`, c.node ?? process.execPath, ['--test', '--test-reporter=spec', '--test-concurrency=1', ...TEST_LIMITS, ...files], opts, io);
     say(`Flaky: ${files.join(', ')} failed in the full run and passed alone (first run's output: ${e.logFile})`);
   }
+}
+
+// Before the rerun, wait up to CALM_WAIT_MS for the Mac's one-minute load
+// to fall to CALM_LOAD per core, then rerun whatever it is. On 7 Nov app
+// builds and other threads' tests had it at 60 on 12 cores, and seven files
+// failed alone too, on timing, holding the runner off main twice.
+export const CALM_LOAD = 1.5;
+export const CALM_WAIT_MS = 20 * 60_000;
+export function waitForCalm(io = {}) {
+  const {
+    say = console.log,
+    loadPerCore = () => os.loadavg()[0] / os.cpus().length,
+    sleep = (ms) => Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms),
+    now = Date.now,
+  } = io;
+  const start = now();
+  let load = loadPerCore();
+  if (load <= CALM_LOAD) return;
+  say(`The Mac is busy (load ${load.toFixed(1)} per core); waiting up to ${CALM_WAIT_MS / 60_000} minutes for it to ease before rerunning.`);
+  while (load > CALM_LOAD && now() - start < CALM_WAIT_MS) {
+    sleep(15_000);
+    load = loadPerCore();
+  }
+  say(`Rerunning at load ${load.toFixed(1)} per core after ${Math.round((now() - start) / 1000)}s.`);
 }
 
 function readOr(file) {
