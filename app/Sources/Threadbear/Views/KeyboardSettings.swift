@@ -251,7 +251,8 @@ private struct VoiceShortcutsSection: View {
     @AppStorage(VoiceKeys.triggerKey) private var trigger = VoiceTriggerKey.fn.rawValue
     @AppStorage(VoiceKeys.holdKey) private var hold = true
     @AppStorage(VoiceKeys.handsFreeKey) private var handsFree = true
-    @AppStorage(VoiceKeys.doubleTapKey) private var doubleTap = true
+    @AppStorage(VoiceKeys.shiftKey) private var shiftToggle = true
+    @AppStorage(VoiceKeys.doubleTapKey) private var doubleTap = false
     @AppStorage(VoiceKeys.commandModeKey) private var commandMode = false
     @AppStorage(VoiceKeys.commandKey) private var command = VoiceCommandKey.control.rawValue
 
@@ -273,7 +274,7 @@ private struct VoiceShortcutsSection: View {
                     HStack {
                         Spacer()
                         Button("Reset Voice Keys") { reset() }
-                            .tip("Back to Fn, Fn Space, a double tap of Fn and Fn Control")
+                            .tip("Back to Fn, Fn Space, Shift Fn and Fn Control, with double tap off")
                     }
                 }
             }
@@ -284,7 +285,8 @@ private struct VoiceShortcutsSection: View {
     private enum Row: String, CaseIterable {
         case hold = "Dictate while held, type in on release"
         case handsFree = "Start or stop hands-free dictation"
-        case doubleTap = "Double-tap to start hands-free"
+        case shift = "Start or stop hands-free, with Shift"
+        case doubleTap = "Double-tap to start hands-free (macOS may open emoji too)"
         case command = "Command Mode, held"
         case cancel = "Cancel"
     }
@@ -300,6 +302,7 @@ private struct VoiceShortcutsSection: View {
         switch row {
         case .hold: keys.holdDisplay
         case .handsFree: keys.handsFreeDisplay
+        case .shift: keys.shiftDisplay
         case .doubleTap: keys.doubleTapDisplay
         case .command: keys.commandDisplay
         case .cancel: "Esc"
@@ -323,6 +326,8 @@ private struct VoiceShortcutsSection: View {
                 onOff($hold, tip: "Hold \(keys.trigger.display) to dictate")
             case .handsFree:
                 onOff($handsFree, tip: "\(keys.handsFreeDisplay) starts and stops hands-free dictation")
+            case .shift:
+                onOff($shiftToggle, tip: "\(keys.shiftDisplay) starts and stops hands-free dictation")
             case .doubleTap:
                 onOff($doubleTap, tip: "Two quick taps of \(keys.trigger.display) start hands-free dictation")
             case .command:
@@ -348,6 +353,7 @@ private struct VoiceShortcutsSection: View {
         switch row {
         case .hold: hold
         case .handsFree: handsFree
+        case .shift: shiftToggle
         case .doubleTap: doubleTap
         case .command: commandMode
         case .cancel: true
@@ -366,7 +372,8 @@ private struct VoiceShortcutsSection: View {
         trigger = VoiceTriggerKey.fn.rawValue
         hold = true
         handsFree = true
-        doubleTap = true
+        shiftToggle = true
+        doubleTap = false
         command = VoiceCommandKey.control.rawValue
     }
 }
