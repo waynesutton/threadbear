@@ -71,6 +71,8 @@ struct SettingsPage: View {
             Divider()
             ScrollView {
                 SettingsView(inPanel: true)
+                    // Off the panel's edges while it's narrower than Settings' widest.
+                    .padding(.horizontal, zoomed(24))
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, zoomed(16))
             }

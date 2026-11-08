@@ -1655,6 +1655,10 @@ or picking a thread closes Settings and puts you back. To have Settings in
 a window of its own instead, set Open Settings in to Its own window in
 Settings > General.
 
+Over the main panel, Settings widens with the window, up to the width its
+rows reach. Its own window can be dragged wider too; each tab still sets
+how tall it is.
+
 ### The activity log
 
 Turn on Keep an activity log in Settings (⌘,) > General and the app notes

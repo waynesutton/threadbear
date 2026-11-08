@@ -182,6 +182,13 @@ enum Automation {
             }
             app.settingsTab = tab
         }
+        // {"page": true}: over the main panel, as Open Settings in Main
+        // window has it, instead of the window; false closes the page.
+        if let page = c["page"] as? Bool {
+            app.showsSettingsPage = page
+            try? await Task.sleep(for: .milliseconds(200))
+            return "ok page \(page ? "shown" : "closed") \(app.settingsTab.rawValue)"
+        }
         if SettingsWindow.current?.isVisible != true { app.settingsRequest += 1 }
         for _ in 0..<200 where SettingsWindow.current?.isVisible != true {
             try? await Task.sleep(for: .milliseconds(15))
@@ -1105,6 +1112,11 @@ enum Automation {
             if let id = c["review"] as? String {
                 guard let review = app.reviewWindows.values.first(where: { $0.session.review.id == id })?.window else { return "error that review isn't open" }
                 window = review
+            }
+            // {"settings": true}: the Settings window (open it with `settings`).
+            if c["settings"] as? Bool == true {
+                guard let settings = SettingsWindow.current, settings.isVisible else { return "error the Settings window isn't open" }
+                window = settings
             }
             window.setContentSize(NSSize(width: number(c["w"]) ?? 1240, height: number(c["h"]) ?? 820))
             let size = AppDump.contentSize(window)

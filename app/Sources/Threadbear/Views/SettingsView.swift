@@ -43,9 +43,29 @@ struct SettingsView: View {
                 .tabItem { Label("Keyboard", systemImage: "keyboard") }
                 .tag(SettingsTab.keyboard)
         }
-        .frame(width: 540)
+        // Grows with the main panel or the window rather than sitting at one
+        // width, so more options (and a list of sections down the left, one
+        // day) have room. The panel stops where a form's rows do; the window
+        // goes as wide as it's dragged.
+        .frame(minWidth: SettingsLayout.minWidth,
+               idealWidth: SettingsLayout.idealWidth,
+               maxWidth: inPanel ? SettingsLayout.panelMaxWidth : .infinity)
         .background { if !inPanel { SettingsWindowFinder() } }
     }
+}
+
+/// Settings' widths, in one place for the page over the main panel and the
+/// window.
+enum SettingsLayout {
+    /// Narrowest it goes: every tab's title still fits along the top.
+    static let minWidth: CGFloat = 540
+    /// What the window opens at.
+    static let idealWidth: CGFloat = 760
+    /// Widest over the main panel. A grouped Form stops its rows at about
+    /// 700 points of its own accord (macOS 26, and contentMargins doesn't
+    /// move it), so past this the tabs' box would only gain empty sides.
+    /// A sidebar of sections would add its width to this.
+    static let panelMaxWidth: CGFloat = 780
 }
 
 /// What the runner's settings tabs show until there are settings to show.
@@ -799,16 +819,30 @@ struct SettingsSection<Content: View>: View {
 private struct SettingsWindowFinder: NSViewRepresentable {
     func makeNSView(context: Context) -> NSView {
         let view = NSView()
-        DispatchQueue.main.async { SettingsWindow.current = view.window }
+        DispatchQueue.main.async {
+            SettingsWindow.current = view.window
+            if let window = view.window { SettingsWindow.makeResizable(window) }
+        }
         return view
     }
 
     func updateNSView(_ nsView: NSView, context: Context) {
-        if let window = nsView.window { SettingsWindow.current = window }
+        if let window = nsView.window {
+            SettingsWindow.current = window
+            SettingsWindow.makeResizable(window)
+        }
     }
 }
 
 @MainActor
 enum SettingsWindow {
     static weak var current: NSWindow?
+
+    /// A Settings scene's window comes fixed size; this one can be dragged
+    /// wider (each tab still sets its height).
+    static func makeResizable(_ window: NSWindow) {
+        guard !window.styleMask.contains(.resizable) else { return }
+        window.styleMask.insert(.resizable)
+        window.contentMinSize.width = SettingsLayout.minWidth
+    }
 }
