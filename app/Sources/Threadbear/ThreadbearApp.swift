@@ -180,8 +180,6 @@ struct ThreadbearApp: App {
             SettingsView()
                 .environment(app)
         }
-        // Drag it wider than it opens; each tab still sets its height.
-        .windowResizability(.contentMinSize)
         // The app menu's Settings… is replaced on the Settings scene itself:
         // replaced from the main window's commands, the scene still added its
         // own, and the menu had two (Wayne, 7 Nov).
