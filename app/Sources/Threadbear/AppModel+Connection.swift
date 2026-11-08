@@ -169,6 +169,9 @@ extension AppModel {
                 connectors = status
             case .settingsUpdated(let settings):
                 receive(settings)
+                // An experiment switched (Connectors setup, Outside agents)
+                // changes what the Connectors panel offers.
+                loadConnectors()
             case .skillsUpdated(let list, let enabled):
                 receive(skills: list, enabled: enabled)
             case .standingInstructions(let instructions):
