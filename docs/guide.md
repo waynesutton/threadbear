@@ -635,7 +635,13 @@ tab has a dot and the bar says Edited, then a quiet Saved when it lands.
 ⌘S saves at once. If an agent changes the file while you have changes
 that aren't saved, Threadbear never writes over it: a bar asks whether to
 take the file's version or keep yours. The eye at the top shows the file
-as it reads (Markdown drawn) and the pencil goes back to editing.
+as it reads and the pencil goes back to editing.
+
+Markdown files open drawn, as a page to read: headings, lists, tables,
+code and pictures, with the lines kept to a comfortable width. The menu
+at the top switches between Preview (drawn) and Markdown (the raw text,
+ready to type in, saved as above), and the next Markdown file you open
+shows the way you last picked.
 
 Two switches in Settings (⌘,) > General > Files change this, both on
 until you turn them off. Turn off Save files automatically and nothing is

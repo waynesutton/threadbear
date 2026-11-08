@@ -47,6 +47,20 @@ final class FileEditorModeTests: XCTestCase {
         XCTAssertTrue(FileAutosave.isOn)
     }
 
+    /// Markdown opens drawn (Preview) even with the editor on, until its
+    /// bar's menu picks Markdown; other text follows the editor setting.
+    func testMarkdownOpensAsPreviewUntilMarkdownIsPicked() {
+        defer { UserDefaults.standard.removeObject(forKey: MarkdownView.key) }
+        UserDefaults.standard.removeObject(forKey: MarkdownView.key)
+        XCTAssertEqual(MarkdownView.current, .preview)
+        XCTAssertFalse(MarkdownView.opensEditing(path: "/tmp/README.md", editorMode: true))
+        XCTAssertFalse(MarkdownView.opensEditing(path: "/tmp/notes.MDX", editorMode: true))
+        XCTAssertTrue(MarkdownView.opensEditing(path: "/tmp/hello.ts", editorMode: true))
+        XCTAssertFalse(MarkdownView.opensEditing(path: "/tmp/hello.ts", editorMode: false))
+        MarkdownView.current = .markdown
+        XCTAssertTrue(MarkdownView.opensEditing(path: "/tmp/README.markdown", editorMode: false), "the pick is remembered")
+    }
+
     func testAutosaveWritesASecondAfterTyping() {
         let (controller, window) = editor(mode: true)
         defer { controller.stop(); window.close() }

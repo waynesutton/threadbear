@@ -206,7 +206,8 @@ extension AppModel {
         var preview = preview
         preview.opened = (panePreview[threadId]?.opened ?? 0) + 1
         // Edit files like an editor: a text file opens ready to type in.
-        if FileEditorMode.isOn, preview.away == nil, let path = preview.fileURL?.path,
+        // Markdown opens as its bar's menu last left it (MarkdownView).
+        if preview.away == nil, let path = preview.fileURL?.path, MarkdownView.opensEditing(path: path),
            TextFileView.shows(path), TextFileView.canEdit(path), PreviewRules.viewer(forPath: path) != .web {
             preview.editing = true
         }

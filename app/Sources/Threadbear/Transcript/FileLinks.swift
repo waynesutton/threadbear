@@ -35,6 +35,45 @@ enum FileEditorMode {
     static var isOn: Bool { UserDefaults.standard.object(forKey: key) as? Bool ?? true }
 }
 
+/// How a Markdown file shows in the panel: Preview draws it as a page
+/// (headings, lists, tables, pictures), Markdown is its raw text, ready to
+/// type in. The menu in the panel's bar switches one file and remembers the
+/// choice for the next, so Markdown opens drawn even while Edit files like
+/// an editor opens code ready to type in (Wayne, 7 Nov: a `.md` opened as
+/// raw text, where he wanted to read it like a doc).
+enum MarkdownView: String, CaseIterable {
+    case preview
+    case markdown
+
+    static let key = "filesMarkdownView"
+
+    static var current: MarkdownView {
+        get { UserDefaults.standard.string(forKey: key).flatMap(MarkdownView.init(rawValue:)) ?? .preview }
+        set { UserDefaults.standard.set(newValue.rawValue, forKey: key) }
+    }
+
+    var title: String {
+        switch self {
+        case .preview: "Preview"
+        case .markdown: "Markdown"
+        }
+    }
+
+    var symbol: String {
+        switch self {
+        case .preview: "doc.richtext"
+        case .markdown: "chevron.left.forwardslash.chevron.right"
+        }
+    }
+
+    /// Whether a text file the panel can edit opens with its raw text up
+    /// for typing: Markdown by this choice, anything else by Edit files
+    /// like an editor.
+    static func opensEditing(path: String, editorMode: Bool = FileEditorMode.isOn, markdown: MarkdownView = current) -> Bool {
+        PreviewRules.isMarkdown(path) ? markdown == .markdown : editorMode
+    }
+}
+
 /// What a file link in the transcript can do, from its right-click menu.
 /// The menu also sets which one a plain click does.
 enum FileLinkAction: String, CaseIterable {
