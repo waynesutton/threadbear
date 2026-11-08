@@ -89,10 +89,10 @@ export type ExperimentId = string;
 
 // Read from runner.json each time, so turning one on or off takes effect
 // at the next turn, with no restart.
-export function experimentOn(home: string, id: ExperimentId): boolean {
+export function experimentOn(home: string, id: ExperimentId, list: readonly Experiment[] = EXPERIMENTS): boolean {
   const said = readRunnerJson(home).experiments?.[id];
   if (typeof said === 'boolean') return said;
-  return EXPERIMENTS.find((x) => x.id === id)?.on ?? false;
+  return list.find((x) => x.id === id)?.on ?? false;
 }
 
 // The ids of every experiment that's on for this runner, for hello's

@@ -187,6 +187,25 @@ test('settings: update saves to runner.json, applies at once, and a bad field ch
   assert.equal(s.cfg.idleMs, 10 * 60_000, 'a refused update changed nothing');
 });
 
+test('settings: experiments lists each with its switch, and update saves only known ids', () => {
+  const s = settingsSetup();
+  const file = path.join(s.home, 'runner.json');
+  fs.writeFileSync(file, JSON.stringify({ experiments: { voiceMode: true } }));
+  const listed = s.svc.get().experiments;
+  assert.ok(listed.length > 0);
+  assert.equal(listed.find((x) => x.id === 'voiceMode')?.on, true);
+  assert.equal(listed.find((x) => x.id === 'keepAwake')?.on, false);
+  assert.ok(listed.every((x) => x.name && x.does), 'each has a name and what it does');
+  const r = s.methods['settings.update']({ experiments: { keepAwake: true } }) as { settings: any };
+  assert.equal(r.settings.experiments.find((x: any) => x.id === 'keepAwake').on, true);
+  assert.deepEqual(JSON.parse(fs.readFileSync(file, 'utf8')).experiments, { voiceMode: true, keepAwake: true }, 'the others are kept');
+  assert.equal(s.published.at(-1)?.method, 'settings.updated');
+  for (const bad of [{ experiments: { nope: true } }, { experiments: { keepAwake: 'yes' } }, { experiments: [] }, { experiments: null }]) {
+    assert.throws(() => s.methods['settings.update'](bad), (e: RpcError) => e.code === ErrorCode.badParams, JSON.stringify(bad));
+  }
+  assert.deepEqual(JSON.parse(fs.readFileSync(file, 'utf8')).experiments, { voiceMode: true, keepAwake: true }, 'a refused update changed nothing');
+});
+
 test("settings: bringIn is every 5 days until changed, and keeps the rest of runner.json's releases", () => {
   const s = settingsSetup();
   assert.equal(s.svc.get().bringIn, 5);

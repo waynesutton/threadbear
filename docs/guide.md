@@ -1033,9 +1033,12 @@ to `f20`.
 <!-- slug: experiments -->
 
 Some new features start as experiments: off unless you turn them on, while
-they're tried out. Each has a switch under `experiments` in `runner.json`
-in Threadbear's data folder, read at every turn, so there's nothing to
-restart:
+they're tried out. Turn one on or off in Settings > General > Experiments
+(the ⓘ beside each says what it does). Nothing restarts, except Voice mode,
+which lives in the app and takes effect when you quit and reopen
+Threadbear. The switches are kept under `experiments` in `runner.json` in
+Threadbear's data folder, read at every turn, so an agent can set them
+there too:
 
 ```json
 "experiments": { "labReview": true }
