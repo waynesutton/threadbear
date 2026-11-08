@@ -738,6 +738,20 @@ comes up. Bumping the rules re-sends nothing; `scrub-stored.mjs` covers this tab
 but it's the one table where a run over everything costs real I/O.
 
 
+## The profile page (8 Nov 2026)
+
+One `profile` row (`convex/profile.ts`), about 3 KB: what Mike turned on
+for his public page at `/@<handle>`, written by the owner runner
+(`profile:publish`, owner key only) on Save and then at most hourly when it
+has changed, so a day costs at most 24 writes and usually one. Its picture
+and background are two files in storage, deleted when replaced or turned
+off. `profile:view` is public: the row by handle when published, or for a
+valid phone token (Mike's own browser) when not; it reads one row and no
+thread, however many people open the page. `/@<handle>` is served by a GET
+`/` route in `http.ts` that puts the page's name, bio and picture in the
+meta tags and hands every other path to the static-hosting component's
+handler.
+
 ## Outside agents (8 Nov 2026, an experiment)
 
 Grok Bot and other agents that run in the cloud use Threadbear as a

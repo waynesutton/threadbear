@@ -166,7 +166,18 @@ background, and the Librarian page's picture and background when Customize
 the Librarian page is on; both off by default) are copied, scaled down,
 into `looks/` in the data folder; removing or replacing one deletes its
 copy. The rest of those settings are in the app's own settings. Neither
-is ever sent anywhere (`app/Sources/Threadbear/Looks.swift`).
+is ever sent anywhere (`app/Sources/Threadbear/Looks.swift`), except as
+below for a profile page.
+The public profile page (the Customize panel's Profile page section, none
+until you Save one) is kept in `profile.json` in the runner's data folder.
+The runner sends your Convex deployment only the parts you turned on: your
+handle, name, line and links, the Librarian page's picture and background
+(a scaled copy of the bear, made once into `looks/`, when the picture is
+the bear), counts of threads per day and the numbers, the titles and thread
+counts of projects you ticked, and your GitHub user name. It sends it when
+you Save, then checks every hour and sends again only if something changed
+(`runner/src/public-profile.ts`). A visitor's browser fetches the GitHub
+activity from the GitHub Contributions API itself.
 The bear at the top right of the sidebar, the first time it's clicked,
 makes `~/ThreadbearThreads/Bear` with a `CLAUDE.md` of instructions for
 its chats (never rewritten once it's there); Claude Code keeps the bear's
@@ -350,6 +361,7 @@ shared. Notifications say which profile they're from.
 | Your backend's `/mcp`, from outside agents | Convex, and the agents you give a key (Grok Bot runs at xAI) | Only with the Outside agents experiment on and a key made in the Connectors panel. An agent with a key can list and read threads (only ones it started, unless you allow all), and with a write key start Ask-mode threads and message those. What it reads goes to that agent's company. Keys are stored as hashes, expire, and are revoked from the panel |
 | GitHub | the skill's author | Only when you import or update a skill: the repo's commit and files, read without signing in. Nothing of yours is sent. |
 | GitHub, Hugging Face | Kyutai's | Only with the `voiceMode` experiment on, the first time Voice is used: the pocket-tts download, then its model and voices. Nothing of yours is sent. |
+| Your Convex deployment, for the profile page | yours | Only once you Save a profile page in the Librarian page's Customize panel: the parts you turned on (see the data folder above), on Save and then at most once an hour when something changed. Published, anyone with its link can read them; Take the page down deletes them. |
 | GitHub Contributions API (github-contributions-api.jogruber.de) | Jonathan Gruber's, a free public service | Only with Customize the Librarian page on (Settings > General > Look, off by default) and a GitHub user name typed in its GitHub activity: that user name and a year, when the page shows, at most once an hour for the current year. It answers with that profile's public contribution calendar. No token, nothing else of yours (`GitHubActivity` in `app/Sources/Threadbear/Looks.swift`). |
 | Sentry | Mike's | Nothing from your copy. Only a copy whose `origin` is Mike's own repo reports errors or uploads the app's debug symbols (`runner/src/sentry.ts`, `app/Sources/Threadbear/CrashReporting.swift`, `app/build-app.sh`). The App Store iPhone app sends anonymous crash reports. |
 

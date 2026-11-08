@@ -1540,6 +1540,20 @@ export class ConvexSync {
     return typeof r === 'number' ? r : 0;
   }
 
+  // The public profile page (public-profile.ts, convex/profile.ts): the whole
+  // row, or none to take the page down. Owner key only, on the backend.
+  async publishProfile(profile: Record<string, unknown> | undefined): Promise<void> {
+    this.mustBeOn();
+    await this.backend('mutation', 'profile:publish', { key: this.deps.key, ...(profile ? { profile } : {}) });
+  }
+
+  /** A picture for the profile page into file storage; its storage id. */
+  async uploadProfilePicture(bytes: Uint8Array, mediaType: string): Promise<string> {
+    this.mustBeOn();
+    const url = (await this.backend('mutation', 'profile:uploadUrl', { key: this.deps.key })) as string;
+    return this.upload(url, bytes, mediaType);
+  }
+
   // The `pocket` tool (threadbear-mcp.ts). Straight to the backend: the cards
   // live there, for the phone, and aren't kept on any runner.
   async savePocketCard(card: PocketCardInput): Promise<'added' | 'replaced'> {
