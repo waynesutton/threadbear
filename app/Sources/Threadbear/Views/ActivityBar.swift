@@ -107,6 +107,9 @@ struct ActivityBar: View {
         .padding(.bottom, zoomed(10))
         .frame(width: Self.width)
         .frame(maxHeight: .infinity)
+        // Opaque, as the rail on the right is: a dock wider than its room
+        // in a narrow window runs under both.
+        .background(Color(nsColor: .windowBackgroundColor))
         .overlay(alignment: .trailing) {
             Rectangle().fill(.separator).frame(width: 0.5)
         }
