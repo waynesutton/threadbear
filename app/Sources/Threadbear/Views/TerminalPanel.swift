@@ -119,12 +119,12 @@ private struct TerminalTabButton: View {
         .onTapGesture(perform: select)
         .simultaneousGesture(TapGesture(count: 2).onEnded { startRenaming() })
         .onHover { hovering = $0 }
-        .contextMenu {
-            Button("Rename…", action: startRenaming)
-            if tab.name != nil { Button("Use the Shell's Name") { tab.name = nil } }
+        .iconContextMenu {
+            Button("Rename…", systemImage: "pencil", action: startRenaming)
+            if tab.name != nil { Button("Use the Shell's Name", systemImage: "arrow.uturn.backward") { tab.name = nil } }
             if closable {
                 Divider()
-                Button("Close Terminal", action: close)
+                Button("Close Terminal", systemImage: "xmark", action: close)
             }
         }
         .tip(tab.ended ? "This shell has ended" : "Switch to \(tab.title). Double-click to rename it")
