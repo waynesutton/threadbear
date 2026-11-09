@@ -10,6 +10,12 @@ public enum TerminalLinks {
     /// The web address under `column` in a line of the terminal (one
     /// Character per cell), or nil when there isn't one there.
     public static func link(in line: String, at column: Int) -> URL? {
+        span(in: line, at: column)?.url
+    }
+
+    /// The web address under `column` and the cells it covers, for
+    /// underlining it while the pointer is over it.
+    public static func span(in line: String, at column: Int) -> (columns: Range<Int>, url: URL)? {
         let chars = Array(line)
         guard column >= 0, column < chars.count, !stops(chars[column]) else { return nil }
         var start = column
@@ -22,7 +28,7 @@ public enum TerminalLinks {
             let lower = word.distance(from: word.startIndex, to: found.lowerBound) + start
             let upper = word.distance(from: word.startIndex, to: found.upperBound) + start
             guard column >= lower, column < upper else { continue }
-            if let url = url(from: String(word[found])) { return url }
+            if let url = url(from: String(word[found])) { return (lower..<upper, url) }
         }
         return nil
     }

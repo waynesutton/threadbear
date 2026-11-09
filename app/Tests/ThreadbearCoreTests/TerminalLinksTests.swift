@@ -37,6 +37,13 @@ final class TerminalLinksTests: XCTestCase {
         XCTAssertNil(link("http:// nothing", at: "http"))
     }
 
+    func testSpanCoversJustTheLink() {
+        let line = "  Local:   http://localhost:5175/."
+        let span = TerminalLinks.span(in: line, at: 14)
+        XCTAssertEqual(span?.columns, 11..<33)
+        XCTAssertEqual(span?.url.absoluteString, "http://localhost:5175/")
+    }
+
     func testOutOfRangeColumns() {
         XCTAssertNil(TerminalLinks.link(in: "http://localhost:1", at: -1))
         XCTAssertNil(TerminalLinks.link(in: "http://localhost:1", at: 99))

@@ -59,6 +59,8 @@ private struct TerminalTabStrip: View {
     }
 }
 
+/// One tab: click to pick it, double-click (or Rename… in its right-click
+/// menu) to give it a name of your own, ✕ to close it.
 private struct TerminalTabButton: View {
     @ObservedObject var tab: TerminalTab
     let selected: Bool
@@ -66,15 +68,30 @@ private struct TerminalTabButton: View {
     let select: () -> Void
     let close: () -> Void
     @State private var hovering = false
+    @State private var renaming = false
+    @State private var draft = ""
+    @FocusState private var fieldFocused: Bool
 
     var body: some View {
         HStack(spacing: zoomed(4)) {
-            Text(tab.title)
-                .font(.system(size: zoomed(11.5), weight: selected ? .medium : .regular))
-                .foregroundStyle(selected ? .primary : .secondary)
-                .lineLimit(1)
-                .truncationMode(.middle)
-                .frame(maxWidth: zoomed(140), alignment: .leading)
+            if renaming {
+                TextField("Name", text: $draft)
+                    .textFieldStyle(.plain)
+                    .font(.system(size: zoomed(11.5), weight: .medium))
+                    .frame(width: zoomed(120))
+                    .focused($fieldFocused)
+                    .onSubmit(commit)
+                    .onExitCommand { renaming = false }
+                    .onChange(of: fieldFocused) { _, focused in if !focused && renaming { commit() } }
+                    .tip("Press Return to keep the name, Escape to leave it. Empty goes back to the shell's own")
+            } else {
+                Text(tab.title)
+                    .font(.system(size: zoomed(11.5), weight: selected ? .medium : .regular))
+                    .foregroundStyle(selected ? .primary : .secondary)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                    .frame(maxWidth: zoomed(140), alignment: .leading)
+            }
             if closable {
                 Button(action: close) {
                     Image(systemName: "xmark")
@@ -97,12 +114,38 @@ private struct TerminalTabButton: View {
             in: RoundedRectangle(cornerRadius: zoomed(5))
         )
         .contentShape(Rectangle())
+        // Both at once, so a single click picks the tab without waiting to
+        // see whether a second click is coming.
         .onTapGesture(perform: select)
+        .simultaneousGesture(TapGesture(count: 2).onEnded { startRenaming() })
         .onHover { hovering = $0 }
-        .tip(tab.ended ? "This shell has ended" : "Switch to \(tab.title)")
+        .contextMenu {
+            Button("Rename…", action: startRenaming)
+            if tab.name != nil { Button("Use the Shell's Name") { tab.name = nil } }
+            if closable {
+                Divider()
+                Button("Close Terminal", action: close)
+            }
+        }
+        .tip(tab.ended ? "This shell has ended" : "Switch to \(tab.title). Double-click to rename it")
         .accessibilityElement(children: .combine)
         .accessibilityAddTraits(selected ? [.isButton, .isSelected] : .isButton)
+        .accessibilityAction(named: "Rename") { startRenaming() }
         .accessibilityAction(named: "Close") { if closable { close() } }
+    }
+
+    private func startRenaming() {
+        select()
+        draft = tab.title
+        renaming = true
+        DispatchQueue.main.async { fieldFocused = true }
+    }
+
+    private func commit() {
+        guard renaming else { return }
+        renaming = false
+        let name = draft.trimmingCharacters(in: .whitespacesAndNewlines)
+        tab.name = name.isEmpty ? nil : String(name.prefix(60))
     }
 }
 
@@ -153,45 +196,148 @@ private struct TerminalHost: NSViewRepresentable {
     }
 }
 
-/// A terminal that knows what's printed where, for ⌘-click on a link.
+/// A terminal that knows what's printed where: a web address under the
+/// pointer is underlined, with a pointing hand and a tip, and ⌘-click
+/// opens it (TerminalSessions.watchForLinkClicks).
 final class ThreadTerminalView: LocalProcessTerminalView {
+    private lazy var hover = LinkHover(terminal: self)
+    private let underline = LinkUnderlineView()
+
+    /// Starts following the pointer for links. Its own tracking area, as
+    /// SwiftTerm's mouseMoved can't be overridden from here.
+    func watchLinks() {
+        underline.isHidden = true
+        addSubview(underline)
+        addTrackingArea(NSTrackingArea(rect: .zero, options: [.mouseMoved, .mouseEnteredAndExited, .activeInActiveApp, .inVisibleRect], owner: hover))
+    }
+
+    private var cell: CGSize {
+        let font = self.font as CTFont
+        let height = ceil(CTFontGetAscent(font) + CTFontGetDescent(font) + CTFontGetLeading(font))
+        let width = self.font.advancement(forGlyph: self.font.glyph(withName: "W")).width
+        return CGSize(width: width, height: height)
+    }
+
     /// The web address under a point in the view, from a link the program
     /// marked (OSC 8) or from the text there, or nil. Only http and https.
-    func webLink(at point: NSPoint) -> URL? {
-        let font = self.font as CTFont
-        let cellHeight = ceil(CTFontGetAscent(font) + CTFontGetDescent(font) + CTFontGetLeading(font))
-        let glyph = self.font.glyph(withName: "W")
-        let cellWidth = self.font.advancement(forGlyph: glyph).width
-        guard cellHeight > 0, cellWidth > 0, bounds.contains(point) else { return nil }
+    func webLink(at point: NSPoint) -> URL? { linkSpan(at: point)?.url }
+
+    /// The link under a point: its row on screen, the cells it covers and
+    /// where it goes.
+    func linkSpan(at point: NSPoint) -> (row: Int, columns: Range<Int>, url: URL)? {
+        let cell = self.cell
+        guard cell.height > 0, cell.width > 0, bounds.contains(point) else { return nil }
         let term = getTerminal()
-        let row = Int((bounds.height - point.y) / cellHeight)
-        let col = Int(point.x / cellWidth)
+        let row = Int((bounds.height - point.y) / cell.height)
+        let col = Int(point.x / cell.width)
         guard row >= 0, row < term.rows, col >= 0, col < term.cols, let line = term.getLine(row: row) else { return nil }
-        if let payload = line[col].getPayload() as? String, let marked = payload.split(separator: ";", maxSplits: 1).last {
-            return LinkPolicy.web(String(marked))
+        let count = min(term.cols, line.count)
+        guard col < count else { return nil }
+        if let payload = line[col].getPayload() as? String {
+            guard let marked = payload.split(separator: ";", maxSplits: 1, omittingEmptySubsequences: false).last,
+                  let url = LinkPolicy.web(String(marked)) else { return nil }
+            var start = col, end = col + 1
+            while start > 0, line[start - 1].getPayload() as? String == payload { start -= 1 }
+            while end < count, line[end].getPayload() as? String == payload { end += 1 }
+            return (row, start..<end, url)
         }
-        let text = String((0..<min(term.cols, line.count)).map { i -> Character in
+        let text = String((0..<count).map { i -> Character in
             let c = line[i].getCharacter()
             return c == "\0" ? " " : c
         })
-        return TerminalLinks.link(in: text, at: col)
+        return TerminalLinks.span(in: text, at: col).map { (row, $0.columns, $0.url) }
     }
+
+    /// Underlines the link under the point, or takes the underline away.
+    func showHover(at point: NSPoint?) {
+        guard let point, let span = linkSpan(at: point) else {
+            if !underline.isHidden { underline.isHidden = true; window?.invalidateCursorRects(for: underline) }
+            return
+        }
+        let cell = self.cell
+        let frame = NSRect(x: CGFloat(span.columns.lowerBound) * cell.width,
+                           y: bounds.height - CGFloat(span.row + 1) * cell.height,
+                           width: CGFloat(span.columns.count) * cell.width, height: cell.height)
+        if underline.isHidden || underline.frame != frame || underline.url != span.url {
+            underline.frame = frame
+            underline.url = span.url
+            underline.isHidden = false
+            underline.needsDisplay = true
+            window?.invalidateCursorRects(for: underline)
+        }
+        NSCursor.pointingHand.set()
+    }
+
+    /// The underlined link right now, for the automation's `terminal` command.
+    var hoveredLink: URL? { underline.isHidden ? nil : underline.url }
 
     /// Every link ⌘-click would find, trying the middle of each cell on
     /// screen (for the automation's `terminal` command).
     func webLinksOnScreen() -> [URL] {
         let term = getTerminal()
-        let font = self.font as CTFont
-        let cellHeight = ceil(CTFontGetAscent(font) + CTFontGetDescent(font) + CTFontGetLeading(font))
-        let cellWidth = self.font.advancement(forGlyph: self.font.glyph(withName: "W")).width
+        let cell = self.cell
         var found: [URL] = []
         for row in 0..<term.rows {
             for col in 0..<term.cols {
-                let point = NSPoint(x: (CGFloat(col) + 0.5) * cellWidth, y: bounds.height - (CGFloat(row) + 0.5) * cellHeight)
+                let point = NSPoint(x: (CGFloat(col) + 0.5) * cell.width, y: bounds.height - (CGFloat(row) + 0.5) * cell.height)
                 if let url = webLink(at: point), found.last != url { found.append(url) }
             }
         }
         return found
+    }
+
+    /// The middle of the first cell of the first link on screen, for the
+    /// automation to hover over.
+    func firstLinkPoint() -> NSPoint? {
+        let term = getTerminal()
+        let cell = self.cell
+        for row in 0..<term.rows {
+            for col in 0..<term.cols {
+                let point = NSPoint(x: (CGFloat(col) + 0.5) * cell.width, y: bounds.height - (CGFloat(row) + 0.5) * cell.height)
+                if webLink(at: point) != nil { return point }
+            }
+        }
+        return nil
+    }
+}
+
+/// Gets the pointer's moves over a terminal and passes them back to it.
+private final class LinkHover: NSResponder {
+    weak var terminal: ThreadTerminalView?
+
+    init(terminal: ThreadTerminalView) {
+        self.terminal = terminal
+        super.init()
+    }
+
+    required init?(coder: NSCoder) { nil }
+
+    override func mouseMoved(with event: NSEvent) { follow(event) }
+    override func mouseEntered(with event: NSEvent) { follow(event) }
+    override func mouseExited(with event: NSEvent) { terminal?.showHover(at: nil) }
+
+    private func follow(_ event: NSEvent) {
+        guard let terminal, event.window === terminal.window else { return }
+        terminal.showHover(at: terminal.convert(event.locationInWindow, from: nil))
+    }
+}
+
+/// The line under a link the pointer is over. Clicks go through it to the
+/// terminal; it gives the pointing hand and the tip.
+private final class LinkUnderlineView: NSView {
+    var url: URL? {
+        didSet { if url != oldValue { setTip(url.map { "⌘-click to open \(LinkPolicy.shown($0))" } ?? "") } }
+    }
+
+    override func hitTest(_ point: NSPoint) -> NSView? { nil }
+
+    override func resetCursorRects() {
+        addCursorRect(bounds, cursor: .pointingHand)
+    }
+
+    override func draw(_ dirtyRect: NSRect) {
+        NSColor.linkColor.setFill()
+        NSRect(x: 0, y: 1, width: bounds.width, height: 1).fill()
     }
 }
 
@@ -202,6 +348,8 @@ final class TerminalTab: ObservableObject, Identifiable {
     let view: ThreadTerminalView
     let number: Int
     @Published var shellTitle = ""
+    /// A name he gave it (double-click or Rename…), over the shell's own.
+    @Published var name: String?
     @Published var ended = false
 
     init(view: ThreadTerminalView, number: Int) {
@@ -210,6 +358,7 @@ final class TerminalTab: ObservableObject, Identifiable {
     }
 
     var title: String {
+        if let name { return name }
         let own = shellTitle.trimmingCharacters(in: .whitespacesAndNewlines)
         return own.isEmpty ? "Terminal \(number)" : own
     }
@@ -285,6 +434,7 @@ final class TerminalSessions: NSObject, ObservableObject, LocalProcessTerminalVi
         view.nativeForegroundColor = .textColor
         view.caretColor = .controlAccentColor
         view.setAccessibilityLabel("Terminal \(number) for \(thread.title)")
+        view.watchLinks()
         let shell = Self.shell
         var env = ProcessInfo.processInfo.environment
         env["TERM"] = "xterm-256color"

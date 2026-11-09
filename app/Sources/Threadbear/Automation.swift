@@ -721,13 +721,22 @@ enum Automation {
             return "ok \(app.showsPanels(for: thread) ? "showing \(app.paneSection(for: thread).id)" : "hidden")"
         case "terminal":
             // The Terminal panel's open tab (TerminalPanel.swift): "send" types
-            // into its shell ("\r" for Return), "new" adds a tab, and the
-            // answer lists its tabs and the web links ⌘-click finds on screen.
+            // into its shell ("\r" for Return), "new" adds a tab, "rename"
+            // names it ("" for the shell's own), "hover" underlines the first
+            // link as the pointer would, and the answer lists its tabs and
+            // the web links ⌘-click finds on screen.
             guard let thread = app.paneThread else { return "error no thread selected" }
             let sessions = TerminalSessions.shared
             if c["new"] as? Bool == true { sessions.add(for: thread) }
             if let text = c["send"] as? String { sessions.current(for: thread).view.send(txt: text) }
+            if let name = c["rename"] as? String { sessions.current(for: thread).name = name.isEmpty ? nil : name }
             try? await Task.sleep(for: .milliseconds(c["waitMs"] as? Int ?? 300))
+            if c["hover"] as? Bool == true {
+                // The pointer over the first link on screen, as a move there would.
+                let view = sessions.current(for: thread).view
+                view.showHover(at: view.firstLinkPoint())
+                return "ok hovering: \(view.hoveredLink?.absoluteString ?? "nothing")"
+            }
             let tabs = sessions.tabs(for: thread).map(\.title).joined(separator: " | ")
             let links = sessions.current(for: thread).view.webLinksOnScreen().map(\.absoluteString)
             return "ok tabs: \(tabs); links: \(links.joined(separator: " "))"
