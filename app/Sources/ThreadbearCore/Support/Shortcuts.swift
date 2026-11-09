@@ -141,6 +141,8 @@ public enum ShortcutCommand: String, CaseIterable, Sendable {
     // Wayne's pages over the main panel, after the activity bar's first four.
     case showSkills, showNotes
     case zoomIn, zoomOut, actualSize, toggleThreads, togglePanels, resetPanelLayout
+    // ⌘/ folds the Threads panel away and back, keeping its place and width.
+    case collapseThreads
     case settings
     // The app menu's Quit Threadbear, which asks first (QuitPrompt).
     case quit
@@ -149,7 +151,7 @@ public enum ShortcutCommand: String, CaseIterable, Sendable {
         switch self {
         case .newThread, .archive, .hibernate, .stop, .copyTranscript: .threads
         case .back, .forward, .nextInboxThread, .showInbox, .showScheduled, .showProjects, .showLibrarian, .showHibernating, .showArchived, .showSkills, .showNotes: .go
-        case .zoomIn, .zoomOut, .actualSize, .toggleThreads, .togglePanels, .resetPanelLayout: .view
+        case .zoomIn, .zoomOut, .actualSize, .toggleThreads, .togglePanels, .resetPanelLayout, .collapseThreads: .view
         // The app menu's Settings…, over the main panel or in its window (SettingsPage).
         case .settings, .quit: .go
         }
@@ -180,6 +182,7 @@ public enum ShortcutCommand: String, CaseIterable, Sendable {
         case .toggleThreads: "Show Threads"
         case .togglePanels: "Show Panels"
         case .resetPanelLayout: "Reset Panel Layout"
+        case .collapseThreads: "Collapse Threads"
         case .quit: "Quit Threadbear"
         }
     }
@@ -193,6 +196,7 @@ public enum ShortcutCommand: String, CaseIterable, Sendable {
         case .hibernate: ["Pick a time…"]
         case .toggleThreads: ["Show Threads", "Hide Threads"]
         case .togglePanels: ["Show Panels", "Hide Panels"]
+        case .collapseThreads: ["Collapse Threads", "Expand Threads"]
         default: [title]
         }
     }
@@ -220,6 +224,7 @@ public enum ShortcutCommand: String, CaseIterable, Sendable {
         case .actualSize: ShortcutKey("0")
         case .toggleThreads: ShortcutKey("s", control: true)
         case .togglePanels: ShortcutKey("p", option: true)
+        case .collapseThreads: ShortcutKey("/")
         case .quit: ShortcutKey("q")
         case .hibernate, .showHibernating, .showArchived, .resetPanelLayout: nil
         }
