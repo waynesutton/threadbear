@@ -59,6 +59,7 @@ extension AppModel {
     /// detail area. The thread that was showing stays selected, so ⌘1
     /// goes back to it.
     func showProjects() {
+        closeOverlayPages()
         sidebarMode = .projects
         openProjectId = nil
         showsProjectsHome = true
@@ -66,6 +67,7 @@ extension AppModel {
 
     /// The Librarian view in the sidebar, and its page in the detail area.
     func showLibrarian() {
+        closeOverlayPages()
         sidebarMode = .librarian
         openProjectId = nil
         showsLibrarianHome = true

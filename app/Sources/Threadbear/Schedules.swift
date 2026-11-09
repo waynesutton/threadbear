@@ -160,6 +160,9 @@ extension AppModel {
 
     /// The Scheduled view in the sidebar, and its page in the detail area.
     func showSchedules() {
+        // Explicit: from Scheduled already, sidebarMode doesn't change, so
+        // DetailView's onChange wouldn't put Notes away (Wayne, 9 Nov).
+        closeOverlayPages()
         sidebarMode = .scheduled
         openProjectId = nil
         showsScheduledHome = true

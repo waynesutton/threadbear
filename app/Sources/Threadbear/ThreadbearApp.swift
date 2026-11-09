@@ -161,7 +161,7 @@ struct ThreadbearApp: App {
                     // ⌘1 to ⌘6 in the activity bar's order, as VS Code numbers
                     // its views. Hibernating and Archive are sections of the
                     // inbox now: these unfold them.
-                    Button("Show Inbox", systemImage: "tray") { app.sidebarMode = .inbox }
+                    Button("Show Inbox", systemImage: "tray") { app.showInbox() }
                         .shortcut(.showInbox)
                     Button("Show Scheduled", systemImage: "clock") { app.showSchedules() }
                         .shortcut(.showScheduled)

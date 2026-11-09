@@ -39,6 +39,15 @@ extension AppModel {
         showsNotesPage = false
     }
 
+    /// The Threads view in the sidebar (⌘1, the bar's Threads). Closes the
+    /// page over the main panel itself: from the inbox already, sidebarMode
+    /// doesn't change, so DetailView's onChange never fired and ⌘1 left
+    /// Notes up (Wayne, 9 Nov).
+    func showInbox() {
+        closeOverlayPages()
+        sidebarMode = .inbox
+    }
+
     /// The Notes page over the main panel.
     func showNotes() {
         showsSettingsPage = false
