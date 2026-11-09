@@ -731,6 +731,18 @@ enum Automation {
             // A beat for the pane (and a web view) to appear.
             try? await Task.sleep(for: .milliseconds(200))
             return "ok \(app.showsPanels(for: thread) ? "showing \(app.paneSection(for: thread).id)" : "hidden")"
+        case "terminal":
+            // The Terminal panel's open tab (TerminalPanel.swift): "send" types
+            // into its shell ("\r" for Return), "new" adds a tab, and the
+            // answer lists its tabs and the web links ⌘-click finds on screen.
+            guard let thread = app.paneThread else { return "error no thread selected" }
+            let sessions = TerminalSessions.shared
+            if c["new"] as? Bool == true { sessions.add(for: thread) }
+            if let text = c["send"] as? String { sessions.current(for: thread).view.send(txt: text) }
+            try? await Task.sleep(for: .milliseconds(c["waitMs"] as? Int ?? 300))
+            let tabs = sessions.tabs(for: thread).map(\.title).joined(separator: " | ")
+            let links = sessions.current(for: thread).view.webLinksOnScreen().map(\.absoluteString)
+            return "ok tabs: \(tabs); links: \(links.joined(separator: " "))"
         case "stall":
             // Blocks the main thread, to try what a freeze does: `seconds`.
             usleep(UInt32((c["seconds"] as? Double ?? 6) * 1_000_000))

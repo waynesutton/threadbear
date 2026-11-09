@@ -638,10 +638,16 @@ Two buttons on the rail down the right, below the folder's own panels
 folders and open files in the panel (a thread on another Mac lists that
 Mac's folder), and **Terminal** is a real terminal in the thread's
 folder, running your own login shell as Terminal.app would, with your
-PATH, aliases and colours. Each thread keeps its own terminal while the
-app runs, so going to another thread and back finds it as you left it;
-type `exit` and the next look starts a fresh one. Terminal is for
-threads on this Mac.
+PATH, aliases and colours. Click + above it for another terminal, so a
+dev server can keep running in one while you work in the next; each
+shows as a tab, and its ✕ closes it and ends its shell. Each thread
+keeps its own terminals while the app runs, so going to another thread
+and back finds them as you left them; `exit` closes that tab, and in the
+last one the next look starts a fresh shell. ⌘-click a web address in a
+terminal, like a dev server's `http://localhost:5173/`, to open it in
+your browser. Only http and https links open this way, so text a
+program prints can't start another app. Terminal is for threads on
+this Mac.
 
 Clicking a file in a reply, Highlights or Files opens it here in the
 panel: code with syntax colours, Markdown drawn, and Edit for text. To
