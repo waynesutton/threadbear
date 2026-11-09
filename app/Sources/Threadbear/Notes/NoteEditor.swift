@@ -149,7 +149,7 @@ enum NoteStyle {
         let italic = NSFontManager.shared.convert(mono, toHaveTrait: .italicFontMask)
         for span in NoteHighlight.spans(in: storage.string) where NSMaxRange(span.range) <= storage.length {
             switch span.kind {
-            case .heading: storage.addAttributes([.font: headingFont(level: span.level), .foregroundColor: NSColor.controlAccentColor], range: span.range)
+            case .heading: storage.addAttribute(.font, value: headingFont(level: span.level), range: span.range)
             case .checkbox:
                 let link = URL(string: "\(boxScheme)://\(span.range.location)")!
                 storage.addAttributes([.font: bold, .foregroundColor: NSColor.controlAccentColor, .link: link, .cursor: NSCursor.pointingHand], range: span.range)
