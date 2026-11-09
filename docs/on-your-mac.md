@@ -192,7 +192,9 @@ the bear), counts of threads per day and the numbers, the titles and thread
 counts of projects you ticked, and your GitHub user name. It sends it as you
 change it, then checks every hour and sends again only if something changed
 (`runner/src/public-profile.ts`). A visitor's browser fetches the GitHub
-activity from the GitHub Contributions API itself. The page's font, Geist,
+activity from the GitHub Contributions API itself, and, with the Changelog
+on, opening it lists your public commits from GitHub's API (api.github.com,
+no token), so only the repo's name and your GitHub user name are sent for it. The page's font, Geist,
 is served from your own site (`web/public/fonts`), not a font service.
 The bear at the top right of the sidebar, the first time it's clicked,
 makes `~/ThreadbearThreads/Bear` with a `CLAUDE.md` of instructions for
