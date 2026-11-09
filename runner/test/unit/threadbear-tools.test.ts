@@ -1149,6 +1149,39 @@ test("A Codex thread in ask mode ends its turn and reads without asking, and ask
   assert.deepEqual(asked, ['send_message']);
 });
 
+// Codex's half of Ask mode's tools: the sandbox stops shell writes, and
+// this stops Threadbear's own tools that change something, even in Full.
+test('A Codex Ask turn refuses the threadbear tools that change something, even in Full, without asking; reading and end_turn still run', async () => {
+  const h = makeHarness();
+  const { thread } = start(h);
+  const list = buildThreadbearTools(h.runner, thread.id, Date.now, undefined, undefined, undefined, { provider: 'codex', sleep: async () => {} });
+  const asked: string[] = [];
+  let readOnly = true;
+  const codex = new CodexTools(list as ToolDefinition[], {
+    requestApproval: async (r) => {
+      asked.push(r.name.split('__').at(-1)!);
+      return { decision: 'allow' };
+    },
+    cwd: () => '/tmp',
+    mode: () => 'full',
+    readOnly: () => readOnly,
+    rules: () => [],
+    addRules: () => {},
+  });
+  const call = (tool: string, args: Record<string, unknown>) => codex.call({ threadId: 'n', turnId: 't', callId: tool, namespace: 'threadbear', tool, arguments: args }, { fromChild: false, signal: new AbortController().signal });
+  const sent = await call('send_message', { id: thread.id, text: 'hi' });
+  assert.equal(sent.success, false);
+  assert.match(sent.contentItems.map((c) => ('text' in c ? c.text : '')).join(''), /Ask mode/);
+  assert.equal((await call('create_thread', { text: 'x' })).success, false);
+  assert.ok((await call('list_threads', {})).success);
+  assert.ok((await call('end_turn', { needs: 'nothing', summary: ['Checked it.'] })).success);
+  assert.deepEqual(asked, []);
+  // An ordinary turn again: Full lets it through to the tool itself.
+  readOnly = false;
+  const again = await call('send_message', { id: thread.id, text: 'hi' });
+  assert.doesNotMatch(again.contentItems.map((c) => ('text' in c ? c.text : '')).join(''), /Ask mode/);
+});
+
 // A Codex thread's tool list is fixed when it starts, so what it was told
 // end_turn takes can be from before One reply changed (1 Nov 2026, thread
 // d8c829e8, refused for leaving out a question its schema never mentioned).

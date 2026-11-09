@@ -1006,6 +1006,32 @@ test('in ask mode every threadbear tool that changes something asks first; read-
   await h.session.end();
 });
 
+test("an Ask message's turn refuses the threadbear tools that change something, even in Full; the next turn has them back", async () => {
+  const ran: string[] = [];
+  const mk = (name: string, readOnly = false) =>
+    tool(name, `${name}.`, {}, async () => {
+      ran.push(name);
+      return { content: [{ type: 'text', text: 'ok' }] };
+    }, readOnly ? { annotations: { readOnlyHint: true } } : undefined);
+  const h = await open({ permissionMode: 'full', deps: { toolsFor: () => [mk('read_thread', true), mk('send_message')] } });
+  await started(h);
+  h.session.send({ id: 'm1', text: 'x', images: [], readOnly: true });
+  await turnStarts(h, 'u1');
+  const call = (tool: string, turnId: string) =>
+    h.conn.serverRequest('item/tool/call', { threadId: 'th-1', turnId, callId: `exec-${tool}-${turnId}`, namespace: 'threadbear', tool, arguments: {} });
+  const ok = (r: Record<string, unknown>) => (r.result as { success: boolean }).success;
+  assert.equal(ok(await call('read_thread', 'u1')), true);
+  assert.equal(ok(await call('send_message', 'u1')), false);
+  assert.deepEqual(ran, ['read_thread']);
+  assert.equal(h.rec.approvals.length, 0);
+  complete(h, 'u1');
+  await waitFor(() => h.rec.results().length === 1);
+  h.session.send({ id: 'm2', text: 'y', images: [] });
+  await turnStarts(h, 'u2');
+  assert.equal(ok(await call('send_message', 'u2')), true);
+  await h.session.end();
+});
+
 test('a message sent while the turn is ending waits for the next turn, even when a late steer is refused', async () => {
   const h = await open();
   await started(h);

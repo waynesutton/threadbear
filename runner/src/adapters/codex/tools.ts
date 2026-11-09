@@ -104,6 +104,9 @@ export type CodexToolsDeps = {
   cwd(): string;
   // The thread's permission mode now (not the turn's).
   mode(): PermissionMode;
+  // The running turn is an Ask one: only the tools that read or never ask
+  // run, whatever the mode (docs/protocol.md, "Ask mode").
+  readOnly?(): boolean;
   // "Always allow" rules: a tool's full name, as for Claude.
   rules(): Iterable<string>;
   addRules(rules: string[]): void;
@@ -141,6 +144,9 @@ export class CodexTools {
     const alwaysAsk = ALWAYS_ASK_TOOLS.has(fullName);
     const readOnly = NEVER_ASK_TOOLS.has(fullName) || tool.annotations?.readOnlyHint === true;
     const allowed = !alwaysAsk && [...this.deps.rules()].includes(fullName);
+    if (!readOnly && this.deps.readOnly?.()) {
+      return text(`This turn is in Ask mode, so nothing may change: ${name} is off for it. Answer from what you can read, and say what you'd do rather than doing it.`, false);
+    }
     if (alwaysAsk || (this.deps.mode() !== 'full' && !readOnly && !allowed)) {
       const ans = await this.deps.requestApproval({
         toolUseId: o.fromChild ? undefined : params.callId,

@@ -2012,7 +2012,7 @@ Ayush's "Plan View UI".
   plan collaboration mode on `turn/start` (experimental API) with the
   read-only sandbox, and `default` once on the turn after it leaves.
   Choosing `plan` in `threads.update` remembers the mode the thread had
-  (`modeBeforePlan`); approving the plan goes back to it (`full` if none).
+  (`modeBeforePlan`); approving the plan goes back to it (`ask` if none, such as a thread started in Plan first: Go ahead never gives more access than the thread may have had).
 - **The plan.** `plan.proposed { itemId, text }` when the agent puts its
   plan: Claude's `ExitPlanMode` call (its `itemId`, and an
   `approval.requested` with that `itemId` follows, with `allow` and `deny`
@@ -3900,12 +3900,17 @@ rest of the running turn it goes into, changes nothing (`src/modes.ts`):
 - Claude: a `PreToolUse` hook (the second, after the edit-mode one)
   refuses every tool but the ones that only read, look up or ask
   (`READ_ONLY_ALLOWED` in `src/adapters/claude/adapter.ts`: Read, Glob,
-  Grep, the web tools, ToolSearch, Skill, subagents, todos, questions)
+  Grep, the web tools, ToolSearch, subagents, todos, questions)
   and the threadbear tools that never ask (`NEVER_ASK_TOOLS`), whatever
   the permission mode (full access included). So Bash and the other
   shells, edits, other MCP servers' tools and any tool not named are
-  refused; a subagent's calls go through the same hook. Codex: the turn runs with `approvalPolicy: "never"` and a
-  read-only sandbox (network allowed).
+  refused; a subagent's calls go through the same hook. So is Skill: a
+  skill's `` !`command` `` lines run as it loads, checked by the permission
+  mode but never by a hook, so on Full they would run unasked. Codex: the turn runs with `approvalPolicy: "never"` and a
+  read-only sandbox (network allowed), and the threadbear tools refuse any
+  call but the ones that read or never ask, whatever the thread's mode,
+  until the turn ends (an Ask message steered into a running turn does the
+  same for the rest of it; that turn's sandbox stays as it started).
 - The next message without a `mode` is an ordinary turn again. The mode is
   the app's to remember; the runner only sees it on each message.
 

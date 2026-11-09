@@ -126,10 +126,12 @@ export const approvalsPart = {
   },
 
   // Approving the plan: back to the mode the thread had before plan mode.
-  // Returns that mode; the caller tells the CLI.
+  // With none noted (a thread started in Plan first), Ask before edits:
+  // Go ahead approves the plan, not more access than the thread may have
+  // had (Wayne, 8 Nov 2026). Returns that mode; the caller tells the CLI.
   leavePlan(this: Runner, st: ThreadState): PermissionMode {
     const { rec, rt } = st;
-    const mode = rec.modeBeforePlan && rec.modeBeforePlan !== 'plan' ? rec.modeBeforePlan : 'full';
+    const mode = rec.modeBeforePlan && rec.modeBeforePlan !== 'plan' ? rec.modeBeforePlan : 'ask';
     if (rec.openPlan) this.emit(st, { type: 'plan.resolved', itemId: rec.openPlan, decision: 'go' }, rt.turn?.turnId);
     delete rec.openPlan;
     // Approved: the next plan is a new file.

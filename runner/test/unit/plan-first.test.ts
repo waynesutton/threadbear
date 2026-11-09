@@ -46,7 +46,7 @@ test('Go ahead allows the ExitPlanMode call and leaves plan mode for the earlier
   assert.throws(() => h.runner.approvePlan({ threadId: id, itemId: 'tu-plan' }), RpcError);
 });
 
-test('allowing the plan from any card (Return, the phone) goes ahead too, to full by default', async () => {
+test('allowing the plan from any card (Return, the phone) goes ahead too, back to the mode it had', async () => {
   const h = makeHarness();
   const { id, s } = planThread(h);
   const answer = propose(s);
@@ -97,4 +97,16 @@ test('a message to a waiting Codex plan sends it back; a newer plan replaces an 
     [['a', 'revise'], ['b', 'revise']],
   );
   assert.equal(h.runner.get(id).permissionMode, 'plan');
+});
+
+test('a thread started in Plan first goes ahead into Ask before edits, never Full access', async () => {
+  const h = makeHarness();
+  const { thread } = h.runner.create({ text: 'Add CSV export', accountId: 'claude-3', permissionMode: 'plan' });
+  const s = h.adapter.last;
+  s.init();
+  const answer = propose(s);
+  const req = h.events(thread.id).find((e) => e.type === 'approval.requested');
+  h.runner.respondApproval({ threadId: thread.id, approvalId: req.approvalId, decision: 'allow' });
+  assert.equal((await answer).mode, 'ask');
+  assert.equal(h.runner.get(thread.id).permissionMode, 'ask');
 });

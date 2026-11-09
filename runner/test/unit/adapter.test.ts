@@ -145,10 +145,10 @@ test('an Ask mode turn refuses Bash, MCP and every other tool that could change 
   const decision = async (tool: string) => (await pre({ hook_event_name: 'PreToolUse', tool_name: tool, tool_input: {} }))?.hookSpecificOutput?.permissionDecision;
   assert.equal(await decision('Bash'), undefined, 'an ordinary turn is left alone');
   session.send({ id: 'turn-1', text: 'What does this do?', images: [], readOnly: true });
-  for (const tool of ['Bash', 'PowerShell', 'Edit', 'Write', 'NotebookEdit', 'KillShell', 'Monitor', 'CronCreate', 'mcp__convex__run', 'mcp__threadbear__send_message', 'mcp__threadbear__create_thread', 'mcp__threadbear__delete_thread', 'SomeNewTool']) {
+  for (const tool of ['Bash', 'PowerShell', 'Edit', 'Write', 'NotebookEdit', 'KillShell', 'Monitor', 'CronCreate', 'mcp__convex__run', 'mcp__threadbear__send_message', 'mcp__threadbear__create_thread', 'mcp__threadbear__delete_thread', 'Skill', 'SomeNewTool']) {
     assert.equal(await decision(tool), 'deny', `${tool} is refused in Ask`);
   }
-  for (const tool of ['Read', 'Grep', 'Glob', 'WebFetch', 'WebSearch', 'Agent', 'Skill', 'ToolSearch', 'mcp__threadbear__end_turn', 'mcp__threadbear__read_thread']) {
+  for (const tool of ['Read', 'Grep', 'Glob', 'WebFetch', 'WebSearch', 'Agent', 'ToolSearch', 'mcp__threadbear__end_turn', 'mcp__threadbear__read_thread']) {
     assert.equal(await decision(tool), undefined, `${tool} runs in Ask`);
   }
   // The turn's over: the next ordinary message gets its tools back.

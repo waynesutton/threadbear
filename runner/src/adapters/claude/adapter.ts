@@ -280,7 +280,10 @@ export class ClaudeAdapter implements AgentAdapter {
 // mode: Bash and the other shells, every other MCP server's tools, and
 // any tool a newer CLI adds, until it's named here. Refusing only the
 // edit tools left Bash and MCP running (Wayne, 7 Nov 2026). A subagent's
-// calls come through the same hook, so it's held to the same.
+// calls come through the same hook, so it's held to the same. Skill is
+// refused too: a skill's !`command` lines run as it loads, through the
+// permission mode but never this hook, so on Full they'd run unasked
+// (tried on CLI 2.1.319, 8 Nov 2026).
 const READ_ONLY_ALLOWED = new Set([
   'Read',
   'Glob',
@@ -290,7 +293,6 @@ const READ_ONLY_ALLOWED = new Set([
   'WebFetch',
   'WebSearch',
   'ToolSearch',
-  'Skill',
   'Task',
   'Agent',
   'TodoWrite',

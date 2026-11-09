@@ -315,7 +315,8 @@ shown on the composer (the box you type in) and changed by clicking it.
 - **Plan first**: the agent looks around and writes a plan, but changes
   nothing yet. The plan shows as a card with Go ahead and Send back. Go
   ahead (or Return in an empty message box) lets it start, back in the mode
-  the thread had before. Send back, or just writing what you'd change, has
+  the thread had before (Ask before edits for a thread that started in Plan
+  first). Send back, or just writing what you'd change, has
   it plan again. Once it's working, the same card ticks off its steps.
 
 In Ask before edits and Auto, an edit to a file Threadbear runs by itself
@@ -416,8 +417,10 @@ Stepping on from Plan first puts back the access the thread had, or Ask
 before edits if Threadbear can't tell what that was (after a restart). In
 Ask, the agent reads what it needs but changes nothing, whatever the access
 chip says, and just answers: on Claude, shell commands and other tools that
-could change something (another MCP server's, most of Threadbear's own)
-are switched off for that turn, so it reads files and the web instead; it shows as an Ask chip beside the access
+could change something (another MCP server's, most of Threadbear's own,
+and skills, which can run commands as they load) are switched off for
+that turn, so it reads files and the web instead; on Codex, Threadbear's
+own tools that change something are off too; it shows as an Ask chip beside the access
 chip (click it to turn it off) and stays on for the thread until you
 change it. Off, nothing shows and messages work as always. Settings (⌘,)
 > General can turn Shift-Tab's modes off.
