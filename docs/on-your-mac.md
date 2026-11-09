@@ -177,8 +177,8 @@ item is deleted. In the Keychain, macOS asked for your password after every
 update, as each update re-signs the app.
 They're never sent anywhere, and the runner never reads them.
 Pictures you choose under Settings > General > Look (the main window's
-background, and the Librarian page's picture and background when Customize
-the Librarian page is on; both off by default) are copied, scaled down,
+background, and the Librarian and Scheduled pages' pictures and
+backgrounds when their Customize switches are on; all off by default) are copied, scaled down,
 into `looks/` in the data folder; removing or replacing one deletes its
 copy. The rest of those settings are in the app's own settings. Neither
 is ever sent anywhere (`app/Sources/Threadbear/Looks.swift`), except as
