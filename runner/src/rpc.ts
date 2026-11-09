@@ -133,6 +133,9 @@ export type RpcServerOptions = {
   updates?: () => unknown;
   // The Mac app's hello with its build (docs/protocol.md, "App restarts").
   appHello?: (build: { commit: string; short: string; tree: string }) => void;
+  // Plain HTTP pages served beside /rpc (the Git panel's, git-panel.ts):
+  // true when it answered the request, false to leave it to the 404.
+  pages?: (req: http.IncomingMessage, res: http.ServerResponse) => Promise<boolean>;
   // Tests shorten these.
   authTimeoutMs?: number;
   maxPendingAuth?: number;
@@ -158,8 +161,15 @@ export class RpcServer {
         res.end('{"ok":true}');
         return;
       }
-      res.writeHead(404);
-      res.end();
+      const notFound = () => {
+        if (res.headersSent) return;
+        res.writeHead(404);
+        res.end();
+      };
+      if (!opts.pages) return notFound();
+      opts.pages(req, res).then((answered) => {
+        if (!answered) notFound();
+      }, notFound);
     });
     // A socket that never finishes its request headers is let go sooner
     // than Node's minute.
