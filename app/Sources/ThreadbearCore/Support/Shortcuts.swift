@@ -142,6 +142,8 @@ public enum ShortcutCommand: String, CaseIterable, Sendable {
     case showSkills, showNotes
     case zoomIn, zoomOut, actualSize, toggleThreads, togglePanels, resetPanelLayout
     case settings
+    // The app menu's Quit Threadbear, which asks first (QuitPrompt).
+    case quit
 
     public var group: ShortcutGroup {
         switch self {
@@ -149,7 +151,7 @@ public enum ShortcutCommand: String, CaseIterable, Sendable {
         case .back, .forward, .nextInboxThread, .showInbox, .showScheduled, .showProjects, .showLibrarian, .showHibernating, .showArchived, .showSkills, .showNotes: .go
         case .zoomIn, .zoomOut, .actualSize, .toggleThreads, .togglePanels, .resetPanelLayout: .view
         // The app menu's Settings…, over the main panel or in its window (SettingsPage).
-        case .settings: .go
+        case .settings, .quit: .go
         }
     }
 
@@ -178,6 +180,7 @@ public enum ShortcutCommand: String, CaseIterable, Sendable {
         case .toggleThreads: "Show Threads"
         case .togglePanels: "Show Panels"
         case .resetPanelLayout: "Reset Panel Layout"
+        case .quit: "Quit Threadbear"
         }
     }
 
@@ -217,6 +220,7 @@ public enum ShortcutCommand: String, CaseIterable, Sendable {
         case .actualSize: ShortcutKey("0")
         case .toggleThreads: ShortcutKey("s", control: true)
         case .togglePanels: ShortcutKey("p", option: true)
+        case .quit: ShortcutKey("q")
         case .hibernate, .showHibernating, .showArchived, .resetPanelLayout: nil
         }
     }
