@@ -43,20 +43,22 @@ final class LineNumberRuler: NSRulerView {
         text.enumerateSubstrings(in: NSRange(location: 0, length: chars.location), options: [.byLines, .substringNotRequired]) { _, _, _, _ in number += 1 }
         var index = chars.location
         let inset = textView.textContainerInset.height
-        func draw(_ n: Int, at line: NSRange, y: CGFloat) {
+        func draw(_ n: Int, at line: NSRange, y: CGFloat, height: CGFloat) {
             let current = line.location == caret
             let label = "\(n)" as NSString
             let attributes: [NSAttributedString.Key: Any] = [.font: font, .foregroundColor: current ? NSColor.secondaryLabelColor : NSColor.tertiaryLabelColor]
             let size = label.size(withAttributes: attributes)
-            label.draw(at: NSPoint(x: ruleThickness - size.width - 8, y: y), withAttributes: attributes)
+            // Centred on its line, so a big heading's number sits beside it, not above.
+            let middle = height > 0 ? max((height - size.height) / 2, 0) : 3
+            label.draw(at: NSPoint(x: ruleThickness - size.width - 8, y: y + middle), withAttributes: attributes)
         }
         while index <= NSMaxRange(chars) {
             let line = text.lineRange(for: NSRange(location: index, length: 0))
             let glyph = layout.glyphIndexForCharacter(at: min(line.location, max(text.length - 1, 0)))
             var lineRect = text.length == 0 ? NSRect(x: 0, y: 0, width: 0, height: font.boundingRectForFont.height + 4) : layout.lineFragmentRect(forGlyphAt: glyph, effectiveRange: nil)
             lineRect.origin.y += inset
-            let y = convert(NSPoint(x: 0, y: lineRect.minY), from: textView).y + 3
-            draw(number, at: line, y: y)
+            let y = convert(NSPoint(x: 0, y: lineRect.minY), from: textView).y
+            draw(number, at: line, y: y, height: lineRect.height)
             number += 1
             if NSMaxRange(line) <= index || NSMaxRange(line) >= text.length { break }
             index = NSMaxRange(line)
@@ -64,8 +66,8 @@ final class LineNumberRuler: NSRulerView {
         // The empty last line after a final newline gets its number too.
         if text.length > 0, text.hasSuffix("\n"), NSMaxRange(chars) >= text.length {
             let rect = layout.extraLineFragmentRect
-            let y = convert(NSPoint(x: 0, y: rect.minY + inset), from: textView).y + 3
-            draw(number, at: NSRange(location: text.length, length: 0), y: y)
+            let y = convert(NSPoint(x: 0, y: rect.minY + inset), from: textView).y
+            draw(number, at: NSRange(location: text.length, length: 0), y: y, height: rect.height)
         }
     }
 }

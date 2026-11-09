@@ -38,4 +38,37 @@ final class NotesTests: XCTestCase {
         let bold = NoteHighlight.spans(in: text).first { $0.kind == .bold }!
         XCTAssertEqual(ns.substring(with: bold.range), "**milk**")
     }
+
+    func testHeadingLevelsAndTasks() {
+        let text = "# One\n### Three\n- [ ] milk\n- [x] eggs\n* [ ]"
+        let ns = text as NSString
+        let spans = NoteHighlight.spans(in: text)
+        XCTAssertEqual(spans.filter { $0.kind == .heading }.map(\.level), [1, 3])
+        let boxes = spans.filter { $0.kind == .checkbox }
+        XCTAssertEqual(boxes.map { ns.substring(with: $0.range) }, ["[ ]", "[x]", "[ ]"])
+        let done = spans.filter { $0.kind == .done }
+        XCTAssertEqual(done.map { ns.substring(with: $0.range) }, ["eggs"], "only the ticked task is struck through")
+        XCTAssertEqual(ns.substring(with: spans.first { $0.kind == .listMarker }!.range), "-")
+    }
+
+    func testTickingABox() {
+        let text = "- [ ] milk\n- [x] eggs"
+        XCTAssertEqual(NoteEditing.toggledBox(in: text, at: 2)?.replacement, "x")
+        XCTAssertEqual(NoteEditing.toggledBox(in: text, at: 2)?.range, NSRange(location: 3, length: 1))
+        XCTAssertEqual(NoteEditing.toggledBox(in: text, at: 13)?.replacement, " ")
+        XCTAssertNil(NoteEditing.toggledBox(in: text, at: 0))
+        XCTAssertNil(NoteEditing.toggledBox(in: text, at: 99))
+    }
+
+    func testReturnCarriesListsOn() {
+        XCTAssertEqual(NoteEditing.newline(before: "- milk", after: ""), .continueList("- "))
+        XCTAssertEqual(NoteEditing.newline(before: "  * [x] eggs", after: ""), .continueList("  * [ ] "))
+        XCTAssertEqual(NoteEditing.newline(before: "9. bread", after: ""), .continueList("10. "))
+        XCTAssertEqual(NoteEditing.newline(before: "1) a", after: ""), .continueList("2) "))
+        XCTAssertEqual(NoteEditing.newline(before: "- [ ] ", after: ""), .endList)
+        XCTAssertEqual(NoteEditing.newline(before: "- ", after: ""), .endList)
+        XCTAssertEqual(NoteEditing.newline(before: "- ", after: "rest"), .plain)
+        XCTAssertEqual(NoteEditing.newline(before: "just text", after: ""), .plain)
+        XCTAssertEqual(NoteEditing.newline(before: "-dash", after: ""), .plain)
+    }
 }

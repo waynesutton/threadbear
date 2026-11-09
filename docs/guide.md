@@ -1648,7 +1648,13 @@ notes. New Note starts one called "Untitled note" (then "Untitled note
 with the bin or its right-click menu. The text box is a code editor's:
 line numbers down the side, a fixed-width font, and basic Markdown
 coloured as you type (headings, **bold**, *italics*, `code`, lists,
-links and quotes). Notes save as you type. The sidebar button left of
+links and quotes). Headings get bigger by level: `#` is the biggest, then
+`##` and `###`. Start a line with `- [ ] ` for a task: click its box to
+tick it (it turns to `[x]` and the task is struck through) or untick it,
+and ⌘Z undoes a click. Return on a list line starts the next item (the
+next number, or a fresh box on a task list); Return on an empty item ends
+the list. A note stays plain Markdown text underneath, so it copies out as
+it is. Notes save as you type. The sidebar button left of
 the Notes title folds the list of notes away for more room to write, and
 brings it back; Threadbear remembers which you left it on. To leave
 Notes, press Esc, click its X, or go anywhere else: ⌘1 to ⌘4, or any

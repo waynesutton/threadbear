@@ -1202,6 +1202,35 @@ enum Automation {
             default: return "error phase is listening, hearing or off"
             }
             return "ok"
+        case "note":
+            // Opens Notes on a new note with "body", or the newest one.
+            // "tick" clicks the task box whose "[" is at that character, and
+            // "returnAt" puts the caret there and presses Return, both
+            // through the editor's own handlers. Says the note's text.
+            NotesStore.shared.load()
+            if let body = c["body"] as? String, let note = NotesStore.shared.create() {
+                NotesStore.shared.setBody(note.id, body)
+            }
+            app.showNotes()
+            try? await Task.sleep(for: .milliseconds(400))
+            func editor(_ view: NSView?) -> NSTextView? {
+                guard let view else { return nil }
+                if let text = view as? NSTextView, text.accessibilityLabel() == "Note" { return text }
+                for sub in view.subviews { if let found = editor(sub) { return found } }
+                return nil
+            }
+            guard let view = editor(Self.mainWindow?.contentView) else { return "error no note editor on screen" }
+            if let at = number(c["tick"]).map { Int($0) } {
+                guard at >= 0, at < view.string.utf16.count,
+                      let link = view.textStorage?.attribute(.link, at: at, effectiveRange: nil) else { return "error no box at \(at)" }
+                _ = view.delegate?.textView?(view, clickedOnLink: link, at: at)
+            }
+            if let at = number(c["returnAt"]).map { Int($0) } {
+                view.setSelectedRange(NSRange(location: min(max(at, 0), view.string.utf16.count), length: 0))
+                view.doCommand(by: #selector(NSResponder.insertNewline(_:)))
+            }
+            try? await Task.sleep(for: .milliseconds(200))
+            return "ok " + (NotesStore.shared.sorted.first?.body ?? view.string).replacingOccurrences(of: "\n", with: "\\n")
         case "dictation-stage":
             // Opens Notes on its newest note (making one if there's none)
             // and shows talking into it in a phase, with no microphone;
