@@ -58,14 +58,14 @@ struct ActivityBar: View {
             }
             // Only once the runner has said it keeps skills (skills.list).
             if app.skillsSupported, app.skillsEnabled {
-                ActivityButton(symbol: "sparkles.rectangle.stack", title: "Skills", shortcut: nil,
+                ActivityButton(symbol: "sparkles.rectangle.stack", title: "Skills", shortcut: AppShortcuts.shared.display(.showSkills),
                                badge: nil, active: app.showsSkillsPage, slides: false) {
                     if app.showsSkillsPage { app.showsSkillsPage = false } else { app.showSkills() }
                 }
             }
             // Mike's own notes, this Mac's alone (NotesStore); Settings > General can hide it.
             if notesShown {
-                ActivityButton(symbol: "note.text", title: "Notes", shortcut: nil,
+                ActivityButton(symbol: "note.text", title: "Notes", shortcut: AppShortcuts.shared.display(.showNotes),
                                badge: nil, active: app.showsNotesPage, slides: false) {
                     if app.showsNotesPage { app.showsNotesPage = false } else { app.showNotes() }
                 }

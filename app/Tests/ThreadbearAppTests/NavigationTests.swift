@@ -52,6 +52,31 @@ final class NavigationTests: XCTestCase {
         XCTAssertFalse(app.canGoForward)
     }
 
+    /// Notes (or Skills, or Settings) over the panel isn't a step: Back
+    /// puts it away, back to the thread under it, and stays there.
+    func testBackFirstPutsAPageOverThePanelAway() async {
+        let app = app()
+        app.select("a")
+        await settle()
+        app.select("b")
+        await settle()
+        app.showNotes()
+        XCTAssertTrue(app.canGoBack)
+        XCTAssertEqual(app.destination(back: true)?.title, "b")
+
+        app.goBack()
+        XCTAssertFalse(app.showsNotesPage)
+        XCTAssertEqual(app.place.threadId, "b")
+        app.goBack()
+        XCTAssertEqual(app.place.threadId, "a")
+    }
+
+    func testTheHeaderButtonsTipsNameWhereTheyGo() {
+        XCTAssertEqual(HistoryText.tip(back: true, to: ("Profile page", nil), shortcut: "⌘["), "Back to Profile page (⌘[)")
+        XCTAssertEqual(HistoryText.tip(back: false, to: nil, shortcut: "⌘]"), "Nothing to go forward to (⌘])")
+        XCTAssertEqual(HistoryText.tip(back: true, to: nil, shortcut: nil), "Nothing to go back to")
+    }
+
     /// A thread started from the new-thread screen takes that screen's
     /// place, so Back goes to the thread before it, not the empty composer.
     func testStartedThreadReplacesTheNewThreadScreen() async {

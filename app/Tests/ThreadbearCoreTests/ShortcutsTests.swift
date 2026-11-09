@@ -82,6 +82,7 @@ final class ShortcutsTests: XCTestCase {
             .newThread: "⌘N", .archive: "⌘E", .stop: "⌘.", .copyTranscript: "⇧⌘C",
             .back: "⌘[", .forward: "⌘]", .nextInboxThread: "⌥⌘↓",
             .showInbox: "⌘1", .showScheduled: "⌘2", .showProjects: "⌘3", .showLibrarian: "⌘4",
+            .showSkills: "⌘5", .showNotes: "⌘6",
             .zoomIn: "⌘=", .zoomOut: "⌘-", .actualSize: "⌘0",
             .toggleThreads: "⌃⌘S", .togglePanels: "⌥⌘P",
             .settings: "⌘,",

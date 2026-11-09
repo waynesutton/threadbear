@@ -549,8 +549,11 @@ To get rid of one for good, hover it there and click the trash, or
 right-click it and choose Delete…; after you confirm, it goes to the
 runner's trash folder, with no Undo in the app.
 
-Back and Forward (⌘[ and ⌘], in the Go menu) step through the threads and
-pages you've had open, as a browser does. A mouse's side buttons do the same,
+Back and Forward (⌘[ and ⌘], in the Go menu, or the ‹ and › beside the share
+icon at the top right of a thread) step through the threads and
+pages you've had open, as a browser does. Hover either arrow to see which
+thread it goes to. With Settings, Skills or Notes open over the thread, Back
+puts that page away first. A mouse's side buttons do the same,
 and so does a trackpad swipe, as in Safari: with natural scrolling right for
 Back and left for Forward, and the other way round without it. A card in the
 middle of the window says which thread or page you'll land on, and fills the
@@ -1097,6 +1100,8 @@ key:
 - Show Scheduled: `showScheduled`, ⌘2
 - Show Projects: `showProjects`, ⌘3
 - Show Librarian: `showLibrarian`, ⌘4
+- Show Skills: `showSkills`, ⌘5
+- Show Notes: `showNotes`, ⌘6
 - Show Hibernating: `showHibernating`, no key
 - Show Archived: `showArchived`, no key
 - Settings: `settings`, ⌘,
@@ -1485,7 +1490,7 @@ on your Mac (`![a chart](/path/to/chart.png)`), rather than showing a link.
 
 Skills give your agents extra know-how: how to draw a Mermaid diagram,
 build an isometric explainer, write in a house style. Click Skills in the
-bar on the left (under the Librarian) to see yours. The page opens over the
+bar on the left (under the Librarian), or press ⌘5, to see yours. The page opens over the
 main panel; its X or Esc puts you back where you were.
 
 To add one, paste its GitHub link in Import a skill and press Import: a
@@ -1529,7 +1534,7 @@ from the bar and your skills are kept for when you turn it back on.
 
 ## Notes
 
-Notes, under Skills in the bar on the left, is a place for your own
+Notes, under Skills in the bar on the left (⌘6), is a place for your own
 notes. New Note starts one called "Untitled note" (then "Untitled note
 2" and so on); click its title above the text to rename it, and delete it
 with the bin or its right-click menu. The text box is a code editor's:

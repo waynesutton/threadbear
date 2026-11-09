@@ -138,13 +138,15 @@ public enum ShortcutGroup: String, CaseIterable, Sendable {
 public enum ShortcutCommand: String, CaseIterable, Sendable {
     case newThread, archive, hibernate, stop, copyTranscript
     case back, forward, nextInboxThread, showInbox, showScheduled, showProjects, showLibrarian, showHibernating, showArchived
+    // Wayne's pages over the main panel, after the activity bar's first four.
+    case showSkills, showNotes
     case zoomIn, zoomOut, actualSize, toggleThreads, togglePanels, resetPanelLayout
     case settings
 
     public var group: ShortcutGroup {
         switch self {
         case .newThread, .archive, .hibernate, .stop, .copyTranscript: .threads
-        case .back, .forward, .nextInboxThread, .showInbox, .showScheduled, .showProjects, .showLibrarian, .showHibernating, .showArchived: .go
+        case .back, .forward, .nextInboxThread, .showInbox, .showScheduled, .showProjects, .showLibrarian, .showHibernating, .showArchived, .showSkills, .showNotes: .go
         case .zoomIn, .zoomOut, .actualSize, .toggleThreads, .togglePanels, .resetPanelLayout: .view
         // The app menu's Settings…, over the main panel or in its window (SettingsPage).
         case .settings: .go
@@ -167,6 +169,8 @@ public enum ShortcutCommand: String, CaseIterable, Sendable {
         case .showLibrarian: "Show Librarian"
         case .showHibernating: "Show Hibernating"
         case .showArchived: "Show Archived"
+        case .showSkills: "Show Skills"
+        case .showNotes: "Show Notes"
         case .settings: "Settings…"
         case .zoomIn: "Zoom In"
         case .zoomOut: "Zoom Out"
@@ -204,6 +208,9 @@ public enum ShortcutCommand: String, CaseIterable, Sendable {
         case .showScheduled: ShortcutKey("2")
         case .showProjects: ShortcutKey("3")
         case .showLibrarian: ShortcutKey("4")
+        // On in the activity bar's order, as ⌘1 to ⌘4 are.
+        case .showSkills: ShortcutKey("5")
+        case .showNotes: ShortcutKey("6")
         // ⌘= is the key under the + sign, so ⌘+ works without shift.
         case .zoomIn: ShortcutKey("=")
         case .zoomOut: ShortcutKey("-")

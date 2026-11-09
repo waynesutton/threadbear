@@ -65,22 +65,31 @@ extension AppModel {
         history.replaceCurrent(with: place)
     }
 
-    var canGoBack: Bool { history.canGoBack }
+    /// Settings, Skills or Notes over the main panel. They aren't steps in
+    /// the history, so Back first puts the page away, back to what's under it.
+    var overlayPageShown: Bool { showsSettingsPage || showsSkillsPage || showsNotesPage }
+
+    var canGoBack: Bool { overlayPageShown || history.canGoBack }
     var canGoForward: Bool { history.canGoForward }
 
     func goBack() {
+        if overlayPageShown { closeOverlayPages(); return }
         flushNavigation()
         if let place = history.back(where: canShow) { show(place) }
     }
 
     func goForward() {
         flushNavigation()
-        if let place = history.forward(where: canShow) { show(place) }
+        if let place = history.forward(where: canShow) {
+            closeOverlayPages()
+            show(place)
+        }
     }
 
     /// Where Back or Forward would go, named for a swipe's card: the
     /// thread's title and its place line, or the page.
     func destination(back: Bool) -> (title: String, detail: String?)? {
+        if back, overlayPageShown { return describe(place) }
         guard let place = history.peek(back: back, where: canShow) else { return nil }
         return describe(place)
     }

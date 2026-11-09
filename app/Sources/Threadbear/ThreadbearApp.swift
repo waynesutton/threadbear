@@ -9,6 +9,8 @@ struct ThreadbearApp: App {
     @State private var app = AppModel.shared
     @State private var zoom = TextZoom.shared
     @State private var updater = AppUpdater.shared
+    /// Settings > General can hide Notes; its menu item goes quiet with it.
+    @AppStorage(NotesStore.shownKey) private var notesShown = true
 
     init() {
         // A build staged while the app was last running (and it was killed
@@ -153,7 +155,7 @@ struct ThreadbearApp: App {
                     .shortcut(.copyTranscript)
                     .disabled(app.selection.map { app.isBusy(BusyKey.copying($0)) } ?? true)
                     Divider()
-                    // ⌘1 to ⌘4 in the activity bar's order, as VS Code numbers
+                    // ⌘1 to ⌘6 in the activity bar's order, as VS Code numbers
                     // its views. Hibernating and Archive are sections of the
                     // inbox now: these unfold them.
                     Button("Show Inbox", systemImage: "tray") { app.sidebarMode = .inbox }
@@ -167,6 +169,18 @@ struct ThreadbearApp: App {
                     Button("Show Librarian", systemImage: "books.vertical") { app.showLibrarian() }
                         .shortcut(.showLibrarian)
                         .disabled(!app.projectsSupported)
+                    // ⌘5 and ⌘6 go on down the activity bar. A second press
+                    // puts the page away, as its icon does.
+                    Button("Show Skills", systemImage: "sparkles.rectangle.stack") {
+                        if app.showsSkillsPage { app.showsSkillsPage = false } else { app.showSkills() }
+                    }
+                    .shortcut(.showSkills)
+                    .disabled(!(app.skillsSupported && app.skillsEnabled))
+                    Button("Show Notes", systemImage: "note.text") {
+                        if app.showsNotesPage { app.showsNotesPage = false } else { app.showNotes() }
+                    }
+                    .shortcut(.showNotes)
+                    .disabled(!notesShown)
                     Divider()
                     Button("Show Hibernating", systemImage: "moon.zzz") { app.showHibernating() }
                         .shortcut(.showHibernating)
