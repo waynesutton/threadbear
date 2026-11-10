@@ -109,6 +109,8 @@ final class AppModel {
     /// This Mac's runner's experiments that are on (hello's `experiments`),
     /// for the ones that live in the app: Voice mode.
     var experiments: Set<String> = []
+    /// The pages experiment's pages (Pages.swift), newest first.
+    var pages: [Page] = []
     /// How long a thread may sit idle with one of Mike's messages still
     /// queued before the app gives up on it showing.
     static let queuedGrace: Double = 10

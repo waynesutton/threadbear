@@ -756,6 +756,15 @@ public struct RunnersResult: Sendable, Decodable {
 /// read as "no projects here" and hide them.
 public extension RPCClient {
     /// Newest activity first; archived ones only (all of them) with `archived`.
+    /// Every page (docs/protocol.md, "Pages"); empty with the experiment off.
+    func listPages() async throws -> [Page] {
+        try await call("pages.list", .object([:]), as: PagesResult.self).pages
+    }
+
+    func getPage(_ pageId: String) async throws -> PageGetResult {
+        try await call("pages.get", .object(["pageId": .string(pageId)]), as: PageGetResult.self)
+    }
+
     func listProjects(archived: Bool = false) async throws -> [Project] {
         var params: [String: JSONValue] = [:]
         if archived { params["archived"] = .bool(true) }

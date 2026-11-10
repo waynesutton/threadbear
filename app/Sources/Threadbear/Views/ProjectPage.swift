@@ -35,6 +35,7 @@ struct ProjectPage: View {
                 TextSection(project: project, field: .notes)
                 FoldersSection(project: project)
                 ThreadsSection(project: project, threads: threads)
+                if app.pagesOn { PagesSection(project: project) }
                 PatchesSection(project: project, threads: threads)
             }
             .frame(maxWidth: zoomed(720), alignment: .leading)
@@ -282,6 +283,69 @@ extension AttributedString {
     /// short text in a SwiftUI view (a project's notes, a review's notes).
     static func inlineMarkdown(_ text: String) -> AttributedString {
         (try? AttributedString(markdown: text, options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace))) ?? AttributedString(text)
+    }
+}
+
+/// The pages its threads' agents made (docs/protocol.md, "Pages"): a
+/// bundle report, a progress card. Each opens in a window of its own.
+/// The pages experiment.
+private struct PagesSection: View {
+    @Environment(AppModel.self) private var app
+    let project: Project
+
+    var body: some View {
+        let pages = app.pages(in: project.id)
+        VStack(alignment: .leading, spacing: 0) {
+            PageHeading(title: "Pages", detail: pages.isEmpty ? nil : "\(pages.count)") { EmptyView() }
+            if pages.isEmpty {
+                Text("None yet. Ask a thread in this project for a page, like a bundle size report, and it shows here.")
+                    .font(.system(size: TypeScale.label))
+                    .foregroundStyle(Color(nsColor: Theme.faintText))
+            } else {
+                VStack(alignment: .leading, spacing: zoomed(2)) {
+                    ForEach(pages) { page in PageRow(page: page) }
+                }
+            }
+        }
+    }
+}
+
+private struct PageRow: View {
+    @Environment(AppModel.self) private var app
+    let page: Page
+    @State private var hovering = false
+
+    var body: some View {
+        Button { app.openPage(page) } label: {
+            HStack(alignment: .firstTextBaseline, spacing: zoomed(10)) {
+                Image(systemName: "doc.richtext")
+                    .foregroundStyle(Color(nsColor: Theme.faintText))
+                VStack(alignment: .leading, spacing: zoomed(2)) {
+                    HStack(spacing: zoomed(6)) {
+                        Text(page.title).fontWeight(.medium)
+                        Text("v\(page.version) · \(RelativeTime.short(page.updatedAt, now: app.now))")
+                            .font(.system(size: TypeScale.detail))
+                            .foregroundStyle(Color(nsColor: Theme.faintText))
+                    }
+                    if !page.summary.isEmpty {
+                        Text(page.summary)
+                            .font(.system(size: TypeScale.detail))
+                            .foregroundStyle(Color(nsColor: Theme.faintText))
+                            .lineLimit(2)
+                    }
+                }
+                Spacer(minLength: 0)
+            }
+            .font(.system(size: TypeScale.label))
+            .padding(.vertical, zoomed(6))
+            .padding(.horizontal, zoomed(8))
+            .background(RoundedRectangle(cornerRadius: zoomed(6)).fill(Color.primary.opacity(hovering ? 0.06 : 0)))
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .busy(app.isBusy(BusyKey.page(page.id)))
+        .onHover { hovering = $0 }
+        .tip("Open this page in a window of its own")
     }
 }
 
