@@ -39,7 +39,7 @@ import type { SecretAnswer, SecretRequest } from './runner/approvals.ts';
 import type { StartRequest } from './cross-runner.ts';
 import { SECRET_TIMEOUT_DEFAULT_MIN, SECRET_TIMEOUT_MAX_MIN } from './secrets.ts';
 import { cutSafely, firstLineSafely } from './safe-cut.ts';
-import { MAX_SUMMARY, MAX_TITLE, type PageRecord, type Pages } from './pages.ts';
+import { MAX_RECIPE, MAX_SUMMARY, MAX_TITLE, PAGE_KINDS, type PageRecord, type Pages } from './pages.ts';
 import { MAX_HANDLES, XaiKeyRejected, forgetXaiKey, formatXSearch, readXaiKey, saveXaiKey, xSearch, xSearchProblem } from './x-search.ts';
 
 // What the tools drive: the Runner itself, or during a handover
@@ -780,7 +780,7 @@ export function buildThreadbearTools(
   // keeps, in zero or more projects. Only handed out while it's on.
   const pageStore = opts.pages?.();
   const pageLine = (p: PageRecord): string =>
-    `${p.id}  v${p.version}  "${p.title}"${p.live ? '  live' : ''}  ${p.projects.length ? `in ${p.projects.map((x) => x.id).join(', ')}` : 'no project'}  thread ${p.ownerThread.slice(0, 8)}  ${p.updatedAt}${p.summary ? `\n  ${p.summary}` : ''}`;
+    `${p.id}  ${p.kind ?? 'page'}  v${p.version}  "${p.title}"${p.live ? '  live' : ''}${p.deletedAt ? `  deleted ${p.deletedAt}` : ''}  ${p.projects.length ? `in ${p.projects.map((x) => x.id).join(', ')}` : 'no project'}  thread ${p.ownerThread.slice(0, 8)}  ${p.updatedAt}${p.editedBy === 'user' ? '  edited by the user' : ''}${p.summary ? `\n  ${p.summary}` : ''}`;
   const showPage = async (p: PageRecord, show: boolean | undefined): Promise<string> => {
     if (!show) return '';
     if (!control.pin) return ' This runner can\'t open it in the side pane.';
@@ -789,19 +789,23 @@ export function buildThreadbearTools(
   };
   const projectIds = async (qs: string[]): Promise<string[]> => Promise.all(qs.map(async (q) => (await project(q)).id));
   const pageContent = {
-    html: z.string().optional().describe('The page as one HTML document. Give html or dir.'),
+    html: z.string().optional().describe('The page as one HTML document. Give one of html, dir or markdown.'),
     dir: z.string().optional().describe('A folder you built with index.html and its assets (svg, png, webp, mp4, css). Absolute, or relative to this thread’s folder.'),
+    markdown: z.string().optional().describe('For a doc: the text as markdown. Threadbear draws it, and the user can edit it in the app.'),
   };
+  const recipeArg = z.string().max(MAX_RECIPE).optional().describe('How to make it again, for the Refresh button: the command, the data file, the steps. A thread follows it later.');
   const absDir = (d: string | undefined, cwd: string | undefined): string | undefined => (d === undefined ? undefined : path.resolve(cwd ?? process.cwd(), d.replace(/^~(?=\/)/, home)));
   const pageTools = pageStore
     ? [
         tool(
           'create_page',
-          `Makes a Page: a named, versioned page Threadbear keeps for the user, like a report or a progress card, that outlives this reply and can be updated in place with update_page. Static HTML, CSS and SVG only unless live is true. Then put a \`\`\`page <id>\`\`\` block in your reply to show it as a card. If a page from the same source already exists (list_pages), update that one instead.`,
+          `Makes a Page: a named, versioned page Threadbear keeps for the user (a chart, dashboard, report, doc), that outlives this reply and is updated in place with update_page. Use the make-page skill to build charts and dashboards from data. Static HTML, CSS and SVG unless live is true. Then put a \`\`\`page <id>\`\`\` block in your reply. If one from the same source exists (list_pages), update it instead.`,
           {
             title: z.string().min(1).max(MAX_TITLE).describe('Short, what it shows: "Bundle size".'),
             summary: z.string().max(MAX_SUMMARY).describe('One or two lines of what it says now, for lists and other apps.'),
             ...pageContent,
+            kind: z.enum(PAGE_KINDS).optional().describe('chart, dashboard, report, doc, bundle or page. markdown makes a doc.'),
+            recipe: recipeArg,
             projects: z.array(z.string()).optional().describe('Projects to put it in, by id or title. Left out: this thread\'s project when it is pinned to exactly one. [] for none.'),
             source: z.string().max(MAX_TITLE).optional().describe('What made it ("bundle-analyzer summary"), so the next run finds and updates it.'),
             live: z.boolean().optional().describe('Allows inline scripts. They run only in the side pane after the user chooses Run them, never in the thread.'),
@@ -816,9 +820,12 @@ export function buildThreadbearTools(
               ownerThread: selfId,
               ...(input.html !== undefined ? { html: input.html } : {}),
               ...(input.dir !== undefined ? { dir: absDir(input.dir, me?.cwd) } : {}),
+              ...(input.markdown !== undefined ? { markdown: input.markdown } : {}),
               ...(input.projects ? { projects: await projectIds(input.projects) } : {}),
               ownerProjects: me?.projects ?? [],
               ...(input.source ? { source: input.source } : {}),
+              ...(input.kind ? { kind: input.kind } : {}),
+              ...(input.recipe ? { recipe: input.recipe } : {}),
               ...(input.live ? { live: true } : {}),
             });
             return `Made ${pageLine(p)}\nShow it with a \`\`\`page ${p.id}\`\`\` block.${await showPage(p, input.show)}`;
@@ -826,51 +833,95 @@ export function buildThreadbearTools(
         ),
         tool(
           'update_page',
-          'Updates a Page in place: new content makes a new version, the card in the thread follows it, and the last 10 versions are kept.',
+          'Updates a Page in place: new content (html, dir or markdown) makes a new version, and the last 10 are kept. restoreVersion makes an older version the newest again. If the user edited a doc themselves (read_page says so), start from their markdown.',
           {
             id: z.string().min(1).describe('The page id (pg_...) or a unique prefix.'),
             title: z.string().min(1).max(MAX_TITLE).optional(),
             summary: z.string().max(MAX_SUMMARY).optional(),
             ...pageContent,
+            recipe: recipeArg,
+            restoreVersion: z.number().int().min(1).optional().describe('Make this older version the newest again.'),
             show: z.boolean().optional().describe('Open it in the side pane now.'),
           },
           handle(async (input) => {
             const me = (await all()).find((t) => t.id === selfId);
+            if (input.restoreVersion !== undefined) {
+              const r = pageStore.restoreVersion(input.id, input.restoreVersion);
+              return `Version ${input.restoreVersion} is the newest again: ${pageLine(r)}${await showPage(r, input.show)}`;
+            }
             const p = pageStore.update(input.id, {
               ...(input.title !== undefined ? { title: input.title } : {}),
               ...(input.summary !== undefined ? { summary: input.summary } : {}),
+              ...(input.recipe !== undefined ? { recipe: input.recipe } : {}),
               ...(input.html !== undefined ? { html: input.html } : {}),
               ...(input.dir !== undefined ? { dir: absDir(input.dir, me?.cwd) } : {}),
+              ...(input.markdown !== undefined ? { markdown: input.markdown } : {}),
             });
             return `Updated ${pageLine(p)}${await showPage(p, input.show)}`;
           }),
         ),
         tool(
           'list_pages',
-          'Lists Pages, newest first: by project, by the thread that made them, with no project, or by source.',
+          'Lists Pages, newest first: by project, by the thread that made them, with no project, by source, or the deleted ones.',
           {
             project: z.string().optional().describe('Project id or title.'),
             thread: z.string().optional().describe('Thread id. "self" for this thread.'),
             none: z.boolean().optional().describe('Only pages in no project.'),
             source: z.string().optional(),
+            deleted: z.boolean().optional().describe('Only deleted pages, kept 7 days for restore_page.'),
           },
-          handle(async ({ project: q, thread, none, source }) => {
+          handle(async ({ project: q, thread, none, source, deleted }) => {
             const list = pageStore.list({
               ...(q ? { project: (await project(q)).id } : {}),
               ...(thread ? { thread: thread === 'self' ? selfId : thread } : {}),
               ...(none ? { none } : {}),
               ...(source ? { source } : {}),
+              ...(deleted ? { deleted } : {}),
             });
             return list.length ? list.map(pageLine).join('\n') : 'No pages.';
           }),
         ),
         tool(
           'read_page',
-          'Reads a Page: its title, summary, version, projects and the path of its newest index.html.',
-          { id: z.string().min(1) },
-          handle(({ id }) => {
+          "Reads a Page: title, summary, kind, version, projects, how to remake it, the versions kept, the path of its index.html, and a doc's markdown.",
+          { id: z.string().min(1), version: z.number().int().min(1).optional().describe('An older version. Default: the newest.') },
+          handle(({ id, version }) => {
             const p = pageStore.find(id);
-            return `${pageLine(p)}\nfile: ${pageStore.file(p.id)}`;
+            const md = pageStore.markdown(p.id, version);
+            return [
+              pageLine(p),
+              p.recipe ? `recipe: ${p.recipe}` : '',
+              `versions kept: ${pageStore.versions(p.id).join(', ')}`,
+              `file: ${pageStore.file(p.id, version)}`,
+              md !== undefined ? `markdown:\n${md}` : '',
+            ]
+              .filter(Boolean)
+              .join('\n');
+          }),
+        ),
+        tool(
+          'delete_page',
+          'Deletes a Page. It is kept 7 days, and restore_page brings it back until then.',
+          { id: z.string().min(1) },
+          handle(({ id }) => `Deleted ${pageStore.delete(id).id}. restore_page brings it back for 7 days.`),
+        ),
+        tool(
+          'restore_page',
+          'Brings back a deleted Page (list_pages with deleted: true shows them).',
+          { id: z.string().min(1) },
+          handle(({ id }) => `Restored ${pageLine(pageStore.restore(id))}`),
+        ),
+        tool(
+          'export_page',
+          "Copies a Page's files (index.html and its assets) into a new or empty folder, for the user to keep or send. For a PDF, run the make-page skill's export-pdf.mjs on the copied index.html.",
+          {
+            id: z.string().min(1),
+            folder: z.string().min(1).describe('Where to copy it. Absolute, or relative to this thread’s folder.'),
+            version: z.number().int().min(1).optional(),
+          },
+          handle(async ({ id, folder, version }) => {
+            const me = (await all()).find((t) => t.id === selfId);
+            return `Copied to ${pageStore.exportTo(id, absDir(folder, me?.cwd)!, version)}`;
           }),
         ),
         tool(

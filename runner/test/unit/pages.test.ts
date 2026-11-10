@@ -131,7 +131,7 @@ test('page tools: off without the experiment; create inherits the pinned project
   const tools = buildThreadbearTools(control, 'th1', Date.now, undefined, projects, undefined, { pages: () => store }) as unknown as Tool[];
   const made = await call(tools, 'create_page', { title: 'Bundle size', summary: '20.22 MB', html: page('v1'), source: 'bundle-analyzer summary' });
   assert.equal(made.err, false, made.text);
-  assert.match(made.text, /pg_bundle_size {2}v1 .*in p_tb/);
+  assert.match(made.text, /pg_bundle_size {2}page {2}v1 .*in p_tb/);
   const bad = await call(tools, 'create_page', { title: 'X', summary: '', html: page('<script></script>') });
   assert.equal(bad.err, true);
 
@@ -169,4 +169,81 @@ test('pages.* methods: empty while off, list, get with file and versions, setPro
   assert.equal((m['pages.list']!({ none: true }) as { pages: unknown[] }).pages.length, 0);
   assert.throws(() => m['pages.get']!({ pageId: 'nope' }), /No page nope/);
   assert.throws(() => m['pages.setProjects']!({ pageId: p.id, add: 'p_tb' }), /list of strings/);
+});
+
+test('docs: markdown is drawn, kept beside it, edited by the user as a new version, and escaped', async () => {
+  const store = new Pages(home());
+  const d = store.create({ title: 'Launch plan', summary: '', ownerThread: 't', markdown: '# Goals\n\n- [x] ship **Pages**\n- [ ] write the guide\n\n<script>alert(1)</script>\n\n[site](https://convex.dev) [bad](javascript:alert(1))\n\n| a | b |\n|---|---|\n| 1 | 2 |' });
+  assert.equal(d.kind, 'doc');
+  const html = fs.readFileSync(store.file(d.id), 'utf8');
+  assert.doesNotMatch(html, /<script/);
+  assert.match(html, /&lt;script&gt;/);
+  assert.match(html, /<a href="https:\/\/convex.dev">site<\/a>/);
+  assert.doesNotMatch(html, /javascript:/);
+  assert.match(html, /<li class="task done">/);
+  assert.match(html, /<table>/);
+  assert.match(store.markdown(d.id)!, /ship \*\*Pages\*\*/);
+  const edited = store.update(d.id, { markdown: '# Goals\n\nDone.', by: 'user' });
+  assert.equal(edited.version, 2);
+  assert.equal(edited.editedBy, 'user');
+  assert.equal(store.markdown(d.id), '# Goals\n\nDone.');
+  assert.match(store.markdown(d.id, 1)!, /write the guide/);
+  const renamed = store.update(d.id, { title: 'Launch plan v2' });
+  assert.equal(renamed.version, 3, "a doc's title is in the page, so a new title is a new version");
+  assert.match(fs.readFileSync(store.file(d.id), 'utf8'), /Launch plan v2/);
+});
+
+test('delete keeps a page 7 days for restore, then purges it with its files', () => {
+  const h = home();
+  let t = Date.parse('2026-11-10T00:00:00Z');
+  const store = new Pages(h, () => t);
+  const p = store.create({ title: 'Old', summary: '', ownerThread: 't', html: page('x'), projects: [] });
+  store.delete(p.id);
+  assert.equal(store.list().length, 0);
+  assert.equal(store.list({ deleted: true }).length, 1);
+  assert.throws(() => store.update(p.id, { html: page('y') }), /deleted/);
+  store.restore(p.id);
+  assert.equal(store.list().length, 1);
+  store.delete(p.id);
+  t += 8 * 24 * 3600 * 1000;
+  const later = new Pages(h, () => t);
+  assert.equal(later.list({ deleted: true }).length, 0);
+  assert.ok(!fs.existsSync(path.join(h, 'pages', p.id)));
+});
+
+test('restoreVersion makes an old version the newest again; exportTo copies a version into an empty folder', () => {
+  const store = new Pages(home());
+  const p = store.create({ title: 'V', summary: '', ownerThread: 't', html: page('one') });
+  store.update(p.id, { html: page('two') });
+  const back = store.restoreVersion(p.id, 1);
+  assert.equal(back.version, 3);
+  assert.match(fs.readFileSync(store.file(p.id), 'utf8'), /one/);
+  assert.throws(() => store.restoreVersion(p.id, 9), /isn't kept/);
+  const dest = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'tb-export-')), 'out');
+  const file = store.exportTo(p.id, dest, 2);
+  assert.match(fs.readFileSync(file, 'utf8'), /two/);
+  assert.throws(() => store.exportTo(p.id, dest), /already has files/);
+});
+
+test('pages.refresh and pages.edit send the page to a thread; the runner never runs the recipe', async () => {
+  const { pageMethods, refreshText, editText } = await import('../../src/pages.ts');
+  const store = new Pages(home());
+  const p = store.create({ title: 'Bundle size', summary: '', ownerThread: 'th1', html: page('x'), recipe: 'node report.mjs ~/app out' });
+  const sent: { id: string; text: string }[] = [];
+  const m = pageMethods(() => store, (pg, text) => (sent.push({ id: pg.ownerThread, text }), { threadId: pg.ownerThread, started: false }));
+  m['pages.refresh']!({ pageId: p.id });
+  m['pages.edit']!({ pageId: p.id, text: 'make the bars amber' });
+  assert.deepEqual(sent.map((x) => x.id), ['th1', 'th1']);
+  assert.equal(sent[0]!.text, refreshText(store.find(p.id)));
+  assert.match(sent[0]!.text, /How it was made: node report\.mjs/);
+  assert.equal(sent[1]!.text, editText(store.find(p.id), 'make the bars amber'));
+  assert.throws(() => m['pages.edit']!({ pageId: p.id, text: ' ' }), /what should change/);
+  const doc = store.create({ title: 'Notes', summary: '', ownerThread: 'th1', markdown: 'hi' });
+  m['pages.saveDoc']!({ pageId: doc.id, markdown: 'hello' });
+  assert.equal((m['pages.get']!({ pageId: doc.id }) as { markdown: string }).markdown, 'hello');
+  assert.equal(store.find(doc.id).editedBy, 'user');
+  m['pages.delete']!({ pageId: doc.id });
+  assert.equal((m['pages.list']!({ deleted: true }) as { pages: unknown[] }).pages.length, 1);
+  m['pages.restore']!({ pageId: doc.id });
+  assert.throws(() => m['pages.export']!({ pageId: doc.id, dest: 'relative' }), /absolute/);
 });

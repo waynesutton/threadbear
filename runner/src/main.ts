@@ -1,7 +1,7 @@
 // Runner entry point: `node src/main.ts`. launchd runs this (see
 // scripts/install-runner.sh); tests run it with THREADBEAR_HOME and
 // THREADBEAR_PORT pointing at temp places.
-import { Pages, pageMethods } from './pages.ts';
+import { Pages, pageMethods, type PageAsk } from './pages.ts';
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
@@ -681,7 +681,20 @@ async function main(): Promise<void> {
       }),
     changed: () => {},
   });
-  const methods = { ...profileMethods(profileJobs), ...profilePageMethods(publicProfile), ...restartMethods(restarter), ...scheduleMethods(scheduler), ...projectMethods(projects), ...pageMethods(pagesFor), ...drainProjectMethods(projects), ...librarianMethods(librarian), ...connectorsMethods(connectors, { on: () => experimentOn(cfg.home, 'connectorsSetup'), start: ({ text, title, why }) => runner.create({ text, title, permissionMode: 'full', startedBy: { kind: 'runner', label: 'Threadbear', why } }).thread.id, open: openThread, local: () => experimentOn(cfg.home, 'localConnectors'), findLauncher: (l) => findLauncher(l) }), ...settingsMethods(settings), ...skillMethods(skills), ...instructionsMethods(instructions), ...modelMethods(models), ...devicesMethods(sync), ...agentsMethods(sync, () => experimentOn(cfg.home, OUTSIDE_AGENTS)), ...usageStatsMethods({ tally, history: usageHistory, clock: realClock }) };
+  // Refresh and Edit with agent (pages.ts): to the thread that made the
+  // page, queued behind its turn, or a new thread in the page's project.
+  const askAboutPage: PageAsk = (page, text) => {
+    try {
+      runner.get(page.ownerThread);
+      void runner.send(page.ownerThread, text, [], { queue: true });
+      return { threadId: page.ownerThread, started: false };
+    } catch {
+      const folder = page.projects.map((x) => projects.list({ archived: true }).find((pr) => pr.id === x.id)?.folders[0]).find(Boolean);
+      const t = runner.create({ text, title: `Page: ${page.title}`, ...(folder ? { cwd: folder } : {}), startedBy: { kind: 'runner', label: 'Pages', why: 'Refresh or change a page whose thread is gone' } });
+      return { threadId: t.thread.id, started: true };
+    }
+  };
+  const methods = { ...profileMethods(profileJobs), ...profilePageMethods(publicProfile), ...restartMethods(restarter), ...scheduleMethods(scheduler), ...projectMethods(projects), ...pageMethods(pagesFor, askAboutPage), ...drainProjectMethods(projects), ...librarianMethods(librarian), ...connectorsMethods(connectors, { on: () => experimentOn(cfg.home, 'connectorsSetup'), start: ({ text, title, why }) => runner.create({ text, title, permissionMode: 'full', startedBy: { kind: 'runner', label: 'Threadbear', why } }).thread.id, open: openThread, local: () => experimentOn(cfg.home, 'localConnectors'), findLauncher: (l) => findLauncher(l) }), ...settingsMethods(settings), ...skillMethods(skills), ...instructionsMethods(instructions), ...modelMethods(models), ...devicesMethods(sync), ...agentsMethods(sync, () => experimentOn(cfg.home, OUTSIDE_AGENTS)), ...usageStatsMethods({ tally, history: usageHistory, clock: realClock }) };
   // runner.status carries the CLI statuses too (protocol, "runner.status").
   const restartStatus = methods['runner.status'];
   methods['runner.status'] = (p) => {

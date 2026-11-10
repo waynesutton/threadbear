@@ -13,6 +13,7 @@ import crypto from 'node:crypto';
 import { atomicWriteFileSync, readJsonSync } from './fsutil.ts';
 import type { ProjectMaker, ThreadProject } from './protocol.ts';
 import { ErrorCode, RpcError } from './protocol.ts';
+import { DOC_SOURCE, renderDoc } from './page-doc.ts';
 
 export const MAX_VERSIONS = 10;
 export const MAX_HTML_BYTES = 1_000_000;
@@ -23,7 +24,14 @@ export const MAX_TITLE = 120;
 // What a page folder may hold besides index.html: passive assets only.
 // No .js (scripts live inline, and only on live pages) and no .json (a
 // page can't read data files; that's for a later host channel).
-export const PAGE_ASSETS = new Set(['.html', '.css', '.svg', '.png', '.jpg', '.jpeg', '.webp', '.gif', '.mp4', '.webm', '.woff2']);
+export const PAGE_ASSETS = new Set(['.html', '.css', '.svg', '.png', '.jpg', '.jpeg', '.webp', '.gif', '.mp4', '.webm', '.woff2', '.md']);
+export const MAX_RECIPE = 1000;
+// A deleted page is kept this long so Restore can bring it back.
+export const DELETED_KEEP_MS = 7 * 24 * 3600 * 1000;
+// What a page is, for its icon and what Refresh and Edit mean. A doc is
+// markdown the runner draws (page-doc.ts), which the user can edit too.
+export const PAGE_KINDS = ['page', 'chart', 'dashboard', 'report', 'doc', 'bundle'] as const;
+export type PageKind = (typeof PAGE_KINDS)[number];
 
 export type PageProject = { id: string; by: ProjectMaker; pinned?: boolean };
 
@@ -41,11 +49,21 @@ export type PageRecord = {
   // What made it, so the same report updates rather than piles up
   // ("bundle-analyzer summary").
   source?: string;
+  // Left out on pages from before kinds: "page".
+  kind?: PageKind;
+  // How to make it again, in words an agent can follow (the command, the
+  // data file), for Refresh. Never run by the runner itself.
+  recipe?: string;
+  // Who wrote the newest version: an agent, or the user in the editor.
+  editedBy?: 'agent' | 'user';
+  // Set while it's deleted; gone for good DELETED_KEEP_MS later.
+  deletedAt?: string;
   createdAt: string;
   updatedAt: string;
 };
 
-export type PageContent = { html?: string; dir?: string };
+// One of: a whole HTML document, a built folder, or markdown for a doc.
+export type PageContent = { html?: string; dir?: string; markdown?: string };
 
 export type CreatePage = PageContent & {
   title: string;
@@ -57,11 +75,13 @@ export type CreatePage = PageContent & {
   ownerProjects?: readonly ThreadProject[];
   source?: string;
   live?: boolean;
+  kind?: PageKind;
+  recipe?: string;
 };
 
-export type UpdatePage = PageContent & { title?: string; summary?: string };
+export type UpdatePage = PageContent & { title?: string; summary?: string; recipe?: string; by?: 'agent' | 'user' };
 
-export type PageFilter = { project?: string; thread?: string; none?: boolean; source?: string };
+export type PageFilter = { project?: string; thread?: string; none?: boolean; source?: string; deleted?: boolean };
 
 const SCRIPT = /<script\b/i;
 
@@ -79,10 +99,13 @@ export class Pages {
     this.now = now;
     this.onChange = onChange;
     this.records = readJsonSync<PageRecord[]>(this.indexFile()) ?? [];
+    this.purge();
   }
 
+  // Deleted pages are left out unless asked for (then only they come back).
   list(f: PageFilter = {}): PageRecord[] {
     return this.records
+      .filter((p) => (f.deleted ? Boolean(p.deletedAt) : !p.deletedAt))
       .filter((p) => (f.thread ? p.ownerThread === f.thread : true))
       .filter((p) => (f.project ? p.projects.some((x) => x.id === f.project) : true))
       .filter((p) => (f.none ? p.projects.length === 0 : true))
@@ -108,7 +131,8 @@ export class Pages {
     const projects = c.projects
       ? [...new Set(c.projects)].map((pid): PageProject => ({ id: pid, by: 'agent', pinned: true }))
       : inherited(c.ownerProjects ?? []);
-    const bytes = this.write(id, 1, c, live);
+    const kind = c.markdown !== undefined ? 'doc' : (c.kind ?? 'page');
+    const bytes = this.write(id, 1, c, live, title);
     const rec: PageRecord = {
       id,
       title,
@@ -119,6 +143,9 @@ export class Pages {
       bytes,
       live,
       ...(c.source ? { source: c.source.trim().slice(0, MAX_TITLE) } : {}),
+      kind,
+      ...(c.recipe?.trim() ? { recipe: c.recipe.trim().slice(0, MAX_RECIPE) } : {}),
+      editedBy: 'agent',
       createdAt: at,
       updatedAt: at,
     };
@@ -128,14 +155,26 @@ export class Pages {
   }
 
   update(id: string, u: UpdatePage): PageRecord {
-    const p = this.must(id);
+    const p = this.live(id);
     const next = { ...p };
     if (u.title !== undefined) next.title = cleanTitle(u.title);
     if (u.summary !== undefined) next.summary = cleanSummary(u.summary);
-    if (u.html !== undefined || u.dir !== undefined) {
+    if (u.recipe !== undefined) next.recipe = u.recipe.trim().slice(0, MAX_RECIPE) || undefined;
+    if (u.html !== undefined || u.dir !== undefined || u.markdown !== undefined) {
+      if (u.markdown !== undefined && next.kind !== 'doc' && (u.html !== undefined || u.dir !== undefined)) throw new PageError('Give the page as html, dir or markdown, one of them.');
+      if (u.markdown !== undefined) next.kind = 'doc';
       next.version = p.version + 1;
-      next.bytes = this.write(p.id, next.version, u, p.live);
+      next.bytes = this.write(p.id, next.version, u, p.live, next.title);
+      next.editedBy = u.by ?? 'agent';
       this.prune(p.id, next.version);
+    } else if (u.title !== undefined && next.kind === 'doc') {
+      // A doc's title is drawn in it: a new title is a new version.
+      const md = this.markdown(p.id);
+      if (md !== undefined) {
+        next.version = p.version + 1;
+        next.bytes = this.write(p.id, next.version, { markdown: md }, p.live, next.title);
+        this.prune(p.id, next.version);
+      }
     }
     next.updatedAt = new Date(this.now()).toISOString();
     this.records = this.records.map((r) => (r.id === p.id ? next : r));
@@ -143,8 +182,52 @@ export class Pages {
     return next;
   }
 
-  setProjects(id: string, change: { add?: string[]; remove?: string[]; by?: ProjectMaker }): PageRecord {
+  // A doc's markdown, newest or at a version, for the editor.
+  markdown(id: string, version?: number): string | undefined {
     const p = this.must(id);
+    try {
+      return fs.readFileSync(path.join(this.versionDir(p.id, version ?? p.version), DOC_SOURCE), 'utf8');
+    } catch {
+      return undefined;
+    }
+  }
+
+  // An older version becomes the newest again, as a new version, so
+  // nothing in between is lost.
+  restoreVersion(id: string, version: number): PageRecord {
+    const p = this.live(id);
+    const from = this.versionDir(p.id, version);
+    if (!fs.existsSync(from)) throw new PageError(`Version ${version} of ${p.id} isn't kept. read_page lists the versions there are.`);
+    return this.update(p.id, { dir: from });
+  }
+
+  // Set aside for DELETED_KEEP_MS, then gone. Lists leave it out.
+  delete(id: string): PageRecord {
+    const p = this.live(id);
+    return this.replace({ ...p, deletedAt: new Date(this.now()).toISOString() });
+  }
+
+  restore(id: string): PageRecord {
+    const p = this.must(id);
+    if (!p.deletedAt) return p;
+    const { deletedAt: _gone, ...rest } = p;
+    return this.replace({ ...rest, updatedAt: new Date(this.now()).toISOString() });
+  }
+
+  // Copies a version's files into dest (made if missing, refused if it
+  // has files), for Download. Returns the copied index.html.
+  exportTo(id: string, dest: string, version?: number): string {
+    const p = this.must(id);
+    const from = this.versionDir(p.id, version ?? p.version);
+    if (!fs.existsSync(from)) throw new PageError(`Version ${version} of ${p.id} isn't kept.`);
+    if (fs.existsSync(dest) && fs.readdirSync(dest).length) throw new PageError(`${dest} already has files in it. Pick an empty or new folder.`);
+    fs.mkdirSync(dest, { recursive: true });
+    fs.cpSync(from, dest, { recursive: true });
+    return path.join(dest, 'index.html');
+  }
+
+  setProjects(id: string, change: { add?: string[]; remove?: string[]; by?: ProjectMaker }): PageRecord {
+    const p = this.live(id);
     const remove = new Set(change.remove ?? []);
     const kept = p.projects.filter((x) => !remove.has(x.id));
     const have = new Set(kept.map((x) => x.id));
@@ -158,6 +241,30 @@ export class Pages {
   // By id or a unique prefix, or a PageError saying how to find one.
   find(id: string): PageRecord {
     return this.must(id);
+  }
+
+  private replace(next: PageRecord): PageRecord {
+    this.records = this.records.map((r) => (r.id === next.id ? next : r));
+    this.persist();
+    return next;
+  }
+
+  // Pages deleted over DELETED_KEEP_MS ago, removed with their files.
+  private purge(): void {
+    const cut = this.now() - DELETED_KEEP_MS;
+    const gone = this.records.filter((p) => p.deletedAt && Date.parse(p.deletedAt) < cut);
+    if (!gone.length) return;
+    for (const p of gone) fs.rmSync(path.join(this.dir, p.id), { recursive: true, force: true });
+    const ids = new Set(gone.map((p) => p.id));
+    this.records = this.records.filter((p) => !ids.has(p.id));
+    atomicWriteFileSync(this.indexFile(), JSON.stringify(this.records, null, 2) + '\n');
+  }
+
+  // A page that isn't deleted, for anything that changes it.
+  private live(id: string): PageRecord {
+    const p = this.must(id);
+    if (p.deletedAt) throw new PageError(`${p.id} is deleted. restore_page brings it back first.`);
+    return p;
   }
 
   private must(id: string): PageRecord {
@@ -179,9 +286,19 @@ export class Pages {
 
   // Checks everything before anything is written, then copies into a temp
   // folder and renames it into place, so a refused page leaves nothing.
-  private write(id: string, v: number, c: PageContent, live: boolean): number {
-    if ((c.html === undefined) === (c.dir === undefined)) throw new PageError('Give the page as html or as dir, one of them.');
-    const files: { rel: string; data: Buffer }[] = c.html !== undefined ? [{ rel: 'index.html', data: Buffer.from(c.html, 'utf8') }] : readPageDir(c.dir!);
+  private write(id: string, v: number, c: PageContent, live: boolean, title: string): number {
+    const given = [c.html, c.dir, c.markdown].filter((x) => x !== undefined).length;
+    if (given !== 1) throw new PageError('Give the page as html, dir or markdown, one of them.');
+    const at = new Date(this.now());
+    const files: { rel: string; data: Buffer }[] =
+      c.markdown !== undefined
+        ? [
+            { rel: 'index.html', data: Buffer.from(renderDoc(title, c.markdown, `Version ${v} · ${at.toISOString().slice(0, 16).replace('T', ' ')} UTC`), 'utf8') },
+            { rel: DOC_SOURCE, data: Buffer.from(c.markdown, 'utf8') },
+          ]
+        : c.html !== undefined
+          ? [{ rel: 'index.html', data: Buffer.from(c.html, 'utf8') }]
+          : readPageDir(c.dir!);
     const index = files.find((f) => f.rel === 'index.html');
     if (!index) throw new PageError(`${c.dir} has no index.html.`);
     if (index.data.length > MAX_HTML_BYTES) throw new PageError(`index.html is ${index.data.length} bytes; the most is ${MAX_HTML_BYTES}. Move pictures into files next to it.`);
@@ -278,9 +395,25 @@ export function readPageDir(dir: string): { rel: string; data: Buffer }[] {
   return out;
 }
 
+// What Refresh and Edit with agent send: a message to the thread that made
+// the page, or a new thread when that one's gone. The runner never runs a
+// recipe itself; an agent reads it and does the work, under the thread's
+// own permissions.
+export function refreshText(p: PageRecord): string {
+  const how = p.recipe ? `How it was made: ${p.recipe}` : 'Make it again from the same source as before.';
+  return `Refresh the page "${p.title}" (${p.id}). ${how} Then call update_page with id ${p.id}${p.kind === 'doc' ? ' and the new markdown' : ''}.`;
+}
+
+export function editText(p: PageRecord, change: string): string {
+  return `Change the page "${p.title}" (${p.id}): ${change.trim()}\n\nCall update_page with id ${p.id}${p.kind === 'doc' ? ' and the new markdown (read_page has the current markdown)' : ''} when it's done.`;
+}
+
+export type PageAsk = (page: PageRecord, text: string) => { threadId: string; started: boolean };
+
 // docs/protocol.md, "Pages". `pages` is undefined while the experiment is
-// off: lists come back empty and the rest say so.
-export function pageMethods(pages: () => Pages | undefined): Record<string, (p: Record<string, unknown>) => unknown> {
+// off: lists come back empty and the rest say so. `ask` sends Refresh and
+// Edit with agent to a thread.
+export function pageMethods(pages: () => Pages | undefined, ask?: PageAsk): Record<string, (p: Record<string, unknown>) => unknown> {
   const must = (): Pages => {
     const s = pages();
     if (!s) throw new RpcError(ErrorCode.badParams, 'Pages is off. Turn it on in Settings > General > Experiments.');
@@ -317,14 +450,49 @@ export function pageMethods(pages: () => Pages | undefined): Record<string, (p: 
       if (!s) return { pages: [] };
       const project = str(p, 'project');
       const thread = str(p, 'thread');
-      return { pages: s.list({ ...(project ? { project } : {}), ...(thread ? { thread } : {}), ...(p.none === true ? { none: true } : {}) }) };
+      return { pages: s.list({ ...(project ? { project } : {}), ...(thread ? { thread } : {}), ...(p.none === true ? { none: true } : {}), ...(p.deleted === true ? { deleted: true } : {}) }) };
     },
     'pages.get': (p) =>
       found(() => {
         const s = must();
         const page = s.find(id(p));
-        return { page, file: s.file(page.id), versions: s.versions(page.id) };
+        const version = typeof p.version === 'number' ? p.version : undefined;
+        const markdown = s.markdown(page.id, version);
+        return { page, file: s.file(page.id, version), versions: s.versions(page.id), ...(markdown !== undefined ? { markdown } : {}) };
       }),
+    'pages.saveDoc': (p) => {
+      const markdown = str(p, 'markdown');
+      if (markdown === undefined) throw new RpcError(ErrorCode.badParams, 'markdown is required');
+      const title = str(p, 'title');
+      return found(() => ({ page: must().update(id(p), { markdown, by: 'user', ...(title ? { title } : {}) }) }));
+    },
+    'pages.restoreVersion': (p) => {
+      if (typeof p.version !== 'number') throw new RpcError(ErrorCode.badParams, 'version is required');
+      return found(() => ({ page: must().restoreVersion(id(p), p.version as number) }));
+    },
+    'pages.delete': (p) => found(() => ({ page: must().delete(id(p)) })),
+    'pages.restore': (p) => found(() => ({ page: must().restore(id(p)) })),
+    'pages.export': (p) => {
+      const dest = str(p, 'dest');
+      if (!dest || !path.isAbsolute(dest)) throw new RpcError(ErrorCode.badParams, 'dest must be an absolute folder');
+      const version = typeof p.version === 'number' ? p.version : undefined;
+      return found(() => ({ file: must().exportTo(id(p), dest, version) }));
+    },
+    'pages.refresh': (p) =>
+      found(() => {
+        if (!ask) throw new RpcError(ErrorCode.badParams, "This runner can't send a page to a thread.");
+        const page = must().find(id(p));
+        return ask(page, refreshText(page));
+      }),
+    'pages.edit': (p) => {
+      const change = str(p, 'text');
+      if (!change?.trim()) throw new RpcError(ErrorCode.badParams, 'text is required: what should change');
+      return found(() => {
+        if (!ask) throw new RpcError(ErrorCode.badParams, "This runner can't send a page to a thread.");
+        const page = must().find(id(p));
+        return ask(page, editText(page, change));
+      });
+    },
     'pages.setProjects': (p) => {
       const add = list(p, 'add');
       const remove = list(p, 'remove');
