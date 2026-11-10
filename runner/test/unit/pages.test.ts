@@ -131,7 +131,7 @@ test('page tools: off without the experiment; create inherits the pinned project
   const tools = buildThreadbearTools(control, 'th1', Date.now, undefined, projects, undefined, { pages: () => store }) as unknown as Tool[];
   const made = await call(tools, 'create_print', { title: 'Bundle size', summary: '20.22 MB', html: page('v1'), source: 'bundle-analyzer summary' });
   assert.equal(made.err, false, made.text);
-  assert.match(made.text, /pg_bundle_size {2}page {2}v1 .*in p_tb/);
+  assert.match(made.text, /pg_bundle_size {2}print {2}v1 .*in p_tb/);
   const bad = await call(tools, 'create_print', { title: 'X', summary: '', html: page('<script></script>') });
   assert.equal(bad.err, true);
 
@@ -258,6 +258,7 @@ test('the old page tool names still work after the rename to Prints', async () =
   for (const n of ['create_page', 'update_page', 'list_pages', 'read_page', 'delete_page', 'restore_page', 'export_page', 'add_page_to_project', 'remove_page_from_project']) assert.ok(names.includes(n), n);
   const made = await call(tools, 'create_page', { title: 'Old name', summary: '', html: page('x') });
   assert.match(made.text, /Made pg_old_name/);
+  assert.match(made.text, /```print pg_old_name```/, 'agents are told the print block');
   assert.match((await call(tools, 'list_prints', {})).text, /pg_old_name/);
   for (const n of ['list_prints', 'read_print', 'list_pages', 'read_page']) assert.ok(NEVER_ASK_TOOLS.has(`mcp__threadbear__${n}`), n);
 });

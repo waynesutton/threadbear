@@ -803,7 +803,7 @@ export function buildThreadbearTools(
   // out while it's on.
   const pageStore = opts.pages?.();
   const pageLine = (p: PageRecord): string =>
-    `${p.id}  ${p.kind ?? 'page'}  v${p.version}  "${p.title}"${p.live ? '  live' : ''}${p.deletedAt ? `  deleted ${p.deletedAt}` : ''}  ${p.projects.length ? `in ${p.projects.map((x) => x.id).join(', ')}` : 'no project'}  thread ${p.ownerThread.slice(0, 8)}  ${p.updatedAt}${p.editedBy === 'user' ? '  edited by the user' : ''}${p.published ? `  published${printLink(opts.printPublisher?.()?.site(), p.published.slug) ? ` at ${printLink(opts.printPublisher?.()?.site(), p.published.slug)}` : ''}` : ''}${p.summary ? `\n  ${p.summary}` : ''}`;
+    `${p.id}  ${!p.kind || p.kind === 'page' ? 'print' : p.kind}  v${p.version}  "${p.title}"${p.live ? '  live' : ''}${p.deletedAt ? `  deleted ${p.deletedAt}` : ''}  ${p.projects.length ? `in ${p.projects.map((x) => x.id).join(', ')}` : 'no project'}  thread ${p.ownerThread.slice(0, 8)}  ${p.updatedAt}${p.editedBy === 'user' ? '  edited by the user' : ''}${p.published ? `  published${printLink(opts.printPublisher?.()?.site(), p.published.slug) ? ` at ${printLink(opts.printPublisher?.()?.site(), p.published.slug)}` : ''}` : ''}${p.summary ? `\n  ${p.summary}` : ''}`;
   const showPage = async (p: PageRecord, show: boolean | undefined): Promise<string> => {
     if (!show) return '';
     if (!control.pin) return ' This runner can\'t open it in the side pane.';
@@ -827,7 +827,7 @@ export function buildThreadbearTools(
             title: z.string().min(1).max(MAX_TITLE).describe('Short, what it shows: "Bundle size".'),
             summary: z.string().max(MAX_SUMMARY).describe('One or two lines of what it says now, for lists and other apps.'),
             ...pageContent,
-            kind: z.enum(PAGE_KINDS).optional().describe('chart, dashboard, report, doc, bundle or page. markdown makes a doc.'),
+            kind: z.enum(PAGE_KINDS).optional().describe('chart, dashboard, report, doc or bundle. Left out, or page: a plain print. markdown makes a doc.'),
             recipe: recipeArg,
             projects: z.array(z.string()).optional().describe('Projects to put it in, by id or title. Left out: this thread\'s project when it is pinned to exactly one. [] for none.'),
             source: z.string().max(MAX_TITLE).optional().describe('What made it ("bundle-analyzer summary"), so the next run finds and updates it.'),
@@ -851,7 +851,7 @@ export function buildThreadbearTools(
               ...(input.recipe ? { recipe: input.recipe } : {}),
               ...(input.live ? { live: true } : {}),
             });
-            return `Made ${pageLine(p)}\nShow it with a \`\`\`page ${p.id}\`\`\` block.${await showPage(p, input.show)}`;
+            return `Made ${pageLine(p)}\nShow it with a \`\`\`print ${p.id}\`\`\` block.${await showPage(p, input.show)}`;
           }),
         ),
         tool(
@@ -972,7 +972,7 @@ export function buildThreadbearTools(
         ),
         tool(
           'add_print_to_project',
-          'Puts a Print in a project, so it shows on that project. A page can be in several.',
+          'Puts a Print in a project, so it shows on that project. A print can be in several.',
           { id: z.string().min(1), project: z.string().min(1).describe('Project id or title.') },
           handle(async ({ id, project: q }) => pageLine(pageStore.setProjects(id, { add: [(await project(q)).id] }))),
         ),
