@@ -110,7 +110,10 @@ final class AppModel {
     /// for the ones that live in the app: Voice mode.
     var experiments: Set<String> = []
     /// The pages experiment's pages (Pages.swift), newest first.
-    var pages: [Page] = []
+    var pages: [Page] = [] {
+        // The cards in replies follow it (PageCards).
+        didSet { PageCards.shared.update(pages, enabled: pagesOn) }
+    }
     /// Deleted pages, kept 7 days for Restore (Pages.swift).
     var deletedPages: [Page] = []
     /// How long a thread may sit idle with one of Mike's messages still

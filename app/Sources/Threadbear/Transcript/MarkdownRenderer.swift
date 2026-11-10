@@ -376,7 +376,9 @@ enum MarkdownRenderer {
                 finishParagraph(from: start, style: paragraphStyle(context, spacing: zoomed(6), before: zoomed(6), line: ceil(font.pointSize * 1.4), font: font))
 
             case let code as CodeBlock:
-                if let rich = richBlock(code) {
+                if let pageId = pageFence(code) {
+                    pageCard(pageId, code, context)
+                } else if let rich = richBlock(code) {
                     richBlock(rich, context)
                 } else if let draft = draftBlock(code) {
                     draftBlock(draft, context)
@@ -493,6 +495,20 @@ enum MarkdownRenderer {
             return rich
         }
 
+        /// A closed ```page fence naming a page (PageFence), while the
+        /// pages experiment is on; otherwise it stays code. The id may be
+        /// in the info string (```page pg_x) or on the fence's one line.
+        func pageFence(_ code: CodeBlock) -> String? {
+            guard PageCards.shared.enabled, isClosed(code) else { return nil }
+            var info = code.language
+            if let range = code.range, range.lowerBound.line >= 1, range.lowerBound.line <= sourceLines.count {
+                let line = String(sourceLines[range.lowerBound.line - 1]).trimmingCharacters(in: .whitespaces)
+                let stripped = line.drop(while: { $0 == "`" || $0 == "~" || $0 == ">" || $0 == " " })
+                if !stripped.isEmpty { info = String(stripped) }
+            }
+            return PageFence.id(language: info, code: code.code)
+        }
+
         /// A closed ```slack, ```email or ```draft fence (DraftBlock). One
         /// still streaming in stays code until it's closed, as above.
         func draftBlock(_ code: CodeBlock) -> DraftBlock? {
@@ -607,6 +623,18 @@ enum MarkdownRenderer {
             let fence = block.source.contains("```") ? "~~~~" : "```"
             let box = NSMutableAttributedString(attachment: attachment)
             box.addAttribute(.tbCopyText, value: "\(fence)\(block.kind.rawValue)\n\(block.source)\n\(fence)", range: NSRange(location: 0, length: box.length))
+            output.append(box)
+            finishParagraph(from: start, style: paragraphStyle(context))
+        }
+
+        /// A page's card (PageCardCell): one attachment on a line of its own.
+        /// Copying it copies the fence, so it pastes as the same card.
+        mutating func pageCard(_ pageId: String, _ code: CodeBlock, _ context: Context) {
+            let attachment = NSTextAttachment()
+            attachment.attachmentCell = PageCardCell(pageId: pageId)
+            let start = output.length
+            let box = NSMutableAttributedString(attachment: attachment)
+            box.addAttribute(.tbCopyText, value: "```page \(pageId)\n```", range: NSRange(location: 0, length: box.length))
             output.append(box)
             finishParagraph(from: start, style: paragraphStyle(context))
         }

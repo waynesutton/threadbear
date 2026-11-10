@@ -43,3 +43,25 @@ final class PageTests: XCTestCase {
         XCTAssertFalse(old.editedByUser)
     }
 }
+
+final class PageFenceTests: XCTestCase {
+    func testAPageFenceNamesItsPage() {
+        XCTAssertEqual(PageFence.id(language: "page pg_bundle_size", code: ""), "pg_bundle_size")
+        XCTAssertEqual(PageFence.id(language: "page", code: "pg_sales_2026\n"), "pg_sales_2026")
+        XCTAssertEqual(PageFence.id(language: "PAGE", code: "  pg_a  "), "pg_a")
+        XCTAssertNil(PageFence.id(language: "page", code: "not a page"))
+        XCTAssertNil(PageFence.id(language: "page", code: ""))
+        XCTAssertNil(PageFence.id(language: "html", code: "pg_a"))
+        XCTAssertNil(PageFence.id(language: "page pg_Bad", code: ""), "ids are lower case")
+        XCTAssertNil(PageFence.id(language: "page pg_", code: ""))
+    }
+
+    func testAPageThumbIsANewDrawingPerVersion() {
+        let v1 = RichBlock.pageThumb(file: "/p/pg_a/v1/index.html", version: 1)
+        let v2 = RichBlock.pageThumb(file: "/p/pg_a/v2/index.html", version: 2)
+        XCTAssertNotEqual(v1.id, v2.id)
+        XCTAssertEqual(v1.pageFile, "/p/pg_a/v1/index.html")
+        XCTAssertNil(RichBlock(kind: .html, source: "<p>").pageFile)
+        XCTAssertNil(RichBlock.from(language: "page", code: "pg_a"), "a page fence is never an html or mermaid box")
+    }
+}

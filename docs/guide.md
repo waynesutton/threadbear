@@ -893,6 +893,8 @@ Ask in plain words, in any thread:
 
 **Where a page goes.** In a thread that belongs to one project, its pages go in that project and show under **Pages** on the project's page. Say "keep it out of projects" for none, or "put it in Poddle" for another. A page can be in several projects. Pages are kept on your Mac, in the `pages` folder in Threadbear's data folder. Nothing about them goes to your Convex mirror, so they don't show on your phone or the website yet.
 
+**In a reply**, a thread shows a page as a card: a picture of the top of the page, then its title, kind, version and age, with Open, Refresh and a ⋯ menu. Click the picture or Open to open it. The card always shows the page as it is now, so when a page gets a new version, the card in an earlier reply moves to it too, marked "New version", rather than a second card appearing. While a refresh is under way, the card says so.
+
 **Every row on the project's page** opens its page in a window of its own when you click it. Its ⋯ menu, or a right-click, has:
 
 - **Refresh** sends the page to the thread that made it, to be made again the same way, and opens that thread so you can watch.

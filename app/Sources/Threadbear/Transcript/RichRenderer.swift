@@ -85,7 +85,11 @@ final class RichRenderer: NSObject, WKNavigationDelegate, WKUIDelegate {
             guard let self else { return .failed("the app is closing") }
             do {
                 return .drawn(try await self.withTimeout {
-                    block.kind == .mermaid ? try await self.drawDiagram(block, zoom: zoom) : try await self.drawPage(block, zoom: zoom)
+                    switch block.kind {
+                    case .mermaid: try await self.drawDiagram(block, zoom: zoom)
+                    case .html: try await self.drawPage(block, zoom: zoom)
+                    case .page: try await self.drawPageCard(block, zoom: zoom)
+                    }
                 })
             } catch {
                 AppLog.write("rich", "couldn't draw a \(block.kind.rawValue) block: \(error.localizedDescription)")
@@ -280,6 +284,40 @@ final class RichRenderer: NSObject, WKNavigationDelegate, WKUIDelegate {
         guard let dark = looks[true], let light = looks[false] else { throw Failure.unavailable("the page came out empty") }
         let size = CGSize(width: dark.1.width, height: max(dark.1.height, light.1.height))
         return Rendered(drawn: RichBlocks.Drawn(size: size, clipped: dark.2 || light.2), pictures: RichBlocks.Pictures(dark: dark.0, light: light.0))
+    }
+
+    /// The top of a Page's own file (the pages experiment), for its card
+    /// in a reply (PageCardCell): loaded where it is, so the pictures and
+    /// clips beside it show, under the same lockdown as an html block.
+    /// Laid out wide and scaled down, so the card shows a good part of the
+    /// page, as the picked mockup does, not just its first row.
+    static let pageCardWidth: CGFloat = 1080
+    static let pageCardHeight: CGFloat = 470
+
+    private func drawPageCard(_ block: RichBlock, zoom: Int) async throws -> Rendered {
+        guard let path = block.pageFile, FileManager.default.fileExists(atPath: path) else { throw Failure.unavailable("the page's file isn't on this Mac") }
+        let file = URL(fileURLWithPath: path)
+        let view = try await makePageView()
+        guard let address = previews.address(for: file) else { throw Failure.unavailable("the page couldn't be opened") }
+        defer { previews.forget(file) }
+        let width = Self.pageCardWidth
+        view.pageZoom = 1
+        var looks: [Bool: CGImage] = [:]
+        for dark in [true, false] {
+            view.appearance = NSAppearance(named: dark ? .darkAqua : .aqua)
+            view.frame = NSRect(x: 0, y: 0, width: width, height: Self.pageCardHeight)
+            try await load(view) { $0.load(URLRequest(url: address)) }
+            // Wait for its fonts, then a moment more, so the snapshot isn't
+            // taken before the page has painted (a blank card, 10 Nov). Not
+            // requestAnimationFrame: off screen it never fires.
+            _ = try? await view.callAsyncJavaScript("await document.fonts.ready; return 1", arguments: [:], in: nil, contentWorld: .defaultClient)
+            try await Task.sleep(for: .milliseconds(250))
+            looks[dark] = try await snapshot(view, size: CGSize(width: width, height: Self.pageCardHeight))
+        }
+        view.loadHTMLString("", baseURL: nil)
+        guard let dark = looks[true], let light = looks[false] else { throw Failure.unavailable("the page came out empty") }
+        _ = zoom
+        return Rendered(drawn: RichBlocks.Drawn(size: CGSize(width: width, height: Self.pageCardHeight), clipped: true), pictures: RichBlocks.Pictures(dark: dark, light: light))
     }
 
     /// The block's page, in a folder of its own (so the preview scheme,

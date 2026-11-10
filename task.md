@@ -2,7 +2,6 @@
 
 ## To Do
 
-- [ ] Pages: `page` fence card in the transcript. Mock it for Wayne first (AGENTS.md): it goes through RichRenderer's off-screen pipeline. prds/threadbear-pages.md
 - [ ] Pages: open a page in the thread's side pane (today the project page opens it in its own window), and reload the open pane on `pages.updated`. prds/threadbear-pages.md
 - [ ] Pages: only ask once per page for `update_page` from the thread that owns it (adapter change). prds/threadbear-pages.md
 - [ ] Pages: optional HyperFrames share clip for any page. prds/threadbear-pages.md
@@ -11,6 +10,8 @@
 ## In Progress
 
 ## Completed
+
+- [x] 2026-11-10 17:12 UTC Page card in replies, look B "Preview on top" (Wayne picked it in review 1df116ab): the top of the page drawn off screen, title, kind, version, age, New version, Open, Refresh and a ⋯ menu; follows new versions. app Transcript/PageCards.swift, PageSheets.swift, RichRenderer.swift, MarkdownRenderer.swift, TextKit.swift, RichBlock.swift (PageFence). Verified: swift build; PageTests, PageFenceTests, TipsTests, EveryClickShowsTests, ProjectsAppTests pass; built card compared with the B mockup in a debug app against a dev runner (~/ThreadbearThreads/page-card-mocks/B-built-in-app.png).
 
 - [x] 2026-11-10 15:53 UTC Page kinds (chart, dashboard, report, doc, bundle), docs you can edit, delete with 7-day restore, versions, download, Refresh and Edit with Agent; a row menu and Recently deleted on the project page; a Pages section in docs/guide.md. prds/threadbear-pages.md. runner/src/pages.ts, runner/src/page-doc.ts, runner/src/threadbear-mcp.ts, runner/src/main.ts, app Page.swift, Pages.swift, ProjectPage.swift, RunnerAPI, docs/protocol.md, docs/guide.md, docs/experiments.md. Verified: `node --test test/unit/pages.test.ts` 14 pass; `swift build` clean; PageTests, TipsTests, EveryClickShowsTests and Projects tests pass; seen in a debug app against a seeded dev runner.
 - [x] 2026-11-10 15:53 UTC make-page skill at `~/.claude/skills/make-page` (outside the repo): CSV, TSV, JSON and XLSX in; bar, column, line, segmented and pie charts, tiles and tables out, in a palette checked with the dataviz validator; dashboard and report pages; PDF export. Verified: `node --test test.mjs` 8 pass; dark, light and PDF looked at.

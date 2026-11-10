@@ -346,8 +346,8 @@ private struct PagesSection: View {
             }
         }
         .onAppear { app.loadDeletedPages() }
-        .sheet(item: $asking) { page in AskPageSheet(page: page) }
-        .sheet(item: $editing) { page in EditDocSheet(page: page) }
+        .sheet(item: $asking) { page in AskPageSheet(page: page, close: { asking = nil }) }
+        .sheet(item: $editing) { page in EditDocSheet(page: page, close: { editing = nil }) }
     }
 }
 
@@ -452,10 +452,11 @@ private struct PageMenu: View {
 }
 
 /// Edit with Agent: what should change, sent to the thread that made it.
-private struct AskPageSheet: View {
+/// Shown from a project's Pages and from a page card's menu (PageSheets).
+struct AskPageSheet: View {
     @Environment(AppModel.self) private var app
-    @Environment(\.dismiss) private var dismiss
     let page: Page
+    let close: () -> Void
     @State private var text = ""
 
     var body: some View {
@@ -470,12 +471,12 @@ private struct AskPageSheet: View {
                 .tip("What should change on the page")
             HStack {
                 Spacer()
-                Button("Cancel") { dismiss() }
+                Button("Cancel") { close() }
                     .keyboardShortcut(.cancelAction)
                     .tip("Close without asking for a change")
                 Button("Send") {
                     app.editPageWithAgent(page, text: text)
-                    dismiss()
+                    close()
                 }
                 .keyboardShortcut(.defaultAction)
                 .disabled(text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
@@ -488,10 +489,10 @@ private struct AskPageSheet: View {
 }
 
 /// Edit Text: a doc's markdown, edited by hand. Save makes a new version.
-private struct EditDocSheet: View {
+struct EditDocSheet: View {
     @Environment(AppModel.self) private var app
-    @Environment(\.dismiss) private var dismiss
     let page: Page
+    let close: () -> Void
     @State private var text = ""
     @State private var loaded = false
     @State private var saving = false
@@ -519,14 +520,14 @@ private struct EditDocSheet: View {
                     .font(.system(size: TypeScale.detail))
                     .foregroundStyle(Color(nsColor: Theme.faintText))
                 Spacer()
-                Button("Cancel") { dismiss() }
+                Button("Cancel") { close() }
                     .keyboardShortcut(.cancelAction)
                     .tip("Close without saving")
                 Button("Save") {
                     saving = true
                     app.savePageDoc(page, markdown: text) { ok in
                         saving = false
-                        if ok { dismiss() }
+                        if ok { close() }
                     }
                 }
                 .keyboardShortcut("s", modifiers: .command)
@@ -542,7 +543,7 @@ private struct EditDocSheet: View {
                 text = md
                 loaded = true
             } else {
-                dismiss()
+                close()
             }
         }
     }

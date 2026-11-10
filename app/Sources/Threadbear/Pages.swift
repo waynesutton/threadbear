@@ -59,6 +59,7 @@ extension AppModel {
     /// recipe, and opens that thread so its work can be watched.
     func refreshPage(_ page: Page) {
         guard let client else { return }
+        PageCards.shared.markRefreshing(page)
         whileBusy(BusyKey.page(page.id), note: "Asking a thread to refresh \(page.title)") { [self] in
             do {
                 let sent = try await client.refreshPage(page.id)
@@ -71,6 +72,7 @@ extension AppModel {
 
     func editPageWithAgent(_ page: Page, text: String) {
         guard let client, !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+        PageCards.shared.markRefreshing(page)
         whileBusy(BusyKey.page(page.id), note: "Asking a thread to change \(page.title)") { [self] in
             do {
                 let sent = try await client.editPageWithAgent(page.id, text: text)
