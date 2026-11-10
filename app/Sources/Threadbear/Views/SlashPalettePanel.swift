@@ -123,12 +123,15 @@ final class SlashPaletteCoordinator: NSObject, NSWindowDelegate {
     /// the window's sides or the screen's edges. With the box near the
     /// top of the screen it ran off it and the first rows were cut off
     /// (Wayne, 10 Nov), so it shrinks to the room above, and goes under
-    /// the box when there's more room there.
+    /// the box when there's more room there. The screen is the box's, not
+    /// the window's: with the window across two displays, macOS draws it
+    /// on one only, and the picker went off on the other (Wayne, 10 Nov).
     func place() {
         guard let panel, let anchor, let parent = anchor.window else { return }
         let box = parent.convertToScreen(anchor.convert(anchor.bounds, to: nil))
         let window = parent.frame
-        let screen = (parent.screen ?? NSScreen.main)?.visibleFrame ?? window
+        let boxScreen = NSScreen.screens.first { $0.frame.contains(NSPoint(x: box.midX, y: box.midY)) }
+        let screen = (boxScreen ?? parent.screen ?? NSScreen.main)?.visibleFrame ?? window
         let margin: CGFloat = 8, gap = zoomed(8)
         // Sideways it stays inside both the window and the screen.
         let left = max(window.minX, screen.minX) + margin
