@@ -320,6 +320,45 @@ final class RichRenderer: NSObject, WKNavigationDelegate, WKUIDelegate {
         return Rendered(drawn: RichBlocks.Drawn(size: CGSize(width: width, height: Self.pageCardHeight), clipped: true), pictures: RichBlocks.Pictures(dark: dark, light: light))
     }
 
+    /// A Page as a PDF, for Download as PDF (the pages experiment): laid out
+    /// in the same locked-down view as its card, in the light look, 800 px
+    /// wide, captured whole, then cut into US Letter pages (PagePDF).
+    func pagePDF(file path: String) async throws -> Data {
+        let previous = tail
+        let job = Task { [weak self] () throws -> Data in
+            await previous?.value
+            guard let self else { throw Failure.unavailable("the app is closing") }
+            return try await self.withTimeout { try await self.drawPDF(path) }
+        }
+        tail = Task { _ = try? await job.value }
+        return try await job.value
+    }
+
+    private func drawPDF(_ path: String) async throws -> Data {
+        guard FileManager.default.fileExists(atPath: path) else { throw Failure.unavailable("the page's file isn't on this Mac") }
+        let file = URL(fileURLWithPath: path)
+        let view = try await makePageView()
+        guard let address = previews.address(for: file) else { throw Failure.unavailable("the page couldn't be opened") }
+        defer { previews.forget(file) }
+        view.pageZoom = 1
+        view.appearance = NSAppearance(named: .aqua)
+        view.frame = NSRect(x: 0, y: 0, width: PagePDF.layoutWidth, height: 1)
+        try await load(view) { $0.load(URLRequest(url: address)) }
+        _ = try? await view.callAsyncJavaScript("await document.fonts.ready; return 1", arguments: [:], in: nil, contentWorld: .defaultClient)
+        let measured = try await view.callAsyncJavaScript(
+            "return Math.max(document.documentElement.scrollHeight, document.body ? document.body.scrollHeight : 0)",
+            arguments: [:], in: nil, contentWorld: .defaultClient)
+        let height = min(PagePDF.maxHeight, max(1, CGFloat((measured as? NSNumber)?.doubleValue ?? 1)))
+        view.frame = NSRect(x: 0, y: 0, width: PagePDF.layoutWidth, height: height)
+        try await Task.sleep(for: .milliseconds(250))
+        let config = WKPDFConfiguration()
+        config.rect = CGRect(x: 0, y: 0, width: PagePDF.layoutWidth, height: height)
+        let tall = try await view.pdf(configuration: config)
+        view.loadHTMLString("", baseURL: nil)
+        guard let pages = PagePDF.paginate(tall) else { throw Failure.unavailable("the PDF came out empty") }
+        return pages
+    }
+
     /// The block's page, in a folder of its own (so the preview scheme,
     /// which lets a page read what's beside it, finds nothing else there),
     /// for drawing it and for Open beside.

@@ -428,6 +428,7 @@ private struct PageMenu: View {
         if page.isDoc { Button("Edit Text…") { edit() } }
         Divider()
         Button("Download…") { app.downloadPage(page) }
+        Button("Download as PDF…") { app.downloadPagePDF(page) }
         Menu("Versions") {
             ForEach(page.keptVersions, id: \.self) { v in
                 if v == page.version {
@@ -437,6 +438,7 @@ private struct PageMenu: View {
                         Button("Open") { app.openPage(page, version: v) }
                         Button("Make This the Newest") { app.restorePageVersion(page, version: v) }
                         Button("Download…") { app.downloadPage(page, version: v) }
+                        Button("Download as PDF…") { app.downloadPagePDF(page, version: v) }
                     }
                 }
             }

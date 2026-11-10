@@ -65,3 +65,33 @@ final class PageFenceTests: XCTestCase {
         XCTAssertNil(RichBlock.from(language: "page", code: "pg_a"), "a page fence is never an html or mermaid box")
     }
 }
+
+final class PagePDFTests: XCTestCase {
+    /// A tall one-page PDF, as WebKit makes one, with a mark near the bottom.
+    private func tall(width: CGFloat, height: CGFloat) -> Data {
+        let out = NSMutableData()
+        var box = CGRect(x: 0, y: 0, width: width, height: height)
+        let ctx = CGContext(consumer: CGDataConsumer(data: out as CFMutableData)!, mediaBox: &box, nil)!
+        ctx.beginPDFPage(nil)
+        ctx.setFillColor(CGColor(gray: 0, alpha: 1))
+        ctx.fill(CGRect(x: 10, y: 10, width: 50, height: 50))
+        ctx.endPDFPage()
+        ctx.closePDF()
+        return out as Data
+    }
+
+    func testATallPageIsCutIntoLetterPages() throws {
+        // 800 wide scales to 540 pt; a Letter page holds 720 pt, about 1067 px.
+        XCTAssertEqual(PagePDF.pageCount(sourceWidth: 800, sourceHeight: 1000), 1)
+        XCTAssertEqual(PagePDF.pageCount(sourceWidth: 800, sourceHeight: 1067), 1)
+        XCTAssertEqual(PagePDF.pageCount(sourceWidth: 800, sourceHeight: 3000), 3)
+        let pdf = try XCTUnwrap(PagePDF.paginate(tall(width: 800, height: 3000)))
+        let doc = try XCTUnwrap(CGPDFDocument(CGDataProvider(data: pdf as CFData)!))
+        XCTAssertEqual(doc.numberOfPages, 3)
+        XCTAssertEqual(doc.page(at: 1)?.getBoxRect(.mediaBox).size, PagePDF.paper)
+    }
+
+    func testNotAPDFGivesNothing() {
+        XCTAssertNil(PagePDF.paginate(Data("not a pdf".utf8)))
+    }
+}

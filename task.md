@@ -5,11 +5,12 @@
 - [ ] Pages: open a page in the thread's side pane (today the project page opens it in its own window), and reload the open pane on `pages.updated`. prds/threadbear-pages.md
 - [ ] Pages: only ask once per page for `update_page` from the thread that owns it (adapter change). prds/threadbear-pages.md
 - [ ] Pages: optional HyperFrames share clip for any page. prds/threadbear-pages.md
-- [ ] Pages: Download as PDF from the app's menu (today a thread does it with make-page's export-pdf.mjs).
 
 ## In Progress
 
 ## Completed
+
+- [x] 2026-11-10 18:34 UTC Download as PDF in both page menus (project page and the card in replies), for the newest version and each kept one: the page laid out light at 800 px in the card's locked-down view, captured whole by WebKit, cut into US Letter pages (PagePDF). app Pages.swift, PageSheets.swift, ProjectPage.swift, RichRenderer.swift, ThreadbearCore/Support/PagePDF.swift, a debug-only pagePDF automation command. Verified: swift build; PagePDFTests, PageTests, TipsTests, EveryClickShowsTests pass; a dashboard (2 pages) and a report (1 page) made through a debug app against a dev runner and looked at.
 
 - [x] 2026-11-10 17:12 UTC Page card in replies, look B "Preview on top" (Wayne picked it in review 1df116ab): the top of the page drawn off screen, title, kind, version, age, New version, Open, Refresh and a ⋯ menu; follows new versions. app Transcript/PageCards.swift, PageSheets.swift, RichRenderer.swift, MarkdownRenderer.swift, TextKit.swift, RichBlock.swift (PageFence). Verified: swift build; PageTests, PageFenceTests, TipsTests, EveryClickShowsTests, ProjectsAppTests pass; built card compared with the B mockup in a debug app against a dev runner (~/ThreadbearThreads/page-card-mocks/B-built-in-app.png).
 

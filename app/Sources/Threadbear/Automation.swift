@@ -1065,6 +1065,18 @@ enum Automation {
             }
             try? await Task.sleep(for: .milliseconds(400))
             return "ok"
+        case "pagePDF":
+            // {"cmd":"pagePDF","id":"pg_…","path":"/tmp/x.pdf"} runs Download
+            // as PDF's drawing without its save panel, for checking it.
+            guard let id = c["id"] as? String, let path = c["path"] as? String, let client = app.client else { return "error give an id and a path" }
+            do {
+                let got = try await client.getPage(id)
+                let pdf = try await RichRenderer.shared.pagePDF(file: got.file)
+                try pdf.write(to: URL(fileURLWithPath: path))
+                return "ok \(pdf.count) bytes"
+            } catch {
+                return "error \(error.localizedDescription)"
+            }
         case "project":
             // {"cmd":"project","id":"p_…"} opens a project's page in the
             // detail area; {"cmd":"project","close":true} closes it, and

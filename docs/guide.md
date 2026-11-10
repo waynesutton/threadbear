@@ -900,7 +900,8 @@ Ask in plain words, in any thread:
 - **Refresh** sends the page to the thread that made it, to be made again the same way, and opens that thread so you can watch.
 - **Edit with Agent…** asks for what should change, for example "make the region chart a pie". The thread does it and saves a new version.
 - **Edit Text…** (docs only) opens the doc's text to edit yourself. Save makes a new version marked "edited by you", and an agent changing it later starts from your text.
-- **Download…** saves the page's files in a new folder. Its `index.html` opens in any browser. For a PDF, ask the thread to "download it as a PDF".
+- **Download…** saves the page's files in a new folder. Its `index.html` opens in any browser.
+- **Download as PDF…** saves it as a PDF on US Letter pages, in the light look, so it prints and sends cleanly. A line that lands right on a page break can be cut across two pages. For print-perfect breaks, ask the thread to "download it as a PDF", which prints it through Chrome.
 - **Versions** lists the last 10. Open one, download it, or make it the newest again; nothing in between is lost.
 - **Projects** puts it in a project or takes it out.
 - **Delete** takes it away. It waits 7 days under **Recently deleted** at the bottom of the list, where **Restore** brings it back.

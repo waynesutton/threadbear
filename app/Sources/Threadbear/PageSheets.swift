@@ -20,6 +20,7 @@ enum PageMenuBuilder {
         }
         menu.addItem(.separator())
         menu.addItem(ClosureItem("Download…") { app.downloadPage(page) })
+        menu.addItem(ClosureItem("Download as PDF…") { app.downloadPagePDF(page) })
         let versions = NSMenuItem(title: "Versions", action: nil, keyEquivalent: "")
         let sub = NSMenu()
         for v in page.keptVersions {
@@ -31,6 +32,7 @@ enum PageMenuBuilder {
                 inner.addItem(ClosureItem("Open") { app.openPage(page, version: v) })
                 inner.addItem(ClosureItem("Make This the Newest") { app.restorePageVersion(page, version: v) })
                 inner.addItem(ClosureItem("Download…") { app.downloadPage(page, version: v) })
+                inner.addItem(ClosureItem("Download as PDF…") { app.downloadPagePDF(page, version: v) })
                 item.submenu = inner
                 sub.addItem(item)
             }

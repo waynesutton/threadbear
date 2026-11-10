@@ -1,4 +1,5 @@
 import AppKit
+import UniformTypeIdentifiers
 import ThreadbearCore
 
 /// Pages (docs/protocol.md, "Pages"): the pages agents make, kept by the
@@ -185,6 +186,29 @@ extension AppModel {
             do {
                 let file = try await client.exportPage(page.id, to: target.path, version: version)
                 NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: file)])
+            } catch {
+                show(error)
+            }
+        }
+    }
+
+    /// Asks where, draws the page (or a version) as a US Letter PDF in the
+    /// light look, saves it, and shows it in the Finder.
+    func downloadPagePDF(_ page: Page, version: Int? = nil) {
+        guard let client else { return }
+        let panel = NSSavePanel()
+        panel.allowedContentTypes = [.pdf]
+        panel.canCreateDirectories = true
+        let name = page.title.replacingOccurrences(of: "/", with: "-").replacingOccurrences(of: ":", with: "-")
+        panel.nameFieldStringValue = version.map { "\(name) v\($0).pdf" } ?? "\(name).pdf"
+        panel.message = "Save \"\(page.title)\" as a PDF."
+        guard panel.runModal() == .OK, let dest = panel.url else { return }
+        whileBusy(BusyKey.page(page.id), note: "Saving \(page.title) as a PDF") { [self] in
+            do {
+                let got = try await client.getPage(page.id, version: version)
+                let pdf = try await RichRenderer.shared.pagePDF(file: got.file)
+                try pdf.write(to: dest, options: .atomic)
+                NSWorkspace.shared.activateFileViewerSelecting([dest])
             } catch {
                 show(error)
             }
