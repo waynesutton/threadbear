@@ -876,39 +876,39 @@ on a card, or its right-click menu, opens it in Notion. Boards are read through
 a Connectors gateway (see [Connectors](#connectors)); without one, the
 project's page says so and nothing is read.
 
-## Pages
+## Prints
 
-A Page is something a thread makes for you to keep. It can be a chart, a dashboard, a report or a doc. It stays after the reply that made it scrolls away, and asking again updates it rather than making another one. It's an experiment: turn it on in Settings > General > Experiments > Pages.
+A Print is something a thread makes for you to keep. It can be a chart, a dashboard, a report or a doc. It stays after the reply that made it scrolls away, and asking again updates it rather than making another one. It's an experiment: turn it on in Settings > General > Experiments > Prints. (Prints were called Pages until 10 Nov 2026; an older reply's page still shows as a card.)
 
 Ask in plain words, in any thread:
 
 | Say | You get |
 |---|---|
-| "Make a pie chart of this spreadsheet by region" | A **chart** page. Attach the file or name it. CSV, TSV, JSON and Excel (.xlsx) work |
+| "Make a pie chart of this spreadsheet by region" | A **chart** print. Attach the file or name it. CSV, TSV, JSON and Excel (.xlsx) work |
 | "Make a dashboard from this data" | A **dashboard**: big numbers, a few charts and a table |
 | "Give me a report on where this project stands" | A **report**: sections of text with charts |
-| "Write up the launch plan as a page" | A **doc**. You can edit it yourself too |
+| "Write up the launch plan as a print" | A **doc**. You can edit it yourself too |
 | "Run bundle-analyzer summary" | A **bundle size** report for a Convex app |
 | "Add a figure that explains it" or "make a share clip" | A larger extra: an illustrated figure, or a short video. Only when you ask |
 
-**Where a page goes.** In a thread that belongs to one project, its pages go in that project and show under **Pages** on the project's page. Say "keep it out of projects" for none, or "put it in Poddle" for another. A page can be in several projects. Pages are kept on your Mac, in the `pages` folder in Threadbear's data folder. Nothing about them goes to your Convex mirror, so they don't show on your phone or the website yet.
+**Where a print goes.** In a thread that belongs to one project, its prints go in that project and show under **Prints** on the project's page. Say "keep it out of projects" for none, or "put it in Poddle" for another. A print can be in several projects. Prints are kept on your Mac, in the `pages` folder in Threadbear's data folder. Nothing about them goes to your Convex mirror, so they don't show on your phone or the website yet.
 
-**In a reply**, a thread shows a page as a card: a picture of the top of the page, then its title, kind, version and age, with Open, Refresh and a ⋯ menu. Click the picture or Open to open it. The card always shows the page as it is now, so when a page gets a new version, the card in an earlier reply moves to it too, marked "New version", rather than a second card appearing. While a refresh is under way, the card says so.
+**In a reply**, a thread shows a print as a card: a picture of the top of it, then its title, kind, version and age, with Open, Refresh and a ⋯ menu. Click the picture or Open to open it. The card always shows the print as it is now, so when a print gets a new version, the card in an earlier reply moves to it too, marked "New version", rather than a second card appearing. While a refresh is under way, the card says so.
 
-**Every row on the project's page** opens its page in a window of its own when you click it. Its ⋯ menu, or a right-click, has:
+**Every row under Prints on the project's page** opens its print in a window of its own when you click it. Its ⋯ menu, or a right-click, has:
 
-- **Refresh** sends the page to the thread that made it, to be made again the same way, and opens that thread so you can watch.
+- **Refresh** sends the print to the thread that made it, to be made again the same way, and opens that thread so you can watch.
 - **Edit with Agent…** asks for what should change, for example "make the region chart a pie". The thread does it and saves a new version.
 - **Edit Text…** (docs only) opens the doc's text to edit yourself. Save makes a new version marked "edited by you", and an agent changing it later starts from your text.
-- **Download…** saves the page's files in a new folder. Its `index.html` opens in any browser.
+- **Download…** saves the print's files in a new folder. Its `index.html` opens in any browser.
 - **Download as PDF…** saves it as a PDF on US Letter pages, in the light look, so it prints and sends cleanly. A line that lands right on a page break can be cut across two pages. For print-perfect breaks, ask the thread to "download it as a PDF", which prints it through Chrome.
 - **Versions** lists the last 10. Open one, download it, or make it the newest again; nothing in between is lost.
 - **Projects** puts it in a project or takes it out.
 - **Delete** takes it away. It waits 7 days under **Recently deleted** at the bottom of the list, where **Restore** brings it back.
 
-You can also ask a thread for any of these: "refresh the sales dashboard", "go back to version 3", "delete the old chart", "bring it back", "download it", "what pages do I have".
+You can also ask a thread for any of these: "refresh the sales dashboard", "go back to version 3", "delete the old chart", "bring it back", "download it", "what prints do I have".
 
-Pages are static: pictures, charts and text, with no scripts, so they open straight away and can't reach the internet. A thread can make a "live" page with scripts when you ask for one. Its scripts run only after you choose Run them, and again for each new version.
+Prints are static: pictures, charts and text, with no scripts, so they open straight away and can't reach the internet. A thread can make a "live" print with scripts when you ask for one. Its scripts run only after you choose Run them, and again for each new version.
 
 ## The librarian
 <!-- slug: librarian -->

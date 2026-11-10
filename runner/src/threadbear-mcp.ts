@@ -130,7 +130,7 @@ export const ALWAYS_ASK_TOOLS = new Set([`mcp__${SERVER_NAME}__delete_thread`]);
 // Restart to Update asks only wake or file this thread, with the runner's
 // words, and the turn they start runs in its mode then, so they stay in.
 export const NEVER_ASK_TOOLS = new Set(
-  ['end_turn', 'list_threads', 'read_thread', 'list_accounts', 'list_schedules', 'list_projects', 'read_project', 'unpin', 'ask_secret', 'add_button', 'x_search', 'list_pages', 'read_page'].map(
+  ['end_turn', 'list_threads', 'read_thread', 'list_accounts', 'list_schedules', 'list_projects', 'read_project', 'unpin', 'ask_secret', 'add_button', 'x_search', 'list_prints', 'read_print', 'list_pages', 'read_page'].map(
     (n) => `mcp__${SERVER_NAME}__${n}`,
   ),
 );
@@ -776,8 +776,10 @@ export function buildThreadbearTools(
       ]
     : [];
 
-  // The pages experiment (pages.ts): named, versioned pages the runner
-  // keeps, in zero or more projects. Only handed out while it's on.
+  // The pages experiment (pages.ts), called Prints since 10 Nov 2026 (Wayne
+  // picked the name; the code and protocol still say page): named,
+  // versioned pages the runner keeps, in zero or more projects. Only handed
+  // out while it's on.
   const pageStore = opts.pages?.();
   const pageLine = (p: PageRecord): string =>
     `${p.id}  ${p.kind ?? 'page'}  v${p.version}  "${p.title}"${p.live ? '  live' : ''}${p.deletedAt ? `  deleted ${p.deletedAt}` : ''}  ${p.projects.length ? `in ${p.projects.map((x) => x.id).join(', ')}` : 'no project'}  thread ${p.ownerThread.slice(0, 8)}  ${p.updatedAt}${p.editedBy === 'user' ? '  edited by the user' : ''}${p.summary ? `\n  ${p.summary}` : ''}`;
@@ -795,11 +797,11 @@ export function buildThreadbearTools(
   };
   const recipeArg = z.string().max(MAX_RECIPE).optional().describe('How to make it again, for the Refresh button: the command, the data file, the steps. A thread follows it later.');
   const absDir = (d: string | undefined, cwd: string | undefined): string | undefined => (d === undefined ? undefined : path.resolve(cwd ?? process.cwd(), d.replace(/^~(?=\/)/, home)));
-  const pageTools = pageStore
+  const printTools = pageStore
     ? [
         tool(
-          'create_page',
-          `Makes a Page: a named, versioned page Threadbear keeps for the user (a chart, dashboard, report, doc), that outlives this reply and is updated in place with update_page. Use the make-page skill to build charts and dashboards from data. Static HTML, CSS and SVG unless live is true. Then put a \`\`\`page <id>\`\`\` block in your reply. If one from the same source exists (list_pages), update it instead.`,
+          'create_print',
+          `Makes a Print: a named, versioned page Threadbear keeps for the user (a chart, dashboard, report, doc), that outlives this reply and is updated in place with update_print. Use the make-print skill to build charts and dashboards from data. Static HTML, CSS and SVG unless live is true. Then put a \`\`\`page <id>\`\`\` block in your reply. If one from the same source exists (list_prints), update it instead.`,
           {
             title: z.string().min(1).max(MAX_TITLE).describe('Short, what it shows: "Bundle size".'),
             summary: z.string().max(MAX_SUMMARY).describe('One or two lines of what it says now, for lists and other apps.'),
@@ -813,7 +815,7 @@ export function buildThreadbearTools(
           },
           handle(async (input, extra) => {
             const me = (await all()).find((t) => t.id === selfId);
-            await confirm('create_page', await confinedReason(`Make the page "${input.title}"`), { title: input.title, ...(input.dir ? { dir: input.dir } : {}) }, extra?.signal);
+            await confirm('create_print', await confinedReason(`Make the print "${input.title}"`), { title: input.title, ...(input.dir ? { dir: input.dir } : {}) }, extra?.signal);
             const p = pageStore.create({
               title: input.title,
               summary: input.summary,
@@ -832,10 +834,10 @@ export function buildThreadbearTools(
           }),
         ),
         tool(
-          'update_page',
-          'Updates a Page in place: new content (html, dir or markdown) makes a new version, and the last 10 are kept. restoreVersion makes an older version the newest again. If the user edited a doc themselves (read_page says so), start from their markdown.',
+          'update_print',
+          'Updates a Print in place: new content (html, dir or markdown) makes a new version, and the last 10 are kept. restoreVersion makes an older version the newest again. If the user edited a doc themselves (read_print says so), start from their markdown.',
           {
-            id: z.string().min(1).describe('The page id (pg_...) or a unique prefix.'),
+            id: z.string().min(1).describe('The print id (pg_...) or a unique prefix.'),
             title: z.string().min(1).max(MAX_TITLE).optional(),
             summary: z.string().max(MAX_SUMMARY).optional(),
             ...pageContent,
@@ -861,14 +863,14 @@ export function buildThreadbearTools(
           }),
         ),
         tool(
-          'list_pages',
-          'Lists Pages, newest first: by project, by the thread that made them, with no project, by source, or the deleted ones.',
+          'list_prints',
+          'Lists Prints, newest first: by project, by the thread that made them, with no project, by source, or the deleted ones.',
           {
             project: z.string().optional().describe('Project id or title.'),
             thread: z.string().optional().describe('Thread id. "self" for this thread.'),
-            none: z.boolean().optional().describe('Only pages in no project.'),
+            none: z.boolean().optional().describe('Only prints in no project.'),
             source: z.string().optional(),
-            deleted: z.boolean().optional().describe('Only deleted pages, kept 7 days for restore_page.'),
+            deleted: z.boolean().optional().describe('Only deleted prints, kept 7 days for restore_print.'),
           },
           handle(async ({ project: q, thread, none, source, deleted }) => {
             const list = pageStore.list({
@@ -878,12 +880,12 @@ export function buildThreadbearTools(
               ...(source ? { source } : {}),
               ...(deleted ? { deleted } : {}),
             });
-            return list.length ? list.map(pageLine).join('\n') : 'No pages.';
+            return list.length ? list.map(pageLine).join('\n') : 'No prints.';
           }),
         ),
         tool(
-          'read_page',
-          "Reads a Page: title, summary, kind, version, projects, how to remake it, the versions kept, the path of its index.html, and a doc's markdown.",
+          'read_print',
+          "Reads a Print: title, summary, kind, version, projects, how to remake it, the versions kept, the path of its index.html, and a doc's markdown.",
           { id: z.string().min(1), version: z.number().int().min(1).optional().describe('An older version. Default: the newest.') },
           handle(({ id, version }) => {
             const p = pageStore.find(id);
@@ -900,20 +902,20 @@ export function buildThreadbearTools(
           }),
         ),
         tool(
-          'delete_page',
-          'Deletes a Page. It is kept 7 days, and restore_page brings it back until then.',
+          'delete_print',
+          'Deletes a Print. It is kept 7 days, and restore_print brings it back until then.',
           { id: z.string().min(1) },
-          handle(({ id }) => `Deleted ${pageStore.delete(id).id}. restore_page brings it back for 7 days.`),
+          handle(({ id }) => `Deleted ${pageStore.delete(id).id}. restore_print brings it back for 7 days.`),
         ),
         tool(
-          'restore_page',
-          'Brings back a deleted Page (list_pages with deleted: true shows them).',
+          'restore_print',
+          'Brings back a deleted Print (list_prints with deleted: true shows them).',
           { id: z.string().min(1) },
           handle(({ id }) => `Restored ${pageLine(pageStore.restore(id))}`),
         ),
         tool(
-          'export_page',
-          "Copies a Page's files (index.html and its assets) into a new or empty folder, for the user to keep or send. For a PDF, run the make-page skill's export-pdf.mjs on the copied index.html.",
+          'export_print',
+          "Copies a Print's files (index.html and its assets) into a new or empty folder, for the user to keep or send. For a PDF, run the make-print skill's export-pdf.mjs on the copied index.html.",
           {
             id: z.string().min(1),
             folder: z.string().min(1).describe('Where to copy it. Absolute, or relative to this thread’s folder.'),
@@ -925,19 +927,25 @@ export function buildThreadbearTools(
           }),
         ),
         tool(
-          'add_page_to_project',
-          'Puts a Page in a project, so it shows on that project. A page can be in several.',
+          'add_print_to_project',
+          'Puts a Print in a project, so it shows on that project. A page can be in several.',
           { id: z.string().min(1), project: z.string().min(1).describe('Project id or title.') },
           handle(async ({ id, project: q }) => pageLine(pageStore.setProjects(id, { add: [(await project(q)).id] }))),
         ),
         tool(
-          'remove_page_from_project',
-          'Takes a Page out of a project. It stays with the thread that made it.',
+          'remove_print_from_project',
+          'Takes a Print out of a project. It stays with the thread that made it.',
           { id: z.string().min(1), project: z.string().min(1).describe('Project id or title.') },
           handle(async ({ id, project: q }) => pageLine(pageStore.setProjects(id, { remove: [(await project(q)).id] }))),
         ),
       ]
     : [];
+  // The names from before the rename: a session that loaded them keeps
+  // calling them (AGENTS.md, "keep taking the old ones").
+  const pageTools = [
+    ...printTools,
+    ...printTools.map((t) => ({ ...t, name: t.name.replace('prints', 'pages').replace('print', 'page'), description: `Old name for ${t.name}.` })),
+  ];
 
   // Highlights (docs/protocol.md): the list beside the transcript of what
   // the thread made and shared. Always this thread's own.

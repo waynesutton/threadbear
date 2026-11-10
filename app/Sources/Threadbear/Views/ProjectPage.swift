@@ -286,7 +286,8 @@ extension AttributedString {
     }
 }
 
-/// The pages its threads' agents made (docs/protocol.md, "Pages"): a
+/// Its Prints ("Pages" until 10 Nov 2026; the code and protocol still say
+/// page): what its threads' agents made (docs/protocol.md, "Prints"), a
 /// bundle report, a chart, a dashboard, a doc. Each row opens its page in a
 /// window of its own; its menu refreshes, edits, downloads, restores a
 /// version, moves or deletes it. Deleted ones wait 7 days under Recently
@@ -302,7 +303,7 @@ private struct PagesSection: View {
         let pages = app.pages(in: project.id)
         let deleted = app.deletedPages(in: project.id)
         VStack(alignment: .leading, spacing: 0) {
-            PageHeading(title: "Pages", detail: pages.isEmpty ? nil : "\(pages.count)") { EmptyView() }
+            PageHeading(title: "Prints", detail: pages.isEmpty ? nil : "\(pages.count)") { EmptyView() }
             if pages.isEmpty {
                 Text("None yet. Ask a thread in this project for a chart, a dashboard, a report or a doc, and it shows here.")
                     .font(.system(size: TypeScale.label))
@@ -330,7 +331,7 @@ private struct PagesSection: View {
                                 Button("Restore") { app.restorePage(page) }
                                     .buttonStyle(.borderless)
                                     .busy(app.isBusy(BusyKey.page(page.id)))
-                                    .tip("Bring this page back. Deleted pages are kept for 7 days")
+                                    .tip("Bring this print back. Deleted prints are kept for 7 days")
                             }
                             .font(.system(size: TypeScale.label))
                         }
@@ -342,7 +343,7 @@ private struct PagesSection: View {
                         .foregroundStyle(Color(nsColor: Theme.faintText))
                 }
                 .padding(.top, zoomed(8))
-                .tip("Pages deleted in the last 7 days. Restore brings one back")
+                .tip("Prints deleted in the last 7 days. Restore brings one back")
             }
         }
         .onAppear { app.loadDeletedPages() }
@@ -385,7 +386,7 @@ private struct PageRow: View {
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
-            .tip("Open this page in a window of its own")
+            .tip("Open this print in a window of its own")
             Menu {
                 PageMenu(page: page, ask: ask, edit: edit)
             } label: {
@@ -396,7 +397,7 @@ private struct PageRow: View {
             .fixedSize()
             .opacity(hovering || app.isBusy(BusyKey.page(page.id)) ? 1 : 0.5)
             .busy(app.isBusy(BusyKey.page(page.id)))
-            .tip("Refresh, edit, download, versions, move or delete this page")
+            .tip("Refresh, edit, download, versions, move or delete this print")
         }
         .font(.system(size: TypeScale.label))
         .padding(.vertical, zoomed(6))
@@ -408,7 +409,7 @@ private struct PageRow: View {
 
     /// "Dashboard · v3 · 2h · edited by you".
     private var detail: String {
-        var parts = [page.kind.capitalized, "v\(page.version)", RelativeTime.short(page.updatedAt, now: app.now)]
+        var parts = [page.kindLabel, "v\(page.version)", RelativeTime.short(page.updatedAt, now: app.now)]
         if page.editedByUser { parts.append("edited by you") }
         return parts.joined(separator: " · ")
     }
@@ -470,7 +471,7 @@ struct AskPageSheet: View {
             TextField("Make the region chart a pie, and add a table of the top 10 rows", text: $text, axis: .vertical)
                 .lineLimit(3...8)
                 .textFieldStyle(.roundedBorder)
-                .tip("What should change on the page")
+                .tip("What should change on the print")
             HStack {
                 Spacer()
                 Button("Cancel") { close() }
@@ -482,7 +483,7 @@ struct AskPageSheet: View {
                 }
                 .keyboardShortcut(.defaultAction)
                 .disabled(text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-                .tip("Send this to the thread that made the page, and open that thread")
+                .tip("Send this to the thread that made the print, and open that thread")
             }
         }
         .padding(zoomed(20))
@@ -535,7 +536,7 @@ struct EditDocSheet: View {
                 .keyboardShortcut("s", modifiers: .command)
                 .disabled(!loaded || saving)
                 .busy(saving)
-                .tip("Save your edit as a new version of the page")
+                .tip("Save your edit as a new version of the print")
             }
         }
         .padding(zoomed(20))

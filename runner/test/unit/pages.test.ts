@@ -125,33 +125,33 @@ test('page tools: off without the experiment; create inherits the pinned project
   const control = { list: async () => [thread], get: async () => ({ ...thread, permissionMode: 'full' }) } as never;
   const projects = { find: async (q: string) => (q === 'Threadbear' || q === 'p_tb' ? { id: 'p_tb', title: 'Threadbear' } : undefined) } as never;
   const off = buildThreadbearTools(control, 'th1', Date.now, undefined, projects) as unknown as Tool[];
-  assert.ok(!off.some((t) => t.name === 'create_page'));
+  assert.ok(!off.some((t) => t.name === 'create_print' || t.name === 'create_page'));
 
   const store = new Pages(h);
   const tools = buildThreadbearTools(control, 'th1', Date.now, undefined, projects, undefined, { pages: () => store }) as unknown as Tool[];
-  const made = await call(tools, 'create_page', { title: 'Bundle size', summary: '20.22 MB', html: page('v1'), source: 'bundle-analyzer summary' });
+  const made = await call(tools, 'create_print', { title: 'Bundle size', summary: '20.22 MB', html: page('v1'), source: 'bundle-analyzer summary' });
   assert.equal(made.err, false, made.text);
   assert.match(made.text, /pg_bundle_size {2}page {2}v1 .*in p_tb/);
-  const bad = await call(tools, 'create_page', { title: 'X', summary: '', html: page('<script></script>') });
+  const bad = await call(tools, 'create_print', { title: 'X', summary: '', html: page('<script></script>') });
   assert.equal(bad.err, true);
 
   fs.mkdirSync(path.join(cwd, 'out'));
   fs.writeFileSync(path.join(cwd, 'out', 'index.html'), page('v2'));
-  const up = await call(tools, 'update_page', { id: 'pg_bundle', dir: 'out' });
+  const up = await call(tools, 'update_print', { id: 'pg_bundle', dir: 'out' });
   assert.match(up.text, /v2/);
   assert.match(fs.readFileSync(store.file('pg_bundle_size'), 'utf8'), /v2/);
 
-  assert.match((await call(tools, 'list_pages', { project: 'Threadbear' })).text, /pg_bundle_size/);
-  assert.equal((await call(tools, 'list_pages', { none: true })).text, 'No pages.');
-  await call(tools, 'remove_page_from_project', { id: 'pg_bundle_size', project: 'Threadbear' });
-  assert.match((await call(tools, 'read_page', { id: 'pg_bundle_size' })).text, /no project[\s\S]*file: .*v2\/index\.html/);
+  assert.match((await call(tools, 'list_prints', { project: 'Threadbear' })).text, /pg_bundle_size/);
+  assert.equal((await call(tools, 'list_prints', { none: true })).text, 'No prints.');
+  await call(tools, 'remove_print_from_project', { id: 'pg_bundle_size', project: 'Threadbear' });
+  assert.match((await call(tools, 'read_print', { id: 'pg_bundle_size' })).text, /no project[\s\S]*file: .*v2\/index\.html/);
 });
 
 test('pages.* methods: empty while off, list, get with file and versions, setProjects as Mike, and a change notifies', async () => {
   const { pageMethods } = await import('../../src/pages.ts');
   const offM = pageMethods(() => undefined);
   assert.deepEqual(offM['pages.list']!({}), { pages: [] });
-  assert.throws(() => offM['pages.get']!({ pageId: 'x' }), /Pages is off/);
+  assert.throws(() => offM['pages.get']!({ pageId: 'x' }), /Prints is off/);
 
   const seen: number[] = [];
   const store = new Pages(home(), Date.now, (list) => seen.push(list.length));
@@ -167,7 +167,7 @@ test('pages.* methods: empty while off, list, get with file and versions, setPro
   assert.deepEqual(moved.page.projects.map((x) => [x.id, x.by]), [['p_tb', 'mike']]);
   assert.equal((m['pages.list']!({ project: 'p_tb' }) as { pages: unknown[] }).pages.length, 1);
   assert.equal((m['pages.list']!({ none: true }) as { pages: unknown[] }).pages.length, 0);
-  assert.throws(() => m['pages.get']!({ pageId: 'nope' }), /No page nope/);
+  assert.throws(() => m['pages.get']!({ pageId: 'nope' }), /No print nope/);
   assert.throws(() => m['pages.setProjects']!({ pageId: p.id, add: 'p_tb' }), /list of strings/);
 });
 
@@ -246,4 +246,18 @@ test('pages.refresh and pages.edit send the page to a thread; the runner never r
   assert.equal((m['pages.list']!({ deleted: true }) as { pages: unknown[] }).pages.length, 1);
   m['pages.restore']!({ pageId: doc.id });
   assert.throws(() => m['pages.export']!({ pageId: doc.id, dest: 'relative' }), /absolute/);
+});
+
+test('the old page tool names still work after the rename to Prints', async () => {
+  const { buildThreadbearTools, NEVER_ASK_TOOLS } = await import('../../src/threadbear-mcp.ts');
+  const store = new Pages(home());
+  const control = { list: async () => [{ id: 'th1', title: 't', cwd: os.tmpdir(), projects: [] }], get: async () => ({ permissionMode: 'full' }) } as never;
+  const tools = buildThreadbearTools(control, 'th1', Date.now, undefined, undefined, undefined, { pages: () => store }) as unknown as Tool[];
+  const names = tools.map((t) => t.name);
+  for (const n of ['create_print', 'update_print', 'list_prints', 'read_print', 'delete_print', 'restore_print', 'export_print', 'add_print_to_project', 'remove_print_from_project']) assert.ok(names.includes(n), n);
+  for (const n of ['create_page', 'update_page', 'list_pages', 'read_page', 'delete_page', 'restore_page', 'export_page', 'add_page_to_project', 'remove_page_from_project']) assert.ok(names.includes(n), n);
+  const made = await call(tools, 'create_page', { title: 'Old name', summary: '', html: page('x') });
+  assert.match(made.text, /Made pg_old_name/);
+  assert.match((await call(tools, 'list_prints', {})).text, /pg_old_name/);
+  for (const n of ['list_prints', 'read_print', 'list_pages', 'read_page']) assert.ok(NEVER_ASK_TOOLS.has(`mcp__threadbear__${n}`), n);
 });

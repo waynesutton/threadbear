@@ -690,7 +690,7 @@ async function main(): Promise<void> {
       return { threadId: page.ownerThread, started: false };
     } catch {
       const folder = page.projects.map((x) => projects.list({ archived: true }).find((pr) => pr.id === x.id)?.folders[0]).find(Boolean);
-      const t = runner.create({ text, title: `Page: ${page.title}`, ...(folder ? { cwd: folder } : {}), startedBy: { kind: 'runner', label: 'Pages', why: 'Refresh or change a page whose thread is gone' } });
+      const t = runner.create({ text, title: `Print: ${page.title}`, ...(folder ? { cwd: folder } : {}), startedBy: { kind: 'runner', label: 'Prints', why: 'Refresh or change a print whose thread is gone' } });
       return { threadId: t.thread.id, started: true };
     }
   };

@@ -4764,9 +4764,9 @@ or by agents with the Notion tools. `read_project` lists the open cards,
 and a thread's brief has one line saying the board is there and how many
 are open. With no gateway, `error` says so.
 
-## Pages
+## Prints
 
-The pages experiment (`runner/src/pages.ts`). A Page is a named, versioned page an agent makes for the user (a bundle size report, a progress card) that outlives the reply it was posted in. The runner keeps it, not a folder, so it can be in zero, one or several projects whatever folder its thread ran in.
+The pages experiment (`runner/src/pages.ts`). People and agents call these **Prints** since 10 Nov 2026 (Wayne picked the name, in the app's sewing-box vocabulary: threads, patches, pins, pocket). Only the words changed: the methods, the notification, the `Page` type, the `pg_` ids, the experiment's id and the `pages` folder keep "page", so an app and a runner from either side of the rename work together. A Print is a named, versioned page an agent makes for the user (a bundle size report, a progress card) that outlives the reply it was posted in. The runner keeps it, not a folder, so it can be in zero, one or several projects whatever folder its thread ran in.
 
 ```ts
 type Page = {
@@ -4793,9 +4793,9 @@ type Page = {
 - **Projects.** Made with no `projects`, a page joins its thread's project when the thread is pinned to exactly one; `[]` means none.
 - **Docs.** A page given as `markdown` is a doc: the runner draws it (`runner/src/page-doc.ts`, a small escaped subset: headings, lists, task lists, tables, quotes, code, http(s) and mailto links; no HTML passes through) and keeps the text as `source.md` beside it, so the user can edit it (`pages.saveDoc`) and the next agent starts from their words.
 - **Deleted** pages are kept 7 days (`pages.restore`), then removed with their files when the store next loads.
-- **Agent tools:** `create_page` (`kind`, `markdown`, `recipe`), `update_page` (`markdown`, `recipe`, `restoreVersion`), `list_pages` (`deleted`), `read_page` (`version`; shows the recipe, the kept versions and a doc's markdown), `delete_page`, `restore_page`, `export_page`, `add_page_to_project`, `remove_page_from_project`, only while the experiment is on. `list_pages` and `read_page` never ask. The older arguments still work.
-- **Skills.** `make-page` builds charts, dashboards and reports from CSV, TSV, JSON or XLSX through a spec, and exports PDFs; `bundle-report` is its recipe for Convex bundle size. Both live in the user's skills folder, not the repo.
-- **In a reply**, an agent shows a page with a ```` ```page <id> ```` block (the id in the info string, or alone on the fence's one line; `PageFence`). The Mac app draws it as a card (`PageCardCell`, "Preview on top", Wayne picked it on 10 Nov 2026): the top of the newest version's `index.html` from `pages.get`, drawn off screen under the html block's lockdown at 1080 by 470 and scaled down, over a footer with the kind, title, version and age and Open, Refresh and a ⋯ menu. It follows `pages.updated`, so every card naming a page shows its newest version; a version newer than the first made in the last 15 minutes is marked "New version". With the experiment off, or in an app that doesn't know pages, the block shows as code.
+- **Agent tools:** `create_print` (`kind`, `markdown`, `recipe`), `update_print` (`markdown`, `recipe`, `restoreVersion`), `list_prints` (`deleted`), `read_print` (`version`; shows the recipe, the kept versions and a doc's markdown), `delete_print`, `restore_print`, `export_print`, `add_print_to_project`, `remove_print_from_project`, only while the experiment is on. `list_prints` and `read_print` never ask. The older arguments still work, and so does each tool's name from before the rename (`create_page` and the rest), for sessions that loaded them.
+- **Skills.** `make-print` builds charts, dashboards and reports from CSV, TSV, JSON or XLSX through a spec, and exports PDFs; `bundle-report` is its recipe for Convex bundle size. Both live in the user's skills folder, not the repo.
+- **In a reply**, an agent shows a print with a ```` ```print <id> ```` block (```` ```page ````, its name before the rename, still works; the id in the info string, or alone on the fence's one line; `PageFence`). The Mac app draws it as a card (`PageCardCell`, "Preview on top", Wayne picked it on 10 Nov 2026): the top of the newest version's `index.html` from `pages.get`, drawn off screen under the html block's lockdown at 1080 by 470 and scaled down, over a footer with the kind, title, version and age and Open, Refresh and a ⋯ menu. It follows `pages.updated`, so every card naming a page shows its newest version; a version newer than the first made in the last 15 minutes is marked "New version". With the experiment off, or in an app that doesn't know pages, the block shows as code.
 
 ## Schedules
 

@@ -1,6 +1,7 @@
 import Foundation
 
-/// A Page (docs/protocol.md, "Pages"): a named, versioned page an agent
+/// A Print, as people and agents call it since 10 Nov 2026 (the code and
+/// protocol keep "page"; docs/protocol.md, "Prints"): a named, versioned page an agent
 /// made, kept by the runner, in zero or more projects. The pages
 /// experiment; with it off the runner sends none.
 public struct Page: Sendable, Hashable, Decodable, Identifiable {
@@ -60,6 +61,9 @@ public struct Page: Sendable, Hashable, Decodable, Identifiable {
     public func isIn(project id: String) -> Bool { projects.contains { $0.id == id } }
 
     public var isDoc: Bool { kind == "doc" }
+
+    /// What its kind is called: a plain one is a Print.
+    public var kindLabel: String { kind == "page" ? "Print" : kind.capitalized }
 
     /// The versions the runner still keeps: the newest ten.
     public var keptVersions: [Int] { Array(Swift.max(1, version - 9)...version).reversed() }

@@ -2,6 +2,12 @@
 
 ## To Do
 
+- [ ] Prints: publish, opt-in per print, so it opens on iPhone, the website and a share link.
+- [ ] Prints: a sheet kind (CSV kept beside it, full table, Edit Data, CSV download; no formulas).
+- [ ] Prints: a diagram kind (Mermaid source drawn with Pele, Edit Text).
+- [ ] Prints: read-only list and read for outside agents (Grok).
+- [ ] Prints: scheduled refresh, as a line in the make-print skill and the guide (no code).
+
 - [ ] Pages: open a page in the thread's side pane (today the project page opens it in its own window), and reload the open pane on `pages.updated`. prds/threadbear-pages.md
 - [ ] Pages: only ask once per page for `update_page` from the thread that owns it (adapter change). prds/threadbear-pages.md
 - [ ] Pages: optional HyperFrames share clip for any page. prds/threadbear-pages.md
@@ -9,6 +15,8 @@
 ## In Progress
 
 ## Completed
+
+- [x] 2026-11-10 19:41 UTC Pages renamed to Prints (Wayne picked it) in everything people and agents see: tool names (old ones kept as aliases), the ```print block (```page still draws), the app's wording, guide, protocol and experiment docs. Internals, RPC, ids and the experiment id keep "page". runner/src/threadbear-mcp.ts, pages.ts, main.ts, app Page.swift, RichBlock.swift, PageCards.swift, ProjectPage.swift, docs. Verified: tsc; pages.test.ts 16 pass; swift build; PageTests, PageFenceTests, TipsTests, EveryClickShowsTests pass.
 
 - [x] 2026-11-10 18:34 UTC Download as PDF in both page menus (project page and the card in replies), for the newest version and each kept one: the page laid out light at 800 px in the card's locked-down view, captured whole by WebKit, cut into US Letter pages (PagePDF). app Pages.swift, PageSheets.swift, ProjectPage.swift, RichRenderer.swift, ThreadbearCore/Support/PagePDF.swift, a debug-only pagePDF automation command. Verified: swift build; PagePDFTests, PageTests, TipsTests, EveryClickShowsTests pass; a dashboard (2 pages) and a report (1 page) made through a debug app against a dev runner and looked at.
 

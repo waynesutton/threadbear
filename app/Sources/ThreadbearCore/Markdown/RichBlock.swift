@@ -186,7 +186,8 @@ public enum RichPages {
     }
 }
 
-/// A ```page <id> fence in a reply (the pages experiment): the card for one
+/// A ```print <id> fence in a reply (the pages experiment, called Prints;
+/// ```page, its name before 10 Nov 2026, still works): the card for one
 /// of the runner's Pages, drawn from the page as it is now, so a new
 /// version shows in every reply that names it.
 public enum PageFence {
@@ -194,7 +195,7 @@ public enum PageFence {
     /// body is the id, or nil for anything else.
     public static func id(language: String?, code: String) -> String? {
         let words = (language ?? "").split(whereSeparator: { $0 == " " || $0 == "\t" })
-        guard words.first?.lowercased() == "page" else { return nil }
+        guard let word = words.first?.lowercased(), word == "print" || word == "page" else { return nil }
         let candidate = words.count > 1 ? String(words[1]) : code.trimmingCharacters(in: .whitespacesAndNewlines).split(whereSeparator: \.isWhitespace).first.map(String.init) ?? ""
         return isPageId(candidate) ? candidate : nil
     }

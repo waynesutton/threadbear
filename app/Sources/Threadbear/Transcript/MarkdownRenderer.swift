@@ -634,7 +634,7 @@ enum MarkdownRenderer {
             attachment.attachmentCell = PageCardCell(pageId: pageId)
             let start = output.length
             let box = NSMutableAttributedString(attachment: attachment)
-            box.addAttribute(.tbCopyText, value: "```page \(pageId)\n```", range: NSRange(location: 0, length: box.length))
+            box.addAttribute(.tbCopyText, value: "```print \(pageId)\n```", range: NSRange(location: 0, length: box.length))
             output.append(box)
             finishParagraph(from: start, style: paragraphStyle(context))
         }

@@ -39,6 +39,8 @@ final class PageTests: XCTestCase {
         XCTAssertEqual(page.keptVersions, [12, 11, 10, 9, 8, 7, 6, 5, 4, 3], "the newest ten, newest first")
         let old = try JSONDecoder().decode(Page.self, from: Data(#"{"id":"pg_o","title":"Old","version":2}"#.utf8))
         XCTAssertEqual(old.kind, "page", "a page from before kinds")
+        XCTAssertEqual(old.kindLabel, "Print")
+        XCTAssertEqual(page.kindLabel, "Doc")
         XCTAssertEqual(old.keptVersions, [2, 1])
         XCTAssertFalse(old.editedByUser)
     }
@@ -47,6 +49,9 @@ final class PageTests: XCTestCase {
 final class PageFenceTests: XCTestCase {
     func testAPageFenceNamesItsPage() {
         XCTAssertEqual(PageFence.id(language: "page pg_bundle_size", code: ""), "pg_bundle_size")
+        XCTAssertEqual(PageFence.id(language: "print pg_bundle_size", code: ""), "pg_bundle_size")
+        XCTAssertEqual(PageFence.id(language: "print", code: "pg_sales_2026\n"), "pg_sales_2026")
+        XCTAssertNil(PageFence.id(language: "printer pg_a", code: ""))
         XCTAssertEqual(PageFence.id(language: "page", code: "pg_sales_2026\n"), "pg_sales_2026")
         XCTAssertEqual(PageFence.id(language: "PAGE", code: "  pg_a  "), "pg_a")
         XCTAssertNil(PageFence.id(language: "page", code: "not a page"))

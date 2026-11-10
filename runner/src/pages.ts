@@ -1,4 +1,5 @@
-// Pages (the pages experiment): a named, versioned page a thread makes for
+// Prints (the pages experiment; "Pages" until 10 Nov 2026, and the code and
+// protocol still say page): a named, versioned page a thread makes for
 // the user, like a bundle size report or a progress card. It outlives the
 // reply it was posted in and can be updated in place. Unlike a pin, the
 // runner keeps it, so it can belong to zero, one or several projects the
@@ -161,7 +162,7 @@ export class Pages {
     if (u.summary !== undefined) next.summary = cleanSummary(u.summary);
     if (u.recipe !== undefined) next.recipe = u.recipe.trim().slice(0, MAX_RECIPE) || undefined;
     if (u.html !== undefined || u.dir !== undefined || u.markdown !== undefined) {
-      if (u.markdown !== undefined && next.kind !== 'doc' && (u.html !== undefined || u.dir !== undefined)) throw new PageError('Give the page as html, dir or markdown, one of them.');
+      if (u.markdown !== undefined && next.kind !== 'doc' && (u.html !== undefined || u.dir !== undefined)) throw new PageError('Give the print as html, dir or markdown, one of them.');
       if (u.markdown !== undefined) next.kind = 'doc';
       next.version = p.version + 1;
       next.bytes = this.write(p.id, next.version, u, p.live, next.title);
@@ -197,7 +198,7 @@ export class Pages {
   restoreVersion(id: string, version: number): PageRecord {
     const p = this.live(id);
     const from = this.versionDir(p.id, version);
-    if (!fs.existsSync(from)) throw new PageError(`Version ${version} of ${p.id} isn't kept. read_page lists the versions there are.`);
+    if (!fs.existsSync(from)) throw new PageError(`Version ${version} of ${p.id} isn't kept. read_print lists the versions there are.`);
     return this.update(p.id, { dir: from });
   }
 
@@ -263,13 +264,13 @@ export class Pages {
   // A page that isn't deleted, for anything that changes it.
   private live(id: string): PageRecord {
     const p = this.must(id);
-    if (p.deletedAt) throw new PageError(`${p.id} is deleted. restore_page brings it back first.`);
+    if (p.deletedAt) throw new PageError(`${p.id} is deleted. restore_print brings it back first.`);
     return p;
   }
 
   private must(id: string): PageRecord {
     const p = this.get(id) ?? this.records.find((r) => r.id.startsWith(id));
-    if (!p) throw new PageError(`No page ${id}. list_pages shows them.`);
+    if (!p) throw new PageError(`No print ${id}. list_prints shows them.`);
     return p;
   }
 
@@ -288,7 +289,7 @@ export class Pages {
   // folder and renames it into place, so a refused page leaves nothing.
   private write(id: string, v: number, c: PageContent, live: boolean, title: string): number {
     const given = [c.html, c.dir, c.markdown].filter((x) => x !== undefined).length;
-    if (given !== 1) throw new PageError('Give the page as html, dir or markdown, one of them.');
+    if (given !== 1) throw new PageError('Give the print as html, dir or markdown, one of them.');
     const at = new Date(this.now());
     const files: { rel: string; data: Buffer }[] =
       c.markdown !== undefined
@@ -303,11 +304,11 @@ export class Pages {
     if (!index) throw new PageError(`${c.dir} has no index.html.`);
     if (index.data.length > MAX_HTML_BYTES) throw new PageError(`index.html is ${index.data.length} bytes; the most is ${MAX_HTML_BYTES}. Move pictures into files next to it.`);
     const total = files.reduce((n, f) => n + f.data.length, 0);
-    if (total > MAX_PAGE_BYTES) throw new PageError(`The page is ${total} bytes; the most is ${MAX_PAGE_BYTES}.`);
+    if (total > MAX_PAGE_BYTES) throw new PageError(`The print is ${total} bytes; the most is ${MAX_PAGE_BYTES}.`);
     if (!live) {
       for (const f of files) {
         if (f.rel.endsWith('.html') && SCRIPT.test(f.data.toString('utf8'))) {
-          throw new PageError(`${f.rel} has a <script>. Pages are static unless made with live: true; draw with HTML, CSS and SVG instead.`);
+          throw new PageError(`${f.rel} has a <script>. Prints are static unless made with live: true; draw with HTML, CSS and SVG instead.`);
         }
       }
     }
@@ -359,7 +360,7 @@ function inherited(ps: readonly ThreadProject[]): PageProject[] {
 
 function cleanTitle(t: string): string {
   const s = t.trim().slice(0, MAX_TITLE);
-  if (!s) throw new PageError('A page needs a title.');
+  if (!s) throw new PageError('A print needs a title.');
   return s;
 }
 
@@ -386,7 +387,7 @@ export function readPageDir(dir: string): { rel: string; data: Buffer }[] {
       if (e.isSymbolicLink()) throw new PageError(`${rel} is a link. Copy the file in instead.`);
       if (e.isDirectory()) walk(full);
       else if (e.isFile()) {
-        if (!PAGE_ASSETS.has(path.extname(e.name).toLowerCase())) throw new PageError(`${rel} can't go in a page. Allowed: ${[...PAGE_ASSETS].join(' ')}.`);
+        if (!PAGE_ASSETS.has(path.extname(e.name).toLowerCase())) throw new PageError(`${rel} can't go in a print. Allowed: ${[...PAGE_ASSETS].join(' ')}.`);
         out.push({ rel, data: fs.readFileSync(full) });
       }
     }
@@ -401,22 +402,22 @@ export function readPageDir(dir: string): { rel: string; data: Buffer }[] {
 // own permissions.
 export function refreshText(p: PageRecord): string {
   const how = p.recipe ? `How it was made: ${p.recipe}` : 'Make it again from the same source as before.';
-  return `Refresh the page "${p.title}" (${p.id}). ${how} Then call update_page with id ${p.id}${p.kind === 'doc' ? ' and the new markdown' : ''}.`;
+  return `Refresh the print "${p.title}" (${p.id}). ${how} Then call update_print with id ${p.id}${p.kind === 'doc' ? ' and the new markdown' : ''}.`;
 }
 
 export function editText(p: PageRecord, change: string): string {
-  return `Change the page "${p.title}" (${p.id}): ${change.trim()}\n\nCall update_page with id ${p.id}${p.kind === 'doc' ? ' and the new markdown (read_page has the current markdown)' : ''} when it's done.`;
+  return `Change the print "${p.title}" (${p.id}): ${change.trim()}\n\nCall update_print with id ${p.id}${p.kind === 'doc' ? ' and the new markdown (read_print has the current markdown)' : ''} when it's done.`;
 }
 
 export type PageAsk = (page: PageRecord, text: string) => { threadId: string; started: boolean };
 
-// docs/protocol.md, "Pages". `pages` is undefined while the experiment is
+// docs/protocol.md, "Prints". `pages` is undefined while the experiment is
 // off: lists come back empty and the rest say so. `ask` sends Refresh and
 // Edit with agent to a thread.
 export function pageMethods(pages: () => Pages | undefined, ask?: PageAsk): Record<string, (p: Record<string, unknown>) => unknown> {
   const must = (): Pages => {
     const s = pages();
-    if (!s) throw new RpcError(ErrorCode.badParams, 'Pages is off. Turn it on in Settings > General > Experiments.');
+    if (!s) throw new RpcError(ErrorCode.badParams, 'Prints is off. Turn it on in Settings > General > Experiments.');
     return s;
   };
   const str = (p: Record<string, unknown>, k: string): string | undefined => {
@@ -480,7 +481,7 @@ export function pageMethods(pages: () => Pages | undefined, ask?: PageAsk): Reco
     },
     'pages.refresh': (p) =>
       found(() => {
-        if (!ask) throw new RpcError(ErrorCode.badParams, "This runner can't send a page to a thread.");
+        if (!ask) throw new RpcError(ErrorCode.badParams, "This runner can't send a print to a thread.");
         const page = must().find(id(p));
         return ask(page, refreshText(page));
       }),
@@ -488,7 +489,7 @@ export function pageMethods(pages: () => Pages | undefined, ask?: PageAsk): Reco
       const change = str(p, 'text');
       if (!change?.trim()) throw new RpcError(ErrorCode.badParams, 'text is required: what should change');
       return found(() => {
-        if (!ask) throw new RpcError(ErrorCode.badParams, "This runner can't send a page to a thread.");
+        if (!ask) throw new RpcError(ErrorCode.badParams, "This runner can't send a print to a thread.");
         const page = must().find(id(p));
         return ask(page, editText(page, change));
       });

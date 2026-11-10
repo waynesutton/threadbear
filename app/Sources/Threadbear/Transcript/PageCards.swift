@@ -2,7 +2,8 @@ import AppKit
 import Synchronization
 import ThreadbearCore
 
-/// What a ```page card in a reply needs to know (the pages experiment,
+/// What a ```print card in a reply (```page before the rename to Prints)
+/// needs to know (the pages experiment,
 /// "Preview on top", Wayne picked it on 10 Nov 2026): each page as it is
 /// now, where its newest file is, and which are being refreshed. Read from
 /// any thread, as rows render across cores; written on the main thread
@@ -83,10 +84,10 @@ final class PageCardCell: NSTextAttachmentCell {
 
         var tip: String {
             switch self {
-            case .open: return "Open this page in a window of its own"
+            case .open: return "Open this print in a window of its own"
             case .refresh: return "Ask the thread that made it to make it again the same way"
             case .more: return "Edit with Agent, edit its text, download, versions or delete"
-            case .preview: return "Open this page"
+            case .preview: return "Open this print"
             }
         }
     }
@@ -121,9 +122,9 @@ final class PageCardCell: NSTextAttachmentCell {
     /// "Dashboard · v3 · 2h ago", or what's under way.
     var meta: String {
         guard let page else { return "Not on this Mac. It may be deleted, or on another Mac's runner." }
-        if refreshing { return "\(page.kind.capitalized) · v\(page.version) · refreshing in its thread…" }
+        if refreshing { return "\(page.kindLabel) · v\(page.version) · refreshing in its thread…" }
         let age = now.timeIntervalSince(page.updatedAt) < 90 ? "just now" : "\(RelativeTime.short(page.updatedAt, now: now)) ago"
-        return "\(page.kind.capitalized) · v\(page.version) · \(age)"
+        return "\(page.kindLabel) · v\(page.version) · \(age)"
     }
 
     /// A version newer than the first, made in the last 15 minutes.
