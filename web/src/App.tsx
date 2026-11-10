@@ -19,6 +19,7 @@ import { ReplyButton } from './reply-button';
 import { CommandState } from './command-state';
 import { previewOf, ShareControl, SharePage } from './share';
 import { FrontPage, ProfilePage } from './profile';
+import { PrintPage } from './print';
 import { busy, Lists, ResizeHandle, type Row, useSidebarWidth } from './sidebar';
 import { Pop } from './menu';
 import { pastedOf } from './picture-chips';
@@ -36,6 +37,8 @@ export function App() {
   const route = useRoute();
   // A shared thread is for anyone, signed in or not.
   if (route.page === 'share') return <SharePage key={route.slug} slug={route.slug} token={token} />;
+  // So is a published print (print.tsx).
+  if (route.page === 'print') return <PrintPage key={route.slug} slug={route.slug} />;
   // So is the profile page, once it's published (profile.tsx).
   if (route.page === 'profile') return <ProfilePage token={token} />;
   if (!token) {

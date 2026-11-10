@@ -27,6 +27,8 @@ export const MAX_TITLE = 120;
 // page can't read data files; that's for a later host channel).
 export const PAGE_ASSETS = new Set(['.html', '.css', '.svg', '.png', '.jpg', '.jpeg', '.webp', '.gif', '.mp4', '.webm', '.woff2', '.md']);
 export const MAX_RECIPE = 1000;
+// The backend's cap on a published print's HTML (convex/sync.ts PRINT_HTML_MAX).
+export const PUBLISH_HTML_MAX = 700_000;
 // A deleted page is kept this long so Restore can bring it back.
 export const DELETED_KEEP_MS = 7 * 24 * 3600 * 1000;
 // What a page is, for its icon and what Refresh and Edit mean. A doc is
@@ -57,6 +59,9 @@ export type PageRecord = {
   recipe?: string;
   // Who wrote the newest version: an agent, or the user in the editor.
   editedBy?: 'agent' | 'user';
+  // Set while it's published (docs/protocol.md, "Prints"): its link's
+  // slug, made here, and the version last sent to the backend.
+  published?: { slug: string; at: string; version: number };
   // Set while it's deleted; gone for good DELETED_KEEP_MS later.
   deletedAt?: string;
   createdAt: string;
@@ -202,10 +207,35 @@ export class Pages {
     return this.update(p.id, { dir: from });
   }
 
+  // Marks it published under a link (a new one only the first time, so a
+  // link survives new versions), or not published.
+  setPublished(id: string, on: boolean, sentVersion?: number): PageRecord {
+    const p = this.live(id);
+    if (!on) {
+      const { published: _was, ...rest } = p;
+      return this.replace(rest);
+    }
+    const slug = p.published?.slug ?? crypto.randomBytes(16).toString('base64url');
+    return this.replace({ ...p, published: { slug, at: new Date(this.now()).toISOString(), version: sentVersion ?? p.version } });
+  }
+
+  // What publishing sends: the newest version's index.html. Refused for a
+  // live print (its scripts would run for anyone with the link), one over
+  // the backend's size, and one that leans on files beside it.
+  publishable(id: string): { html: string } {
+    const p = this.live(id);
+    if (p.live) throw new PageError('A live print has scripts, so it can not be published. Make a static one.');
+    const html = fs.readFileSync(this.file(p.id), 'utf8');
+    if (SCRIPT.test(html)) throw new PageError('This print has a script, so it can not be published.');
+    if (html.length > PUBLISH_HTML_MAX) throw new PageError(`This print is ${html.length} characters; at most ${PUBLISH_HTML_MAX} can be published.`);
+    return { html };
+  }
+
   // Set aside for DELETED_KEEP_MS, then gone. Lists leave it out.
   delete(id: string): PageRecord {
     const p = this.live(id);
-    return this.replace({ ...p, deletedAt: new Date(this.now()).toISOString() });
+    const { published: _was, ...rest } = p;
+    return this.replace({ ...rest, deletedAt: new Date(this.now()).toISOString() });
   }
 
   restore(id: string): PageRecord {
@@ -411,10 +441,72 @@ export function editText(p: PageRecord, change: string): string {
 
 export type PageAsk = (page: PageRecord, text: string) => { threadId: string; started: boolean };
 
+// What publishing needs from the Convex mirror (sync.ts), and the website
+// a link is on.
+export type PagePublisher = {
+  problem(): string | undefined;
+  site(): string | undefined;
+  publish(print: { id: string; slug: string; title: string; kind: string; version: number; summary: string; html: string; updatedAt: string }): Promise<void>;
+  unpublish(id: string): Promise<void>;
+};
+
+export function printLink(site: string | undefined, slug: string): string | undefined {
+  return site ? `${site.replace(/\/+$/, '')}/p/${slug}` : undefined;
+}
+
+// Sends a print's newest version and marks it published, or takes it down.
+export async function publishPage(pages: Pages, pub: PagePublisher, id: string): Promise<{ page: PageRecord; url?: string }> {
+  const problem = pub.problem();
+  if (problem) throw new PageError(problem);
+  const p = pages.find(id);
+  const { html } = pages.publishable(p.id);
+  const marked = pages.setPublished(p.id, true);
+  try {
+    await pub.publish({ id: marked.id, slug: marked.published!.slug, title: marked.title, kind: marked.kind ?? 'page', version: marked.version, summary: marked.summary, html, updatedAt: marked.updatedAt });
+  } catch (e) {
+    // Never marked published when nothing went up.
+    if (!p.published) pages.setPublished(p.id, false);
+    throw e;
+  }
+  const url = printLink(pub.site(), marked.published!.slug);
+  return { page: marked, ...(url ? { url } : {}) };
+}
+
+export async function unpublishPage(pages: Pages, pub: PagePublisher, id: string): Promise<PageRecord> {
+  const p = pages.find(id);
+  await pub.unpublish(p.id);
+  return p.published ? pages.setPublished(p.id, false) : p;
+}
+
+// After any change: a published print whose newest version isn't the one
+// sent goes up again, and one deleted while published comes down. Returns
+// what it did, for the log; failures are left for the next change.
+export async function followPublished(pages: Pages, pub: PagePublisher, known: Map<string, string>): Promise<void> {
+  if (pub.problem()) return;
+  const live = new Set<string>();
+  for (const p of pages.list()) {
+    if (!p.published) continue;
+    live.add(p.id);
+    known.set(p.id, p.published.slug);
+    if (p.published.version === p.version) continue;
+    try {
+      await publishPage(pages, pub, p.id);
+    } catch {
+      // A new version that can't be published (too big, a script) leaves
+      // the last published one up.
+    }
+  }
+  for (const id of [...known.keys()]) {
+    if (live.has(id)) continue;
+    known.delete(id);
+    await pub.unpublish(id).catch(() => {});
+  }
+}
+
 // docs/protocol.md, "Prints". `pages` is undefined while the experiment is
 // off: lists come back empty and the rest say so. `ask` sends Refresh and
 // Edit with agent to a thread.
-export function pageMethods(pages: () => Pages | undefined, ask?: PageAsk): Record<string, (p: Record<string, unknown>) => unknown> {
+export function pageMethods(pages: () => Pages | undefined, ask?: PageAsk, pub?: PagePublisher): Record<string, (p: Record<string, unknown>) => unknown> {
   const must = (): Pages => {
     const s = pages();
     if (!s) throw new RpcError(ErrorCode.badParams, 'Prints is off. Turn it on in Settings > General > Experiments.');
@@ -478,6 +570,22 @@ export function pageMethods(pages: () => Pages | undefined, ask?: PageAsk): Reco
       if (!dest || !path.isAbsolute(dest)) throw new RpcError(ErrorCode.badParams, 'dest must be an absolute folder');
       const version = typeof p.version === 'number' ? p.version : undefined;
       return found(() => ({ file: must().exportTo(id(p), dest, version) }));
+    },
+    'pages.publish': async (p) => {
+      if (!pub) throw new RpcError(ErrorCode.badParams, "This runner can't publish.");
+      try {
+        return await publishPage(must(), pub, id(p));
+      } catch (e) {
+        throw new RpcError(ErrorCode.badParams, (e as Error).message);
+      }
+    },
+    'pages.unpublish': async (p) => {
+      if (!pub) throw new RpcError(ErrorCode.badParams, "This runner can't publish.");
+      try {
+        return { page: await unpublishPage(must(), pub, id(p)) };
+      } catch (e) {
+        throw new RpcError(ErrorCode.badParams, (e as Error).message);
+      }
     },
     'pages.refresh': (p) =>
       found(() => {

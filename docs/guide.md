@@ -962,7 +962,7 @@ Ask in plain words, in any thread:
 | "Run bundle-analyzer summary" | A **bundle size** report for a Convex app |
 | "Add a figure that explains it" or "make a share clip" | A larger extra: an illustrated figure, or a short video. Only when you ask |
 
-**Where a print goes.** In a thread that belongs to one project, its prints go in that project and show under **Prints** on the project's page. Say "keep it out of projects" for none, or "put it in Poddle" for another. A print can be in several projects. Prints are kept on your Mac, in the `pages` folder in Threadbear's data folder. Nothing about them goes to your Convex mirror, so they don't show on your phone or the website yet.
+**Where a print goes.** In a thread that belongs to one project, its prints go in that project and show under **Prints** on the project's page. Say "keep it out of projects" for none, or "put it in Poddle" for another. A print can be in several projects. Prints are kept on your Mac, in the `pages` folder in Threadbear's data folder. Nothing about a print goes to your Convex backend unless you publish it (below).
 
 **In a reply**, a thread shows a print as a card: a picture of the top of it, then its title, kind, version and age, with Open, Refresh and a ⋯ menu. Click the picture or Open to open it. The card always shows the print as it is now, so when a print gets a new version, the card in an earlier reply moves to it too, marked "New version", rather than a second card appearing. While a refresh is under way, the card says so.
 
@@ -975,6 +975,7 @@ Ask in plain words, in any thread:
 - **Download as PDF…** saves it as a PDF on US Letter pages, in the light look, so it prints and sends cleanly. A line that lands right on a page break can be cut across two pages. For print-perfect breaks, ask the thread to "download it as a PDF", which prints it through Chrome.
 - **Versions** lists the last 10. Open one, download it, or make it the newest again; nothing in between is lost.
 - **Projects** puts it in a project or takes it out.
+- **Publish…** puts the print on your own Convex backend, after asking, and copies its link. It then opens on your phone, on the website, and for anyone you give the link to, and each new version goes up by itself. **Copy Link**, **Open on the Web** and **Unpublish** replace it once it's published. Unpublish, or Delete, takes it down and the link stops working. Only the print's one page goes up, and only prints with no scripts can be published.
 - **Delete** takes it away. It waits 7 days under **Recently deleted** at the bottom of the list, where **Restore** brings it back.
 
 You can also ask a thread for any of these: "refresh the sales dashboard", "go back to version 3", "delete the old chart", "bring it back", "download it", "what prints do I have".

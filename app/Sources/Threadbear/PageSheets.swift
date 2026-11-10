@@ -40,6 +40,14 @@ enum PageMenuBuilder {
         versions.submenu = sub
         menu.addItem(versions)
         menu.addItem(.separator())
+        if page.publishedSlug != nil {
+            menu.addItem(ClosureItem("Copy Link") { app.copyPrintLink(page) })
+            if let link = app.printLink(page) { menu.addItem(ClosureItem("Open on the Web") { OpenGate.openWeb(link) }) }
+            menu.addItem(ClosureItem("Unpublish") { app.unpublishPage(page) })
+        } else if !page.live {
+            menu.addItem(ClosureItem("Publish…") { app.publishPage(page) })
+        }
+        menu.addItem(.separator())
         menu.addItem(ClosureItem("Delete") { app.deletePage(page) })
         return menu
     }

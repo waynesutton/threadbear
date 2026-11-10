@@ -21,6 +21,12 @@ final class PageTests: XCTestCase {
         XCTAssertEqual(page.updatedAt, ISO8601.parse("2026-11-10T09:30:00.000Z"))
     }
 
+    func testAPublishedPageCarriesItsLinksSlug() throws {
+        let json = #"{"id":"pg_a","title":"A","version":2,"published":{"slug":"abcDEF0123456789abcdef","at":"2026-11-10T09:30:00Z","version":2}}"#
+        XCTAssertEqual(try JSONDecoder().decode(Page.self, from: Data(json.utf8)).publishedSlug, "abcDEF0123456789abcdef")
+        XCTAssertNil(try JSONDecoder().decode(Page.self, from: Data(#"{"id":"pg_a","title":"A"}"#.utf8)).publishedSlug)
+    }
+
     func testAPageInNoProjectIsInNone() throws {
         let json = #"{"id":"pg_a","title":"A","summary":"","ownerThread":"t","projects":[],"version":1,"bytes":1,"live":true,"updatedAt":"2026-11-10T09:30:00Z"}"#
         let page = try JSONDecoder().decode(Page.self, from: Data(json.utf8))

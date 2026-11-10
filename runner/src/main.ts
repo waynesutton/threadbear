@@ -1,7 +1,7 @@
 // Runner entry point: `node src/main.ts`. launchd runs this (see
 // scripts/install-runner.sh); tests run it with THREADBEAR_HOME and
 // THREADBEAR_PORT pointing at temp places.
-import { Pages, pageMethods, type PageAsk } from './pages.ts';
+import { Pages, followPublished, pageMethods, type PageAsk, type PagePublisher } from './pages.ts';
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
@@ -251,20 +251,41 @@ async function main(): Promise<void> {
   // The pages experiment (pages.ts): one store for every thread, made the
   // first time a thread is handed the page tools.
   let pageStore: Pages | undefined;
-  const pagesFor = () => (experimentOn(cfg.home, 'pages') ? (pageStore ??= new Pages(cfg.home, Date.now, (pages) => runner.publish({ method: 'pages.updated', params: { pages } }))) : undefined);
+  // Published prints follow their newest version (pages.ts followPublished).
+  const printPublisher: PagePublisher = {
+    problem: () => sync.printsProblem(),
+    site: () => sync.site(),
+    publish: (print) => sync.publishPrint(print),
+    unpublish: (id) => sync.unpublishPrint(id),
+  };
+  const publishedKnown = new Map<string, string>();
+  // What was published when the runner started, so one deleted later still comes down.
+  const seeded = (store: Pages): Pages => {
+    for (const p of store.list()) if (p.published) publishedKnown.set(p.id, p.published.slug);
+    return store;
+  };
+  let following: Promise<void> = Promise.resolve();
+  const pagesFor = () =>
+    experimentOn(cfg.home, 'pages')
+      ? (pageStore ??= seeded(new Pages(cfg.home, Date.now, (pages) => {
+          runner.publish({ method: 'pages.updated', params: { pages } });
+          const store = pageStore;
+          if (store) following = following.then(() => followPublished(store, printPublisher, publishedKnown)).catch((e) => log.warn('published prints not followed', { error: String(e) }));
+        })))
+      : undefined;
   const claude = new ClaudeAdapter({
     plugins: () => skills.plugins(),
     claudePath: cfg.claudePath,
     registry,
     log,
-    mcpServersFor: (threadId) => ({ [SERVER_NAME]: threadbearMcpServer(router(), threadId, scheduleControl(), projectControl(), appRestarts, () => cfg.bulletReplies, pocketControl, () => cfg.oneReply, () => cfg.connectorsUrl, gatewayHealth, () => experimentOn(cfg.home, 'scheduleChecks'), remoteControl, () => experimentOn(cfg.home, 'replyButtons'), () => experimentOn(cfg.home, 'runAsks'), xSearchFor, pagesFor) }),
+    mcpServersFor: (threadId) => ({ [SERVER_NAME]: threadbearMcpServer(router(), threadId, scheduleControl(), projectControl(), appRestarts, () => cfg.bulletReplies, pocketControl, () => cfg.oneReply, () => cfg.connectorsUrl, gatewayHealth, () => experimentOn(cfg.home, 'scheduleChecks'), remoteControl, () => experimentOn(cfg.home, 'replyButtons'), () => experimentOn(cfg.home, 'runAsks'), xSearchFor, pagesFor, () => printPublisher) }),
     oneReply: () => cfg.oneReply,
     sandboxFor: (cwd) => sandboxFor(cfg.sandbox, cwd),
     alwaysAsk: ALWAYS_ASK_TOOLS,
     neverAsk: NEVER_ASK_TOOLS,
   });
   // The threadbear tools for an agent that isn't given them in-process.
-  const codexStyleTools = (threadId: string) => buildThreadbearTools(router(), threadId, Date.now, scheduleControl(), projectControl(), appRestarts, { provider: 'codex', bulletReplies: () => cfg.bulletReplies, oneReply: () => cfg.oneReply, pocket: pocketControl, gateway: () => cfg.connectorsUrl, gatewayHealth, scheduleChecks: () => experimentOn(cfg.home, 'scheduleChecks'), remote: remoteControl, replyButtons: () => experimentOn(cfg.home, 'replyButtons'), runAsks: () => experimentOn(cfg.home, 'runAsks'), xSearch: xSearchFor, pages: pagesFor });
+  const codexStyleTools = (threadId: string) => buildThreadbearTools(router(), threadId, Date.now, scheduleControl(), projectControl(), appRestarts, { provider: 'codex', bulletReplies: () => cfg.bulletReplies, oneReply: () => cfg.oneReply, pocket: pocketControl, gateway: () => cfg.connectorsUrl, gatewayHealth, scheduleChecks: () => experimentOn(cfg.home, 'scheduleChecks'), remote: remoteControl, replyButtons: () => experimentOn(cfg.home, 'replyButtons'), runAsks: () => experimentOn(cfg.home, 'runAsks'), xSearch: xSearchFor, pages: pagesFor, printPublisher: () => printPublisher });
   // One app-server per live Codex thread, each starting what E says is
   // current, with the same threadbear tools as dynamic tools.
   const codex = new CodexAdapter({
@@ -797,7 +818,7 @@ async function main(): Promise<void> {
       return { threadId: t.thread.id, started: true };
     }
   };
-  const methods = { ...profileMethods(profileJobs), ...profilePageMethods(publicProfile), ...restartMethods(restarter), ...scheduleMethods(scheduler), ...projectMethods(projects), ...pageMethods(pagesFor, askAboutPage), ...drainProjectMethods(projects), ...librarianMethods(librarian), ...connectorsMethods(connectors, { on: () => experimentOn(cfg.home, 'connectorsSetup'), start: (r) => startOwnThread(runner, r, undefined), open: openThread, local: () => experimentOn(cfg.home, 'localConnectors'), findLauncher: (l) => findLauncher(l) }), ...settingsMethods(settings), ...skillMethods(skills), ...instructionsMethods(instructions), ...modelMethods(models), ...devicesMethods(sync), ...agentsMethods(sync, () => experimentOn(cfg.home, OUTSIDE_AGENTS)), ...usageStatsMethods({ tally, history: usageHistory, clock: realClock }) };
+  const methods = { ...profileMethods(profileJobs), ...profilePageMethods(publicProfile), ...restartMethods(restarter), ...scheduleMethods(scheduler), ...projectMethods(projects), ...pageMethods(pagesFor, askAboutPage, printPublisher), ...drainProjectMethods(projects), ...librarianMethods(librarian), ...connectorsMethods(connectors, { on: () => experimentOn(cfg.home, 'connectorsSetup'), start: (r) => startOwnThread(runner, r, undefined), open: openThread, local: () => experimentOn(cfg.home, 'localConnectors'), findLauncher: (l) => findLauncher(l) }), ...settingsMethods(settings), ...skillMethods(skills), ...instructionsMethods(instructions), ...modelMethods(models), ...devicesMethods(sync), ...agentsMethods(sync, () => experimentOn(cfg.home, OUTSIDE_AGENTS)), ...usageStatsMethods({ tally, history: usageHistory, clock: realClock }) };
   // runner.status carries the CLI statuses too (protocol, "runner.status").
   const restartStatus = methods['runner.status'];
   methods['runner.status'] = (p) => {

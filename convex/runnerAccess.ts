@@ -161,6 +161,8 @@ export const ACCESS: Record<string, Access> = {
   appendMessages: 'own',
   messageHeads: 'own',
   setProjects: 'own',
+  publishPrint: 'own',
+  unpublishPrint: 'own',
   upsertProjects: 'own',
   projectIcons: 'own',
   iconUploadUrl: 'shared',

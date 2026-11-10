@@ -261,3 +261,48 @@ test('the old page tool names still work after the rename to Prints', async () =
   assert.match((await call(tools, 'list_prints', {})).text, /pg_old_name/);
   for (const n of ['list_prints', 'read_print', 'list_pages', 'read_page']) assert.ok(NEVER_ASK_TOOLS.has(`mcp__threadbear__${n}`), n);
 });
+
+test('publish: a link made once, new versions follow, live and scripted prints refused, delete takes it down', async () => {
+  const { publishPage, unpublishPage, followPublished, printLink, PUBLISH_HTML_MAX } = await import('../../src/pages.ts');
+  const sent: { id: string; slug: string; version: number; html: string }[] = [];
+  const down: string[] = [];
+  let problem: string | undefined;
+  const pub = { problem: () => problem, site: () => 'https://x.convex.site/', publish: async (p: never) => void sent.push(p), unpublish: async (id: string) => void down.push(id) };
+  const known = new Map<string, string>();
+  const store = new Pages(home());
+  const p = store.create({ title: 'Sales', summary: 's', ownerThread: 't', html: page('one'), projects: [] });
+  const first = await publishPage(store, pub, p.id);
+  const slug = first.page.published!.slug;
+  assert.match(slug, /^[A-Za-z0-9_-]{22}$/);
+  assert.equal(first.url, `https://x.convex.site/p/${slug}`);
+  assert.equal(printLink(undefined, slug), undefined);
+  assert.match(sent[0]!.html, /one/);
+
+  store.update(p.id, { html: page('two') });
+  await followPublished(store, pub, known);
+  assert.equal(sent.length, 2);
+  assert.equal(sent[1]!.slug, slug, 'the link survives a new version');
+  assert.equal(sent[1]!.version, 2);
+  await followPublished(store, pub, known);
+  assert.equal(sent.length, 2, 'nothing to send when the newest is up');
+
+  const live = store.create({ title: 'Live', summary: '', ownerThread: 't', html: page('<script>1</script>'), live: true });
+  await assert.rejects(publishPage(store, pub, live.id), /scripts/);
+  assert.equal(store.find(live.id).published, undefined);
+  const big = store.create({ title: 'Big', summary: '', ownerThread: 't', html: page('x'.repeat(PUBLISH_HTML_MAX)) });
+  await assert.rejects(publishPage(store, pub, big.id), /at most/);
+
+  problem = 'The backend is too old';
+  const other = store.create({ title: 'Other', summary: '', ownerThread: 't', html: page('o') });
+  await assert.rejects(publishPage(store, pub, other.id), /too old/);
+  problem = undefined;
+
+  store.delete(p.id);
+  await followPublished(store, pub, known);
+  assert.deepEqual(down, [p.id]);
+  assert.equal(store.list({ deleted: true })[0]!.published, undefined);
+
+  const again = await publishPage(store, pub, other.id);
+  assert.equal((await unpublishPage(store, pub, other.id)).published, undefined);
+  assert.ok(again.page.published);
+});

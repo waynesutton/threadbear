@@ -326,4 +326,10 @@
 //    characters), and phone:messages returns it, so the phone draws a plan
 //    card and reads the whole plan before Go ahead. An older runner sends
 //    none; an older backend gets the plan as an ordinary reply.
-export const API_VERSION = 72;
+// 73: Prints can be published. sync:publishPrint stores one print's
+//    index.html (static, at most 700,000 characters) under a link its
+//    runner made, sync:unpublishPrint removes it, prints:view answers the
+//    website's /p/<slug> page for anyone with the link, and prints:list
+//    gives the phone and the website the published ones. A runner publishes
+//    only from 73; nothing about a print is stored before it's published.
+export const API_VERSION = 73;

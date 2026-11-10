@@ -41,7 +41,7 @@ import type { StartRequest } from './cross-runner.ts';
 import { SECRET_TIMEOUT_DEFAULT_MIN, SECRET_TIMEOUT_MAX_MIN } from './secrets.ts';
 import { cutSafely, firstLineSafely } from './safe-cut.ts';
 import { pickRunner } from './moves.ts';
-import { MAX_RECIPE, MAX_SUMMARY, MAX_TITLE, PAGE_KINDS, type PageRecord, type Pages } from './pages.ts';
+import { MAX_RECIPE, MAX_SUMMARY, MAX_TITLE, PAGE_KINDS, printLink, publishPage, unpublishPage, type PagePublisher, type PageRecord, type Pages } from './pages.ts';
 import { MAX_HANDLES, XaiKeyRejected, forgetXaiKey, formatXSearch, readXaiKey, saveXaiKey, xSearch, xSearchProblem } from './x-search.ts';
 
 // What the tools drive: the Runner itself, or during a handover
@@ -243,6 +243,8 @@ export function buildThreadbearTools(
     // The pages experiment (pages.ts): the page tools are only handed out
     // while it's on.
     pages?: () => Pages | undefined;
+    // Publishing a print to the user's Convex backend (pages.ts).
+    printPublisher?: () => PagePublisher | undefined;
   } = {},
 ) {
   const codex = opts.provider === 'codex';
@@ -801,7 +803,7 @@ export function buildThreadbearTools(
   // out while it's on.
   const pageStore = opts.pages?.();
   const pageLine = (p: PageRecord): string =>
-    `${p.id}  ${p.kind ?? 'page'}  v${p.version}  "${p.title}"${p.live ? '  live' : ''}${p.deletedAt ? `  deleted ${p.deletedAt}` : ''}  ${p.projects.length ? `in ${p.projects.map((x) => x.id).join(', ')}` : 'no project'}  thread ${p.ownerThread.slice(0, 8)}  ${p.updatedAt}${p.editedBy === 'user' ? '  edited by the user' : ''}${p.summary ? `\n  ${p.summary}` : ''}`;
+    `${p.id}  ${p.kind ?? 'page'}  v${p.version}  "${p.title}"${p.live ? '  live' : ''}${p.deletedAt ? `  deleted ${p.deletedAt}` : ''}  ${p.projects.length ? `in ${p.projects.map((x) => x.id).join(', ')}` : 'no project'}  thread ${p.ownerThread.slice(0, 8)}  ${p.updatedAt}${p.editedBy === 'user' ? '  edited by the user' : ''}${p.published ? `  published${printLink(opts.printPublisher?.()?.site(), p.published.slug) ? ` at ${printLink(opts.printPublisher?.()?.site(), p.published.slug)}` : ''}` : ''}${p.summary ? `\n  ${p.summary}` : ''}`;
   const showPage = async (p: PageRecord, show: boolean | undefined): Promise<string> => {
     if (!show) return '';
     if (!control.pin) return ' This runner can\'t open it in the side pane.';
@@ -946,6 +948,29 @@ export function buildThreadbearTools(
           }),
         ),
         tool(
+          'publish_print',
+          "Publishes a Print to the user's own Convex backend, so it opens on their phone, the website, and for anyone with its link. Always asks the user first. Only when they ask for it: a print can hold private data. Static prints only. New versions go up by themselves from then on.",
+          { id: z.string().min(1) },
+          handle(async ({ id }, extra) => {
+            const pub = opts.printPublisher?.();
+            if (!pub) throw new Error("This runner can't publish.");
+            const p = pageStore.find(id);
+            await confirm('publish_print', [`Publish "${p.title}" so anyone with its link can open it`], { id: p.id, title: p.title }, extra?.signal);
+            const r = await publishPage(pageStore, pub, p.id);
+            return `Published ${r.page.id}${r.url ? `: ${r.url}` : ''}. unpublish_print takes it down.`;
+          }),
+        ),
+        tool(
+          'unpublish_print',
+          'Takes a published Print down: its link stops working, and it stays on the Mac.',
+          { id: z.string().min(1) },
+          handle(async ({ id }) => {
+            const pub = opts.printPublisher?.();
+            if (!pub) throw new Error("This runner can't publish.");
+            return `Not published any more: ${(await unpublishPage(pageStore, pub, id)).id}.`;
+          }),
+        ),
+        tool(
           'add_print_to_project',
           'Puts a Print in a project, so it shows on that project. A page can be in several.',
           { id: z.string().min(1), project: z.string().min(1).describe('Project id or title.') },
@@ -963,7 +988,7 @@ export function buildThreadbearTools(
   // calling them (AGENTS.md, "keep taking the old ones").
   const pageTools = [
     ...printTools,
-    ...printTools.map((t) => ({ ...t, name: t.name.replace('prints', 'pages').replace('print', 'page'), description: `Old name for ${t.name}.` })),
+    ...printTools.filter((t) => !t.name.includes('publish')).map((t) => ({ ...t, name: t.name.replace('prints', 'pages').replace('print', 'page'), description: `Old name for ${t.name}.` })),
   ];
 
   // Highlights (docs/protocol.md): the list beside the transcript of what
@@ -2302,13 +2327,13 @@ export function serverInstructions(selfId: string, o: { one: boolean; bulletRepl
   );
 }
 
-export function threadbearMcpServer(control: ThreadControl, selfId: string, schedules?: ScheduleControl, projects?: ProjectControl, appRestarts?: AppRestartControl, bulletReplies: () => boolean = () => true, pocket?: () => PocketControl | undefined, oneReply: () => boolean = () => false, gateway?: () => string | undefined, gatewayHealth?: () => Promise<ConnectorService[] | undefined>, scheduleChecks?: () => boolean, remote?: () => RemoteControl | undefined, replyButtons?: () => boolean, runAsks?: () => boolean, xSearch?: () => { secretsDir: string } | undefined, pages?: () => Pages | undefined): McpSdkServerConfigWithInstance {
+export function threadbearMcpServer(control: ThreadControl, selfId: string, schedules?: ScheduleControl, projects?: ProjectControl, appRestarts?: AppRestartControl, bulletReplies: () => boolean = () => true, pocket?: () => PocketControl | undefined, oneReply: () => boolean = () => false, gateway?: () => string | undefined, gatewayHealth?: () => Promise<ConnectorService[] | undefined>, scheduleChecks?: () => boolean, remote?: () => RemoteControl | undefined, replyButtons?: () => boolean, runAsks?: () => boolean, xSearch?: () => { secretsDir: string } | undefined, pages?: () => Pages | undefined, printPublisher?: () => PagePublisher | undefined): McpSdkServerConfigWithInstance {
   const one = oneReply();
   const server = createSdkMcpServer({
     name: SERVER_NAME,
     version: RUNNER_VERSION,
     instructions: serverInstructions(selfId, { one, bulletReplies: bulletReplies(), pocket: Boolean(pocket?.()), projects: Boolean(projects) }),
-    tools: buildThreadbearTools(control, selfId, Date.now, schedules, projects, appRestarts, { bulletReplies, pocket, oneReply: () => one, gateway, gatewayHealth, scheduleChecks, remote, replyButtons, runAsks, xSearch, pages }),
+    tools: buildThreadbearTools(control, selfId, Date.now, schedules, projects, appRestarts, { bulletReplies, pocket, oneReply: () => one, gateway, gatewayHealth, scheduleChecks, remote, replyButtons, runAsks, xSearch, pages, printPublisher }),
   });
   server.tools = [...ALWAYS_ASK_TOOLS].map((name) => ({ name: name.split('__').at(-1)!, permission_policy: 'always_ask' as const }));
   return server;

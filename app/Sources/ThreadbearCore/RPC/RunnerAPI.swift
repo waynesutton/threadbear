@@ -865,6 +865,14 @@ public extension RPCClient {
         return try await call("pages.export", .object(params), as: PageExportResult.self).file
     }
 
+    func publishPage(_ pageId: String) async throws -> PagePublishResult {
+        try await call("pages.publish", .object(["pageId": .string(pageId)]), as: PagePublishResult.self)
+    }
+
+    func unpublishPage(_ pageId: String) async throws -> Page {
+        try await call("pages.unpublish", .object(["pageId": .string(pageId)]), as: PageResult.self).page
+    }
+
     func setPageProjects(_ pageId: String, add: [String] = [], remove: [String] = []) async throws -> Page {
         try await call("pages.setProjects", .object(["pageId": .string(pageId), "add": .array(add.map(JSONValue.string)), "remove": .array(remove.map(JSONValue.string))]), as: PageResult.self).page
     }

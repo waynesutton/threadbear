@@ -2,7 +2,7 @@
 
 ## To Do
 
-- [ ] Prints: publish, opt-in per print, so it opens on iPhone, the website and a share link.
+- [ ] Prints: a card for published prints in replies on the iPhone app and the website (today the link opens in a browser).
 - [ ] Prints: a sheet kind (CSV kept beside it, full table, Edit Data, CSV download; no formulas).
 - [ ] Prints: a diagram kind (Mermaid source drawn with Pele, Edit Text).
 - [ ] Prints: read-only list and read for outside agents (Grok).
@@ -15,6 +15,8 @@
 ## In Progress
 
 ## Completed
+
+- [x] 2026-11-10 20:05 UTC Publish a print (opt-in): backend API 73 (`prints` table, sync:publishPrint, sync:unpublishPrint, prints:view, prints:list), runner pages.publish and pages.unpublish with new versions following, publish_print and unpublish_print tools, Publish…, Copy Link, Open on the Web and Unpublish in both Mac menus, and the website's /p/<slug> page in a sandboxed frame. Verified: convex and web typecheck; runner pages.test.ts and runner-access tests; web tests; swift build and focused app tests.
 
 - [x] 2026-11-10 19:41 UTC Pages renamed to Prints (Wayne picked it) in everything people and agents see: tool names (old ones kept as aliases), the ```print block (```page still draws), the app's wording, guide, protocol and experiment docs. Internals, RPC, ids and the experiment id keep "page". runner/src/threadbear-mcp.ts, pages.ts, main.ts, app Page.swift, RichBlock.swift, PageCards.swift, ProjectPage.swift, docs. Verified: tsc; pages.test.ts 16 pass; swift build; PageTests, PageFenceTests, TipsTests, EveryClickShowsTests pass.
 

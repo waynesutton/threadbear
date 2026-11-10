@@ -416,6 +416,7 @@ private struct PageRow: View {
     private var detail: String {
         var parts = [page.kindLabel, "v\(page.version)", RelativeTime.short(page.updatedAt, now: app.now)]
         if page.editedByUser { parts.append("edited by you") }
+        if page.publishedSlug != nil { parts.append("published") }
         return parts.joined(separator: " · ")
     }
 }
@@ -454,6 +455,14 @@ private struct PageMenu: View {
                 Toggle(project.title, isOn: Binding(get: { page.isIn(project: project.id) }, set: { _ in app.togglePage(page, inProject: project.id) }))
             }
         } label: { Label("Projects", systemImage: "square.stack") }
+        Divider()
+        if page.publishedSlug != nil {
+            Button("Copy Link", systemImage: "link") { app.copyPrintLink(page) }
+            if let link = app.printLink(page) { Button("Open on the Web", systemImage: "safari") { OpenGate.openWeb(link) } }
+            Button("Unpublish", systemImage: "eye.slash") { app.unpublishPage(page) }
+        } else if !page.live {
+            Button("Publish…", systemImage: "globe") { app.publishPage(page) }
+        }
         Divider()
         Button("Delete", systemImage: "trash", role: .destructive) { app.deletePage(page) }
     }

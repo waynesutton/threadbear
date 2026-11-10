@@ -34,11 +34,14 @@ public struct Page: Sendable, Hashable, Decodable, Identifiable {
     public var recipe: String?
     /// The newest version was written in the app's editor.
     public var editedByUser: Bool
+    /// Its link's slug while it's published (the website's /p/<slug>).
+    public var publishedSlug: String?
     /// Set while it's deleted (kept 7 days for Restore).
     public var deletedAt: Date?
     public var updatedAt: Date
 
-    enum CodingKeys: String, CodingKey { case id, title, summary, ownerThread, projects, version, bytes, live, source, kind, recipe, editedBy, deletedAt, updatedAt }
+    enum CodingKeys: String, CodingKey { case id, title, summary, ownerThread, projects, version, bytes, live, source, kind, recipe, editedBy, deletedAt, updatedAt, published }
+    private struct Published: Decodable { var slug: String }
 
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -55,6 +58,7 @@ public struct Page: Sendable, Hashable, Decodable, Identifiable {
         recipe = try? c.decodeIfPresent(String.self, forKey: .recipe)
         editedByUser = ((try? c.decodeIfPresent(String.self, forKey: .editedBy)) ?? nil) == "user"
         deletedAt = ((try? c.decodeIfPresent(String.self, forKey: .deletedAt)) ?? nil).flatMap(ISO8601.parse)
+        publishedSlug = ((try? c.decodeIfPresent(Published.self, forKey: .published)) ?? nil)?.slug
         updatedAt = ((try? c.decodeIfPresent(String.self, forKey: .updatedAt)) ?? nil).flatMap(ISO8601.parse) ?? .distantPast
     }
 
@@ -112,6 +116,12 @@ public struct PageResult: Sendable, Decodable {
 public struct PageAskResult: Sendable, Decodable {
     public var threadId: String
     public var started: Bool
+}
+
+/// `pages.publish`: the page, and its link when the website is known.
+public struct PagePublishResult: Sendable, Decodable {
+    public var page: Page
+    public var url: String?
 }
 
 public struct PageExportResult: Sendable, Decodable {

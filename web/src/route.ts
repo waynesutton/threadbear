@@ -1,5 +1,6 @@
 // A few pages, so no router: "/" is the list, "/t/<threadId>" a thread,
-// "/s/<slug>" a thread someone shared (no sign-in; share.tsx), "/profile"
+// "/s/<slug>" a thread someone shared (no sign-in; share.tsx), "/p/<slug>"
+// a published print (no sign-in; print.tsx), "/profile"
 // the public profile page (no sign-in; profile.tsx; "/@<name>" from before
 // there was one page per site opens it too), "/signin" how to sign in,
 // "/new" a new
@@ -9,11 +10,13 @@
 import { useSyncExternalStore } from 'react';
 
 export type RailView = 'scheduled' | 'projects' | 'runners' | 'usage';
-export type Route = { page: 'list' } | { page: 'new' } | { page: 'thread'; threadId: string } | { page: 'share'; slug: string } | { page: 'profile' } | { page: 'signin' } | { page: RailView; id?: string };
+export type Route = { page: 'list' } | { page: 'new' } | { page: 'thread'; threadId: string } | { page: 'share'; slug: string } | { page: 'print'; slug: string } | { page: 'profile' } | { page: 'signin' } | { page: RailView; id?: string };
 
 function parse(): Route {
   const s = location.pathname.match(/^\/s\/([^/]+)\/?$/);
   if (s) return { page: 'share', slug: decodeURIComponent(s[1]) };
+  const p = location.pathname.match(/^\/p\/([A-Za-z0-9_-]{16,64})\/?$/);
+  if (p) return { page: 'print', slug: p[1] };
   if (/^\/(profile|@[A-Za-z0-9-]{1,40})\/?$/.test(location.pathname)) return { page: 'profile' };
   if (/^\/signin\/?$/.test(location.pathname)) return { page: 'signin' };
   const m = location.pathname.match(/^\/t\/([^/]+)\/?$/);

@@ -1149,6 +1149,8 @@ the summary and then the reply.
 | `pages.delete` | `{ pageId }` | `{ page: Page }` with `deletedAt`. Left out of lists and `pages.updated`; removed with its files 7 days later |
 | `pages.restore` | `{ pageId }` | `{ page: Page }`: a deleted page back. Nothing for one that isn't deleted |
 | `pages.export` | `{ pageId, dest: string, version?: number }` | `{ file: string }`: the version's files copied into `dest`, an absolute folder that's new or empty; `file` is its `index.html`. For Download |
+| `pages.publish` | `{ pageId }` | `{ page: Page, url?: string }`: sends the newest version's `index.html` to the Convex backend (`sync:publishPrint`, API 73) under a link whose slug the runner makes once (16 random bytes), and marks the page `published`; `url` is `<site>/p/<slug>`. From then on each new version goes up by itself. `-32602` with the reason for a live print, one with a script, one over 700,000 characters, sync off, or a backend older than 73 |
+| `pages.unpublish` | `{ pageId }` | `{ page: Page }`: the backend's row removed (`sync:unpublishPrint`), so the link stops working; the print stays on the Mac. Deleting a published print does the same |
 | `pages.refresh` | `{ pageId }` | `{ threadId, started: boolean }`: a message asking to make the page again from its `recipe` goes to the thread that made it, queued behind its turn; when that thread is gone, a new thread starts in the page's project's first folder (`started: true`). The runner never runs the recipe itself |
 | `pages.edit` | `{ pageId, text: string }` | `{ threadId, started: boolean }`: as `pages.refresh`, with the user's words for what should change |
 | `pages.setProjects` | `{ pageId, add?: string[], remove?: string[] }` | `{ page: Page }`. Mike's change, pinned. A page can be in several projects or none |
@@ -5155,18 +5157,20 @@ type Page = {
   kind?: "page" | "chart" | "dashboard" | "report" | "doc" | "bundle"  // absent: "page"
   recipe?: string       // how to make it again, for Refresh; an agent follows it
   editedBy?: "agent" | "user"  // who wrote the newest version
+  published?: { slug: string; at: string; version: number }  // while published: its link's slug, and the version last sent
   deletedAt?: string    // while deleted
   createdAt: string
   updatedAt: string
 }
 ```
 
-- **Stored** in `<home>/pages/`: `index.json`, and each version as a folder `<id>/v<n>/` holding `index.html` and the assets it names (`.css .svg .png .jpg .webp .gif .mp4 .webm .woff2`). The last 10 versions are kept. Never sent to Convex.
+- **Stored** in `<home>/pages/`: `index.json`, and each version as a folder `<id>/v<n>/` holding `index.html` and the assets it names (`.css .svg .png .jpg .webp .gif .mp4 .webm .woff2`). The last 10 versions are kept. Nothing about a print goes to Convex unless the user publishes it.
+- **Published** (opt-in, per print, API 73): `pages.publish` puts the newest `index.html` (only that file, static, at most 700,000 characters) in the backend's `prints` table. `prints:view { slug }` answers the website's `/p/<slug>` page for anyone with the link; it draws the HTML in a frame with an empty `sandbox` behind the same Content-Security-Policy as a page in a reply (`web/src/print-doc.ts`), so it can't run, load or go anywhere. `prints:list { token }` gives the phone and website the published ones without their HTML. The Mac asks before publishing; an agent's `publish_print` always asks the user.
 - **Static by default.** A page whose HTML has `<script` is refused unless it was made `live`. Links, `.js` and `.json` files are refused in a page folder. `index.html` is at most 1 MB and the folder 25 MB.
 - **Projects.** Made with no `projects`, a page joins its thread's project when the thread is pinned to exactly one; `[]` means none.
 - **Docs.** A page given as `markdown` is a doc: the runner draws it (`runner/src/page-doc.ts`, a small escaped subset: headings, lists, task lists, tables, quotes, code, http(s) and mailto links; no HTML passes through) and keeps the text as `source.md` beside it, so the user can edit it (`pages.saveDoc`) and the next agent starts from their words.
 - **Deleted** pages are kept 7 days (`pages.restore`), then removed with their files when the store next loads.
-- **Agent tools:** `create_print` (`kind`, `markdown`, `recipe`), `update_print` (`markdown`, `recipe`, `restoreVersion`), `list_prints` (`deleted`), `read_print` (`version`; shows the recipe, the kept versions and a doc's markdown), `delete_print`, `restore_print`, `export_print`, `add_print_to_project`, `remove_print_from_project`, only while the experiment is on. `list_prints` and `read_print` never ask. The older arguments still work, and so does each tool's name from before the rename (`create_page` and the rest), for sessions that loaded them.
+- **Agent tools:** `create_print` (`kind`, `markdown`, `recipe`), `update_print` (`markdown`, `recipe`, `restoreVersion`), `list_prints` (`deleted`), `read_print` (`version`; shows the recipe, the kept versions and a doc's markdown), `delete_print`, `restore_print`, `export_print`, `publish_print` (always asks the user), `unpublish_print`, `add_print_to_project`, `remove_print_from_project`, only while the experiment is on. `list_prints` and `read_print` never ask. The older arguments still work, and so does each tool's name from before the rename (`create_page` and the rest), for sessions that loaded them.
 - **Skills.** `make-print` builds charts, dashboards and reports from CSV, TSV, JSON or XLSX through a spec, and exports PDFs; `bundle-report` is its recipe for Convex bundle size. Both live in the user's skills folder, not the repo.
 - **In a reply**, an agent shows a print with a ```` ```print <id> ```` block (```` ```page ````, its name before the rename, still works; the id in the info string, or alone on the fence's one line; `PageFence`). The Mac app draws it as a card (`PageCardCell`, "Preview on top", Wayne picked it on 10 Nov 2026): the top of the newest version's `index.html` from `pages.get`, drawn off screen under the html block's lockdown at 1080 by 470 and scaled down, over a footer with the kind, title, version and age and Open, Refresh and a ⋯ menu. It follows `pages.updated`, so every card naming a page shows its newest version; a version newer than the first made in the last 15 minutes is marked "New version". With the experiment off, or in an app that doesn't know pages, the block shows as code.
 
@@ -6564,6 +6568,8 @@ anyone's); "any runner" is any good key. Anything not sorted is owner only.
 | `dropShareImages` | its own | the thread's row is its runner's; none: nothing |
 | `setProjects` | its own | `runnerId` |
 | `upsertProjects` | its own | `runnerId` |
+| `publishPrint` | its own | `runnerId` |
+| `unpublishPrint` | its own | `runnerId` |
 | `projectIcons` | its own | `runnerId` |
 | `setProjectIcon` | its own | `runnerId`, and the file no other runner's row uses |
 | `iconUploadUrl` | any runner | a one-use URL, tied to the key that asked, that records the upload as its runner's; 300 an hour, 10 MB a file, 200 MB an hour |

@@ -664,3 +664,9 @@ html.pf-html, html.pf-html body { background: #faf8f3; color-scheme: light; }
   /* An odd one out takes the whole row rather than sitting alone. */
   .pf-number:last-child:nth-child(odd) { grid-column: 1 / -1; }
 }
+
+/* A published print (print.tsx): a one-line header and the print filling the rest. */
+.print-page { display: flex; flex-direction: column; height: 100dvh; }
+.print-bar { display: flex; align-items: center; gap: 10px; padding: 8px 14px; border-bottom: 1px solid rgba(127,127,127,.25); font-size: 13px; white-space: nowrap; overflow: hidden; }
+.print-bar strong { overflow: hidden; text-overflow: ellipsis; }
+.print-frame { flex: 1; width: 100%; border: 0; background: transparent; }

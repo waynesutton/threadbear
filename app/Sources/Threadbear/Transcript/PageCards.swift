@@ -124,7 +124,7 @@ final class PageCardCell: NSTextAttachmentCell {
         guard let page else { return "Not on this Mac. It may be deleted, or on another Mac's runner." }
         if refreshing { return "\(page.kindLabel) · v\(page.version) · refreshing in its thread…" }
         let age = now.timeIntervalSince(page.updatedAt) < 90 ? "just now" : "\(RelativeTime.short(page.updatedAt, now: now)) ago"
-        return "\(page.kindLabel) · v\(page.version) · \(age)"
+        return "\(page.kindLabel) · v\(page.version) · \(age)\(page.publishedSlug != nil ? " · published" : "")"
     }
 
     /// A version newer than the first, made in the last 15 minutes.

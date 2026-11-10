@@ -215,6 +215,53 @@ extension AppModel {
         }
     }
 
+    /// A published print's link on the website, while sync is on.
+    func printLink(_ page: Page) -> URL? {
+        guard let slug = page.publishedSlug else { return nil }
+        return websiteURL?.appendingPathComponent("p").appendingPathComponent(slug)
+    }
+
+    /// Asks first (anyone with the link can open it), then sends the print
+    /// to the Convex backend and copies its link.
+    func publishPage(_ page: Page) {
+        guard let client else { return }
+        let alert = NSAlert()
+        alert.messageText = "Publish \u{201C}\(page.title)\u{201D}?"
+        alert.informativeText = "It goes to your Convex backend, so it opens on your phone and the website, and anyone with its link can open it. New versions go up by themselves. Unpublish takes it down."
+        alert.addButton(withTitle: "Publish")
+        alert.addButton(withTitle: "Cancel")
+        guard alert.runModal() == .alertFirstButtonReturn else { return }
+        whileBusy(BusyKey.page(page.id), note: "Publishing \(page.title)") { [self] in
+            do {
+                let got = try await client.publishPage(page.id)
+                replace(page: got.page)
+                if let link = got.url ?? printLink(got.page)?.absoluteString {
+                    NSPasteboard.general.clearContents()
+                    NSPasteboard.general.setString(link, forType: .string)
+                }
+            } catch {
+                show(error)
+            }
+        }
+    }
+
+    func unpublishPage(_ page: Page) {
+        guard let client else { return }
+        whileBusy(BusyKey.page(page.id), note: "Unpublishing \(page.title)") { [self] in
+            do {
+                replace(page: try await client.unpublishPage(page.id))
+            } catch {
+                show(error)
+            }
+        }
+    }
+
+    func copyPrintLink(_ page: Page) {
+        guard let link = printLink(page) else { return }
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(link.absoluteString, forType: .string)
+    }
+
     private func replace(page: Page) {
         if let i = pages.firstIndex(where: { $0.id == page.id }) { pages[i] = page } else if page.deletedAt == nil { pages.insert(page, at: 0) }
     }
