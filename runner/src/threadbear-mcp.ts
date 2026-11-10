@@ -39,6 +39,7 @@ import type { SecretAnswer, SecretRequest } from './runner/approvals.ts';
 import type { StartRequest } from './cross-runner.ts';
 import { SECRET_TIMEOUT_DEFAULT_MIN, SECRET_TIMEOUT_MAX_MIN } from './secrets.ts';
 import { cutSafely, firstLineSafely } from './safe-cut.ts';
+import { MAX_SUMMARY, MAX_TITLE, type PageRecord, type Pages } from './pages.ts';
 import { MAX_HANDLES, XaiKeyRejected, forgetXaiKey, formatXSearch, readXaiKey, saveXaiKey, xSearch, xSearchProblem } from './x-search.ts';
 
 // What the tools drive: the Runner itself, or during a handover
@@ -129,7 +130,7 @@ export const ALWAYS_ASK_TOOLS = new Set([`mcp__${SERVER_NAME}__delete_thread`]);
 // Restart to Update asks only wake or file this thread, with the runner's
 // words, and the turn they start runs in its mode then, so they stay in.
 export const NEVER_ASK_TOOLS = new Set(
-  ['end_turn', 'list_threads', 'read_thread', 'list_accounts', 'list_schedules', 'list_projects', 'read_project', 'unpin', 'ask_secret', 'add_button', 'x_search'].map(
+  ['end_turn', 'list_threads', 'read_thread', 'list_accounts', 'list_schedules', 'list_projects', 'read_project', 'unpin', 'ask_secret', 'add_button', 'x_search', 'list_pages', 'read_page'].map(
     (n) => `mcp__${SERVER_NAME}__${n}`,
   ),
 );
@@ -220,6 +221,9 @@ export function buildThreadbearTools(
     // The xSearch experiment (x-search.ts): x_search is only handed out
     // while it's on; the runner's secrets folder, where its key is kept.
     xSearch?: () => { secretsDir: string; fetch?: typeof fetch } | undefined;
+    // The pages experiment (pages.ts): the page tools are only handed out
+    // while it's on.
+    pages?: () => Pages | undefined;
   } = {},
 ) {
   const codex = opts.provider === 'codex';
@@ -768,6 +772,118 @@ export function buildThreadbearTools(
               throw new Error(`${e.message} Threadbear forgot it: call x_search again and the user can enter a new one.`);
             }
           }),
+        ),
+      ]
+    : [];
+
+  // The pages experiment (pages.ts): named, versioned pages the runner
+  // keeps, in zero or more projects. Only handed out while it's on.
+  const pageStore = opts.pages?.();
+  const pageLine = (p: PageRecord): string =>
+    `${p.id}  v${p.version}  "${p.title}"${p.live ? '  live' : ''}  ${p.projects.length ? `in ${p.projects.map((x) => x.id).join(', ')}` : 'no project'}  thread ${p.ownerThread.slice(0, 8)}  ${p.updatedAt}${p.summary ? `\n  ${p.summary}` : ''}`;
+  const showPage = async (p: PageRecord, show: boolean | undefined): Promise<string> => {
+    if (!show) return '';
+    if (!control.pin) return ' This runner can\'t open it in the side pane.';
+    const { shown } = await control.pin(selfId, { path: pageStore!.file(p.id), title: p.title, show: true });
+    return shown === false ? ' It opens in the side pane when the user next looks at this thread.' : ' It is open in the side pane.';
+  };
+  const projectIds = async (qs: string[]): Promise<string[]> => Promise.all(qs.map(async (q) => (await project(q)).id));
+  const pageContent = {
+    html: z.string().optional().describe('The page as one HTML document. Give html or dir.'),
+    dir: z.string().optional().describe('A folder you built with index.html and its assets (svg, png, webp, mp4, css). Absolute, or relative to this thread’s folder.'),
+  };
+  const absDir = (d: string | undefined, cwd: string | undefined): string | undefined => (d === undefined ? undefined : path.resolve(cwd ?? process.cwd(), d.replace(/^~(?=\/)/, home)));
+  const pageTools = pageStore
+    ? [
+        tool(
+          'create_page',
+          `Makes a Page: a named, versioned page Threadbear keeps for the user, like a report or a progress card, that outlives this reply and can be updated in place with update_page. Static HTML, CSS and SVG only unless live is true. Then put a \`\`\`page <id>\`\`\` block in your reply to show it as a card. If a page from the same source already exists (list_pages), update that one instead.`,
+          {
+            title: z.string().min(1).max(MAX_TITLE).describe('Short, what it shows: "Bundle size".'),
+            summary: z.string().max(MAX_SUMMARY).describe('One or two lines of what it says now, for lists and other apps.'),
+            ...pageContent,
+            projects: z.array(z.string()).optional().describe('Projects to put it in, by id or title. Left out: this thread\'s project when it is pinned to exactly one. [] for none.'),
+            source: z.string().max(MAX_TITLE).optional().describe('What made it ("bundle-analyzer summary"), so the next run finds and updates it.'),
+            live: z.boolean().optional().describe('Allows inline scripts. They run only in the side pane after the user chooses Run them, never in the thread.'),
+            show: z.boolean().optional().describe('Open it in the side pane now.'),
+          },
+          handle(async (input, extra) => {
+            const me = (await all()).find((t) => t.id === selfId);
+            await confirm('create_page', await confinedReason(`Make the page "${input.title}"`), { title: input.title, ...(input.dir ? { dir: input.dir } : {}) }, extra?.signal);
+            const p = pageStore.create({
+              title: input.title,
+              summary: input.summary,
+              ownerThread: selfId,
+              ...(input.html !== undefined ? { html: input.html } : {}),
+              ...(input.dir !== undefined ? { dir: absDir(input.dir, me?.cwd) } : {}),
+              ...(input.projects ? { projects: await projectIds(input.projects) } : {}),
+              ownerProjects: me?.projects ?? [],
+              ...(input.source ? { source: input.source } : {}),
+              ...(input.live ? { live: true } : {}),
+            });
+            return `Made ${pageLine(p)}\nShow it with a \`\`\`page ${p.id}\`\`\` block.${await showPage(p, input.show)}`;
+          }),
+        ),
+        tool(
+          'update_page',
+          'Updates a Page in place: new content makes a new version, the card in the thread follows it, and the last 10 versions are kept.',
+          {
+            id: z.string().min(1).describe('The page id (pg_...) or a unique prefix.'),
+            title: z.string().min(1).max(MAX_TITLE).optional(),
+            summary: z.string().max(MAX_SUMMARY).optional(),
+            ...pageContent,
+            show: z.boolean().optional().describe('Open it in the side pane now.'),
+          },
+          handle(async (input) => {
+            const me = (await all()).find((t) => t.id === selfId);
+            const p = pageStore.update(input.id, {
+              ...(input.title !== undefined ? { title: input.title } : {}),
+              ...(input.summary !== undefined ? { summary: input.summary } : {}),
+              ...(input.html !== undefined ? { html: input.html } : {}),
+              ...(input.dir !== undefined ? { dir: absDir(input.dir, me?.cwd) } : {}),
+            });
+            return `Updated ${pageLine(p)}${await showPage(p, input.show)}`;
+          }),
+        ),
+        tool(
+          'list_pages',
+          'Lists Pages, newest first: by project, by the thread that made them, with no project, or by source.',
+          {
+            project: z.string().optional().describe('Project id or title.'),
+            thread: z.string().optional().describe('Thread id. "self" for this thread.'),
+            none: z.boolean().optional().describe('Only pages in no project.'),
+            source: z.string().optional(),
+          },
+          handle(async ({ project: q, thread, none, source }) => {
+            const list = pageStore.list({
+              ...(q ? { project: (await project(q)).id } : {}),
+              ...(thread ? { thread: thread === 'self' ? selfId : thread } : {}),
+              ...(none ? { none } : {}),
+              ...(source ? { source } : {}),
+            });
+            return list.length ? list.map(pageLine).join('\n') : 'No pages.';
+          }),
+        ),
+        tool(
+          'read_page',
+          'Reads a Page: its title, summary, version, projects and the path of its newest index.html.',
+          { id: z.string().min(1) },
+          handle(({ id }) => {
+            const p = pageStore.find(id);
+            return `${pageLine(p)}\nfile: ${pageStore.file(p.id)}`;
+          }),
+        ),
+        tool(
+          'add_page_to_project',
+          'Puts a Page in a project, so it shows on that project. A page can be in several.',
+          { id: z.string().min(1), project: z.string().min(1).describe('Project id or title.') },
+          handle(async ({ id, project: q }) => pageLine(pageStore.setProjects(id, { add: [(await project(q)).id] }))),
+        ),
+        tool(
+          'remove_page_from_project',
+          'Takes a Page out of a project. It stays with the thread that made it.',
+          { id: z.string().min(1), project: z.string().min(1).describe('Project id or title.') },
+          handle(async ({ id, project: q }) => pageLine(pageStore.setProjects(id, { remove: [(await project(q)).id] }))),
         ),
       ]
     : [];
@@ -1585,6 +1701,7 @@ export function buildThreadbearTools(
     ...highlightTools,
     ...secretTools,
     ...xSearchTools,
+    ...pageTools,
     ...pocketTools,
     ...(schedules ? scheduleTools : []),
     ...(projects ? projectTools : []),
@@ -2067,13 +2184,13 @@ export function serverInstructions(selfId: string, o: { one: boolean; bulletRepl
   );
 }
 
-export function threadbearMcpServer(control: ThreadControl, selfId: string, schedules?: ScheduleControl, projects?: ProjectControl, appRestarts?: AppRestartControl, bulletReplies: () => boolean = () => true, pocket?: () => PocketControl | undefined, oneReply: () => boolean = () => false, gateway?: () => string | undefined, gatewayHealth?: () => Promise<ConnectorService[] | undefined>, scheduleChecks?: () => boolean, remote?: () => RemoteControl | undefined, richBlocks: () => boolean = () => false, replyButtons?: () => boolean, xSearch?: () => { secretsDir: string } | undefined): McpSdkServerConfigWithInstance {
+export function threadbearMcpServer(control: ThreadControl, selfId: string, schedules?: ScheduleControl, projects?: ProjectControl, appRestarts?: AppRestartControl, bulletReplies: () => boolean = () => true, pocket?: () => PocketControl | undefined, oneReply: () => boolean = () => false, gateway?: () => string | undefined, gatewayHealth?: () => Promise<ConnectorService[] | undefined>, scheduleChecks?: () => boolean, remote?: () => RemoteControl | undefined, richBlocks: () => boolean = () => false, replyButtons?: () => boolean, xSearch?: () => { secretsDir: string } | undefined, pages?: () => Pages | undefined): McpSdkServerConfigWithInstance {
   const one = oneReply();
   const server = createSdkMcpServer({
     name: SERVER_NAME,
     version: RUNNER_VERSION,
     instructions: serverInstructions(selfId, { one, bulletReplies: bulletReplies(), pocket: Boolean(pocket?.()), projects: Boolean(projects), richBlocks: richBlocks() }),
-    tools: buildThreadbearTools(control, selfId, Date.now, schedules, projects, appRestarts, { bulletReplies, pocket, oneReply: () => one, gateway, gatewayHealth, scheduleChecks, remote, replyButtons, xSearch }),
+    tools: buildThreadbearTools(control, selfId, Date.now, schedules, projects, appRestarts, { bulletReplies, pocket, oneReply: () => one, gateway, gatewayHealth, scheduleChecks, remote, replyButtons, xSearch, pages }),
   });
   server.tools = [...ALWAYS_ASK_TOOLS].map((name) => ({ name: name.split('__').at(-1)!, permission_policy: 'always_ask' as const }));
   return server;

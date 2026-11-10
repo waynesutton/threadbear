@@ -1,6 +1,7 @@
 // Runner entry point: `node src/main.ts`. launchd runs this (see
 // scripts/install-runner.sh); tests run it with THREADBEAR_HOME and
 // THREADBEAR_PORT pointing at temp places.
+import { Pages } from './pages.ts';
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
@@ -218,12 +219,16 @@ async function main(): Promise<void> {
   skills.sync();
   // The xSearch experiment (x-search.ts): x_search, with its key in secrets/.
   const xSearchFor = () => (experimentOn(cfg.home, 'xSearch') ? { secretsDir: paths.secrets(cfg.home) } : undefined);
+  // The pages experiment (pages.ts): one store for every thread, made the
+  // first time a thread is handed the page tools.
+  let pageStore: Pages | undefined;
+  const pagesFor = () => (experimentOn(cfg.home, 'pages') ? (pageStore ??= new Pages(cfg.home)) : undefined);
   const claude = new ClaudeAdapter({
     plugins: () => skills.plugins(),
     claudePath: cfg.claudePath,
     registry,
     log,
-    mcpServersFor: (threadId) => ({ [SERVER_NAME]: threadbearMcpServer(router(), threadId, scheduleControl(), projectControl(), appRestarts, () => cfg.bulletReplies, pocketControl, () => cfg.oneReply, () => cfg.connectorsUrl, gatewayHealth, () => experimentOn(cfg.home, 'scheduleChecks'), remoteControl, () => experimentOn(cfg.home, 'richBlocks'), () => experimentOn(cfg.home, 'replyButtons'), xSearchFor) }),
+    mcpServersFor: (threadId) => ({ [SERVER_NAME]: threadbearMcpServer(router(), threadId, scheduleControl(), projectControl(), appRestarts, () => cfg.bulletReplies, pocketControl, () => cfg.oneReply, () => cfg.connectorsUrl, gatewayHealth, () => experimentOn(cfg.home, 'scheduleChecks'), remoteControl, () => experimentOn(cfg.home, 'richBlocks'), () => experimentOn(cfg.home, 'replyButtons'), xSearchFor, pagesFor) }),
     oneReply: () => cfg.oneReply,
     sandboxFor: (cwd) => sandboxFor(cfg.sandbox, cwd),
     alwaysAsk: ALWAYS_ASK_TOOLS,
@@ -236,7 +241,7 @@ async function main(): Promise<void> {
     codexArgs: cfg.codexArgs,
     registry,
     log,
-    toolsFor: (threadId) => buildThreadbearTools(router(), threadId, Date.now, scheduleControl(), projectControl(), appRestarts, { provider: 'codex', bulletReplies: () => cfg.bulletReplies, oneReply: () => cfg.oneReply, pocket: pocketControl, gateway: () => cfg.connectorsUrl, gatewayHealth, scheduleChecks: () => experimentOn(cfg.home, 'scheduleChecks'), remote: remoteControl, replyButtons: () => experimentOn(cfg.home, 'replyButtons'), xSearch: xSearchFor }),
+    toolsFor: (threadId) => buildThreadbearTools(router(), threadId, Date.now, scheduleControl(), projectControl(), appRestarts, { provider: 'codex', bulletReplies: () => cfg.bulletReplies, oneReply: () => cfg.oneReply, pocket: pocketControl, gateway: () => cfg.connectorsUrl, gatewayHealth, scheduleChecks: () => experimentOn(cfg.home, 'scheduleChecks'), remote: remoteControl, replyButtons: () => experimentOn(cfg.home, 'replyButtons'), xSearch: xSearchFor, pages: pagesFor }),
     onNotice: (text) => runner.notice('warning', text),
     extraGuidance: () => (experimentOn(cfg.home, 'richBlocks') ? RICH_BLOCKS_LINE : ''),
   });
