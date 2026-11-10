@@ -57,6 +57,8 @@ File references are where to look.
   type into an agent's secret card, one owner-only file each with a small
   script beside it that prints it for `sudo -A`, removed after 24 hours,
   and `secret-box.key` is the key your phone seals those answers to;
+  `xai-api-key`, with the X search experiment on, is the xAI key you gave
+  its first search, owner-only, until xAI turns it down;
   `made-deploy-keys` lists, by name, the deploy keys this Mac made (setup's
   and the Convex panel's), so `tb runner rotate-owner` can tell them from
   others;
@@ -391,6 +393,7 @@ shared. Notifications say which profile they're from.
 | GitHub | the skill's author | Only when you import or update a skill: the repo's commit and files, read without signing in. Nothing of yours is sent. |
 | GitHub, Hugging Face | Kyutai's | Only with the `voiceMode` experiment on, the first time Voice is used: the pocket-tts download, then its model and voices. Nothing of yours is sent. |
 | Your Convex deployment, for the profile page | yours | Only once you make a profile page in the Librarian page's Customize panel: the parts you turned on (see the data folder above), as you change them and then at most once an hour when something changed. Published, anyone with its link can read them; Take the page down deletes them. |
+| xAI (api.x.ai) | xAI's | Only with the `xSearch` experiment on, when an agent calls `x_search`: its question, any accounts and days it names, and your xAI key, to xAI's Responses API. It answers with Grok's reply, links to the X posts it used and what it billed your xAI credit (`runner/src/x-search.ts`). Nothing else of yours goes. |
 | GitHub Contributions API (github-contributions-api.jogruber.de) | Jonathan Gruber's, a free public service | Only with Customize the Librarian page on (Settings > General > Look, off by default) and a GitHub user name typed in its GitHub activity: that user name and a year, when the page shows, at most once an hour for the current year. It answers with that profile's public contribution calendar. No token, nothing else of yours (`GitHubActivity` in `app/Sources/Threadbear/Looks.swift`). |
 | Sentry | Mike's | Nothing from your copy. Only a copy whose `origin` is Mike's own repo reports errors or uploads the app's debug symbols (`runner/src/sentry.ts`, `app/Sources/Threadbear/CrashReporting.swift`, `app/build-app.sh`). The App Store iPhone app sends anonymous crash reports. |
 
