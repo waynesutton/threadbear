@@ -32,6 +32,8 @@ final class EveryClickShowsTests: XCTestCase {
         "connectorsSetup", "connectorsAdd", "agentsConnect", "agentsRevoke",
         // The public profile page (ProfilePageModel.swift).
         "updateProfilePage", "removeProfilePage",
+        // Pages (Pages.swift): each in whileBusy, the row spins.
+        "refreshPage", "editPageWithAgent", "savePageDoc", "restorePageVersion", "deletePage", "restorePage", "exportPage", "setPageProjects",
     ]
 
     /// Functions that show their click some other way, and how.

@@ -27,9 +27,17 @@ public struct Page: Sendable, Hashable, Decodable, Identifiable {
     /// Scripts allowed: they run only after Run them.
     public var live: Bool
     public var source: String?
+    /// chart, dashboard, report, doc, bundle or page.
+    public var kind: String
+    /// How to make it again, for Refresh.
+    public var recipe: String?
+    /// The newest version was written in the app's editor.
+    public var editedByUser: Bool
+    /// Set while it's deleted (kept 7 days for Restore).
+    public var deletedAt: Date?
     public var updatedAt: Date
 
-    enum CodingKeys: String, CodingKey { case id, title, summary, ownerThread, projects, version, bytes, live, source, updatedAt }
+    enum CodingKeys: String, CodingKey { case id, title, summary, ownerThread, projects, version, bytes, live, source, kind, recipe, editedBy, deletedAt, updatedAt }
 
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -42,10 +50,31 @@ public struct Page: Sendable, Hashable, Decodable, Identifiable {
         bytes = (try? c.decodeIfPresent(Int.self, forKey: .bytes)) ?? 0
         live = (try? c.decodeIfPresent(Bool.self, forKey: .live)) ?? false
         source = try? c.decodeIfPresent(String.self, forKey: .source)
+        kind = ((try? c.decodeIfPresent(String.self, forKey: .kind)) ?? nil) ?? "page"
+        recipe = try? c.decodeIfPresent(String.self, forKey: .recipe)
+        editedByUser = ((try? c.decodeIfPresent(String.self, forKey: .editedBy)) ?? nil) == "user"
+        deletedAt = ((try? c.decodeIfPresent(String.self, forKey: .deletedAt)) ?? nil).flatMap(ISO8601.parse)
         updatedAt = ((try? c.decodeIfPresent(String.self, forKey: .updatedAt)) ?? nil).flatMap(ISO8601.parse) ?? .distantPast
     }
 
     public func isIn(project id: String) -> Bool { projects.contains { $0.id == id } }
+
+    public var isDoc: Bool { kind == "doc" }
+
+    /// The versions the runner still keeps: the newest ten.
+    public var keptVersions: [Int] { Array(Swift.max(1, version - 9)...version).reversed() }
+
+    /// An SF Symbol for its kind.
+    public var symbol: String {
+        switch kind {
+        case "chart": "chart.bar"
+        case "dashboard": "rectangle.3.group"
+        case "report": "doc.text.magnifyingglass"
+        case "doc": "doc.plaintext"
+        case "bundle": "shippingbox"
+        default: "doc.richtext"
+        }
+    }
 
     /// The experiment's id, as in hello's `experiments`.
     public static let experiment = "pages"
@@ -67,4 +96,20 @@ public struct PageGetResult: Sendable, Decodable {
     public var page: Page
     public var file: String
     public var versions: [Int]
+    /// A doc's markdown, for the editor.
+    public var markdown: String?
+}
+
+public struct PageResult: Sendable, Decodable {
+    public var page: Page
+}
+
+/// Where Refresh or Edit with Agent went.
+public struct PageAskResult: Sendable, Decodable {
+    public var threadId: String
+    public var started: Bool
+}
+
+public struct PageExportResult: Sendable, Decodable {
+    public var file: String
 }

@@ -111,6 +111,8 @@ final class AppModel {
     var experiments: Set<String> = []
     /// The pages experiment's pages (Pages.swift), newest first.
     var pages: [Page] = []
+    /// Deleted pages, kept 7 days for Restore (Pages.swift).
+    var deletedPages: [Page] = []
     /// How long a thread may sit idle with one of Mike's messages still
     /// queued before the app gives up on it showing.
     static let queuedGrace: Double = 10

@@ -1012,8 +1012,15 @@ the summary and then the reply.
 | `projects.get` | `{ projectId }` | `{ project: Project, threadIds: string[] }`, its threads newest activity first, put away ones included |
 | `projects.create` | `{ title: string, folders?: string[], goals?, state?, notes?, links?: { title?, url }[], threadIds?: string[] }` | `{ project: Project }`, made by Mike (`createdBy: "mike"`). `threadIds` are put in it, pinned. Folders must exist (`-32602` otherwise) |
 | `projects.update` | `{ projectId, title?, folders?: string[], goals?, state?, notes?, links?: { title?, url }[], notion?: string, archived?: boolean }` | `{ project: Project }`. Replaces what's given. A new title is Mike's (`titleBy: "mike"`), so the librarian never renames it. A link that isn't http(s), or more than 8, is `-32602`. A change of folders reloads its threads' patches. `notion` is a Notion page or database address (notion.so, notion.site, notion.com, or a `collection://` data source), read straight away (see Project tasks); empty takes it off; anything else is `-32602` |
-| `pages.list` | `{ project?: string, thread?: string, none?: boolean }` | `{ pages: Page[] }`, newest `updatedAt` first: in a project, made by a thread, or in no project. Empty with the pages experiment off. A runner older than this answers `-32601` |
-| `pages.get` | `{ pageId }` | `{ page: Page, file: string, versions: number[] }`: `file` is the newest version's `index.html` on this Mac, for the side pane; `versions` the ones still kept, oldest first. `-32602` for an unknown page or with the experiment off |
+| `pages.list` | `{ project?: string, thread?: string, none?: boolean, deleted?: boolean }` | `{ pages: Page[] }`, newest `updatedAt` first: in a project, made by a thread, or in no project; with `deleted`, only deleted ones (kept 7 days). Empty with the pages experiment off. A runner older than this answers `-32601` |
+| `pages.get` | `{ pageId, version?: number }` | `{ page: Page, file: string, versions: number[], markdown?: string }`: `file` is that version's (default the newest) `index.html` on this Mac; `versions` the ones still kept, oldest first; `markdown` a doc's text, for the editor. `-32602` for an unknown page or version, or with the experiment off |
+| `pages.saveDoc` | `{ pageId, markdown: string, title?: string }` | `{ page: Page }`: the user's edit of a doc, saved as a new version with `editedBy: "user"` |
+| `pages.restoreVersion` | `{ pageId, version: number }` | `{ page: Page }`: that version's files become a new, newest version. `-32602` for one no longer kept |
+| `pages.delete` | `{ pageId }` | `{ page: Page }` with `deletedAt`. Left out of lists and `pages.updated`; removed with its files 7 days later |
+| `pages.restore` | `{ pageId }` | `{ page: Page }`: a deleted page back. Nothing for one that isn't deleted |
+| `pages.export` | `{ pageId, dest: string, version?: number }` | `{ file: string }`: the version's files copied into `dest`, an absolute folder that's new or empty; `file` is its `index.html`. For Download |
+| `pages.refresh` | `{ pageId }` | `{ threadId, started: boolean }`: a message asking to make the page again from its `recipe` goes to the thread that made it, queued behind its turn; when that thread is gone, a new thread starts in the page's project's first folder (`started: true`). The runner never runs the recipe itself |
+| `pages.edit` | `{ pageId, text: string }` | `{ threadId, started: boolean }`: as `pages.refresh`, with the user's words for what should change |
 | `pages.setProjects` | `{ pageId, add?: string[], remove?: string[] }` | `{ page: Page }`. Mike's change, pinned. A page can be in several projects or none |
 | `projects.refreshTasks` | `{ projectId, force?: boolean }` | `{ project: Project }` once its Notion board has been read again, unless it was read in the last minute (`force` reads it anyway). The project page asks when it opens. `-32602` for a project with no `notion` |
 | `projects.setIcon` | `{ projectId, path?: string, symbol?: string }` | `{ project: Project }`. Mike's choice: `path` a picture on this Mac (PNG, JPEG, WebP, SVG, ICNS or ICO, copied in), or `symbol` an SF Symbol name; neither puts it back to automatic, and the librarian finds one again within seconds. `-32602` for a missing file or a name that isn't a symbol's |
@@ -4763,6 +4770,10 @@ type Page = {
   bytes: number
   live: boolean         // scripts allowed, run only after Run them in the side pane
   source?: string       // what made it ("bundle-analyzer summary"), so a rerun updates it
+  kind?: "page" | "chart" | "dashboard" | "report" | "doc" | "bundle"  // absent: "page"
+  recipe?: string       // how to make it again, for Refresh; an agent follows it
+  editedBy?: "agent" | "user"  // who wrote the newest version
+  deletedAt?: string    // while deleted
   createdAt: string
   updatedAt: string
 }
@@ -4771,7 +4782,10 @@ type Page = {
 - **Stored** in `<home>/pages/`: `index.json`, and each version as a folder `<id>/v<n>/` holding `index.html` and the assets it names (`.css .svg .png .jpg .webp .gif .mp4 .webm .woff2`). The last 10 versions are kept. Never sent to Convex.
 - **Static by default.** A page whose HTML has `<script` is refused unless it was made `live`. Links, `.js` and `.json` files are refused in a page folder. `index.html` is at most 1 MB and the folder 25 MB.
 - **Projects.** Made with no `projects`, a page joins its thread's project when the thread is pinned to exactly one; `[]` means none.
-- **Agent tools:** `create_page`, `update_page`, `list_pages`, `read_page`, `add_page_to_project`, `remove_page_from_project`, only while the experiment is on. `list_pages` and `read_page` never ask.
+- **Docs.** A page given as `markdown` is a doc: the runner draws it (`runner/src/page-doc.ts`, a small escaped subset: headings, lists, task lists, tables, quotes, code, http(s) and mailto links; no HTML passes through) and keeps the text as `source.md` beside it, so the user can edit it (`pages.saveDoc`) and the next agent starts from their words.
+- **Deleted** pages are kept 7 days (`pages.restore`), then removed with their files when the store next loads.
+- **Agent tools:** `create_page` (`kind`, `markdown`, `recipe`), `update_page` (`markdown`, `recipe`, `restoreVersion`), `list_pages` (`deleted`), `read_page` (`version`; shows the recipe, the kept versions and a doc's markdown), `delete_page`, `restore_page`, `export_page`, `add_page_to_project`, `remove_page_from_project`, only while the experiment is on. `list_pages` and `read_page` never ask. The older arguments still work.
+- **Skills.** `make-page` builds charts, dashboards and reports from CSV, TSV, JSON or XLSX through a spec, and exports PDFs; `bundle-report` is its recipe for Convex bundle size. Both live in the user's skills folder, not the repo.
 - **In a reply**, an agent shows a page with a ```` ```page <id> ```` block. An app that knows pages draws it as a card with the page's newest title, version and summary, and opens `file` from `pages.get` in the side pane; one that doesn't shows the block as code.
 
 ## Schedules

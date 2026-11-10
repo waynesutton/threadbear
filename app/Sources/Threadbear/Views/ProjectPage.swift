@@ -287,65 +287,264 @@ extension AttributedString {
 }
 
 /// The pages its threads' agents made (docs/protocol.md, "Pages"): a
-/// bundle report, a progress card. Each opens in a window of its own.
-/// The pages experiment.
+/// bundle report, a chart, a dashboard, a doc. Each row opens its page in a
+/// window of its own; its menu refreshes, edits, downloads, restores a
+/// version, moves or deletes it. Deleted ones wait 7 days under Recently
+/// Deleted. The pages experiment.
 private struct PagesSection: View {
     @Environment(AppModel.self) private var app
     let project: Project
+    @State private var showDeleted = false
+    @State private var asking: Page?
+    @State private var editing: Page?
 
     var body: some View {
         let pages = app.pages(in: project.id)
+        let deleted = app.deletedPages(in: project.id)
         VStack(alignment: .leading, spacing: 0) {
             PageHeading(title: "Pages", detail: pages.isEmpty ? nil : "\(pages.count)") { EmptyView() }
             if pages.isEmpty {
-                Text("None yet. Ask a thread in this project for a page, like a bundle size report, and it shows here.")
+                Text("None yet. Ask a thread in this project for a chart, a dashboard, a report or a doc, and it shows here.")
                     .font(.system(size: TypeScale.label))
                     .foregroundStyle(Color(nsColor: Theme.faintText))
             } else {
                 VStack(alignment: .leading, spacing: zoomed(2)) {
-                    ForEach(pages) { page in PageRow(page: page) }
+                    ForEach(pages) { page in
+                        PageRow(page: page, project: project, ask: { asking = page }, edit: { editing = page })
+                    }
                 }
             }
+            if !deleted.isEmpty {
+                DisclosureGroup(isExpanded: $showDeleted) {
+                    VStack(alignment: .leading, spacing: zoomed(4)) {
+                        ForEach(deleted) { page in
+                            HStack(spacing: zoomed(8)) {
+                                Image(systemName: page.symbol).foregroundStyle(Color(nsColor: Theme.faintText))
+                                Text(page.title)
+                                if let at = page.deletedAt {
+                                    Text("deleted \(RelativeTime.short(at, now: app.now))")
+                                        .font(.system(size: TypeScale.detail))
+                                        .foregroundStyle(Color(nsColor: Theme.faintText))
+                                }
+                                Spacer(minLength: 0)
+                                Button("Restore") { app.restorePage(page) }
+                                    .buttonStyle(.borderless)
+                                    .busy(app.isBusy(BusyKey.page(page.id)))
+                                    .tip("Bring this page back. Deleted pages are kept for 7 days")
+                            }
+                            .font(.system(size: TypeScale.label))
+                        }
+                    }
+                    .padding(.top, zoomed(6))
+                } label: {
+                    Text("Recently deleted (\(deleted.count))")
+                        .font(.system(size: TypeScale.detail))
+                        .foregroundStyle(Color(nsColor: Theme.faintText))
+                }
+                .padding(.top, zoomed(8))
+                .tip("Pages deleted in the last 7 days. Restore brings one back")
+            }
         }
+        .onAppear { app.loadDeletedPages() }
+        .sheet(item: $asking) { page in AskPageSheet(page: page) }
+        .sheet(item: $editing) { page in EditDocSheet(page: page) }
     }
 }
 
 private struct PageRow: View {
     @Environment(AppModel.self) private var app
     let page: Page
+    let project: Project
+    let ask: () -> Void
+    let edit: () -> Void
     @State private var hovering = false
 
     var body: some View {
-        Button { app.openPage(page) } label: {
-            HStack(alignment: .firstTextBaseline, spacing: zoomed(10)) {
-                Image(systemName: "doc.richtext")
-                    .foregroundStyle(Color(nsColor: Theme.faintText))
-                VStack(alignment: .leading, spacing: zoomed(2)) {
-                    HStack(spacing: zoomed(6)) {
-                        Text(page.title).fontWeight(.medium)
-                        Text("v\(page.version) · \(RelativeTime.short(page.updatedAt, now: app.now))")
-                            .font(.system(size: TypeScale.detail))
-                            .foregroundStyle(Color(nsColor: Theme.faintText))
+        HStack(alignment: .firstTextBaseline, spacing: zoomed(6)) {
+            Button { app.openPage(page) } label: {
+                HStack(alignment: .firstTextBaseline, spacing: zoomed(10)) {
+                    Image(systemName: page.symbol)
+                        .foregroundStyle(Color(nsColor: Theme.faintText))
+                        .frame(width: zoomed(16))
+                    VStack(alignment: .leading, spacing: zoomed(2)) {
+                        HStack(spacing: zoomed(6)) {
+                            Text(page.title).fontWeight(.medium)
+                            Text(detail)
+                                .font(.system(size: TypeScale.detail))
+                                .foregroundStyle(Color(nsColor: Theme.faintText))
+                        }
+                        if !page.summary.isEmpty {
+                            Text(page.summary)
+                                .font(.system(size: TypeScale.detail))
+                                .foregroundStyle(Color(nsColor: Theme.faintText))
+                                .lineLimit(2)
+                        }
                     }
-                    if !page.summary.isEmpty {
-                        Text(page.summary)
-                            .font(.system(size: TypeScale.detail))
-                            .foregroundStyle(Color(nsColor: Theme.faintText))
-                            .lineLimit(2)
+                    Spacer(minLength: 0)
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .tip("Open this page in a window of its own")
+            Menu {
+                PageMenu(page: page, ask: ask, edit: edit)
+            } label: {
+                Image(systemName: "ellipsis.circle")
+            }
+            .menuStyle(.borderlessButton)
+            .menuIndicator(.hidden)
+            .fixedSize()
+            .opacity(hovering || app.isBusy(BusyKey.page(page.id)) ? 1 : 0.5)
+            .busy(app.isBusy(BusyKey.page(page.id)))
+            .tip("Refresh, edit, download, versions, move or delete this page")
+        }
+        .font(.system(size: TypeScale.label))
+        .padding(.vertical, zoomed(6))
+        .padding(.horizontal, zoomed(8))
+        .background(RoundedRectangle(cornerRadius: zoomed(6)).fill(Color.primary.opacity(hovering ? 0.06 : 0)))
+        .onHover { hovering = $0 }
+        .contextMenu { PageMenu(page: page, ask: ask, edit: edit) }
+    }
+
+    /// "Dashboard · v3 · 2h · edited by you".
+    private var detail: String {
+        var parts = [page.kind.capitalized, "v\(page.version)", RelativeTime.short(page.updatedAt, now: app.now)]
+        if page.editedByUser { parts.append("edited by you") }
+        return parts.joined(separator: " · ")
+    }
+}
+
+/// The same items in the row's ... menu and its right-click menu.
+private struct PageMenu: View {
+    @Environment(AppModel.self) private var app
+    let page: Page
+    let ask: () -> Void
+    let edit: () -> Void
+
+    var body: some View {
+        Button("Open") { app.openPage(page) }
+        Button("Refresh") { app.refreshPage(page) }
+        Button("Edit with Agent…") { ask() }
+        if page.isDoc { Button("Edit Text…") { edit() } }
+        Divider()
+        Button("Download…") { app.downloadPage(page) }
+        Menu("Versions") {
+            ForEach(page.keptVersions, id: \.self) { v in
+                if v == page.version {
+                    Button("Open Version \(v) (newest)") { app.openPage(page, version: v) }
+                } else {
+                    Menu("Version \(v)") {
+                        Button("Open") { app.openPage(page, version: v) }
+                        Button("Make This the Newest") { app.restorePageVersion(page, version: v) }
+                        Button("Download…") { app.downloadPage(page, version: v) }
                     }
                 }
-                Spacer(minLength: 0)
             }
-            .font(.system(size: TypeScale.label))
-            .padding(.vertical, zoomed(6))
-            .padding(.horizontal, zoomed(8))
-            .background(RoundedRectangle(cornerRadius: zoomed(6)).fill(Color.primary.opacity(hovering ? 0.06 : 0)))
-            .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
-        .busy(app.isBusy(BusyKey.page(page.id)))
-        .onHover { hovering = $0 }
-        .tip("Open this page in a window of its own")
+        Menu("Projects") {
+            ForEach(app.projects.filter { !$0.archived }) { project in
+                Toggle(project.title, isOn: Binding(get: { page.isIn(project: project.id) }, set: { _ in app.togglePage(page, inProject: project.id) }))
+            }
+        }
+        Divider()
+        Button("Delete", role: .destructive) { app.deletePage(page) }
+    }
+}
+
+/// Edit with Agent: what should change, sent to the thread that made it.
+private struct AskPageSheet: View {
+    @Environment(AppModel.self) private var app
+    @Environment(\.dismiss) private var dismiss
+    let page: Page
+    @State private var text = ""
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: zoomed(12)) {
+            Text("Change \u{201C}\(page.title)\u{201D}").font(.headline)
+            Text("Say what should change. The thread that made it does the work and saves a new version; the old one is kept.")
+                .font(.system(size: TypeScale.detail))
+                .foregroundStyle(Color(nsColor: Theme.faintText))
+            TextField("Make the region chart a pie, and add a table of the top 10 rows", text: $text, axis: .vertical)
+                .lineLimit(3...8)
+                .textFieldStyle(.roundedBorder)
+                .tip("What should change on the page")
+            HStack {
+                Spacer()
+                Button("Cancel") { dismiss() }
+                    .keyboardShortcut(.cancelAction)
+                    .tip("Close without asking for a change")
+                Button("Send") {
+                    app.editPageWithAgent(page, text: text)
+                    dismiss()
+                }
+                .keyboardShortcut(.defaultAction)
+                .disabled(text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                .tip("Send this to the thread that made the page, and open that thread")
+            }
+        }
+        .padding(zoomed(20))
+        .frame(width: zoomed(480))
+    }
+}
+
+/// Edit Text: a doc's markdown, edited by hand. Save makes a new version.
+private struct EditDocSheet: View {
+    @Environment(AppModel.self) private var app
+    @Environment(\.dismiss) private var dismiss
+    let page: Page
+    @State private var text = ""
+    @State private var loaded = false
+    @State private var saving = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: zoomed(10)) {
+            HStack {
+                Text(page.title).font(.headline)
+                Spacer()
+                Text("Markdown: # headings, - lists, - [ ] tasks, | tables |, **bold**, [links](https://…)")
+                    .font(.system(size: TypeScale.detail))
+                    .foregroundStyle(Color(nsColor: Theme.faintText))
+            }
+            if loaded {
+                TextEditor(text: $text)
+                    .font(.system(size: TypeScale.label, design: .monospaced))
+                    .frame(minHeight: zoomed(360))
+                    .overlay(RoundedRectangle(cornerRadius: zoomed(6)).stroke(Color.primary.opacity(0.12)))
+                    .tip("The doc's text. Save makes a new version; the old one is kept")
+            } else {
+                ProgressView().frame(maxWidth: .infinity, minHeight: zoomed(360))
+            }
+            HStack {
+                Text("Saves as version \(page.version + 1).")
+                    .font(.system(size: TypeScale.detail))
+                    .foregroundStyle(Color(nsColor: Theme.faintText))
+                Spacer()
+                Button("Cancel") { dismiss() }
+                    .keyboardShortcut(.cancelAction)
+                    .tip("Close without saving")
+                Button("Save") {
+                    saving = true
+                    app.savePageDoc(page, markdown: text) { ok in
+                        saving = false
+                        if ok { dismiss() }
+                    }
+                }
+                .keyboardShortcut("s", modifiers: .command)
+                .disabled(!loaded || saving)
+                .busy(saving)
+                .tip("Save your edit as a new version of the page")
+            }
+        }
+        .padding(zoomed(20))
+        .frame(width: zoomed(720))
+        .task {
+            if let md = await app.pageMarkdown(page) {
+                text = md
+                loaded = true
+            } else {
+                dismiss()
+            }
+        }
     }
 }
 
