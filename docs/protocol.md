@@ -2047,6 +2047,15 @@ Ayush's "Plan View UI".
   that don't know these events still see Claude's approval as an ordinary
   one ("Finish the plan"). A thread on another Mac (Other runners'
   threads) can't take `plans.approve` yet; writing to it still works.
+- **On the phone.** Sync sends each `plan.proposed` as a message row with
+  `plan: true` (backend API 64): the whole plan, scrubbed as a reply is,
+  up to 24,000 characters. The iPhone app draws it as a plan card that
+  opens the plan in a sheet (Copy, and Share as a `.md` file), and Claude's
+  `ExitPlanMode` card as "The plan is ready" with Read plan and Go ahead.
+  Go ahead is `allow` on that card; the sheet's Send back is a message,
+  which sends the plan back as anything Mike writes does. A Codex plan has
+  no card, so the phone only sends it back. An older backend gets the
+  plan as an ordinary reply.
 
 ## Slash commands
 

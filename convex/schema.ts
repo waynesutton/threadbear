@@ -437,6 +437,7 @@ export default defineSchema({
     origin: v.optional(v.string()),
     toolKind: v.optional(v.string()), // the protocol's ToolKind, for a tool row
     summary: v.optional(v.boolean()), // end_turn's bullets, the turn's reply (since API 14)
+    plan: v.optional(v.boolean()), // a Plan first plan in full, for the phone's plan card (since API 64)
     turn: v.optional(v.string()), // the start of its turn's id (since API 26)
     wokeBy: v.optional(v.array(v.object({ kind: v.string(), description: v.string() }))), // what finished and woke this turn, on its first row (since API 33)
     buttons: v.optional(v.array(messageButton)), // the reply buttons its text links, as they are now (since API 59)
