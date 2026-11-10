@@ -7,7 +7,6 @@
 - [ ] Pages: only ask once per page for `update_page` from the thread that owns it (adapter change). prds/threadbear-pages.md
 - [ ] Pages: optional HyperFrames share clip for any page. prds/threadbear-pages.md
 - [ ] Pages: Download as PDF from the app's menu (today a thread does it with make-page's export-pdf.mjs).
-- [ ] Book the experiment check-in schedule and put its id in `runner/src/experiments/pages.md` (`reminder` is a placeholder). prds/threadbear-pages.md
 
 ## In Progress
 

@@ -4,7 +4,7 @@ name: Pages
 title: Pages: named, versioned pages a thread keeps for you
 added: 2026-11-10
 on: false
-reminder: 00000000
+reminder: ee0c4ba6
 ---
 
 ## What it does
