@@ -289,4 +289,8 @@
 //    weren't queued, and sync:pruneFiles any left after a day. A runner
 //    sends pictures to another runner only from 63: an older backend would
 //    drop them and send the words alone.
-export const API_VERSION = 63;
+// 64: a message row can be `plan` (a Plan first plan in full, up to 24,000
+//    characters), and phone:messages returns it, so the phone draws a plan
+//    card and reads the whole plan before Go ahead. An older runner sends
+//    none; an older backend gets the plan as an ordinary reply.
+export const API_VERSION = 64;
