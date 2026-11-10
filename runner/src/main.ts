@@ -1,7 +1,7 @@
 // Runner entry point: `node src/main.ts`. launchd runs this (see
 // scripts/install-runner.sh); tests run it with THREADBEAR_HOME and
 // THREADBEAR_PORT pointing at temp places.
-import { Pages } from './pages.ts';
+import { Pages, pageMethods } from './pages.ts';
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
@@ -222,7 +222,7 @@ async function main(): Promise<void> {
   // The pages experiment (pages.ts): one store for every thread, made the
   // first time a thread is handed the page tools.
   let pageStore: Pages | undefined;
-  const pagesFor = () => (experimentOn(cfg.home, 'pages') ? (pageStore ??= new Pages(cfg.home)) : undefined);
+  const pagesFor = () => (experimentOn(cfg.home, 'pages') ? (pageStore ??= new Pages(cfg.home, Date.now, (pages) => runner.publish({ method: 'pages.updated', params: { pages } }))) : undefined);
   const claude = new ClaudeAdapter({
     plugins: () => skills.plugins(),
     claudePath: cfg.claudePath,
@@ -681,7 +681,7 @@ async function main(): Promise<void> {
       }),
     changed: () => {},
   });
-  const methods = { ...profileMethods(profileJobs), ...profilePageMethods(publicProfile), ...restartMethods(restarter), ...scheduleMethods(scheduler), ...projectMethods(projects), ...drainProjectMethods(projects), ...librarianMethods(librarian), ...connectorsMethods(connectors, { on: () => experimentOn(cfg.home, 'connectorsSetup'), start: ({ text, title, why }) => runner.create({ text, title, permissionMode: 'full', startedBy: { kind: 'runner', label: 'Threadbear', why } }).thread.id, open: openThread, local: () => experimentOn(cfg.home, 'localConnectors'), findLauncher: (l) => findLauncher(l) }), ...settingsMethods(settings), ...skillMethods(skills), ...instructionsMethods(instructions), ...modelMethods(models), ...devicesMethods(sync), ...agentsMethods(sync, () => experimentOn(cfg.home, OUTSIDE_AGENTS)), ...usageStatsMethods({ tally, history: usageHistory, clock: realClock }) };
+  const methods = { ...profileMethods(profileJobs), ...profilePageMethods(publicProfile), ...restartMethods(restarter), ...scheduleMethods(scheduler), ...projectMethods(projects), ...pageMethods(pagesFor), ...drainProjectMethods(projects), ...librarianMethods(librarian), ...connectorsMethods(connectors, { on: () => experimentOn(cfg.home, 'connectorsSetup'), start: ({ text, title, why }) => runner.create({ text, title, permissionMode: 'full', startedBy: { kind: 'runner', label: 'Threadbear', why } }).thread.id, open: openThread, local: () => experimentOn(cfg.home, 'localConnectors'), findLauncher: (l) => findLauncher(l) }), ...settingsMethods(settings), ...skillMethods(skills), ...instructionsMethods(instructions), ...modelMethods(models), ...devicesMethods(sync), ...agentsMethods(sync, () => experimentOn(cfg.home, OUTSIDE_AGENTS)), ...usageStatsMethods({ tally, history: usageHistory, clock: realClock }) };
   // runner.status carries the CLI statuses too (protocol, "runner.status").
   const restartStatus = methods['runner.status'];
   methods['runner.status'] = (p) => {

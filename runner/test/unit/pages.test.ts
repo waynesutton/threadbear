@@ -146,3 +146,27 @@ test('page tools: off without the experiment; create inherits the pinned project
   await call(tools, 'remove_page_from_project', { id: 'pg_bundle_size', project: 'Threadbear' });
   assert.match((await call(tools, 'read_page', { id: 'pg_bundle_size' })).text, /no project[\s\S]*file: .*v2\/index\.html/);
 });
+
+test('pages.* methods: empty while off, list, get with file and versions, setProjects as Mike, and a change notifies', async () => {
+  const { pageMethods } = await import('../../src/pages.ts');
+  const offM = pageMethods(() => undefined);
+  assert.deepEqual(offM['pages.list']!({}), { pages: [] });
+  assert.throws(() => offM['pages.get']!({ pageId: 'x' }), /Pages is off/);
+
+  const seen: number[] = [];
+  const store = new Pages(home(), Date.now, (list) => seen.push(list.length));
+  const m = pageMethods(() => store);
+  const p = store.create({ title: 'Bundle size', summary: 's', ownerThread: 't1', html: page('1'), projects: [] });
+  store.update(p.id, { html: page('2') });
+  assert.deepEqual(seen, [1, 1]);
+  const got = m['pages.get']!({ pageId: 'pg_bundle' }) as { page: { version: number }; file: string; versions: number[] };
+  assert.equal(got.page.version, 2);
+  assert.deepEqual(got.versions, [1, 2]);
+  assert.match(fs.readFileSync(got.file, 'utf8'), /2/);
+  const moved = m['pages.setProjects']!({ pageId: p.id, add: ['p_tb'] }) as { page: { projects: { id: string; by: string }[] } };
+  assert.deepEqual(moved.page.projects.map((x) => [x.id, x.by]), [['p_tb', 'mike']]);
+  assert.equal((m['pages.list']!({ project: 'p_tb' }) as { pages: unknown[] }).pages.length, 1);
+  assert.equal((m['pages.list']!({ none: true }) as { pages: unknown[] }).pages.length, 0);
+  assert.throws(() => m['pages.get']!({ pageId: 'nope' }), /No page nope/);
+  assert.throws(() => m['pages.setProjects']!({ pageId: p.id, add: 'p_tb' }), /list of strings/);
+});

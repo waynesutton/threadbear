@@ -12,6 +12,7 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import { atomicWriteFileSync, readJsonSync } from './fsutil.ts';
 import type { ProjectMaker, ThreadProject } from './protocol.ts';
+import { ErrorCode, RpcError } from './protocol.ts';
 
 export const MAX_VERSIONS = 10;
 export const MAX_HTML_BYTES = 1_000_000;
@@ -69,11 +70,14 @@ export class PageError extends Error {}
 export class Pages {
   readonly dir: string;
   private readonly now: () => number;
+  private readonly onChange: ((pages: PageRecord[]) => void) | undefined;
   private records: PageRecord[];
 
-  constructor(home: string, now: () => number = Date.now) {
+  // onChange: every change, with the whole list, for pages.updated.
+  constructor(home: string, now: () => number = Date.now, onChange?: (pages: PageRecord[]) => void) {
     this.dir = path.join(home, 'pages');
     this.now = now;
+    this.onChange = onChange;
     this.records = readJsonSync<PageRecord[]>(this.indexFile()) ?? [];
   }
 
@@ -215,8 +219,17 @@ export class Pages {
     return path.join(this.dir, 'index.json');
   }
 
+  // The versions still on disk, oldest first.
+  versions(id: string): number[] {
+    const p = this.must(id);
+    const out: number[] = [];
+    for (let v = Math.max(1, p.version - MAX_VERSIONS + 1); v <= p.version; v++) if (fs.existsSync(this.versionDir(p.id, v))) out.push(v);
+    return out;
+  }
+
   private persist(): void {
     atomicWriteFileSync(this.indexFile(), JSON.stringify(this.records, null, 2) + '\n');
+    this.onChange?.(this.list());
   }
 }
 
@@ -263,4 +276,59 @@ export function readPageDir(dir: string): { rel: string; data: Buffer }[] {
   };
   walk(dir);
   return out;
+}
+
+// docs/protocol.md, "Pages". `pages` is undefined while the experiment is
+// off: lists come back empty and the rest say so.
+export function pageMethods(pages: () => Pages | undefined): Record<string, (p: Record<string, unknown>) => unknown> {
+  const must = (): Pages => {
+    const s = pages();
+    if (!s) throw new RpcError(ErrorCode.badParams, 'Pages is off. Turn it on in Settings > General > Experiments.');
+    return s;
+  };
+  const str = (p: Record<string, unknown>, k: string): string | undefined => {
+    const v = p[k];
+    if (v === undefined || v === null) return undefined;
+    if (typeof v !== 'string') throw new RpcError(ErrorCode.badParams, `${k} must be a string`);
+    return v;
+  };
+  const list = (p: Record<string, unknown>, k: string): string[] | undefined => {
+    const v = p[k];
+    if (v === undefined || v === null) return undefined;
+    if (!Array.isArray(v) || v.some((x) => typeof x !== 'string')) throw new RpcError(ErrorCode.badParams, `${k} must be a list of strings`);
+    return v as string[];
+  };
+  const id = (p: Record<string, unknown>): string => {
+    const v = str(p, 'pageId');
+    if (!v) throw new RpcError(ErrorCode.badParams, 'pageId is required');
+    return v;
+  };
+  const found = <T>(fn: () => T): T => {
+    try {
+      return fn();
+    } catch (e) {
+      if (e instanceof PageError) throw new RpcError(ErrorCode.badParams, e.message);
+      throw e;
+    }
+  };
+  return {
+    'pages.list': (p) => {
+      const s = pages();
+      if (!s) return { pages: [] };
+      const project = str(p, 'project');
+      const thread = str(p, 'thread');
+      return { pages: s.list({ ...(project ? { project } : {}), ...(thread ? { thread } : {}), ...(p.none === true ? { none: true } : {}) }) };
+    },
+    'pages.get': (p) =>
+      found(() => {
+        const s = must();
+        const page = s.find(id(p));
+        return { page, file: s.file(page.id), versions: s.versions(page.id) };
+      }),
+    'pages.setProjects': (p) => {
+      const add = list(p, 'add');
+      const remove = list(p, 'remove');
+      return found(() => ({ page: must().setProjects(id(p), { ...(add ? { add } : {}), ...(remove ? { remove } : {}), by: 'mike' }) }));
+    },
+  };
 }

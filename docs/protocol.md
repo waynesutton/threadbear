@@ -1012,6 +1012,9 @@ the summary and then the reply.
 | `projects.get` | `{ projectId }` | `{ project: Project, threadIds: string[] }`, its threads newest activity first, put away ones included |
 | `projects.create` | `{ title: string, folders?: string[], goals?, state?, notes?, links?: { title?, url }[], threadIds?: string[] }` | `{ project: Project }`, made by Mike (`createdBy: "mike"`). `threadIds` are put in it, pinned. Folders must exist (`-32602` otherwise) |
 | `projects.update` | `{ projectId, title?, folders?: string[], goals?, state?, notes?, links?: { title?, url }[], notion?: string, archived?: boolean }` | `{ project: Project }`. Replaces what's given. A new title is Mike's (`titleBy: "mike"`), so the librarian never renames it. A link that isn't http(s), or more than 8, is `-32602`. A change of folders reloads its threads' patches. `notion` is a Notion page or database address (notion.so, notion.site, notion.com, or a `collection://` data source), read straight away (see Project tasks); empty takes it off; anything else is `-32602` |
+| `pages.list` | `{ project?: string, thread?: string, none?: boolean }` | `{ pages: Page[] }`, newest `updatedAt` first: in a project, made by a thread, or in no project. Empty with the pages experiment off. A runner older than this answers `-32601` |
+| `pages.get` | `{ pageId }` | `{ page: Page, file: string, versions: number[] }`: `file` is the newest version's `index.html` on this Mac, for the side pane; `versions` the ones still kept, oldest first. `-32602` for an unknown page or with the experiment off |
+| `pages.setProjects` | `{ pageId, add?: string[], remove?: string[] }` | `{ page: Page }`. Mike's change, pinned. A page can be in several projects or none |
 | `projects.refreshTasks` | `{ projectId, force?: boolean }` | `{ project: Project }` once its Notion board has been read again, unless it was read in the last minute (`force` reads it anyway). The project page asks when it opens. `-32602` for a project with no `notion` |
 | `projects.setIcon` | `{ projectId, path?: string, symbol?: string }` | `{ project: Project }`. Mike's choice: `path` a picture on this Mac (PNG, JPEG, WebP, SVG, ICNS or ICO, copied in), or `symbol` an SF Symbol name; neither puts it back to automatic, and the librarian finds one again within seconds. `-32602` for a missing file or a name that isn't a symbol's |
 | `projects.merge` | `{ projectId, intoId }` | `{ project: Project }` (the one kept). Folders and threads move over, notes are joined, and `projectId` is deleted |
@@ -1090,6 +1093,7 @@ still `-32602`.)
 | `schedules.updated` | `{ schedules: Schedule[] }` sent to every connected client whenever any schedule changes (made, edited, run, deleted, or its thread deleted). The whole list, in `schedules.list` order |
 | `remoteThreads.updated` | `RemoteThreads` sent to every connected client whenever another runner's threads, or what's known of that runner, change. The whole list, as `remoteThreads.list` |
 | `projects.updated` | `{ projects: Project[] }` sent to every connected client when any project changes, as `projects.list` with `archived: true` would answer. Thread membership changes come as `thread.updated` |
+| `pages.updated` | `{ pages: Page[] }` sent to every connected client when any page is made, updated or moved between projects, with the pages experiment on. The whole list, as `pages.list` with nothing given. A card showing a page reloads it when its `version` moves on |
 | `librarian.updated` | `{ librarian: LibrarianStatus }` sent to every connected client when the librarian's status changes |
 | `connectors.updated` | `{ connectors: ConnectorsStatus }` sent to every connected client when what the Connectors panel would show changes (a service signs out or back in, the gateway stops or starts answering); not when only `checkedAt` moves |
 | `settings.updated` | `{ settings: Settings }` sent to every connected client when a setting or the key changes, and at most once a minute while model calls are adding to the spend |
@@ -4743,6 +4747,32 @@ Threadbear only shows the board; cards are moved in Notion, by people
 or by agents with the Notion tools. `read_project` lists the open cards,
 and a thread's brief has one line saying the board is there and how many
 are open. With no gateway, `error` says so.
+
+## Pages
+
+The pages experiment (`runner/src/pages.ts`). A Page is a named, versioned page an agent makes for the user (a bundle size report, a progress card) that outlives the reply it was posted in. The runner keeps it, not a folder, so it can be in zero, one or several projects whatever folder its thread ran in.
+
+```ts
+type Page = {
+  id: string            // "pg_bundle_size"
+  title: string
+  summary: string       // at most 280 characters, for lists and other apps
+  ownerThread: string   // the thread that made it
+  projects: { id: string; by: "mike" | "agent" | "librarian"; pinned?: boolean }[]
+  version: number       // 1 up; each content change is a new version
+  bytes: number
+  live: boolean         // scripts allowed, run only after Run them in the side pane
+  source?: string       // what made it ("bundle-analyzer summary"), so a rerun updates it
+  createdAt: string
+  updatedAt: string
+}
+```
+
+- **Stored** in `<home>/pages/`: `index.json`, and each version as a folder `<id>/v<n>/` holding `index.html` and the assets it names (`.css .svg .png .jpg .webp .gif .mp4 .webm .woff2`). The last 10 versions are kept. Never sent to Convex.
+- **Static by default.** A page whose HTML has `<script` is refused unless it was made `live`. Links, `.js` and `.json` files are refused in a page folder. `index.html` is at most 1 MB and the folder 25 MB.
+- **Projects.** Made with no `projects`, a page joins its thread's project when the thread is pinned to exactly one; `[]` means none.
+- **Agent tools:** `create_page`, `update_page`, `list_pages`, `read_page`, `add_page_to_project`, `remove_page_from_project`, only while the experiment is on. `list_pages` and `read_page` never ask.
+- **In a reply**, an agent shows a page with a ```` ```page <id> ```` block. An app that knows pages draws it as a card with the page's newest title, version and summary, and opens `file` from `pages.get` in the side pane; one that doesn't shows the block as code.
 
 ## Schedules
 
