@@ -27,6 +27,7 @@ The agent side is the `create_print`, `update_print`, `read_print`, `list_prints
 - **Editable CSV sheets.** Deferred by Wayne. The half-done work sits uncommitted in the slot-12 worktree.
 - **Live data.** Live Prints can run scripts, but nothing pushes new data into an open one. The PRD's postMessage phase isn't built.
 - **Opening in the side pane.** The project page opens a Print in its own window. The thread's side pane doesn't take it, and doesn't reload on a new version.
+- **An "Only make Prints when I ask" setting.** Today an agent can make a Print whenever it thinks one helps, like a progress Print on a long task. There's no switch to keep Prints available but make them wait for your say-so.
 - **One approval per Print.** In Ask mode, `update_print` asks every time, even from the thread that owns the Print.
 - **A global Prints view.** Prints with no project are reached through their card or by asking "show my prints with no project".
 - **PDF page breaks.** The built-in PDF can cut a line across two pages. Asking the thread to print through Chrome avoids it.
@@ -35,11 +36,12 @@ The agent side is the `create_print`, `update_print`, `read_print`, `list_prints
 
 ## What's next
 
-1. Draw published Print cards on the iPhone and the website, since the backend already serves them.
-2. Open Prints in the thread's side pane and reload it on a new version.
-3. Ask once per Print for updates from its own thread.
-4. Pick the CSV sheets work back up from slot-12, or drop it.
-5. Write scheduled refresh into the make-print skill and the guide. No code needed.
-6. Decide whether Prints stays an experiment or becomes standard, at the check-in booked for 14 Nov.
+1. Add an "Only make Prints when I ask" setting. With it on, an agent's `create_print` puts a card to you first ("Make the print X?") unless your message asked for one. In progress: prds/prints-only-when-asked.md.
+2. Draw published Print cards on the iPhone and the website, since the backend already serves them.
+3. Open Prints in the thread's side pane and reload it on a new version.
+4. Ask once per Print for updates from its own thread.
+5. Pick the CSV sheets work back up from slot-12, or drop it.
+6. Write scheduled refresh into the make-print skill and the guide. No code needed.
+7. Decide whether Prints stays an experiment or becomes standard, at the check-in booked for 14 Nov.
 
 The optional HyperFrames share clip stays parked until one of the above ships.

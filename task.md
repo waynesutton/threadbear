@@ -14,7 +14,7 @@ Status and gap list: prds/prints-status.md
 
 ## In Progress
 
-Nothing.
+- [ ] Prints: "Only make Prints when I ask" setting. Prints stay available, but an agent asks before making one you didn't ask for. prds/prints-only-when-asked.md
 
 ## Completed
 
