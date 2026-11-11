@@ -11,6 +11,15 @@ enum PaletteKey {
     case left, right
 }
 
+/// Whether Return (and a double-click) in the slash palette sends the
+/// command at once. Off by default: it puts the command in the box, and
+/// the next Return sends it, so a new thread's box doesn't start a thread
+/// by surprise (Wayne, 11 Nov). The Run button always sends.
+enum SlashReturn {
+    static let key = "slashReturnRuns"
+    static var runs: Bool { UserDefaults.standard.bool(forKey: key) }
+}
+
 /// What the composer keeps for its palette: which category and command
 /// are picked, and the text it was closed at with Esc (it stays closed
 /// until the text changes).
@@ -186,10 +195,11 @@ struct SlashPaletteView: View {
             // double-click time has passed (half a second, Mike, 6 Nov).
             // A second click is read from the click itself instead.
             .onTapGesture {
-                if NSApp.currentEvent?.clickCount ?? 1 >= 2, state.selected == command.name { onRun(command) }
-                else { state.selected = command.name }
+                if NSApp.currentEvent?.clickCount ?? 1 >= 2, state.selected == command.name {
+                    if SlashReturn.runs { onRun(command) } else { onFill(command) }
+                } else { state.selected = command.name }
             }
-            .tip("/\(command.name): double-click to run it")
+            .tip("/\(command.name): double-click to \(SlashReturn.runs ? "run it" : "put it in the box")")
     }
 
     @ViewBuilder
@@ -254,9 +264,9 @@ struct SlashPaletteView: View {
                 .tip("Put /\(command.name) in the message, for the agent to run (Return or Tab)")
         } else {
             Button("Run") { onRun(command) }
-                .tip("Send /\(command.name) now (Return)")
+                .tip("Send /\(command.name) now" + (SlashReturn.runs ? " (Return)" : ""))
             Button("Add details") { onFill(command) }
-                .tip("Put /\(command.name) in the box to type more after it (Tab)")
+                .tip("Put /\(command.name) in the box to type more after it (\(SlashReturn.runs ? "Tab" : "Return or Tab"))")
         }
         // With the other buttons, so it's always in sight: under
         // the path it scrolled away in a short palette.

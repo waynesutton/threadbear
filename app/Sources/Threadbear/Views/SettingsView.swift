@@ -237,6 +237,7 @@ private struct GeneralSettings: View {
     @AppStorage(NotesStore.shownKey) private var notesShown = true
     @AppStorage(FileOpenPlace.key) private var fileOpenPlace: FileOpenPlace = .threadbear
     @AppStorage(SlashListChoice.key) private var slashList: SlashListChoice = .mike
+    @AppStorage(SlashReturn.key) private var slashReturnRuns = false
     @AppStorage(RailTerminal.key) private var railTerminal = false
     @AppStorage(FileEditorMode.key) private var editLikeAnEditor = true
     @AppStorage(FileAutosave.key) private var saveFilesAutomatically = true
@@ -341,12 +342,14 @@ private struct GeneralSettings: View {
                 }
 
                 SettingsSection("Slash commands",
-                                about: "Typing / in the message box opens the slash palette: every command and skill, with a search field, categories you can step through with the left and right arrows, and Esc to close. A /skill typed partway through a message opens the palette too, or, if you pick it here, the small list at the cursor instead. Only one of them shows at a time.",
+                                about: "Typing / in the message box opens the slash palette: every command and skill, with a search field, categories you can step through with the left and right arrows, and Esc to close. Return puts the picked command in the box, and the next Return sends it; turn on Return sends a command right away to skip that step (the Run button always sends). A /skill typed partway through a message opens the palette too, or, if you pick it here, the small list at the cursor instead. Only one of them shows at a time.",
                                 ask: "change what the slash palette lists or how it looks.") {
                     Picker("Skills partway through a message", selection: $slashList) {
                         ForEach(SlashListChoice.allCases) { Text($0.title).tag($0) }
                     }
                     .tip("Which list a /skill typed after other words brings up")
+                    Toggle("Return sends a command right away", isOn: $slashReturnRuns)
+                        .tip("Off: Return puts the command in the box and the next Return sends it, so a new thread doesn't start by surprise. The Run button always sends")
                 }
 
                 SettingsSection("Terminal",

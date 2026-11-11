@@ -328,7 +328,8 @@ struct ComposerView: View {
         if key == .enter, matches.isEmpty { return false }
         let categories = SlashPalette.counts(searched, query: typed.query, recent: app.recentSlashCommands).map(\.0)
         if let (command, run) = SlashPaletteView.handle(key, matches: matches, categories: categories, state: &palette, text: text) {
-            pick(command, run: run && !typed.midMessage)
+            // Return only fills it in unless Settings says it sends (SlashReturn).
+            pick(command, run: run && !typed.midMessage && SlashReturn.runs)
         }
         return true
     }

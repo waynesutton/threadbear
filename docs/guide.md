@@ -531,9 +531,12 @@ other names, what `/model` and `/effort` are set to now, and where it
 comes from (yours, this folder's, a plugin's) with its file and an Open
 button that shows the file beside the thread.
 Up and Down move, Left and Right step through the categories (All,
-Threadbear, the CLI's, Skills, Recent), Return runs it, Tab puts it in
-the box so you can type its details after it, and Esc closes the palette.
-Clicking a category shows only those; double-clicking a command runs it.
+Threadbear, the CLI's, Skills, Recent), Return or Tab puts it in the box
+(Return again sends it, so a new thread never starts by surprise), and
+Esc closes the palette. The Run button sends it at once; to have Return
+do that too, turn on Settings > General > Slash commands > Return sends
+a command right away. Clicking a category shows only those;
+double-clicking a command does what Return does.
 Click the search field along the palette's top to find a skill or
 command by any word in its name or description. The arrows, Return and
 Esc work there too, the X at its right closes the palette, and clicking back in the message box carries on
