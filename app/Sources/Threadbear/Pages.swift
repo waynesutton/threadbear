@@ -56,6 +56,34 @@ extension AppModel {
         }
     }
 
+    /// From a reply's card: in this thread's side pane, as a highlight
+    /// opens, where it follows new versions. A thread on another runner, or
+    /// none selected, gets the window instead (its file is on that Mac).
+    func openPageHere(_ page: Page) {
+        guard let client, let thread = selectedThread, !thread.isRemote else { return openPage(page) }
+        whileBusy(BusyKey.page(page.id)) { [self] in
+            do {
+                let got = try await client.getPage(page.id)
+                preview(path: got.file, title: got.page.title, in: thread)
+            } catch {
+                show(error)
+            }
+        }
+    }
+
+    /// A side pane showing a Print's newest version moves to the new one
+    /// when it lands, rather than staying on the file it opened.
+    func followPageVersions(before: [Page]) {
+        for (threadId, shown) in panePreview {
+            guard let path = shown.fileURL?.path,
+                  let next = PagePath.newer(than: path, before: before, after: pages),
+                  FileManager.default.fileExists(atPath: next) else { continue }
+            var moved = shown
+            moved.target = .file(next)
+            show(moved, in: threadId)
+        }
+    }
+
     /// Sends the page to the thread that made it to be made again from its
     /// recipe, and opens that thread so its work can be watched.
     func refreshPage(_ page: Page) {

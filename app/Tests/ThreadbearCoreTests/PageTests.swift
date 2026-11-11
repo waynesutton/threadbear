@@ -32,6 +32,26 @@ final class PageTests: XCTestCase {
         XCTAssertEqual(page.updatedAt, ISO8601.parse("2026-11-10T09:30:00.000Z"))
     }
 
+    func testASidePaneShowingAPrintFollowsItsNewestVersion() throws {
+        let page = { (id: String, v: Int, deleted: Bool) in
+            try JSONDecoder().decode(Page.self, from: Data(#"{"id":"\#(id)","title":"T","version":\#(v)\#(deleted ? #","deletedAt":"2026-11-11T00:00:00Z""# : "")}"#.utf8))
+        }
+        let shown = "/Users/w/Library/Application Support/Threadbear/pages/pg_sales/v2/index.html"
+        XCTAssertEqual(PagePath.parse(shown)?.id, "pg_sales")
+        XCTAssertEqual(PagePath.parse(shown)?.version, 2)
+        let was = [try page("pg_sales", 2, false)]
+        XCTAssertEqual(PagePath.newer(than: shown, before: was, after: [try page("pg_other", 9, false), try page("pg_sales", 4, false)]),
+                       "/Users/w/Library/Application Support/Threadbear/pages/pg_sales/v4/index.html")
+        XCTAssertNil(PagePath.newer(than: shown, before: was, after: was), "already the newest")
+        XCTAssertNil(PagePath.newer(than: shown, before: [try page("pg_sales", 3, false)], after: [try page("pg_sales", 4, false)]),
+                     "an older version opened on purpose stays")
+        XCTAssertNil(PagePath.newer(than: shown, before: was, after: [try page("pg_sales", 5, true)]), "a deleted one stays as it was")
+        XCTAssertNil(PagePath.newer(than: shown, before: was, after: []))
+        for other in ["/Users/w/dev/site/v2/index.html", "/Users/w/pages/pg_a/v2/chart.svg", "/Users/w/pages/pg_a/vx/index.html", "index.html"] {
+            XCTAssertNil(PagePath.parse(other), other)
+        }
+    }
+
     func testAPublishedPageCarriesItsLinksSlug() throws {
         let json = #"{"id":"pg_a","title":"A","version":2,"published":{"slug":"abcDEF0123456789abcdef","at":"2026-11-10T09:30:00Z","version":2}}"#
         XCTAssertEqual(try JSONDecoder().decode(Page.self, from: Data(json.utf8)).publishedSlug, "abcDEF0123456789abcdef")

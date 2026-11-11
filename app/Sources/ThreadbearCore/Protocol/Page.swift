@@ -132,3 +132,28 @@ public struct PagePublishResult: Sendable, Decodable {
 public struct PageExportResult: Sendable, Decodable {
     public var file: String
 }
+
+/// Where a Print's version lives on the runner's Mac: `<home>/pages/<id>/v<n>/index.html`
+/// (docs/protocol.md, "Prints"). A side pane showing one follows new versions.
+public enum PagePath {
+    /// The Print id and version a file under a pages folder belongs to.
+    public static func parse(_ path: String) -> (id: String, version: Int)? {
+        let parts = (path as NSString).pathComponents
+        guard parts.count >= 4, parts[parts.count - 1] == "index.html",
+              parts[parts.count - 4] == "pages",
+              parts[parts.count - 2].hasPrefix("v"), let v = Int(parts[parts.count - 2].dropFirst()), v > 0
+        else { return nil }
+        return (parts[parts.count - 3], v)
+    }
+
+    /// The same Print's new newest version, when the file shown was the
+    /// newest in `before` and `after` has a newer one; nil to leave it as it
+    /// is. An older version opened on purpose stays put.
+    public static func newer(than path: String, before: [Page], after: [Page]) -> String? {
+        guard let (id, v) = parse(path), let page = after.first(where: { $0.id == id }), page.version > v, page.deletedAt == nil,
+              before.first(where: { $0.id == id })?.version == v
+        else { return nil }
+        let folder = ((path as NSString).deletingLastPathComponent as NSString).deletingLastPathComponent
+        return (((folder as NSString).appendingPathComponent("v\(page.version)")) as NSString).appendingPathComponent("index.html")
+    }
+}

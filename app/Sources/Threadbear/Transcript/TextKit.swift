@@ -758,7 +758,7 @@ final class TranscriptTextView: NSTextView {
         guard let page = cell.page else { return }
         let app = AppModel.shared
         switch action {
-        case .open, .preview: app.openPage(page)
+        case .open, .preview: app.openPageHere(page)
         case .refresh: app.refreshPage(page)
         case .more:
             let menu = PageMenuBuilder.menu(for: page, app: app)

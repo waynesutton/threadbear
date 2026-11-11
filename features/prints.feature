@@ -37,3 +37,11 @@ Feature: Diagram Prints
     Then no Print is made and the thread is told I said no
     When I ask a thread to "make a chart of this data"
     Then it makes the Print without a card
+
+  @prints.pane @manual @gpui-pending
+  Scenario: A Print opened from its card follows new versions in the side pane
+    Given a reply in a thread shows a Print's card at version 1
+    When I click Open on the card
+    Then the Print opens in the thread's side pane
+    When the thread saves version 2 of that Print
+    Then the side pane shows version 2 without another click
