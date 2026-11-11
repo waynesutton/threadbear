@@ -15,11 +15,15 @@ Lets a thread's agent make a Print you keep (called Pages until 10 Nov 2026): a 
 
 ## Lives in
 
+Only make Prints when I ask is a normal setting, `printsWhenAsked` in runner.json (`config.ts`, `settings.ts`), checked in `create_print` in `runner/src/threadbear-mcp.ts` (`asksForPrint`), with its switch in the app's `SettingsView.swift`.
+
 Diagram rendering is in `runner/src/page-diagram.ts`, using the pinned bundle and license in `runner/skills/pele/`. The app reuses Edit Text; `Page.swift` and `RunnerAPI.swift` add diagram source and `pages.saveDiagram`.
 
 `runner/src/pages.ts` (the store, `<home>/pages/`) and `runner/src/page-doc.ts` (docs); the page tools (`create_print`, `update_print`, `list_prints`, `read_print`, `delete_print`, `restore_print`, `export_print`, `add_print_to_project`, `remove_print_from_project`, and their old `page` names) in `buildThreadbearTools` (`runner/src/threadbear-mcp.ts`), with `list_prints` and `read_print` (and the old names) in `NEVER_ASK_TOOLS`; `pagesFor` and `pageMethods` (`pages.*` and `pages.updated`) and `askAboutPage` (Refresh and Edit with agent) in `runner/src/main.ts`; in the app, `ThreadbearCore/Protocol/Page.swift`, `Threadbear/Pages.swift` and `PagesSection` in `Views/ProjectPage.swift`; the card in replies, `Transcript/PageCards.swift` (`PageCardCell`), `PageSheets.swift`, `ThreadbearCore/Support/PagePDF.swift` and `pagePDF` in `RichRenderer.swift` (Download as PDF), `PageFence` in `ThreadbearCore/Markdown/RichBlock.swift` and `drawPageCard` in `Transcript/RichRenderer.swift`
 
 ## Taking it out
+
+For Only make Prints when I ask, also remove `printsWhenAsked` from `config.ts`, `settings.ts`, `cli.ts`, `main.ts`, `RunnerSettings.swift`, `RunnerSettingsModel.swift`, `Automation.swift` and its Settings section, and `asksForPrint` with its check in `create_print`.
 
 For diagrams, also remove `runner/src/page-diagram.ts`, `runner/test/unit/page-diagram.test.ts`, the copied `runner/skills/pele/pele.js` and its license, the Mermaid fields and save method in Pages and the app. The outside-agent read tools live with Outside agents, not the local Print store.
 

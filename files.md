@@ -25,3 +25,10 @@
 
 - `prds/prints-status.md` says how Prints work today, what's missing and what's next.
 - `changelog.md` lists what shipped in Prints by day.
+- `prds/prints-only-when-asked.md` is the plan for the Only make Prints when I ask setting.
+
+## Prints only when asked
+
+- `runner/src/threadbear-mcp.ts` has `asksForPrint` and the card `create_print` puts up when the setting is on.
+- `runner/src/settings.ts` and `runner/src/config.ts` keep `printsWhenAsked` in runner.json.
+- `app/Sources/Threadbear/Views/SettingsView.swift` shows the switch under Prints while the Prints experiment is on.

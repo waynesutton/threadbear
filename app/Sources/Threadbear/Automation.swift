@@ -234,6 +234,7 @@ enum Automation {
                 "oneReply": settings.oneReply,
                 "labReview": settings.labReview,
                 "keepAwake": settings.keepAwake.map { $0 as Any } ?? NSNull(),
+                "printsWhenAsked": settings.printsWhenAsked.map { $0 as Any } ?? NSNull(),
                 // "" is none (small jobs off), or an older runner with no pools.
                 "smallJobsPool": settings.models.pool ?? "",
                 "privateFolders": settings.models.privateFolders,

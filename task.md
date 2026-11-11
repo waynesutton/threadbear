@@ -14,9 +14,11 @@ Status and gap list: prds/prints-status.md
 
 ## In Progress
 
-- [ ] Prints: "Only make Prints when I ask" setting. Prints stay available, but an agent asks before making one you didn't ask for. prds/prints-only-when-asked.md
+Nothing.
 
 ## Completed
+
+- [x] 2026-11-11 Only make Prints when I ask: `printsWhenAsked` in runner.json and Settings > General > Prints (shown while Prints is on). With it on, `create_print` after a message that names no print, chart, graph, dashboard or diagram puts an approval card up first; its description tells agents too. runner config.ts, settings.ts, cli.ts, main.ts, threadbear-mcp.ts; app RunnerSettings.swift, RunnerSettingsModel.swift, SettingsView.swift; protocol, guide, features/prints.feature. Verified: runner typecheck; 107 tests in pages, context budget, threadbear tools and experiments; app SettingsTests, TipsTests and EveryClickShowsTests; the switch seen on and off in a debug app against a dev runner. prds/prints-only-when-asked.md
 
 - [x] 2026-11-11 Diagram Prints and read-only published Prints for outside agents landed on main at `b221756c` and pushed to GitHub. Rebased onto the publishing recovery `e8dd6683` (backend API 73, live). Verified: `./check.sh --quick` passed in 2,916 s; runner typecheck and 25 guard tests (context budget, experiments, parity, scenarios, fork view). Three desktop specs stay manual until GPUI has Prints. prds/prints-diagrams-and-agent-reads.md
 

@@ -27,3 +27,13 @@ Feature: Diagram Prints
     When I reopen its card in that thread
     Then I can open the diagram and edit its source
     And assigning it to a project lists the same Print there
+
+  @prints.whenasked @manual @gpui-pending
+  Scenario: Only make Prints when I ask holds back a Print nobody asked for
+    Given Prints is on and "Only make Prints when I ask" is on in Settings
+    When a thread goes to make a Print after a message that asks for none
+    Then an approval card asks "Make the print" with its title first
+    When I choose No on that card
+    Then no Print is made and the thread is told I said no
+    When I ask a thread to "make a chart of this data"
+    Then it makes the Print without a card

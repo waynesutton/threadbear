@@ -107,6 +107,13 @@ export type ProjectControl = Async<Projects, 'list' | 'get' | 'find' | 'create' 
 
 export const SERVER_NAME = 'threadbear';
 
+// Whether a message asks for a Print, for Only make Prints when I ask.
+// "page", "doc" and "report" are left out: ordinary coding requests use
+// them, and they'd wave every Print through.
+export function asksForPrint(text: string): boolean {
+  return /\b(prints?|charts?|graphs?|dashboards?|diagrams?)\b/i.test(text);
+}
+
 export type AgentApprovalRequest = { name: string; title: string; input: Record<string, unknown>; signal?: AbortSignal };
 
 // Permission modes by how much an agent may do in them without asking.
@@ -245,6 +252,9 @@ export function buildThreadbearTools(
     pages?: () => Pages | undefined;
     // Publishing a print to the user's Convex backend (pages.ts).
     printPublisher?: () => PagePublisher | undefined;
+    // Settings' Only make Prints when I ask (printsWhenAsked): create_print
+    // asks first unless the user's latest message asked for one.
+    printsWhenAsked?: () => boolean;
   } = {},
 ) {
   const codex = opts.provider === 'codex';
@@ -264,6 +274,22 @@ export function buildThreadbearTools(
   const oneReply = opts.oneReply?.() === true;
   const all = async (): Promise<ThreadSummary[]> => control.list(['inbox', 'snoozed', 'archived']);
   const sleep = opts.sleep ?? ((ms: number) => new Promise<void>((r) => setTimeout(r, ms)));
+
+  // The text of this thread's latest user.message, a few pages back at most.
+  const latestUserText = async (): Promise<string> => {
+    let before: number | undefined;
+    for (let pages = 0; pages < 4; pages++) {
+      const page = await control.events(selfId, { beforeSeq: before, limit: 200 });
+      const evs = page.events as PersistedEvent[];
+      for (let i = evs.length - 1; i >= 0; i--) {
+        const e = evs[i] as PersistedEvent & { text?: unknown };
+        if (e.type === 'user.message') return typeof e.text === 'string' ? e.text : '';
+      }
+      if (!evs.length || page.firstSeq <= 1) break;
+      before = page.firstSeq;
+    }
+    return '';
+  };
 
   // The current turn's events, oldest first: back a page at a time until
   // its turn.started.
@@ -802,6 +828,7 @@ export function buildThreadbearTools(
   // versioned pages the runner keeps, in zero or more projects. Only handed
   // out while it's on.
   const pageStore = opts.pages?.();
+  const whenAsked = opts.printsWhenAsked?.() === true;
   const pageLine = (p: PageRecord): string =>
     `${p.id}  ${!p.kind || p.kind === 'page' ? 'print' : p.kind}  v${p.version}  "${p.title}"${p.live ? '  live' : ''}${p.deletedAt ? `  deleted ${p.deletedAt}` : ''}  ${p.projects.length ? `in ${p.projects.map((x) => x.id).join(', ')}` : 'no project'}  thread ${p.ownerThread.slice(0, 8)}  ${p.updatedAt}${p.editedBy === 'user' ? '  edited by the user' : ''}${p.published ? `  published${printLink(opts.printPublisher?.()?.site(), p.published.slug) ? ` at ${printLink(opts.printPublisher?.()?.site(), p.published.slug)}` : ''}` : ''}${p.summary ? `\n  ${p.summary}` : ''}`;
   const showPage = async (p: PageRecord, show: boolean | undefined): Promise<string> => {
@@ -823,7 +850,7 @@ export function buildThreadbearTools(
     ? [
         tool(
           'create_print',
-          `Makes a Print: a named, versioned page Threadbear keeps (a chart, dashboard, report, doc or diagram). Update it with update_print. Use make-print for charts and dashboards; give mermaid for diagrams. Static HTML, CSS and SVG unless live is true. Show it with a \`\`\`print <id>\`\`\` block. If one from the same source exists (list_prints), update it instead.`,
+          `Makes a Print: a named, versioned page Threadbear keeps (a chart, dashboard, report, doc or diagram). Update it with update_print. Use make-print for charts and dashboards; give mermaid for diagrams. Static HTML, CSS and SVG unless live is true. Show it with a \`\`\`print <id>\`\`\` block. If one from the same source exists (list_prints), update it instead.${whenAsked ? ' Only when the user asks for one: they turned on asking first for any other.' : ''}`,
           {
             title: z.string().min(1).max(MAX_TITLE).describe('Short, what it shows: "Bundle size".'),
             summary: z.string().max(MAX_SUMMARY).describe('One or two lines of what it says now, for lists and other apps.'),
@@ -837,7 +864,8 @@ export function buildThreadbearTools(
           },
           handle(async (input, extra) => {
             const me = (await all()).find((t) => t.id === selfId);
-            await confirm('create_print', await confinedReason(`Make the print "${input.title}"`), { title: input.title, ...(input.dir ? { dir: input.dir } : {}) }, extra?.signal);
+            const unasked = opts.printsWhenAsked?.() === true && !asksForPrint(await latestUserText()) ? [`Make the print "${input.title}"? You asked to approve Prints you didn't ask for`] : [];
+            await confirm('create_print', [...unasked, ...(await confinedReason(`Make the print "${input.title}"`))], { title: input.title, ...(input.dir ? { dir: input.dir } : {}) }, extra?.signal);
             const p = pageStore.create({
               title: input.title,
               summary: input.summary,
@@ -2332,13 +2360,13 @@ export function serverInstructions(selfId: string, o: { one: boolean; bulletRepl
   );
 }
 
-export function threadbearMcpServer(control: ThreadControl, selfId: string, schedules?: ScheduleControl, projects?: ProjectControl, appRestarts?: AppRestartControl, bulletReplies: () => boolean = () => true, pocket?: () => PocketControl | undefined, oneReply: () => boolean = () => false, gateway?: () => string | undefined, gatewayHealth?: () => Promise<ConnectorService[] | undefined>, scheduleChecks?: () => boolean, remote?: () => RemoteControl | undefined, replyButtons?: () => boolean, runAsks?: () => boolean, xSearch?: () => { secretsDir: string } | undefined, pages?: () => Pages | undefined, printPublisher?: () => PagePublisher | undefined): McpSdkServerConfigWithInstance {
+export function threadbearMcpServer(control: ThreadControl, selfId: string, schedules?: ScheduleControl, projects?: ProjectControl, appRestarts?: AppRestartControl, bulletReplies: () => boolean = () => true, pocket?: () => PocketControl | undefined, oneReply: () => boolean = () => false, gateway?: () => string | undefined, gatewayHealth?: () => Promise<ConnectorService[] | undefined>, scheduleChecks?: () => boolean, remote?: () => RemoteControl | undefined, replyButtons?: () => boolean, runAsks?: () => boolean, xSearch?: () => { secretsDir: string } | undefined, pages?: () => Pages | undefined, printPublisher?: () => PagePublisher | undefined, printsWhenAsked?: () => boolean): McpSdkServerConfigWithInstance {
   const one = oneReply();
   const server = createSdkMcpServer({
     name: SERVER_NAME,
     version: RUNNER_VERSION,
     instructions: serverInstructions(selfId, { one, bulletReplies: bulletReplies(), pocket: Boolean(pocket?.()), projects: Boolean(projects) }),
-    tools: buildThreadbearTools(control, selfId, Date.now, schedules, projects, appRestarts, { bulletReplies, pocket, oneReply: () => one, gateway, gatewayHealth, scheduleChecks, remote, replyButtons, runAsks, xSearch, pages, printPublisher }),
+    tools: buildThreadbearTools(control, selfId, Date.now, schedules, projects, appRestarts, { bulletReplies, pocket, oneReply: () => one, gateway, gatewayHealth, scheduleChecks, remote, replyButtons, runAsks, xSearch, pages, printPublisher, printsWhenAsked }),
   });
   server.tools = [...ALWAYS_ASK_TOOLS].map((name) => ({ name: name.split('__').at(-1)!, permission_policy: 'always_ask' as const }));
   return server;

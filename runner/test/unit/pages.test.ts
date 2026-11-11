@@ -184,7 +184,7 @@ test('setProjects adds and removes, and list filters by project, thread and none
 });
 
 // The tools, against a fake runner that knows one thread pinned to a project.
-type Tool = { name: string; handler: (a: never, e: never) => Promise<{ content: { text: string }[]; isError?: boolean }> };
+type Tool = { name: string; description: string; handler: (a: never, e: never) => Promise<{ content: { text: string }[]; isError?: boolean }> };
 const call = async (tools: Tool[], name: string, args: Record<string, unknown>) => {
   const r = await tools.find((t) => t.name === name)!.handler(args as never, {} as never);
   return { text: r.content[0]!.text, err: r.isError === true };
@@ -379,4 +379,67 @@ test('publish: a link made once, new versions follow, live and scripted prints r
   const again = await publishPage(store, pub, other.id);
   assert.equal((await unpublishPage(store, pub, other.id)).published, undefined);
   assert.ok(again.page.published);
+});
+
+test('only when asked: create_print after a message that asks for no print puts a card up first', async () => {
+  const { buildThreadbearTools } = await import('../../src/threadbear-mcp.ts');
+  const thread = { id: 'th1', title: 'Work', cwd: home(), projects: [] };
+  let said = 'Fix the login bug';
+  const cards: string[] = [];
+  let answer: 'allow' | 'deny' = 'deny';
+  const control = {
+    list: async () => [thread],
+    get: async () => ({ ...thread, permissionMode: 'full' }),
+    events: async () => ({ firstSeq: 1, events: [{ seq: 1, type: 'user.message', text: said, images: [] }, { seq: 2, type: 'turn.started' }] }),
+    requestAgentApproval: async (_id: string, req: { title: string }) => { cards.push(req.title); return { decision: answer }; },
+  } as never;
+  const store = new Pages(home());
+  let on = true;
+  const tools = buildThreadbearTools(control, 'th1', Date.now, undefined, undefined, undefined, { pages: () => store, printsWhenAsked: () => on }) as unknown as Tool[];
+  assert.match(tools.find((t) => t.name === 'create_print')!.description, /only when the user asks/i);
+
+  const denied = await call(tools, 'create_print', { title: 'Progress', summary: '', html: page('a') });
+  assert.equal(denied.err, true);
+  assert.match(denied.text, /said no/);
+  assert.match(cards[0]!, /Make the print "Progress"\? You asked to approve Prints you didn't ask for/);
+  assert.equal(store.list().length, 0);
+
+  answer = 'allow';
+  assert.equal((await call(tools, 'create_print', { title: 'Progress', summary: '', html: page('a') })).err, false);
+  assert.equal(cards.length, 2);
+
+  said = 'Make a pie chart of this spreadsheet';
+  assert.equal((await call(tools, 'create_print', { title: 'Regions', summary: '', html: page('b') })).err, false);
+  said = 'Draw this flow as a diagram';
+  assert.equal((await call(tools, 'create_print', { title: 'Flow', summary: '', mermaid: 'flowchart LR\n A --> B' })).err, false);
+  assert.equal(cards.length, 2, 'asked for, so no card');
+
+  on = false;
+  said = 'Fix the login bug';
+  assert.equal((await call(tools, 'create_print', { title: 'Notes', summary: '', html: page('c') })).err, false);
+  assert.equal(cards.length, 2, 'setting off, so no card');
+  const plain = buildThreadbearTools(control, 'th1', Date.now, undefined, undefined, undefined, { pages: () => store }) as unknown as Tool[];
+  assert.doesNotMatch(plain.find((t) => t.name === 'create_print')!.description, /only when the user asks/i);
+});
+
+test('only when asked: the words that count as asking for a print', async () => {
+  const { asksForPrint } = await import('../../src/threadbear-mcp.ts');
+  for (const s of ['make a print of it', 'Prints please', 'a bar CHART', 'graph the latency', 'build a dashboard', 'diagrams of the flow']) assert.ok(asksForPrint(s), s);
+  for (const s of ['fix the page header', 'write the docs', 'report back when done', 'blueprint', 'printf debugging', 'chartreuse button', '']) assert.ok(!asksForPrint(s), s);
+});
+
+test('only when asked: off unless runner.json turns it on, and settings.update saves it at once', async () => {
+  const { loadConfig } = await import('../../src/config.ts');
+  const { SettingsService, settingsMethods } = await import('../../src/settings.ts');
+  const h = home();
+  const cfg = loadConfig({ THREADBEAR_HOME: h });
+  assert.equal(cfg.printsWhenAsked, false, 'off with nothing in runner.json');
+  const s = new SettingsService({ config: cfg, publish: () => {} });
+  assert.equal(s.get().printsWhenAsked, false);
+  const rpc = settingsMethods(s);
+  assert.equal((rpc['settings.update']!({ printsWhenAsked: true }) as { settings: { printsWhenAsked: boolean } }).settings.printsWhenAsked, true);
+  assert.equal(cfg.printsWhenAsked, true, 'applies at once');
+  assert.equal(JSON.parse(fs.readFileSync(path.join(h, 'runner.json'), 'utf8')).printsWhenAsked, true, 'saved');
+  assert.equal(loadConfig({ THREADBEAR_HOME: h }).printsWhenAsked, true, 'read back');
+  assert.throws(() => rpc['settings.update']!({ printsWhenAsked: 'yes' }), /printsWhenAsked must be a boolean/);
 });

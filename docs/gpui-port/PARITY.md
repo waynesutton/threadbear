@@ -751,4 +751,6 @@ built parsers and gates with no launch of the app, which is the trap.)
 
 ## Fork additions awaiting a shared spec run
 
+`prints.whenasked` has one manual scenario in `features/prints.feature`: the Settings switch, and the approval card the runner puts up before an unasked Print. The runner's side is covered by `runner/test/unit/pages.test.ts`.
+
 `prints.diagram` has three manual behavior scenarios in `features/prints.feature` for source editing, invalid edits and project assignment. The Swift flow was checked with an isolated dev runner; automated shared-driver coverage and GPUI support remain pending. The recorded results above are preserved until a shared spec run produces new reports.

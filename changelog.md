@@ -4,7 +4,9 @@ How Prints work today and what's still missing: [prds/prints-status.md](prds/pri
 
 ## [Unreleased]
 
-Nothing yet.
+### Added
+
+- Only make Prints when I ask, in Settings > General > Prints. Prints stay on, but a thread asks before making one your message didn't ask for.
 
 ## 2026-11-11
 
