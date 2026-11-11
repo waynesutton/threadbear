@@ -655,6 +655,48 @@ final class DraftTests: XCTestCase {
         XCTAssertNil(AppModel().newThreadModel)
     }
 
+    /// The composer starts on the runner's default mode (Auto on a new
+    /// install), goes back to it after a send, and to Full access with a
+    /// runner that has none.
+    func testNewThreadStartsOnTheRunnersDefaultMode() async throws {
+        defer { UserDefaults.standard.removeObject(forKey: AppModel.lastAccountKey) }
+        let app = AppModel()
+        XCTAssertEqual(app.newThreadPermission, .full, "a runner with no default, or one that hasn't said")
+        app.defaults = RunnerDefaults(cwd: "/w", accountId: "claude-3", permissionMode: .auto)
+        XCTAssertEqual(app.newThreadPermission, .auto)
+        let transport = RefusingTransport()
+        transport.createdThread = true
+        let client = RPCClient(transport: transport)
+        try await client.start()
+        app.useClientForTesting(client)
+        app.newThreadPermission = .ask
+        XCTAssertEqual(app.newThreadRequest(text: "x", images: []).permissionMode, .ask)
+        app.drafts["new"] = Draft(text: "Start something")
+        app.send(threadId: nil)
+        for _ in 0..<200 where app.selection == nil {
+            try await Task.sleep(for: .milliseconds(5))
+        }
+        XCTAssertEqual(app.selection, "th_new")
+        XCTAssertEqual(app.newThreadPermission, .auto, "back to the runner's default")
+        XCTAssertNil(app.newThreadPermissionPick)
+        XCTAssertEqual(app.newThreadRequest(text: "x", images: []).permissionMode, .auto, "and that's what the next one sends")
+    }
+
+    /// A runner whose default mode this app doesn't know: the composer says
+    /// so rather than Full access, a new thread leaves the mode out so the
+    /// runner starts it on that default, and a schedule made from it asks.
+    func testUnknownRunnerDefaultModeIsNotFullAccess() {
+        defer { UserDefaults.standard.removeObject(forKey: AppModel.lastAccountKey) }
+        let app = AppModel()
+        app.defaults = try! JSONDecoder().decode(RunnerDefaults.self, from: Data(#"{"cwd":"/w","accountId":"claude-3","permissionMode":"sandboxed"}"#.utf8))
+        XCTAssertEqual(app.newThreadPermission, .unknown)
+        XCTAssertNil(app.newThreadRequest(text: "x", images: []).permissionMode)
+        app.newSchedule(from: nil)
+        XCTAssertEqual(app.scheduleEditor?.permissionMode.sent, .ask)
+        app.newThreadPermission = .full
+        XCTAssertEqual(app.newThreadRequest(text: "x", images: []).permissionMode, .full, "a mode picked is still sent")
+    }
+
     /// A Codex pick doesn't become the next Claude thread's model, and the
     /// composer follows the account with the most room until one is picked.
     func testModelMemoryIsPerProviderAndTheAccountFollowsUsage() {

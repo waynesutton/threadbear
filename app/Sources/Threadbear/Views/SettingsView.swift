@@ -14,58 +14,176 @@ struct SettingsView: View {
 
     var body: some View {
         @Bindable var app = app
-        TabView(selection: $app.settingsTab) {
-            GeneralSettings()
-                .tabItem { Label("General", systemImage: "gearshape") }
-                .tag(SettingsTab.general)
-            // Only with the experiment on (VoiceMode.experiment).
-            if app.experiments.contains(VoiceMode.experiment) {
-                VoiceSettings()
-                    .tabItem { Label("Voice", systemImage: "waveform") }
-                    .tag(SettingsTab.voice)
+        // A sidebar like System Settings rather than tabs along the top: the
+        // window keeps one height and each pane scrolls, where tabs sized
+        // the window to the pane and General grew taller than the screen
+        // (10 Nov). Over the main panel it's the same sidebar beside the
+        // pane, without a split view's toolbar, which would be the main
+        // window's.
+        if inPanel {
+            HStack(spacing: 0) {
+                SettingsSidebar(selection: $app.settingsTab, tabs: tabs)
+                    .frame(width: SettingsLayout.sidebarWidth)
+                Divider()
+                pane(app.settingsTab)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
-            ModelSettings()
-                .tabItem { Label("Models", systemImage: "sparkles") }
-                .tag(SettingsTab.models)
-            PoolSettings()
-                .tabItem { Label("Pools", systemImage: "square.stack") }
-                .tag(SettingsTab.pools)
-            RunnersSettings()
-                .tabItem { Label("Runners", systemImage: "server.rack") }
-                .tag(SettingsTab.runners)
-            ProfilesSettings()
-                .tabItem { Label("Profiles", systemImage: "person.2") }
-                .tag(SettingsTab.profiles)
-            DevicesSettings()
-                .tabItem { Label("Phone & browser", systemImage: "iphone") }
-                .tag(SettingsTab.devices)
-            KeyboardSettings(inPanel: inPanel)
-                .tabItem { Label("Keyboard", systemImage: "keyboard") }
-                .tag(SettingsTab.keyboard)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+        } else {
+            NavigationSplitView(columnVisibility: .constant(.all)) {
+                SettingsSidebar(selection: $app.settingsTab, tabs: tabs)
+                    // The column width alone is ignored in a Settings window (it
+                    // stayed at about 145, cutting "Phone & browser" short).
+                    .frame(minWidth: SettingsLayout.sidebarWidth)
+                    .navigationSplitViewColumnWidth(SettingsLayout.sidebarWidth)
+                    .toolbar(removing: .sidebarToggle)
+            } detail: {
+                pane(app.settingsTab)
+                    .navigationTitle(app.settingsTab.title)
+            }
+            .settingsSizes()
+            .background(SettingsWindowFinder())
         }
-        // Grows with the main panel or the window rather than sitting at one
-        // width, so more options (and a list of sections down the left, one
-        // day) have room. The panel stops where a form's rows do; the window
-        // goes as wide as it's dragged.
-        .frame(minWidth: SettingsLayout.minWidth,
-               idealWidth: SettingsLayout.idealWidth,
-               maxWidth: inPanel ? SettingsLayout.panelMaxWidth : .infinity)
-        .background { if !inPanel { SettingsWindowFinder() } }
+    }
+
+    /// The sections down the side. Voice only with its experiment on
+    /// (VoiceMode.experiment).
+    private var tabs: [SettingsTab] {
+        SettingsTab.allCases.filter { $0 != .voice || app.experiments.contains(VoiceMode.experiment) }
+    }
+
+    @ViewBuilder private func pane(_ tab: SettingsTab) -> some View {
+        switch tab {
+        case .general: GeneralSettings()
+        case .voice: VoiceSettings()
+        case .models: ModelSettings()
+        case .pools: PoolSettings()
+        case .runners: RunnersSettings()
+        case .profiles: ProfilesSettings()
+        case .devices: DevicesSettings()
+        case .keyboard: KeyboardSettings()
+        }
     }
 }
 
-/// Settings' widths, in one place for the page over the main panel and the
-/// window.
+/// The Settings sidebar: grey symbols, with the open section on a soft grey
+/// fill rather than a List's blue selection (Mike preferred Ghostex's
+/// settings to the blue, 10 Nov). Up and down arrows still move through it.
+private struct SettingsSidebar: View {
+    @Binding var selection: SettingsTab
+    var tabs: [SettingsTab] = SettingsTab.allCases
+    @State private var hovered: SettingsTab?
+    @FocusState private var focused: Bool
+
+    var body: some View {
+        ScrollView {
+            VStack(spacing: 2) {
+                ForEach(tabs, id: \.self) { tab in
+                    row(tab)
+                }
+            }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 8)
+        }
+        .scrollIndicators(.never)
+        .focusable()
+        .focused($focused)
+        .focusEffectDisabled()
+        .onMoveCommand { direction in
+            let all = tabs
+            guard let at = all.firstIndex(of: selection) else { return }
+            switch direction {
+            case .up where at > all.startIndex: selection = all[at - 1]
+            case .down where at < all.endIndex - 1: selection = all[at + 1]
+            default: break
+            }
+        }
+    }
+
+    private func row(_ tab: SettingsTab) -> some View {
+        let on = tab == selection
+        return Button {
+            selection = tab
+        } label: {
+            HStack(spacing: 9) {
+                Image(systemName: tab.symbol)
+                    .font(.system(size: 13))
+                    .foregroundStyle(on ? .primary : .secondary)
+                    .frame(width: 18)
+                Text(tab.title)
+                    .font(.system(size: 13, weight: on ? .medium : .regular))
+                    .foregroundStyle(.primary)
+                Spacer(minLength: 0)
+            }
+            .padding(.horizontal, 8)
+            .frame(height: 30)
+            .background(
+                RoundedRectangle(cornerRadius: 7, style: .continuous)
+                    .fill(Color.primary.opacity(on ? 0.1 : hovered == tab ? 0.05 : 0))
+            )
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .onHover { hovered = $0 ? tab : (hovered == tab ? nil : hovered) }
+    }
+}
+
+extension SettingsTab {
+    var title: String {
+        switch self {
+        case .general: "General"
+        case .voice: "Voice"
+        case .models: "Models"
+        case .pools: "Pools"
+        case .runners: "Runners"
+        case .profiles: "Profiles"
+        case .devices: "Phone & browser"
+        case .keyboard: "Keyboard"
+        }
+    }
+
+    var symbol: String {
+        switch self {
+        case .general: "gearshape"
+        case .voice: "waveform"
+        case .models: "sparkles"
+        case .pools: "square.stack"
+        case .runners: "server.rack"
+        case .profiles: "person.2"
+        case .devices: "iphone"
+        case .keyboard: "keyboard"
+        }
+    }
+}
+
+/// The Settings window's size. A grouped Form stops its rows at about 700
+/// points of its own accord (macOS 26), so wider than that adds even sides.
 enum SettingsLayout {
-    /// Narrowest it goes: every tab's title still fits along the top.
-    static let minWidth: CGFloat = 540
-    /// What the window opens at.
-    static let idealWidth: CGFloat = 760
-    /// Widest over the main panel. A grouped Form stops its rows at about
-    /// 700 points of its own accord (macOS 26, and contentMargins doesn't
-    /// move it), so past this the tabs' box would only gain empty sides.
-    /// A sidebar of sections would add its width to this.
-    static let panelMaxWidth: CGFloat = 780
+    static let sidebarWidth: CGFloat = 215
+    /// Narrowest it goes: the sidebar and a pane whose rows still fit.
+    static let minWidth: CGFloat = 640
+    /// What the window opens at: the sidebar and a full-width form.
+    static let idealWidth: CGFloat = 880
+    static let minHeight: CGFloat = 420
+    /// Short enough for a laptop screen with room for the Dock.
+    static let idealHeight: CGFloat = 620
+    /// Largest it goes, either way: bigger than any screen, but not infinite.
+    /// SwiftUI makes the window's largest size the content's, and an
+    /// unbounded one gave it an infinite size, which a Settings window can
+    /// have as SwiftUI never lets one be resized (SettingsWindow.makeResizable
+    /// does). Dragging its edge on macOS 27 then worked out an infinite frame,
+    /// and AppKit threw, crashing the app (THREADBEAR-1S, 10 Nov).
+    static let maxSide: CGFloat = 10_000
+}
+
+extension View {
+    /// The Settings window's size: drag it wider or taller for more room; it
+    /// opens at a size that fits a laptop screen, and General's rows scroll
+    /// past that.
+    func settingsSizes() -> some View {
+        frame(minWidth: SettingsLayout.minWidth, idealWidth: SettingsLayout.idealWidth, maxWidth: SettingsLayout.maxSide,
+              minHeight: SettingsLayout.minHeight, idealHeight: SettingsLayout.idealHeight, maxHeight: SettingsLayout.maxSide)
+    }
 }
 
 /// What the runner's settings tabs show until there are settings to show.
@@ -82,7 +200,6 @@ private struct SettingsGate<Content: View>: View {
                     .foregroundStyle(.secondary)
             }
             .formStyle(.grouped)
-            .frame(height: 140)
         }
     }
 }
@@ -125,6 +242,7 @@ private struct GeneralSettings: View {
     @AppStorage(CompletionSound.enabledKey) private var dingOn = false
     @AppStorage(CompletionSound.dingKey) private var ding = CompletionSound.Ding.chime.rawValue
     @AppStorage(CompletionSound.volumeKey) private var dingVolume = CompletionSound.defaultVolume
+    @AppStorage(QuitPrompt.askKey) private var askBeforeQuitting = true
 
     var body: some View {
         if app.runnerSettings == nil {
@@ -138,9 +256,6 @@ private struct GeneralSettings: View {
                 }
             }
             .formStyle(.grouped)
-            .fixedSize(horizontal: false, vertical: true)
-            .scrollIndicators(.never)
-            .scrollDisabled(true)
         } else {
             runner
         }
@@ -160,6 +275,13 @@ private struct GeneralSettings: View {
                 ForEach(SettingsPlace.allCases) { Text($0.title).tag($0) }
             }
             .tip("Over the main panel, with an X to close it, or in a window of its own")
+        }
+
+        SettingsSection("Quitting",
+                        about: "Quit Threadbear (⌘Q or the Threadbear menu) asks first, so a stray ⌘Q doesn't close the app. Ticking Don't ask again turns this off; turn it back on here. Your threads keep running on the runner while the app is closed.",
+                        ask: "change it for you.") {
+            Toggle("Ask before quitting", isOn: $askBeforeQuitting)
+                .tip("Ask to confirm when you quit Threadbear")
         }
 
         LookSettings()
@@ -256,6 +378,21 @@ private struct GeneralSettings: View {
 
                 InstructionsSection()
 
+                // An experiment from 6 Nov until Mike made it standard on
+                // 10 Nov 2026. A switch rather than always on: with no login
+                // of the other provider it reviews on the same one, which
+                // costs tokens and isn't another lab, so people may want it off.
+                if settings.labReviewSupported {
+                    SettingsSection("Code review",
+                                    about: "When a thread changes code and is done, Threadbear has your other provider (Codex for a Claude thread, Claude for a Codex one) try to break the change in a review thread of its own. Your thread waits for what it finds, fixes what holds up, and tells you in its reply. With only one provider, a fresh session of the same one reviews instead.",
+                                    ask: "explain what a review found, or turn reviews on or off for you.") {
+                        Toggle("Review code changes before a thread is done",
+                               isOn: Binding(get: { settings.labReview },
+                                             set: { app.updateSettings(SettingsUpdate(labReview: $0)) }))
+                            .tip("Have another lab check each code change a thread makes")
+                    }
+                }
+
                 // One reply, Bullet replies, the two live-CLI steppers and
                 // Follow main left here on 2 Nov: Mike wants as few settings
                 // as possible, the defaults suit nearly everyone, and anyone
@@ -268,6 +405,19 @@ private struct GeneralSettings: View {
                                 ask: "read it with tb activity and tell you what's in it.") {
                     Toggle("Keep an activity log", isOn: $activityLog)
                         .tip("Note what you click and open in this app")
+                }
+
+                // On by default (an experiment on Mike's Mac, 6 to 10 Nov);
+                // Mike wanted a switch for anyone who'd rather it slept.
+                // Only a Mac runner sends it.
+                if let keepAwake = settings.keepAwake {
+                    SettingsSection("Sleep",
+                                    about: "While any thread is working, and for three minutes after, your Mac won't go to sleep on its own, so a long turn, or one you started from your phone, isn't cut off halfway. The screen still dims and locks as usual. It stops below 15% battery when you're not plugged in, and closing the lid on battery still puts the Mac to sleep.",
+                                    ask: "check whether it's holding your Mac awake right now.") {
+                        Toggle("Keep the Mac awake while threads work",
+                               isOn: Binding(get: { keepAwake }, set: { app.updateSettings(SettingsUpdate(keepAwake: $0)) }))
+                            .tip("Stop your Mac sleeping on its own while a thread is working")
+                    }
                 }
 
                 // Only on someone's fork: Mike's own copy has nothing to
@@ -287,9 +437,9 @@ private struct GeneralSettings: View {
                 }
 
                 // runner.json's `experiments`, so nobody has to edit it by
-                // hand. Each switch is read at the runner's next use of it,
-                // so nothing restarts; Voice mode lives in the app, which
-                // reads it when it connects (hello's `experiments`).
+                // hand. The list comes from the runner (each
+                // runner/src/experiments/<id>.md), so a new experiment shows
+                // here by itself, and each switch is read at its next use.
                 if !settings.experiments.isEmpty {
                     SettingsSection("Experiments",
                                     about: "New features still being tried out. Each starts off; turn one on to try it, and off again whenever you like. Once one has proved itself it becomes a standard part of Threadbear and its switch goes. The ⓘ beside each says what it does.",
@@ -316,11 +466,6 @@ private struct GeneralSettings: View {
             }
             .task { app.loadStandingInstructions() }
             .formStyle(.grouped)
-            .fixedSize(horizontal: false, vertical: true)
-            // The window fits the form; a scroller beside it is just noise
-            // (General's last section, with no footer, ran a few points over).
-            .scrollIndicators(.never)
-            .scrollDisabled(true)
         }
     }
 
@@ -395,11 +540,6 @@ private struct ModelSettings: View {
                 SettingsErrorRow()
             }
             .formStyle(.grouped)
-            .fixedSize(horizontal: false, vertical: true)
-            // The window fits the form; a scroller beside it is just noise
-            // (General's last section, with no footer, ran a few points over).
-            .scrollIndicators(.never)
-            .scrollDisabled(true)
         }
     }
 
@@ -448,7 +588,6 @@ private struct PoolSettings: View {
                     .foregroundStyle(.secondary)
             }
             .formStyle(.grouped)
-            .frame(height: 140)
         } else {
             form
                 .onAppear { reset(to: app.pools) }
@@ -562,9 +701,6 @@ private struct PoolSettings: View {
             }
         }
         .formStyle(.grouped)
-        .fixedSize(horizontal: false, vertical: true)
-        .scrollIndicators(.never)
-        .scrollDisabled(true)
         // A name typed and then left (another field, a click elsewhere, or
         // the window closing) is saved, not just one ended with Return.
         .onChange(of: naming) { _, focused in if !focused { commitTitle() } }
@@ -802,12 +938,6 @@ private struct LoginToggleRow: View {
     }
 }
 
-/// A section of settings: its title, and behind the ⓘ what it is and what to
-/// ask your agent. Agents can edit runner.json and the rest, so the window
-/// shows what's set with few controls, and every section says to ask your
-/// agent first (Mike, 5 Nov). Taking `ask` as the end of a sentence keeps
-/// that line in every one. Sections with only a message or an error in them
-/// stay plain `Section`s (SettingsInfoTests checks).
 /// One experiment's switch in Settings > General, with what it does behind
 /// its ⓘ.
 private struct ExperimentRow: View {
@@ -834,6 +964,12 @@ private struct ExperimentRow: View {
     }
 }
 
+/// A section of settings: its title, and behind the ⓘ what it is and what to
+/// ask your agent. Agents can edit runner.json and the rest, so the window
+/// shows what's set with few controls, and every section says to ask your
+/// agent first (Mike, 5 Nov). Taking `ask` as the end of a sentence keeps
+/// that line in every one. Sections with only a message or an error in them
+/// stay plain `Section`s (SettingsInfoTests checks).
 struct SettingsSection<Content: View>: View {
     let title: String
     let about: String
@@ -884,11 +1020,23 @@ enum SettingsWindow {
     static weak var current: NSWindow?
 
     /// A Settings scene's window comes fixed size; this one can be dragged
-    /// wider (each tab still sets its height).
+    /// wider and taller. It also opens at the panes' smallest height (the
+    /// scene ignores an ideal height, and `.defaultSize` on it stopped the
+    /// window opening at all), so the first time it's grown to the ideal,
+    /// as far as the screen allows.
     static func makeResizable(_ window: NSWindow) {
         guard !window.styleMask.contains(.resizable) else { return }
         window.styleMask.insert(.resizable)
-        window.contentMinSize.width = SettingsLayout.minWidth
+        window.contentMinSize = NSSize(width: SettingsLayout.minWidth, height: SettingsLayout.minHeight)
+        let room = (window.screen ?? NSScreen.main)?.visibleFrame.height ?? SettingsLayout.idealHeight
+        let chrome = window.frame.height - window.contentLayoutRect.height
+        let height = min(SettingsLayout.idealHeight, room - chrome - 40)
+        guard window.contentLayoutRect.height < height else { return }
+        var frame = window.frame
+        // Grow downwards from where the top already is.
+        frame.origin.y -= height - window.contentLayoutRect.height
+        frame.size.height = height + chrome
+        window.setFrame(frame, display: true)
     }
 }
 

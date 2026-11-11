@@ -2,9 +2,9 @@ import SwiftUI
 import ThreadbearCore
 
 /// ‹ and › beside the share icon in the main panel's bar: Back and Forward
-/// through the threads and pages Wayne has had open, the same steps as ⌘[
+/// through the threads and pages you have had open, the same steps as ⌘[
 /// and ⌘], the mouse's side buttons and trackpad swipes (Navigation.swift).
-/// For when he's lost track of which thread he was on (Wayne, 8 Nov). The
+/// For losing track of which thread you were on (Wayne Sutton, 8 Nov). The
 /// tip names where each one goes.
 struct HistoryButtons: View {
     @Environment(AppModel.self) private var app

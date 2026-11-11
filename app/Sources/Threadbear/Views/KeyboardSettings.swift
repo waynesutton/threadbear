@@ -7,11 +7,6 @@ import ThreadbearCore
 /// Settings' usual ask-your-agent sections because starting a thread to change
 /// one key is slow. The keys are still in a file an agent can change.
 struct KeyboardSettings: View {
-    /// Over the main panel (SettingsPage), whose page scrolls as a whole, so
-    /// the list grows to its full height like the other tabs. In the window,
-    /// which has no scroller of its own, the list scrolls in a fixed height:
-    /// every shortcut at once is taller than a screen.
-    var inPanel = false
     @State private var search = ""
 
     var body: some View {
@@ -20,14 +15,7 @@ struct KeyboardSettings: View {
             SearchField(text: $search, prompt: "Search shortcuts")
                 .padding(.horizontal, 20)
                 .padding(.top, 14)
-            if inPanel {
-                list
-                    .fixedSize(horizontal: false, vertical: true)
-                    .scrollIndicators(.never)
-                    .scrollDisabled(true)
-            } else {
-                list
-            }
+            list
             VStack(alignment: .leading, spacing: 6) {
                 if let problem = shortcuts.problem {
                     Label(problem, systemImage: "exclamationmark.triangle")
@@ -52,7 +40,6 @@ struct KeyboardSettings: View {
             .padding(.top, 8)
             .padding(.bottom, 14)
         }
-        .frame(height: inPanel ? nil : 620)
         .onDisappear { ShortcutRecorder.shared.cancel() }
     }
 

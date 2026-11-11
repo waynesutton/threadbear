@@ -69,13 +69,8 @@ struct SettingsPage: View {
             .padding(.trailing, zoomed(28))
             .padding(.vertical, zoomed(12))
             Divider()
-            ScrollView {
-                SettingsView(inPanel: true)
-                    // Off the panel's edges while it's narrower than Settings' widest.
-                    .padding(.horizontal, zoomed(24))
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, zoomed(16))
-            }
+            // Its own sidebar and panes, each pane scrolling, as in the window.
+            SettingsView(inPanel: true)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Color(nsColor: .windowBackgroundColor))

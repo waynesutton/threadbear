@@ -19,10 +19,12 @@ let package = Package(
         // Crash reports from the installed app (CrashReporting.swift):
         // Sentry's static framework alone (SentryBinary/Package.swift says why).
         .package(path: "SentryBinary"),
-        // The Terminal panel's terminal (TerminalPanel.swift). MIT. Pinned at
-        // 1.11.0, the last without a Metal shader: from 1.12 a build needs
-        // Xcode's separate Metal toolchain, which most Macs don't have.
-        .package(url: "https://github.com/migueldeicaza/SwiftTerm", exact: "1.11.0"),
+        // The Terminal panel's emulator and pty (TerminalPanel.swift), MIT.
+        // Its Metal shader is left out of SwiftPM builds (SwiftTerm's own
+        // Package.swift excludes Shaders.metal), so `swift build` doesn't
+        // need Xcode's separate Metal Toolchain: checked on a Mac without it.
+        // Exactly 1.99.0: from 1.99.1 (SwiftTerm #774) it no longer compiles on Xcode 26.0.
+        .package(url: "https://github.com/migueldeicaza/SwiftTerm.git", exact: "1.99.0"),
     ],
     targets: [
         // Protocol models, the JSON-RPC client, the event reducer and other

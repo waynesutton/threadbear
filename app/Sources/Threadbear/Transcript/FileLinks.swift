@@ -72,6 +72,13 @@ enum MarkdownView: String, CaseIterable {
     static func opensEditing(path: String, editorMode: Bool = FileEditorMode.isOn, markdown: MarkdownView = current) -> Bool {
         PreviewRules.isMarkdown(path) ? markdown == .markdown : editorMode
     }
+
+    /// Whether a file opens with its raw text up for typing by the Markdown
+    /// choice alone: a Markdown file once Markdown was the last pick.
+    /// Anything else opens to read.
+    static func opensRaw(path: String, markdown: MarkdownView = current) -> Bool {
+        opensEditing(path: path, editorMode: false, markdown: markdown)
+    }
 }
 
 /// What a file link in the transcript can do, from its right-click menu.
