@@ -93,6 +93,10 @@ struct ConnectorsPanel: View {
                     Divider().padding(.vertical, zoomed(2))
                     OutsideAgentsSection(agents: agents, offerHidden: hidden.contains(ConnectorsText.Hidden.grokBot))
                 }
+                if let x = app.xSearch, x.on {
+                    Divider().padding(.vertical, zoomed(2))
+                    XSearchSection(status: x)
+                }
                 ShowHiddenMenu(items: ConnectorsText.Hidden.items(hidden, status: status, agents: app.outsideAgents))
             }
             .padding(zoomed(16))
@@ -101,6 +105,7 @@ struct ConnectorsPanel: View {
         .onAppear {
             app.refreshConnectors()
             app.loadOutsideAgents()
+            app.loadXSearch()
         }
         // A key is shown once: closing the panel puts it away for good.
         .onDisappear { app.agentJustConnected = nil }
@@ -543,6 +548,49 @@ private struct OutsideAgentsSection: View {
             }
         }
         .onChange(of: app.agentJustConnected == nil) { _, gone in if !gone { formShown = false } }
+    }
+}
+
+/// X search (an experiment): built into Threadbear, not the gateway, so it
+/// sits apart. Whether an xAI key is saved, and Forget key, which deletes
+/// it so the next search asks again (docs/protocol.md, "X search").
+private struct XSearchSection: View {
+    @Environment(AppModel.self) private var app
+    let status: XSearchStatus
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: zoomed(10)) {
+            Text("Built into Threadbear")
+                .font(.system(size: zoomed(11), weight: .medium))
+                .foregroundStyle(.tertiary)
+                .accessibilityAddTraits(.isHeader)
+            HStack(alignment: .firstTextBaseline, spacing: zoomed(8)) {
+                // The gateway rows' mark: filled grey when ready. Nothing
+                // to do with no key yet, so never the accent.
+                Circle()
+                    .fill(Color.secondary.opacity(status.keySaved ? 0.7 : 0.3))
+                    .frame(width: zoomed(6), height: zoomed(6))
+                    .alignmentGuide(.firstTextBaseline) { $0[.bottom] - zoomed(1) }
+                    .accessibilityHidden(true)
+                VStack(alignment: .leading, spacing: zoomed(2)) {
+                    Text("X search")
+                        .font(.system(size: zoomed(12)))
+                        .lineLimit(1)
+                    Text(status.keySaved ? "xAI key saved" : "Asks for an xAI key on the first search")
+                        .font(.system(size: zoomed(11)))
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                .tip("Agents search X through xAI's Grok with x_search, billed to your xAI credit")
+                Spacer(minLength: zoomed(6))
+                if status.keySaved {
+                    Button("Forget key") { app.forgetXaiKey() }
+                        .controlSize(.small)
+                        .busy(app.isBusy(BusyKey.forgetXaiKey))
+                        .tip("Delete the saved xAI key. The next search asks for one again")
+                }
+            }
+        }
     }
 }
 

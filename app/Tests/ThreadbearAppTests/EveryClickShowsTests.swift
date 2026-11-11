@@ -29,7 +29,7 @@ final class EveryClickShowsTests: XCTestCase {
         "deleteSchedule", "setRunnerOrder", "runSchedule", "createProject", "updateProject", "setProjectIcon",
         "mergeProject", "deleteProject", "deleteThread", "setThreadProjects", "runLibrarian", "updateLibrarian", "savePools", "moveThread", "cancelMove",
         // Connectors setup and Outside agents (Protocol/Connectors.swift).
-        "connectorsSetup", "connectorsAdd", "agentsConnect", "agentsRevoke",
+        "connectorsSetup", "connectorsAdd", "agentsConnect", "agentsRevoke", "xSearchForgetKey",
         // The public profile page (ProfilePageModel.swift).
         "updateProfilePage", "removeProfilePage",
         // Pages (Pages.swift): each in whileBusy, the row spins.

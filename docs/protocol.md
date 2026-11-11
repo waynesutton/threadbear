@@ -1167,6 +1167,8 @@ the summary and then the reply.
 | `agents.list` | `{}` | `{ on, reason?, url?, keys: AgentKey[] }`. Outside agents (an experiment, see "Outside agents"): `url` is the backend's `/mcp`; `reason` says why none can be made (sync off) |
 | `agents.connect` | `{ name?: string, scope?: "read" \| "write", readAll?: boolean }` | `{ key: AgentKey, secret, url }`. Makes a key, `read` and own threads only unless asked. `secret` is in this reply and nowhere else |
 | `agents.revoke` | `{ id?: string }` | As `agents.list`. One key, or every key with no `id` |
+| `xSearch.status` | `{}` | `{ on: boolean, keySaved: boolean }`. X search (an experiment, see "X search"): whether it's on and an xAI key is saved |
+| `xSearch.forgetKey` | `{}` | As `xSearch.status`. Deletes the saved xAI key, so the next `x_search` asks for one |
 | `librarian.run` | `{ threadId?: string }` | `{ librarian: LibrarianStatus }`. Queues a look at the thread now (reason `asked`), or with no `threadId`, at every thread it has never looked at (a backfill, newest first) |
 | `librarian.update` | `{ paused?: boolean }` | `{ librarian: LibrarianStatus }` |
 | `pools.list` | `{}` | `{ pools: Pool[] }` (see Pools) |
@@ -4880,6 +4882,19 @@ env }`, the args the exact pin, with `-y` before it for npx) and its
 `ask` rules, put first in `policy.json`, and allows exactly that command,
 args and env and nothing more. Every remote add's message still forbids
 `stdio`.
+
+### X search
+
+An experiment (`xSearch`). Every thread's agent gets the `x_search`
+threadbear tool, which asks xAI's Grok to search X
+(`runner/src/x-search.ts`). Its xAI key is the user's own: the first call
+asks for it in a secret card and keeps it in `<home>/secrets/xai-api-key`
+(owner-only, masked like every file there), and a key xAI turns down is
+deleted. The app's Connectors panel shows an X search row while it's on,
+from `xSearch.status` (asked when the panel opens): whether a key is
+saved, and Forget key (`xSearch.forgetKey`). Neither ever sends the key.
+An older runner answers neither (method not found) and the row isn't
+shown.
 
 ### Outside agents
 

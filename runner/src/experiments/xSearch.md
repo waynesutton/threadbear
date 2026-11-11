@@ -13,8 +13,8 @@ Gives every thread's agent, on Claude and Codex, an x_search tool: it asks xAI's
 
 ## Lives in
 
-`runner/src/x-search.ts` (the call to xAI, the answer and the key file, `secrets/xai-api-key`); the `x_search` tool in `buildThreadbearTools` (`runner/src/threadbear-mcp.ts`), with its name in `NEVER_ASK_TOOLS`; `xSearchFor` in `runner/src/main.ts`
+`runner/src/x-search.ts` (the call to xAI, the answer and the key file, `secrets/xai-api-key`); the `x_search` tool in `buildThreadbearTools` (`runner/src/threadbear-mcp.ts`), with its name in `NEVER_ASK_TOOLS`; `xSearchFor` and `xSearchMethods` in `runner/src/main.ts`; the X search row in the Connectors panel (`XSearchSection` in `ConnectorsPanel.swift`, `loadXSearch` and `forgetXaiKey` in `ConnectorsModel.swift`)
 
 ## Taking it out
 
-Delete `runner/src/x-search.ts` and its test, the `x_search` tool, its `xSearch` option and its name in `NEVER_ASK_TOOLS` in `threadbear-mcp.ts`, and `xSearchFor` in `main.ts`. A saved key is the file `secrets/xai-api-key` in Threadbear's data folder.
+Delete `runner/src/x-search.ts` and its test, the `x_search` tool, its `xSearch` option and its name in `NEVER_ASK_TOOLS` in `threadbear-mcp.ts`, `xSearchFor` and `xSearchMethods` in `main.ts`, the `xSearch.*` rows and "X search" in `docs/protocol.md`, and the panel's `XSearchSection`, `loadXSearch`, `forgetXaiKey`, `XSearchStatus` and the two client calls in the app. A saved key is the file `secrets/xai-api-key` in Threadbear's data folder.

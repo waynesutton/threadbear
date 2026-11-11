@@ -224,3 +224,16 @@ export async function xSearch(a: XSearchArgs, key: string, deps: { fetch?: typeo
     throw new Error("xAI's answer wasn't JSON.");
   }
 }
+
+// xSearch.status and xSearch.forgetKey (docs/protocol.md, "X search"): the
+// Connectors panel's X search row. Whether a key is saved, never the key.
+export function xSearchMethods(deps: { on: () => boolean; secretsDir: string }): Record<string, (p: Record<string, unknown>) => unknown> {
+  const status = () => ({ on: deps.on(), keySaved: readXaiKey(deps.secretsDir) !== undefined });
+  return {
+    'xSearch.status': () => status(),
+    'xSearch.forgetKey': () => {
+      forgetXaiKey(deps.secretsDir);
+      return status();
+    },
+  };
+}

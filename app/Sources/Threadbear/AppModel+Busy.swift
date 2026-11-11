@@ -34,6 +34,7 @@ enum BusyKey {
     static let setUpConnectors = "setUpConnectors"
     static func addConnector(_ id: String) -> String { "addConnector/\(id)" }
     static let connectAgent = "connectAgent"
+    static let forgetXaiKey = "forgetXaiKey"
     static func revokeAgent(_ id: String?) -> String { "revokeAgent/\(id ?? "all")" }
     static let startRunner = "startRunner"
     static let saveProfilePage = "saveProfilePage"

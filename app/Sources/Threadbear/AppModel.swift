@@ -522,6 +522,9 @@ final class AppModel {
     /// answered (docs/protocol.md, "Outside agents"). Nil from a runner
     /// that doesn't know about them.
     var outsideAgents: AgentsList?
+    /// X search (an experiment): whether it's on and an xAI key is saved,
+    /// once `xSearch.status` has answered. Nil from a runner without it.
+    var xSearch: XSearchStatus?
     /// A key just made, shown once in the Connectors panel and gone when it
     /// closes. Never written anywhere.
     var agentJustConnected: AgentConnected?
