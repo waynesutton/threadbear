@@ -186,31 +186,38 @@ test('tb updates: what to bring in, or that there is nothing', async () => {
 test('upstream with thousands of tags: only a bounded few are fetched, and none that fail to verify stay', async () => {
   const w = world();
   assert.equal((await upstreamFor(w.theirs, w.home).check()).release?.tag, 'release/2026-10-01');
-  const base = git(w.mike, 'rev-parse', 'HEAD');
-  const tree = git(w.mike, 'rev-parse', `${base}^{tree}`);
+  // The thousands of refs are written straight into Mike's bare repo's
+  // packed-refs, which is all the fork fetches from: made one by one in a
+  // clone and pushed, they were most of the test's time and took it past
+  // five minutes on a busy Mac (10 Nov).
+  const bare = path.join(w.root, 'mike.git');
+  const base = git(bare, 'rev-parse', 'main');
+  const tree = git(bare, 'rev-parse', `${base}^{tree}`);
   // Fakes with commits of their own, so any that came over would show.
   const fakes: string[] = [];
   const fake = (msg: string) => {
-    const c = spawnSync('git', ['-C', w.mike, 'commit-tree', tree, '-p', base, '-m', msg], { encoding: 'utf8', env: GIT_ENV }).stdout.trim();
+    const c = spawnSync('git', ['-C', bare, 'commit-tree', tree, '-p', base, '-m', msg], { encoding: 'utf8', env: GIT_ENV }).stdout.trim();
     fakes.push(c);
     return c;
   };
   const lines: string[] = [];
   // Thousands of names, most not dates, and dates years ahead.
-  for (let i = 0; i < 3000; i++) lines.push(`create refs/tags/release/junk-${i} ${base}`);
-  for (let d = Date.parse('2027-01-10'); d < Date.parse('2030-01-01'); d += 86_400_000) lines.push(`create refs/tags/release/${new Date(d).toISOString().slice(0, 10)} ${base}`);
+  for (let i = 0; i < 3000; i++) lines.push(`${base} refs/tags/release/junk-${i}`);
+  for (let d = Date.parse('2027-01-10'); d < Date.parse('2030-01-01'); d += 86_400_000) lines.push(`${base} refs/tags/release/${new Date(d).toISOString().slice(0, 10)}`);
   // Every date after the last release that isn't the real one: a name
   // straight at a commit of its own (never fetched)...
   for (let d = Date.parse('2026-10-02'); d <= Date.parse('2026-12-06'); d += 86_400_000) {
     const name = new Date(d).toISOString().slice(0, 10);
-    if (name !== '2026-11-06') lines.push(`create refs/tags/release/${name} ${fake(name)}`);
+    if (name !== '2026-11-06') lines.push(`${fake(name)} refs/tags/release/${name}`);
   }
-  assert.equal(spawnSync('git', ['-C', w.mike, 'update-ref', '--stdin'], { input: lines.join('\n') + '\n' }).status, 0);
+  const packed = path.join(bare, 'packed-refs');
+  const had = fs.existsSync(packed) ? fs.readFileSync(packed, 'utf8').split('\n').filter((l) => l && !l.startsWith('#') && !l.startsWith('^')) : [];
+  fs.writeFileSync(packed, [...had, ...lines].sort().join('\n') + '\n');
   // ...or an unsigned tag, newer than the real one, on a commit of its own.
-  for (let i = 7; i <= 31; i++) git(w.mike, 'tag', '-a', '-m', 'unsigned', `release/2026-12-${String(i).padStart(2, '0')}`, fake(`tag ${i}`));
+  for (let i = 7; i <= 31; i++) git(bare, 'tag', '-a', '-m', 'unsigned', `release/2026-12-${String(i).padStart(2, '0')}`, fake(`tag ${i}`));
   const real = commit(w.mike, 'b.txt', 'Real');
   signedTag(w.mike, 'release/2026-11-06', w.mikeKey.priv);
-  git(w.mike, 'push', '-q', 'origin', 'main', '--tags');
+  git(w.mike, 'push', '-q', 'origin', 'main', 'release/2026-11-06');
   const before = objectsIn(w.theirs);
   const up = upstreamFor(w.theirs, w.home);
   // 25 unsigned tags newer than it: 20 a check, then the real one.
