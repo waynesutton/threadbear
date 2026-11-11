@@ -29,6 +29,8 @@ async function setup() {
         begin: (tool: string) => call(b.ctx, mcp.begin, { hash, tool, ip: opts.ip ?? '203.0.113.7', now: opts.now ?? NOW }),
         listThreads: (agent: unknown, view: string) => call(b.ctx, mcp.listThreads, { agent, view }),
         readThread: (agent: unknown, threadId: string, limit?: number) => call(b.ctx, mcp.readThread, { agent, threadId, limit }),
+        listPrints: (agent: unknown, limit?: number, cursor?: string) => call(b.ctx, mcp.listPrints, { agent, limit, cursor }),
+        readPrint: (agent: unknown, slug: string, offset?: number, limit?: number) => call(b.ctx, mcp.readPrint, { agent, slug, offset, limit }),
         startThread: (agent: unknown, text: string) => call(b.ctx, mcp.startThread, { agent, text }),
         sendMessage: (agent: unknown, threadId: string, text: string) => call(b.ctx, mcp.sendMessage, { agent, threadId, text }),
       },
@@ -37,12 +39,14 @@ async function setup() {
   };
   const tool = (secret: string | undefined, name: string, args: Record<string, unknown> = {}, opts = {}) => post(secret, { jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name, arguments: args } }, opts);
   const thread = (threadId: string, extra: Record<string, unknown> = {}) => b.ctx.db.insert('threads', { threadId, runnerId: 'm5', title: `T ${threadId}`, status: 'idle', needsYou: false, view: 'inbox', lastActivityAt: 'now', lastActivityMs: 1, cwd: '/Users/secret/folder', accountId: 'claude-main', ...extra });
+  const publish = (id: string, extra: Record<string, unknown> = {}) =>
+    call(b.ctx, sync.publishPrint, { key: OWNER, runnerId: 'm5', print: { id: `pg_${id}`, slug: `published_link_${id}`, title: `Print ${id}`, kind: 'diagram', version: 1, summary: 'Public diagram', html: '<svg>diagram</svg>', updatedAt: '2026-11-11T01:00:00Z', ...extra } });
   // What the runner does once it has made the thread an agent asked for.
   const land = async (commandId: string, threadId: string) => {
     await thread(threadId);
     await call(b.ctx, sync.finishCommand, { key: OWNER, commandId, ok: true, resultThreadId: threadId });
   };
-  return { ...b, issue, post, tool, thread, land };
+  return { ...b, issue, post, tool, thread, land, publish };
 }
 
 const result = (r: { json: any }) => r.json.result;
@@ -159,9 +163,107 @@ test('initialize, ping and tools/list answer as MCP says; a read key sees only t
   assert.equal((await s.post(read, { jsonrpc: '2.0', method: 'notifications/initialized' })).status, 202);
   assert.deepEqual(result(await s.post(read, { jsonrpc: '2.0', id: 2, method: 'ping' })), {});
   const names = (r: any) => result(r).tools.map((t: any) => t.name);
-  assert.deepEqual(names(await s.post(read, { jsonrpc: '2.0', id: 3, method: 'tools/list' })), ['list_threads', 'read_thread']);
-  assert.deepEqual(names(await s.post(write, { jsonrpc: '2.0', id: 3, method: 'tools/list' })), ['list_threads', 'read_thread', 'start_thread', 'send_message']);
+  assert.deepEqual(names(await s.post(read, { jsonrpc: '2.0', id: 3, method: 'tools/list' })), ['list_threads', 'read_thread', 'list_prints', 'read_print']);
+  assert.deepEqual(names(await s.post(write, { jsonrpc: '2.0', id: 3, method: 'tools/list' })), ['list_threads', 'read_thread', 'list_prints', 'read_print', 'start_thread', 'send_message']);
   assert.equal((await s.post(read, { jsonrpc: '2.0', id: 4, method: 'resources/list' })).json.error.code, -32601);
+});
+
+test('published Prints are read only, require readAll, and reveal no local or runner metadata', async () => {
+  const s = await setup();
+  const allowed = (await s.issue({ readAll: true })).secret;
+  const restricted = (await s.issue()).secret;
+  await s.publish('flow');
+  assert.deepEqual(toolOut(await s.tool(restricted, 'list_prints')), { prints: [], cursor: null, isDone: true });
+  const hidden = result(await s.tool(restricted, 'read_print', { slug: 'published_link_flow' }));
+  assert.equal(hidden.isError, true);
+  assert.equal(hidden.content[0].text, 'no such print');
+  assert.deepEqual(result(await s.tool(restricted, 'read_print', { slug: 'a_missing_link_slug' })), hidden);
+
+  const listed = toolOut(await s.tool(allowed, 'list_prints'));
+  assert.equal(listed.prints.length, 1);
+  assert.deepEqual(Object.keys(listed.prints[0]).sort(), ['id', 'kind', 'path', 'slug', 'summary', 'title', 'updatedAt', 'version']);
+  assert.equal(listed.prints[0].path, '/p/published_link_flow');
+  assert.equal(listed.prints[0].html, undefined);
+  const read = toolOut(await s.tool(allowed, 'read_print', { slug: 'published_link_flow' }));
+  assert.equal(read.html, '<svg>diagram</svg>');
+  assert.equal(read.nextOffset, null);
+  assert.equal(read.runnerId, undefined);
+  assert.equal(read.recipe, undefined);
+  assert.equal(read.file, undefined);
+  assert.equal(read.source, undefined);
+  assert.equal((await s.tool(allowed, 'read_print', { slug: 'local_unpublished' })).json.result.isError, true);
+  for (const name of ['create_print', 'update_print', 'publish_print', 'delete_print', 'unpublish_print']) {
+    assert.equal((await s.tool(allowed, name, { slug: 'published_link_flow' })).json.error.code, -32602);
+  }
+  assert.equal(s.rows('commands').length, 0);
+});
+
+test('published Print listing paginates newest first with stable cursors, including across deletion', async () => {
+  const s = await setup();
+  const { secret } = await s.issue({ readAll: true });
+  for (let i = 0; i < 13; i++) await s.publish(`flow_${i}`);
+  const first = toolOut(await s.tool(secret, 'list_prints', { limit: 4 }));
+  assert.deepEqual(first.prints.map((p: { id: string }) => p.id), ['pg_flow_12', 'pg_flow_11', 'pg_flow_10', 'pg_flow_9']);
+  assert.equal(first.isDone, false);
+  assert.equal(typeof first.cursor, 'string');
+  await call(s.ctx, sync.unpublishPrint, { key: OWNER, runnerId: 'm5', id: 'pg_flow_9' });
+  const second = toolOut(await s.tool(secret, 'list_prints', { limit: 10, cursor: first.cursor }));
+  assert.deepEqual(second.prints.map((p: { id: string }) => p.id), Array.from({ length: 9 }, (_, i) => `pg_flow_${8 - i}`));
+  assert.equal(second.isDone, true);
+  assert.equal(second.cursor, null);
+  const capped = toolOut(await s.tool(secret, 'list_prints', { limit: 999 }));
+  assert.equal(capped.prints.length, 10);
+  const defaults = toolOut(await s.tool(secret, 'list_prints'));
+  assert.equal(defaults.prints.length, 5);
+});
+
+test('published Print HTML reads are bounded, resumable and stop immediately after unpublish', async () => {
+  const s = await setup();
+  const { secret } = await s.issue({ readAll: true });
+  const html = 'x'.repeat(70_000);
+  await s.publish('long', { html });
+  const first = toolOut(await s.tool(secret, 'read_print', { slug: 'published_link_long' }));
+  assert.equal(first.html.length, 16_000);
+  assert.equal(first.offset, 0);
+  assert.equal(first.nextOffset, 16_000);
+  assert.equal(first.totalCharacters, html.length);
+  const second = toolOut(await s.tool(secret, 'read_print', { slug: 'published_link_long', offset: first.nextOffset, limit: 100_000 }));
+  assert.equal(second.html.length, 32_000);
+  assert.equal(second.nextOffset, 48_000);
+  const last = toolOut(await s.tool(secret, 'read_print', { slug: 'published_link_long', offset: second.nextOffset, limit: 32_000 }));
+  assert.equal(first.html + second.html + last.html, html);
+  assert.equal(last.nextOffset, null);
+  await call(s.ctx, sync.unpublishPrint, { key: OWNER, runnerId: 'm5', id: 'pg_long' });
+  assert.equal(result(await s.tool(secret, 'read_print', { slug: 'published_link_long' })).content[0].text, 'no such print');
+  assert.deepEqual(toolOut(await s.tool(secret, 'list_prints')).prints, []);
+});
+
+test('published Print calls retain key expiry, revoke and rate checks and count as named tools', async () => {
+  const s = await setup();
+  const { secret, key } = await s.issue({ readAll: true, days: 1 });
+  await s.publish('flow');
+  assert.equal((await s.tool(undefined, 'list_prints')).status, 401);
+  assert.equal((await s.tool(secret, 'read_print', { slug: 'published_link_flow' }, { now: NOW + 2 * 24 * 60 * 60_000 })).status, 401);
+  await s.tool(secret, 'list_prints');
+  await s.tool(secret, 'read_print', { slug: 'published_link_flow' });
+  assert.deepEqual(s.rows('agentCalls').map((row) => row.tool), ['list_prints', 'read_print']);
+  for (let i = 2; i < 30; i++) await s.tool(secret, 'list_prints');
+  assert.equal((await s.tool(secret, 'list_prints')).status, 429);
+  await call(s.ctx, mcp.revokeAgentKey, { key: OWNER, id: key.id });
+  assert.equal((await s.tool(secret, 'read_print', { slug: 'published_link_flow' })).status, 401);
+});
+
+test('Print read identifiers and offsets are validated without disclosing an ambiguous slug', async () => {
+  const s = await setup();
+  const { secret } = await s.issue({ readAll: true });
+  await s.publish('flow');
+  const row = s.rows('prints')[0]!;
+  await s.ctx.db.insert('prints', { ...row, _id: undefined, runnerId: 'other', id: 'pg_other' });
+  assert.equal(result(await s.tool(secret, 'read_print', { slug: row.slug })).content[0].text, 'no such print');
+  for (const args of [{ slug: 1 }, { slug: '' }, { slug: 'x'.repeat(65) }, { slug: row.slug, offset: -1 }, { slug: row.slug, offset: 0.5 }, { slug: row.slug, limit: -1 }, { slug: row.slug, limit: '1' }]) {
+    assert.equal(result(await s.tool(secret, 'read_print', args)).isError, true);
+  }
+  for (const args of [{ limit: 0 }, { limit: 0.5 }, { cursor: 5 }]) assert.equal(result(await s.tool(secret, 'list_prints', args)).isError, true);
 });
 
 test("a read key can't start or send; the call isn't logged as made", async () => {
@@ -285,6 +387,8 @@ test('an error a tool hits says only what it may: never an internal message', as
         throw new Error('database password is hunter2');
       },
       readThread: async () => null,
+      listPrints: async () => null,
+      readPrint: async () => null,
       startThread: async () => null,
       sendMessage: async () => null,
     },

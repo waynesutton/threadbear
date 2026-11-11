@@ -45,7 +45,7 @@ const PRUNE_BATCH = 4_000;
 // what it may message (it can't start more than AGENT_STARTS_PER_DAY a day).
 const OWN_THREADS_MAX = 200;
 
-export const AGENT_TOOLS = ['list_threads', 'read_thread', 'start_thread', 'send_message'] as const;
+export const AGENT_TOOLS = ['list_threads', 'read_thread', 'list_prints', 'read_print', 'start_thread', 'send_message'] as const;
 export type AgentTool = (typeof AGENT_TOOLS)[number];
 const WRITE_TOOLS: readonly string[] = ['start_thread', 'send_message'];
 
@@ -172,6 +172,54 @@ export const readThread = internalQuery({
     }
     out.reverse();
     return { threadId: t.threadId, title: t.title, status: t.status, needsYou: t.needsYou, messages: out, more };
+  },
+});
+
+// Only the public copy of a Print is readable here. There is deliberately
+// no runner call for a local Print, source file or recipe.
+const printFields = { id: v.string(), slug: v.string(), title: v.string(), kind: v.string(), version: v.number(), summary: v.string(), updatedAt: v.string(), path: v.string() };
+
+function printMetadata(row: Doc<'prints'>) {
+  const { id, slug, title, kind, version, summary, updatedAt } = row;
+  return { id, slug, title, kind, version, summary, updatedAt, path: `/p/${slug}` };
+}
+
+function printNumber(value: number | undefined, fallback: number, min: number, max: number): number {
+  if (value === undefined) return fallback;
+  if (!Number.isSafeInteger(value) || value < min) throw new ConvexError({ kind: 'invalid', message: `expected a whole number of at least ${min}` });
+  return Math.min(value, max);
+}
+
+function hiddenPrint(): never {
+  throw new ConvexError({ kind: 'notFound', message: 'no such print' });
+}
+
+export const listPrints = internalQuery({
+  args: { agent: agentRef, limit: v.optional(v.number()), cursor: v.optional(v.string()) },
+  returns: v.object({ prints: v.array(v.object(printFields)), cursor: v.union(v.string(), v.null()), isDone: v.boolean() }),
+  handler: async (ctx, { agent, limit, cursor }) => {
+    if (!agent.readAll) return { prints: [], cursor: null, isDone: true };
+    if (cursor !== undefined && cursor.length > 4096) throw new ConvexError({ kind: 'invalid', message: 'cursor is too long' });
+    // Each stored Print may be close to 1 MiB, even though the response
+    // omits HTML. Ten documents leaves room under the query read budget.
+    const result = await ctx.db.query('prints').withIndex('by_creation_time').order('desc').paginate({ numItems: printNumber(limit, 5, 1, 10), cursor: cursor ?? null });
+    return { prints: result.page.map(printMetadata), cursor: result.isDone ? null : result.continueCursor, isDone: result.isDone };
+  },
+});
+
+export const readPrint = internalQuery({
+  args: { agent: agentRef, slug: v.string(), offset: v.optional(v.number()), limit: v.optional(v.number()) },
+  returns: v.object({ ...printFields, html: v.string(), offset: v.number(), totalCharacters: v.number(), nextOffset: v.union(v.number(), v.null()) }),
+  handler: async (ctx, { agent, slug, offset, limit }) => {
+    if (!agent.readAll || !/^[A-Za-z0-9_-]{16,64}$/.test(slug)) hiddenPrint();
+    const rows = await ctx.db.query('prints').withIndex('by_slug', (q) => q.eq('slug', slug)).take(2);
+    if (rows.length !== 1) hiddenPrint();
+    const row = rows[0]!;
+    const start = printNumber(offset, 0, 0, Number.MAX_SAFE_INTEGER);
+    const size = printNumber(limit, 16_000, 1, 32_000);
+    const html = row.html.slice(start, start + size);
+    const end = start + html.length;
+    return { ...printMetadata(row), html, offset: start, totalCharacters: row.html.length, nextOffset: end < row.html.length ? end : null };
   },
 });
 

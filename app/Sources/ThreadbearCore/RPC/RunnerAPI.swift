@@ -847,6 +847,10 @@ public extension RPCClient {
         try await call("pages.saveDoc", .object(["pageId": .string(pageId), "markdown": .string(markdown)]), as: PageResult.self).page
     }
 
+    func savePageDiagram(_ pageId: String, mermaid: String) async throws -> Page {
+        try await call("pages.saveDiagram", .object(["pageId": .string(pageId), "mermaid": .string(mermaid)]), as: PageResult.self).page
+    }
+
     func restorePageVersion(_ pageId: String, version: Int) async throws -> Page {
         try await call("pages.restoreVersion", .object(["pageId": .string(pageId), "version": .number(Double(version))]), as: PageResult.self).page
     }

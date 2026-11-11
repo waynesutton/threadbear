@@ -962,10 +962,11 @@ Ask in plain words, in any thread:
 | "Make a dashboard from this data" | A **dashboard**: big numbers, a few charts and a table |
 | "Give me a report on where this project stands" | A **report**: sections of text with charts |
 | "Write up the launch plan as a print" | A **doc**. You can edit it yourself too |
+| "Draw this flow as a diagram print" | A **diagram** from Mermaid source, with text you can edit and an SVG you can download |
 | "Run bundle-analyzer summary" | A **bundle size** report for a Convex app |
 | "Add a figure that explains it" or "make a share clip" | A larger extra: an illustrated figure, or a short video. Only when you ask |
 
-**Where a print goes.** In a thread that belongs to one project, its prints go in that project and show under **Prints** on the project's page. Say "keep it out of projects" for none, or "put it in Poddle" for another. A print can be in several projects. Prints are kept on your Mac, in the `pages` folder in Threadbear's data folder. Nothing about a print goes to your Convex backend unless you publish it (below).
+**Where a print goes.** A thread pinned to exactly one project puts its new prints there automatically, under **Prints** on the project's page. Say "keep it out of projects" for none, or "put it in Poddle" for another. A print can be in several projects without duplicating its files. All Prints are stored in `~/Library/Application Support/Threadbear/pages/<print-id>/v<version>/`, separate from your code folders. With no project, reopen its card in the thread or ask "show my prints with no project". Download saves a separate copy wherever you choose. Nothing about a print goes to your Convex backend unless you publish it (below).
 
 **In a reply**, a thread shows a print as a card: a picture of the top of it, then its title, kind, version and age, with Open, Refresh and a ⋯ menu. Click the picture or Open to open it. The card always shows the print as it is now, so when a print gets a new version, the card in an earlier reply moves to it too, marked "New version", rather than a second card appearing. While a refresh is under way, the card says so.
 
@@ -973,7 +974,7 @@ Ask in plain words, in any thread:
 
 - **Refresh** sends the print to the thread that made it, to be made again the same way, and opens that thread so you can watch.
 - **Edit with Agent…** asks for what should change, for example "make the region chart a pie". The thread does it and saves a new version.
-- **Edit Text…** (docs only) opens the doc's text to edit yourself. Save makes a new version marked "edited by you", and an agent changing it later starts from your text.
+- **Edit Text…** opens a doc's Markdown or a diagram's Mermaid source to edit yourself. Save redraws it as a new version marked "edited by you". Invalid diagram source shows an error and keeps the previous version.
 - **Download…** saves the print's files in a new folder. Its `index.html` opens in any browser.
 - **Download as PDF…** saves it as a PDF on US Letter pages, in the light look, so it prints and sends cleanly. A line that lands right on a page break can be cut across two pages. For print-perfect breaks, ask the thread to "download it as a PDF", which prints it through Chrome.
 - **Versions** lists the last 10. Open one, download it, or make it the newest again; nothing in between is lost.
@@ -982,6 +983,10 @@ Ask in plain words, in any thread:
 - **Delete** takes it away. It waits 7 days under **Recently deleted** at the bottom of the list, where **Restore** brings it back.
 
 You can also ask a thread for any of these: "refresh the sales dashboard", "go back to version 3", "delete the old chart", "bring it back", "download it", "what prints do I have".
+
+**Diagrams** are drawn on your Mac with Pele, the same library used for diagrams in replies, and kept as static SVG with their Mermaid source. No package download or network access is needed to render one. Download includes `source.mmd` and `diagram.svg`. Published diagram HTML includes the diagram and its folded source, so both become public when you publish. Editable CSV sheets are deferred.
+
+**Outside agents** can list and read published Prints through the existing Threadbear MCP connector when their key allows **Can read all my threads and published Prints**. A key limited to its own threads sees no Prints. Only published copies are shared; nothing is read from your Mac's local Prints store. `list_prints` returns a page of metadata; `read_print` takes its slug and reads the HTML in bounded pieces. They cannot create, edit, publish or delete Prints. Unpublish removes access on the next read. Reconnect the outside app if it caches the old tool list.
 
 Prints are static: pictures, charts and text, with no scripts, so they open straight away and can't reach the internet. A thread can make a "live" print with scripts when you ask for one. Its scripts run only after you choose Run them, and again for each new version.
 

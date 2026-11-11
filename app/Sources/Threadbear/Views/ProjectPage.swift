@@ -432,7 +432,7 @@ private struct PageMenu: View {
         Button("Open", systemImage: "macwindow") { app.openPage(page) }
         Button("Refresh", systemImage: "arrow.clockwise") { app.refreshPage(page) }
         Button("Edit with Agent…", systemImage: "sparkles") { ask() }
-        if page.isDoc { Button("Edit Text…", systemImage: "pencil") { edit() } }
+        if page.hasEditableSource { Button("Edit Text…", systemImage: "pencil") { edit() } }
         Divider()
         Button("Download…", systemImage: "arrow.down.circle") { app.downloadPage(page) }
         Button("Download as PDF…", systemImage: "doc.richtext") { app.downloadPagePDF(page) }
@@ -519,7 +519,7 @@ struct EditDocSheet: View {
             HStack {
                 Text(page.title).font(.headline)
                 Spacer()
-                Text("Markdown: # headings, - lists, - [ ] tasks, | tables |, **bold**, [links](https://…)")
+                Text(page.isDiagram ? "Mermaid source. Save redraws the diagram and keeps the previous version." : "Markdown: # headings, - lists, - [ ] tasks, | tables |, **bold**, [links](https://…)")
                     .font(.system(size: TypeScale.detail))
                     .foregroundStyle(Color(nsColor: Theme.faintText))
             }
@@ -528,7 +528,7 @@ struct EditDocSheet: View {
                     .font(.system(size: TypeScale.label, design: .monospaced))
                     .frame(minHeight: zoomed(360))
                     .overlay(RoundedRectangle(cornerRadius: zoomed(6)).stroke(Color.primary.opacity(0.12)))
-                    .tip("The doc's text. Save makes a new version; the old one is kept")
+                    .tip(page.isDiagram ? "The diagram's Mermaid source. Save makes a new version; the old one is kept" : "The doc's text. Save makes a new version; the old one is kept")
             } else {
                 ProgressView().frame(maxWidth: .infinity, minHeight: zoomed(360))
             }

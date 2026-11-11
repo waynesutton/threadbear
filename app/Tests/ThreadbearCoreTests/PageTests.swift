@@ -2,6 +2,17 @@ import XCTest
 @testable import ThreadbearCore
 
 final class PageTests: XCTestCase {
+    func testDiagramSourceAndIconDecodeWithoutAffectingOlderPages() throws {
+        let json = #"{"page":{"id":"pg_flow","title":"Flow","kind":"diagram"},"file":"/flow/index.html","versions":[1],"mermaid":"flowchart LR\n A --> B"}"#
+        let result = try JSONDecoder().decode(PageGetResult.self, from: Data(json.utf8))
+        XCTAssertTrue(result.page.isDiagram)
+        XCTAssertTrue(result.page.hasEditableSource)
+        XCTAssertFalse(result.page.isDoc)
+        XCTAssertEqual(result.page.symbol, "point.3.connected.trianglepath.dotted")
+        XCTAssertEqual(result.mermaid, "flowchart LR\n A --> B")
+        XCTAssertNil(try JSONDecoder().decode(PageGetResult.self, from: Data(#"{"page":{"id":"pg_old","title":"Old"},"file":"/old","versions":[1]}"#.utf8)).mermaid)
+    }
+
     func testAPageDecodesAsTheRunnerSendsIt() throws {
         let json = """
         {"pages":[{"id":"pg_bundle_size","title":"Bundle size","summary":"20.22 MB total","ownerThread":"th1",

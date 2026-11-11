@@ -812,9 +812,10 @@ export function buildThreadbearTools(
   };
   const projectIds = async (qs: string[]): Promise<string[]> => Promise.all(qs.map(async (q) => (await project(q)).id));
   const pageContent = {
-    html: z.string().optional().describe('The page as one HTML document. Give one of html, dir or markdown.'),
+    html: z.string().optional().describe('The page as one HTML document. Give one of html, dir, markdown or mermaid.'),
     dir: z.string().optional().describe('A folder you built with index.html and its assets (svg, png, webp, mp4, css). Absolute, or relative to this thread’s folder.'),
     markdown: z.string().optional().describe('For a doc: the text as markdown. Threadbear draws it, and the user can edit it in the app.'),
+    mermaid: z.string().optional().describe('For a diagram: Mermaid source. Threadbear draws static SVG and keeps the editable source. No build step.'),
   };
   const recipeArg = z.string().max(MAX_RECIPE).optional().describe('How to make it again, for the Refresh button: the command, the data file, the steps. A thread follows it later.');
   const absDir = (d: string | undefined, cwd: string | undefined): string | undefined => (d === undefined ? undefined : path.resolve(cwd ?? process.cwd(), d.replace(/^~(?=\/)/, home)));
@@ -822,12 +823,12 @@ export function buildThreadbearTools(
     ? [
         tool(
           'create_print',
-          `Makes a Print: a named, versioned page Threadbear keeps for the user (a chart, dashboard, report, doc), that outlives this reply and is updated in place with update_print. Use the make-print skill to build charts and dashboards from data. Static HTML, CSS and SVG unless live is true. Then put a \`\`\`page <id>\`\`\` block in your reply. If one from the same source exists (list_prints), update it instead.`,
+          `Makes a Print: a named, versioned page Threadbear keeps (a chart, dashboard, report, doc or diagram). Update it with update_print. Use make-print for charts and dashboards; give mermaid for diagrams. Static HTML, CSS and SVG unless live is true. Show it with a \`\`\`print <id>\`\`\` block. If one from the same source exists (list_prints), update it instead.`,
           {
             title: z.string().min(1).max(MAX_TITLE).describe('Short, what it shows: "Bundle size".'),
             summary: z.string().max(MAX_SUMMARY).describe('One or two lines of what it says now, for lists and other apps.'),
             ...pageContent,
-            kind: z.enum(PAGE_KINDS).optional().describe('chart, dashboard, report, doc or bundle. Left out, or page: a plain print. markdown makes a doc.'),
+            kind: z.enum(PAGE_KINDS).optional().describe('chart, dashboard, report, doc, diagram or bundle. Left out, or page: a plain print. markdown makes a doc; mermaid a diagram.'),
             recipe: recipeArg,
             projects: z.array(z.string()).optional().describe('Projects to put it in, by id or title. Left out: this thread\'s project when it is pinned to exactly one. [] for none.'),
             source: z.string().max(MAX_TITLE).optional().describe('What made it ("bundle-analyzer summary"), so the next run finds and updates it.'),
@@ -844,6 +845,7 @@ export function buildThreadbearTools(
               ...(input.html !== undefined ? { html: input.html } : {}),
               ...(input.dir !== undefined ? { dir: absDir(input.dir, me?.cwd) } : {}),
               ...(input.markdown !== undefined ? { markdown: input.markdown } : {}),
+              ...(input.mermaid !== undefined ? { mermaid: input.mermaid } : {}),
               ...(input.projects ? { projects: await projectIds(input.projects) } : {}),
               ownerProjects: me?.projects ?? [],
               ...(input.source ? { source: input.source } : {}),
@@ -856,7 +858,7 @@ export function buildThreadbearTools(
         ),
         tool(
           'update_print',
-          'Updates a Print in place: new content (html, dir or markdown) makes a new version, and the last 10 are kept. restoreVersion makes an older version the newest again. If the user edited a doc themselves (read_print says so), start from their markdown.',
+          'Updates a Print in place: new content (html, dir, markdown or mermaid) makes a new version, and the last 10 are kept. restoreVersion makes an older version the newest again. If the user edited its source (read_print says so), start from their words.',
           {
             id: z.string().min(1).describe('The print id (pg_...) or a unique prefix.'),
             title: z.string().min(1).max(MAX_TITLE).optional(),
@@ -879,6 +881,7 @@ export function buildThreadbearTools(
               ...(input.html !== undefined ? { html: input.html } : {}),
               ...(input.dir !== undefined ? { dir: absDir(input.dir, me?.cwd) } : {}),
               ...(input.markdown !== undefined ? { markdown: input.markdown } : {}),
+              ...(input.mermaid !== undefined ? { mermaid: input.mermaid } : {}),
             });
             return `Updated ${pageLine(p)}${await showPage(p, input.show)}`;
           }),
@@ -906,17 +909,19 @@ export function buildThreadbearTools(
         ),
         tool(
           'read_print',
-          "Reads a Print: title, summary, kind, version, projects, how to remake it, the versions kept, the path of its index.html, and a doc's markdown.",
+          "Reads a Print: title, summary, kind, version, projects, how to remake it, versions kept, the path of its index.html, and doc Markdown or diagram Mermaid.",
           { id: z.string().min(1), version: z.number().int().min(1).optional().describe('An older version. Default: the newest.') },
           handle(({ id, version }) => {
             const p = pageStore.find(id);
             const md = pageStore.markdown(p.id, version);
+            const mermaid = pageStore.mermaid(p.id, version);
             return [
               pageLine(p),
               p.recipe ? `recipe: ${p.recipe}` : '',
               `versions kept: ${pageStore.versions(p.id).join(', ')}`,
               `file: ${pageStore.file(p.id, version)}`,
               md !== undefined ? `markdown:\n${md}` : '',
+              mermaid !== undefined ? `mermaid:\n${mermaid}` : '',
             ]
               .filter(Boolean)
               .join('\n');

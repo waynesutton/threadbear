@@ -84,11 +84,16 @@ extension AppModel {
         }
     }
 
-    /// A doc's markdown for the editor sheet, or nil (shown as an error).
+    /// Source for the shared text editor; older runners may have no source.
     func pageMarkdown(_ page: Page) async -> String? {
         guard let client else { return nil }
         do {
-            return try await client.getPage(page.id).markdown ?? ""
+            let got = try await client.getPage(page.id)
+            guard let source = page.isDiagram ? got.mermaid : got.markdown else {
+                showError("This print has no editable source. Ask its thread to rebuild it.", in: page.ownerThread, doing: "Opening the Print editor")
+                return nil
+            }
+            return source
         } catch {
             show(error)
             return nil
@@ -100,7 +105,10 @@ extension AppModel {
         guard let client else { return done(false) }
         whileBusy(BusyKey.page(page.id)) { [self] in
             do {
-                replace(page: try await client.savePageDoc(page.id, markdown: markdown))
+                let saved = page.isDiagram
+                    ? try await client.savePageDiagram(page.id, mermaid: markdown)
+                    : try await client.savePageDoc(page.id, markdown: markdown)
+                replace(page: saved)
                 done(true)
             } catch {
                 show(error)

@@ -181,6 +181,8 @@ const mcp = httpAction(async (ctx, request) => {
       begin: (tool) => ctx.runMutation(internal.mcp.begin, { hash, tool, ip, now }),
       listThreads: (agent, view) => ctx.runQuery(internal.mcp.listThreads, { agent: agent as never, view }),
       readThread: (agent, threadId, limit) => ctx.runQuery(internal.mcp.readThread, { agent: agent as never, threadId, ...(limit === undefined ? {} : { limit }) }),
+      listPrints: (agent, limit, cursor) => ctx.runQuery(internal.mcp.listPrints, { agent: agent as never, ...(limit === undefined ? {} : { limit }), ...(cursor === undefined ? {} : { cursor }) }),
+      readPrint: (agent, slug, offset, limit) => ctx.runQuery(internal.mcp.readPrint, { agent: agent as never, slug, ...(offset === undefined ? {} : { offset }), ...(limit === undefined ? {} : { limit }) }),
       startThread: (agent, text) => ctx.runMutation(internal.mcp.startThread, { agent: agent as never, text }),
       sendMessage: (agent, threadId, text) => ctx.runMutation(internal.mcp.sendMessage, { agent: agent as never, threadId, text }),
     },

@@ -56,7 +56,7 @@ final class PageCards: @unchecked Sendable {
     /// is being asked for (then the rows render again when it comes).
     func thumb(_ page: Page) -> RichBlock? {
         let known = inner.withLock { inner -> (version: Int, file: String)? in inner.files[page.id] }
-        if let known, known.version == page.version { return RichBlock.pageThumb(file: known.file, version: known.version) }
+        if let known, known.version == page.version { return RichBlock.pageThumb(file: known.file, version: known.version, nativeDiagram: page.isDiagram) }
         let ask = inner.withLock { inner -> Bool in
             guard !inner.asking.contains(page.id) else { return false }
             inner.asking.insert(page.id)
@@ -74,8 +74,8 @@ final class PageCards: @unchecked Sendable {
     }
 }
 
-/// The card for a ```page block: the top of the page as a picture, fading
-/// out, with its kind, title, version and age under it, and Open, Refresh
+/// The card for a ```page block: the top of the page as a picture,
+/// with its kind, title, version and age under it, and Open, Refresh
 /// and a menu. Clicking the picture opens it too. Everything it shows is
 /// fixed when the row renders; a change renders the row again.
 final class PageCardCell: NSTextAttachmentCell {
@@ -184,10 +184,10 @@ final class PageCardCell: NSTextAttachmentCell {
         let layout = layout(in: cellFrame)
         let flipped = controlView?.isFlipped ?? true
         let path = NSBezierPath(roundedRect: layout.box, xRadius: Self.radius, yRadius: Self.radius)
-        Theme.codeBackground.setFill()
+        Theme.codeBackgroundOpaque.setFill()
         path.fill()
 
-        // The preview: the top of the page, fading into the card.
+        // The preview ends at a hairline, without obscuring its content.
         if page != nil {
             NSGraphicsContext.saveGraphicsState()
             path.addClip()
@@ -203,9 +203,6 @@ final class PageCardCell: NSTextAttachmentCell {
                 let size = text.size()
                 text.draw(at: NSPoint(x: layout.preview.midX - size.width / 2, y: layout.preview.midY - size.height / 2))
             }
-            let fade = zoomed(56)
-            NSGradient(starting: Theme.codeBackgroundOpaque.withAlphaComponent(0), ending: Theme.codeBackgroundOpaque)?
-                .draw(in: NSRect(x: layout.preview.minX, y: layout.preview.maxY - fade, width: layout.preview.width, height: fade), angle: flipped ? 90 : -90)
             if refreshing {
                 let text = NSAttributedString(string: "Refreshing in its thread…", attributes: [.font: Self.buttonFont, .foregroundColor: NSColor.labelColor])
                 let size = text.size()

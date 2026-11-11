@@ -35,6 +35,7 @@ type to SVG with its own clean layout. It's installed in this skill's folder
 
 ## Tips
 
+- In Threadbear, when the user asks to keep a diagram as a Print, use `create_print({ title, summary, mermaid: source })` or `update_print` instead. The runner renders it, keeps editable source and SVG, and gives it versions and project membership. Read the existing Print before changing it so user edits are preserved. The renderer is bundled, so this path needs no package install.
 - Keep labels short; put detail in the reply, not the boxes.
 - `flowchart LR` reads well for pipelines, `TD` for hierarchies.
 - To change a diagram, edit the `.mmd` and render again; the page updates in place.

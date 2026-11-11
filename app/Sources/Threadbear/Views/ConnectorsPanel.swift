@@ -576,9 +576,9 @@ private struct ConnectAgentForm: View {
                 Toggle("Can start Ask threads and message them", isOn: $write)
                     .toggleStyle(.checkbox)
                     .tip("Threads it starts always ask you before any tool runs")
-                Toggle("Can read all my threads", isOn: $readAll)
+                Toggle("Can read all my threads and published Prints", isOn: $readAll)
                     .toggleStyle(.checkbox)
-                    .tip("Without this it reads only threads it started. Archived threads are never shown.")
+                    .tip("Without this it reads only threads it started and no Prints. Only published Prints are shared; archived threads are never shown.")
             }
             HStack(spacing: zoomed(6)) {
                 if agent.canConnect {

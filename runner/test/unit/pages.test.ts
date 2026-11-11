@@ -10,6 +10,79 @@ const home = () => fs.mkdtempSync(path.join(os.tmpdir(), 'tb-pages-'));
 const proj = (id: string, pinned: boolean): ThreadProject => ({ id, title: id, by: 'agent', at: '2026-11-10T00:00:00.000Z', ...(pinned ? { pinned } : {}) });
 const page = (body: string) => `<!doctype html><title>t</title><body>${body}</body>`;
 
+test('diagram Prints keep Mermaid through edits, restore, rename and export without scripts', () => {
+  const store = new Pages(home());
+  const source = 'flowchart LR\n A[Start] --> B[Done]';
+  const made = store.create({ title: 'Checkout <flow>', summary: '', ownerThread: 't', mermaid: source });
+  assert.equal(made.kind, 'diagram');
+  assert.equal(store.mermaid(made.id), source);
+  const html = fs.readFileSync(store.file(made.id), 'utf8');
+  assert.match(html, /<svg/);
+  assert.match(html, /Checkout &lt;flow&gt;/);
+  assert.match(html, /Mermaid source/);
+  assert.doesNotMatch(html, /<script\b|\son\w+\s*=/i);
+  assert.ok(store.publishable(made.id).html.includes('<svg'));
+  const changed = store.update(made.id, { mermaid: 'sequenceDiagram\n Alice->>Bob: Hello', by: 'user' });
+  assert.equal(changed.version, 2);
+  assert.equal(changed.editedBy, 'user');
+  assert.equal(store.mermaid(made.id, 1), source);
+  store.update(made.id, { markdown: '# A different kind' });
+  assert.equal(store.restoreVersion(made.id, 1).kind, 'diagram');
+  assert.equal(store.mermaid(made.id), source);
+  assert.equal(store.update(made.id, { title: 'New title' }).version, 5);
+  assert.match(fs.readFileSync(store.file(made.id), 'utf8'), /New title/);
+  const output = fs.mkdtempSync(path.join(os.tmpdir(), 'tb-diagram-export-'));
+  store.exportTo(made.id, output);
+  assert.equal(fs.readFileSync(path.join(output, 'source.mmd'), 'utf8'), source);
+  assert.match(fs.readFileSync(path.join(output, 'diagram.svg'), 'utf8'), /<svg/);
+});
+
+test('invalid diagram input leaves the old version intact; editor RPC and tools return Mermaid', async () => {
+  const store = new Pages(home());
+  const made = store.create({ title: 'Flow', summary: '', ownerThread: 't', mermaid: 'flowchart LR\n A --> B' });
+  assert.throws(() => store.update(made.id, { mermaid: 'not a diagram' }), /diagram/i);
+  assert.throws(() => store.update(made.id, { mermaid: 'x'.repeat(20_001) }), /20,?000/);
+  assert.throws(() => store.update(made.id, { html: page('mixed'), mermaid: 'flowchart LR\n A --> B' }), /one of them/);
+  assert.equal(store.get(made.id)?.version, 1);
+  const { pageMethods } = await import('../../src/pages.ts');
+  const methods = pageMethods(() => store);
+  methods['pages.saveDiagram']!({ pageId: made.id, mermaid: 'flowchart LR\n B --> C' });
+  assert.equal((methods['pages.get']!({ pageId: made.id }) as { mermaid: string }).mermaid, 'flowchart LR\n B --> C');
+  assert.equal(store.get(made.id)?.editedBy, 'user');
+  const { buildThreadbearTools } = await import('../../src/threadbear-mcp.ts');
+  const control = { list: async () => [{ id: 't', cwd: os.tmpdir(), projects: [] }], get: async () => ({ permissionMode: 'full' }) } as never;
+  const tools = buildThreadbearTools(control, 't', Date.now, undefined, undefined, undefined, { pages: () => store }) as unknown as Tool[];
+  assert.match((await call(tools, 'read_print', { id: made.id })).text, /mermaid:\nflowchart LR\n B --> C/);
+  const result = await call(tools, 'create_print', { title: 'Tool flow', summary: '', mermaid: 'flowchart LR\n A --> B' });
+  assert.equal(result.err, false, result.text);
+  assert.equal(store.get('pg_tool_flow')?.kind, 'diagram');
+});
+
+test('replacing diagram source with HTML and restoring an HTML version clears its editable kind', () => {
+  const store = new Pages(home());
+  const made = store.create({ title: 'Flow', summary: '', ownerThread: 't', html: page('original') });
+  store.update(made.id, { mermaid: 'flowchart LR\n A --> B' });
+  assert.equal(store.restoreVersion(made.id, 1).kind, 'page');
+  assert.equal(store.mermaid(made.id), undefined);
+  store.restoreVersion(made.id, 2);
+  assert.equal(store.get(made.id)?.kind, 'diagram');
+  assert.equal(store.update(made.id, { html: page('replacement') }).kind, 'page');
+  assert.equal(store.mermaid(made.id), undefined);
+});
+
+test('diagram edits preserve a live Print permission so its old scripted version can be restored', () => {
+  const store = new Pages(home());
+  const live = store.create({ title: 'Live flow', summary: '', ownerThread: 't', html: page('<script>1</script>'), live: true });
+  const diagram = store.update(live.id, { mermaid: 'flowchart LR\n A --> B' });
+  assert.equal(diagram.live, true, 'an edit must not revoke the existing Print permission');
+  assert.doesNotMatch(fs.readFileSync(store.file(live.id), 'utf8'), /<script\b/i, 'Mermaid still renders static content');
+  assert.equal(store.restoreVersion(live.id, 1).live, true);
+  assert.match(fs.readFileSync(store.file(live.id), 'utf8'), /<script>1<\/script>/);
+  assert.equal(store.restoreVersion(live.id, 2).kind, 'diagram');
+  const fresh = store.create({ title: 'New flow', summary: '', ownerThread: 't', mermaid: 'flowchart LR\n A --> B' });
+  assert.equal(fresh.live, false);
+});
+
 test('create writes v1, update bumps the version in place, and both survive a reload', () => {
   const h = home();
   let t = Date.parse('2026-11-10T00:00:00Z');

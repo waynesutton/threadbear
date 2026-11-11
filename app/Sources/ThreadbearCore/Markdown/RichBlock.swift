@@ -49,8 +49,8 @@ public struct RichBlock: Hashable, Sendable {
     public var label: String { kind.rawValue }
     /// A Page's newest file drawn for its card: the version is in the
     /// source, so a new version is a new drawing.
-    public static func pageThumb(file: String, version: Int) -> RichBlock {
-        RichBlock(kind: .page, source: "\(file)\n\(version)\ncard 3")
+    public static func pageThumb(file: String, version: Int, nativeDiagram: Bool = false) -> RichBlock {
+        RichBlock(kind: .page, source: "\(file)\n\(version)\ncard 4\(nativeDiagram ? "\ndiagram" : "")")
     }
 
     /// The file a `page` block draws.

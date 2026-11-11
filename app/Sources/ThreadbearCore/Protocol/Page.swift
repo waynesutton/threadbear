@@ -65,6 +65,8 @@ public struct Page: Sendable, Hashable, Decodable, Identifiable {
     public func isIn(project id: String) -> Bool { projects.contains { $0.id == id } }
 
     public var isDoc: Bool { kind == "doc" }
+    public var isDiagram: Bool { kind == "diagram" }
+    public var hasEditableSource: Bool { isDoc || isDiagram }
 
     /// What its kind is called: a plain one is a Print.
     public var kindLabel: String { kind == "page" ? "Print" : kind.capitalized }
@@ -79,6 +81,7 @@ public struct Page: Sendable, Hashable, Decodable, Identifiable {
         case "dashboard": "rectangle.3.group"
         case "report": "doc.text.magnifyingglass"
         case "doc": "doc.plaintext"
+        case "diagram": "point.3.connected.trianglepath.dotted"
         case "bundle": "shippingbox"
         default: "doc.richtext"
         }
@@ -106,6 +109,8 @@ public struct PageGetResult: Sendable, Decodable {
     public var versions: [Int]
     /// A doc's markdown, for the editor.
     public var markdown: String?
+    /// A diagram's Mermaid source, kept alongside the rendered Print.
+    public var mermaid: String?
 }
 
 public struct PageResult: Sendable, Decodable {

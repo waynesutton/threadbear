@@ -13,7 +13,7 @@ enum PageMenuBuilder {
         menu.addItem(ClosureItem("Edit with Agent…") {
             PageSheets.present { close in AskPageSheet(page: page, close: close) }
         })
-        if page.isDoc {
+        if page.hasEditableSource {
             menu.addItem(ClosureItem("Edit Text…") {
                 PageSheets.present { close in EditDocSheet(page: page, close: close) }
             })

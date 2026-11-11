@@ -307,6 +307,14 @@ final class RichRenderer: NSObject, WKNavigationDelegate, WKUIDelegate {
             view.appearance = NSAppearance(named: dark ? .darkAqua : .aqua)
             view.frame = NSRect(x: 0, y: 0, width: width, height: Self.pageCardHeight)
             try await load(view) { $0.load(URLRequest(url: address)) }
+            // Native diagram cards share the transcript's existing Pele
+            // palette. Only the preview changes, never the Print's files.
+            if block.source.hasSuffix("\ndiagram") {
+                let p = dark ? RichPalette.dark : RichPalette.light
+                let css = ":root{--bg:\(p.bg);--card:\(p.surface);--line:\(p.surfaceAlt);--text:\(p.fg);--dim:\(p.muted);--slate:\(p.border);--teal:\(p.accent)}"
+                _ = try await view.callAsyncJavaScript("const style = document.createElement('style'); style.textContent = css; document.head.append(style); return 1",
+                                                      arguments: ["css": css], in: nil, contentWorld: .defaultClient)
+            }
             // Wait for its fonts, then a moment more, so the snapshot isn't
             // taken before the page has painted (a blank card, 10 Nov). Not
             // requestAnimationFrame: off screen it never fires.
