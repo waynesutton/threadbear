@@ -141,7 +141,9 @@ final class NotesStore {
         guard let key else { return }
         do {
             let data = try NoteCrypto.seal(note, key: key)
-            try data.write(to: file(note.id), options: [.atomic, .completeFileProtection])
+            // Sealed with the notes' key and kept to you (0600): macOS refuses
+            // .completeFileProtection outright here, so every save failed.
+            try data.write(to: file(note.id), options: .atomic)
             try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: file(note.id).path)
         } catch {
             AppLog.write("notes", "couldn't save a note: \(error.localizedDescription)")
