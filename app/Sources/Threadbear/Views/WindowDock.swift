@@ -74,6 +74,10 @@ enum WindowDock {
         // Reviews were a dock panel until 30 Oct. No layout was saved with one
         // in, but an older build's might have been, and nothing draws it now.
         if layout.contains("threadbear.review") { layout.close("threadbear.review") }
+        // The rail's own Terminal panel from before ⌘J's: it showed the same
+        // shell as the Terminal under the thread, and one terminal view in
+        // two places at once left one of them black (Wayne, 10 Nov).
+        if layout.contains(BuiltinPanels.terminal) { layout.close(BuiltinPanels.terminal) }
         let dock = DockController(layout: layout)
         dock.onChange = { next in
             ActivityRecorder.shared.panels(next)

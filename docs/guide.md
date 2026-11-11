@@ -530,9 +530,14 @@ it, and the one picked is described on the right: how to use it, its
 other names, what `/model` and `/effort` are set to now, and where it
 comes from (yours, this folder's, a plugin's) with its file and an Open
 button that shows the file beside the thread.
-Up and Down move, Return runs it, Tab puts it in the box so you can type
-its details after it, and Esc closes the palette. Clicking a category
-shows only those; double-clicking a command runs it.
+Up and Down move, Left and Right step through the categories (All,
+Threadbear, the CLI's, Skills, Recent), Return runs it, Tab puts it in
+the box so you can type its details after it, and Esc closes the palette.
+Clicking a category shows only those; double-clicking a command runs it.
+Click the search field along the palette's top to find a skill or
+command by any word in its name or description. The arrows, Return and
+Esc work there too, and clicking back in the message box carries on
+typing there.
 Drag the palette's top edge or sides to make it bigger or smaller (the
 border lights up where it will drag), as wide as the window, and the
 lines between its columns to size them. It keeps the sizes for next
@@ -544,7 +549,9 @@ lists the skills the agent can run when it reads one named there. Return
 or Tab puts the skill in your words, and nothing is sent until you send
 the message. Claude Code's own commands, and skills set to run only when
 you type them (`disable-model-invocation: true`), work only at the start
-of a message, so they aren't listed there.
+of a message, so they aren't listed there. If you'd rather have the
+small list at the cursor for these (described under Skills), pick it in
+Settings > General > Slash commands. Only one of the two shows.
 
 The iPhone app has it too: type `/` in a thread's reply box and a list of
 its commands opens above it, with the categories as buttons along the top.
@@ -728,11 +735,12 @@ only once you've said yes.
 
 ## Files and Terminal
 
-Two buttons on the rail down the right, below the folder's own panels
-(such as Worktrees): **Files** lists the thread's folder, to go into
-folders and open files in the panel (a thread on another Mac lists that
-Mac's folder), and **Terminal** opens the Terminal under the thread, as
-⌘J does (see Terminal above). It's there for threads on this Mac.
+**Files** on the rail down the right, below the folder's own panels
+(such as Worktrees), lists the thread's folder, to go into folders and
+open files in the panel (a thread on another Mac lists that Mac's
+folder). Turn on Settings > General > Terminal for a **Terminal** button
+beside it, which opens the Terminal under the thread as ⌘J does (see
+Terminal above), for threads on this Mac. It's off unless you turn it on.
 
 Clicking a file in a reply, Highlights or Files opens it here in the
 panel: code with syntax colours, Markdown drawn, and Edit for text. To
@@ -1794,8 +1802,9 @@ description.
 Every skill works in every thread, on every login, Claude and Codex alike.
 With Always on, agents use it whenever it fits what you ask. Turn it off
 and it's there only when you ask by name: type its slash command, like
-/pele, in a message. Typing / at the start of a word lists your skills
-over the cursor, narrowing as you type: ↑ and ↓ to choose, Return or Tab
+/pele, in a message. Typing / at the start of a word opens the slash
+palette (see Slash commands), or, with Settings > General > Slash
+commands set to the small list, lists your skills over the cursor, narrowing as you type: ↑ and ↓ to choose, Return or Tab
 to put it in, Esc to close. An installed skill's command turns blue as
 you type it, and shows as a link in your message once sent (click it for
 the Skills page), so you can see a skill will run. It works anywhere in

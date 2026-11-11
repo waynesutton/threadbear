@@ -208,6 +208,7 @@ struct PaneHeaderButton: View {
 /// On a project's page it has the project's panels and Patches, and no
 /// Highlights; `thread` is then the one the page borrows them from.
 struct PanelRail: View {
+    @AppStorage(RailTerminal.key) private var railTerminal = false
     @Environment(AppModel.self) private var app
     @ObservedObject private var agentBrowser = AgentBrowserModel.shared
     let thread: ThreadSummary
@@ -263,8 +264,9 @@ struct PanelRail: View {
                 ActivityButton(symbol: "folder", title: "Files", tip: "The files in this thread's folder", active: app.dock.isShowing(BuiltinPanels.files)) {
                     app.clickRail(.panel(BuiltinPanels.files), in: thread)
                 }
-                // The Terminal panel under the thread, as ⌘J.
-                if !thread.isRemote {
+                // The Terminal panel under the thread, as ⌘J. Off by default
+                // (Settings > General > Terminal): ⌘J and View are Mike's way in.
+                if !thread.isRemote, railTerminal {
                     ActivityButton(symbol: WindowDock.terminalSymbol, title: "Terminal", tip: "A terminal in this thread's folder (⌘J)", active: app.terminalShown) {
                         app.toggleTerminal()
                     }

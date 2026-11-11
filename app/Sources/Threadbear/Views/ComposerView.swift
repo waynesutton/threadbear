@@ -211,8 +211,11 @@ struct ComposerView: View {
     /// The command being typed as the message's last word, at its start or
     /// partway through it (David, 9 Nov 2026: skills named mid-message).
     private func paletteTyped(_ text: String) -> SlashPalette.Typed? {
-        guard palette.closedAt != text else { return nil }
-        return SlashPalette.typed(in: text)
+        guard palette.closedAt != text, let typed = SlashPalette.typed(in: text) else { return nil }
+        // With the small list picked in Settings, a /skill partway through a
+        // message is its own (SkillPicker), so the two never show at once.
+        if typed.midMessage, SlashListChoice.current == .mine { return nil }
+        return typed
     }
 
     /// The palette's list for what's typed: partway through a message only
@@ -274,7 +277,15 @@ struct ComposerView: View {
                 palette.closedAt = draft.wrappedValue.text
                 app.preview(path: path, in: thread)
             } : nil },
-            layout: Binding(get: { app.slashPaletteLayout }, set: { app.slashPaletteLayout = $0 })
+            layout: Binding(get: { app.slashPaletteLayout }, set: { app.slashPaletteLayout = $0 }),
+            onKey: { key in
+                _ = paletteKey(key, text: draft.wrappedValue.text)
+                // Esc in the search field closed it: the box has the keys again.
+                if key == .escape, let textView = handle.textView {
+                    textView.window?.makeKey()
+                    textView.window?.makeFirstResponder(textView)
+                }
+            }
         )
     }
 
@@ -311,10 +322,12 @@ struct ComposerView: View {
         let commands = paletteCommands(typed) ?? []
         // Partway through a message, a closed palette leaves the keys alone.
         if typed.midMessage, SlashPalette.matches(commands, query: typed.query, category: .all, recent: []).isEmpty { return false }
-        let matches = SlashPalette.matches(commands, query: typed.query, category: palette.category, recent: app.recentSlashCommands)
+        let searched = SlashPaletteView.searched(commands, search: palette.search, recent: app.recentSlashCommands)
+        let matches = SlashPalette.matches(searched, query: typed.query, category: palette.category, recent: app.recentSlashCommands)
         // Return with nothing to pick sends what's typed, as words.
         if key == .enter, matches.isEmpty { return false }
-        if let (command, run) = SlashPaletteView.handle(key, matches: matches, state: &palette, text: text) {
+        let categories = SlashPalette.counts(searched, query: typed.query, recent: app.recentSlashCommands).map(\.0)
+        if let (command, run) = SlashPaletteView.handle(key, matches: matches, categories: categories, state: &palette, text: text) {
             pick(command, run: run && !typed.midMessage)
         }
         return true
@@ -336,6 +349,8 @@ struct ComposerView: View {
             let length = (textView.string as NSString).length
             let cut = min(typedLength, length)
             textView.insertText(text, replacementRange: NSRange(location: length - cut, length: cut))
+            // A pick from the palette's search field: the box takes the keys back.
+            textView.window?.makeKey()
             textView.window?.makeFirstResponder(textView)
         } else {
             let kept = String(current.utf16.dropLast(typedLength)) ?? ""
@@ -952,6 +967,9 @@ final class ComposerTextView: NSTextView {
 
     /// The list for what's typed now: shown, moved or put away.
     private func offerSkills() {
+        // Mike's palette (the default in Settings) lists skills partway
+        // through a message too; this list only shows when it's picked.
+        guard SlashListChoice.current == .mine else { skillPicker.hide(); return }
         guard isEditable, window != nil, let range = skillToken() else { skillPicker.hide(); return }
         // A message starting with / is the slash palette's (SlashPaletteView): it lists skills too.
         if string.prefix(range.location).trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { skillPicker.hide(); return }
@@ -1149,6 +1167,8 @@ final class ComposerTextView: NSTextView {
         case 48: return .tab
         case 36, 76: return .enter
         case 53: return .escape
+        case 123: return .left
+        case 124: return .right
         default: return nil
         }
     }

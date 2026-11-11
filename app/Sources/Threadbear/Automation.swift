@@ -513,10 +513,12 @@ enum Automation {
             // The Escape key, where the cursor is.
             return pressAtCursor(window, characters: "\u{1b}", keyCode: 53)
         case "arrow":
-            // {"cmd":"arrow","dir":"down"} (or "up"), where the cursor is:
-            // the composer's slash command palette moves its pick.
-            let up = c["dir"] as? String == "up"
-            return pressAtCursor(window, characters: String(UnicodeScalar(up ? 0xF700 : 0xF701)!), keyCode: up ? 126 : 125)
+            // {"cmd":"arrow","dir":"down"} (or "up", "left", "right"), where
+            // the cursor is: the composer's slash command palette moves its
+            // pick, or its category with left and right.
+            let keys: [String: (UInt32, UInt16)] = ["up": (0xF700, 126), "down": (0xF701, 125), "left": (0xF702, 123), "right": (0xF703, 124)]
+            let (char, code) = keys[c["dir"] as? String ?? "down"] ?? keys["down"]!
+            return pressAtCursor(window, characters: String(UnicodeScalar(char)!), keyCode: code)
         case "tab":
             // The Tab key, where the cursor is.
             return pressAtCursor(window, characters: "\t", keyCode: 48)

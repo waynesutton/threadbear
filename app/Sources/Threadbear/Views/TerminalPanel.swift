@@ -529,6 +529,13 @@ enum TerminalStyle {
     }
 }
 
+/// Whether the right-hand rail has a Terminal button as well as ⌘J and the
+/// View menu. Off by default, so the Terminal is Mike's alone (Wayne, 10
+/// Nov); Settings > General > Terminal turns it on.
+enum RailTerminal {
+    static let key = "railTerminalShown"
+}
+
 struct TerminalPanel: View {
     @Environment(AppModel.self) private var app
 

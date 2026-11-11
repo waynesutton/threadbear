@@ -2,6 +2,28 @@ import AppKit
 import SwiftUI
 import ThreadbearCore
 
+/// Which list a /skill typed partway through a message brings up: Mike's
+/// slash palette (the default, so his updates to it come through as he
+/// makes them) or this small list over the cursor. Never both (Wayne, 10
+/// Nov). A message starting with / always gets the palette.
+enum SlashListChoice: String, CaseIterable, Identifiable {
+    case mike, mine
+
+    static let key = "slashListChoice"
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .mike: "Slash palette"
+        case .mine: "Small list at the cursor"
+        }
+    }
+
+    static var current: SlashListChoice {
+        UserDefaults.standard.string(forKey: key).flatMap(SlashListChoice.init) ?? .mike
+    }
+}
+
 /// The composer's / list (ComposerTextView): the installed skills matching
 /// what's typed after the slash, in a small window just over the cursor.
 /// It never takes the keyboard: the text view passes it ↑↓, Return, Tab and

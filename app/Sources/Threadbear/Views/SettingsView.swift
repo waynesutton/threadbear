@@ -236,6 +236,8 @@ private struct GeneralSettings: View {
     @AppStorage(BearChat.shownKey) private var bearShown = true
     @AppStorage(NotesStore.shownKey) private var notesShown = true
     @AppStorage(FileOpenPlace.key) private var fileOpenPlace: FileOpenPlace = .threadbear
+    @AppStorage(SlashListChoice.key) private var slashList: SlashListChoice = .mike
+    @AppStorage(RailTerminal.key) private var railTerminal = false
     @AppStorage(FileEditorMode.key) private var editLikeAnEditor = true
     @AppStorage(FileAutosave.key) private var saveFilesAutomatically = true
     @AppStorage(TurnModes.enabledKey) private var turnModesOn = true
@@ -336,6 +338,22 @@ private struct GeneralSettings: View {
                     Toggle("Show Notes", isOn: $notesShown)
                         .tip("Show Notes in the bar on the left")
                         .onChange(of: notesShown) { _, on in if !on { app.showsNotesPage = false } }
+                }
+
+                SettingsSection("Slash commands",
+                                about: "Typing / in the message box opens the slash palette: every command and skill, with a search field, categories you can step through with the left and right arrows, and Esc to close. A /skill typed partway through a message opens the palette too, or, if you pick it here, the small list at the cursor instead. Only one of them shows at a time.",
+                                ask: "change what the slash palette lists or how it looks.") {
+                    Picker("Skills partway through a message", selection: $slashList) {
+                        ForEach(SlashListChoice.allCases) { Text($0.title).tag($0) }
+                    }
+                    .tip("Which list a /skill typed after other words brings up")
+                }
+
+                SettingsSection("Terminal",
+                                about: "⌘J (or View > Show Terminal) opens a terminal under the thread, in the thread's folder. Turn this on for a Terminal button on the right-hand rail as well; it opens the same terminal.",
+                                ask: "change how the Terminal opens or looks.") {
+                    Toggle("Show Terminal on the right-hand rail", isOn: $railTerminal)
+                        .tip("Add a Terminal button to the rail beside Files. ⌘J works either way")
                 }
 
                 SettingsSection("Shift-Tab modes",
