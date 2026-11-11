@@ -1,6 +1,6 @@
 # Where Prints stand
 
-Updated 2026-11-11. On main at `b221756c`, pushed to GitHub. Prints are still the `pages` experiment, off by default, on for Wayne. The full user-facing walkthrough is the Prints section of `docs/guide.md`. This page is the short version plus the gap list.
+Updated 2026-11-11, after the second round. On main at `b221756c`, pushed to GitHub. Prints are still the `pages` experiment, off by default, on for Wayne. The full user-facing walkthrough is the Prints section of `docs/guide.md`. This page is the short version plus the gap list.
 
 ## How Prints work
 
@@ -18,29 +18,39 @@ A Print is a page a thread makes for you to keep. Ask for a chart, a dashboard, 
 | Delete | Soft delete. Restore within 7 days from Recently deleted |
 | Publishing | Opt in per Print. Backend API 73 stores one static `index.html` under a link. It opens on the phone, the website's `/p/<slug>` page and for anyone with the link. New versions follow. Unpublish or Delete takes it down |
 | Only when asked | Settings > General > Prints > Only make Prints when I ask. Off by default. With it on, a thread that goes to make a Print your message didn't ask for puts a card up first. Saying print, chart, graph, dashboard or diagram counts as asking |
+| Side pane | Open on a reply's card opens the Print in the thread's side pane. A new version replaces it there as soon as it's saved; an older version opened on purpose stays put |
+| Updates in Ask mode | Once you allow one update to a Print, later versions of it from that thread go ahead without asking, until the thread restarts. A no isn't remembered as a yes |
+| Keeping it fresh | "Refresh it every weekday morning" has the thread schedule itself to rebuild the Print from its recipe |
+| On the website | A reply's Print block is a card. Published: title, kind, version and Open to its `/p/` page. Not published: says it's kept on the Mac |
 | Outside agents | A key with read-all access can `list_prints` and `read_print` published Prints, in bounded pages. Read only. Local Prints are never visible |
 
 The agent side is the `create_print`, `update_print`, `read_print`, `list_prints`, `publish_print` family of tools. The older `*_page` names still work. The make-print skill holds the chart, dashboard and report recipes. The bundle-report skill builds the Convex bundle size Print.
 
 ## What's missing
 
-- **Print cards on the iPhone and the website.** A published Print opens as a link in the browser. Neither app draws the card yet.
 - **Editable CSV sheets.** Deferred by Wayne. The half-done work sits uncommitted in the slot-12 worktree.
 - **Live data.** Live Prints can run scripts, but nothing pushes new data into an open one. The PRD's postMessage phase isn't built.
-- **Opening in the side pane.** The project page opens a Print in its own window. The thread's side pane doesn't take it, and doesn't reload on a new version.
-- **One approval per Print.** In Ask mode, `update_print` asks every time, even from the thread that owns the Print.
 - **A global Prints view.** Prints with no project are reached through their card or by asking "show my prints with no project".
+- **The project page still opens a window.** Only a reply's card opens in the side pane. The project page has no thread beside it to open into.
+- **Ask once on Codex.** Codex threads still ask for every update to a Print.
 - **PDF page breaks.** The built-in PDF can cut a line across two pages. Asking the thread to print through Chrome avoids it.
-- **The GPUI app.** The three desktop specs in `features/prints.feature` are manual. The GPUI port has no Prints yet.
+- **The GPUI app.** The desktop specs in `features/prints.feature` are manual. The GPUI port has no Prints yet.
 - **Upstream.** All of this is in Wayne's fork. Nothing has gone to mikecann/threadbear.
+
+## Not planned
+
+- **The iPhone app.** Wayne isn't shipping his own iPhone app, and changes under `ios/` would clash with Mike's. Print blocks show as text on the phone. Leave `ios/` alone unless a feature can't work without it.
+
+## Not yet seen on screen
+
+- The side pane following a new version was checked through the debug app's state, which moved from v1 to v2 to v3. A screenshot of the redraw wasn't possible: the debug window sits behind other windows, and macOS stops a hidden web view from drawing.
+- The website's Print card was checked by its tests and typecheck, not in a browser against a live backend.
 
 ## What's next
 
-1. Draw published Print cards on the iPhone and the website, since the backend already serves them.
-2. Open Prints in the thread's side pane and reload it on a new version.
-3. Ask once per Print for updates from its own thread.
-4. Pick the CSV sheets work back up from slot-12, or drop it.
-5. Write scheduled refresh into the make-print skill and the guide. No code needed.
-6. Decide whether Prints stays an experiment or becomes standard, at the check-in booked for 14 Nov.
+1. Decide whether Prints stays an experiment or becomes standard, at the check-in booked for 14 Nov.
+2. Pick the CSV sheets work back up from slot-12, or drop it.
+3. A Prints view for everything, projects or not, on the Mac.
+4. Ask once per Print on Codex threads too.
 
 The optional HyperFrames share clip stays parked until one of the above ships.

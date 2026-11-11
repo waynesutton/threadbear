@@ -7,6 +7,13 @@ How Prints work today and what's still missing: [prds/prints-status.md](prds/pri
 ### Added
 
 - Only make Prints when I ask, in Settings > General > Prints. Prints stay on, but a thread asks before making one your message didn't ask for.
+- Open on a reply's Print card opens it in the thread's side pane, which moves to each new version as it's saved.
+- Print cards in replies on the website: published ones open their page, the rest say they're kept on the Mac.
+- The guide covers keeping a Print fresh on a schedule.
+
+### Changed
+
+- In Ask before edits, a thread asks once per Print for updates instead of every time (Claude threads).
 
 ## 2026-11-11
 

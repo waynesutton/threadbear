@@ -32,3 +32,10 @@
 - `runner/src/threadbear-mcp.ts` has `asksForPrint` and the card `create_print` puts up when the setting is on.
 - `runner/src/settings.ts` and `runner/src/config.ts` keep `printsWhenAsked` in runner.json.
 - `app/Sources/Threadbear/Views/SettingsView.swift` shows the switch under Prints while the Prints experiment is on.
+
+## Prints round two
+
+- `runner/src/adapters/claude/adapter.ts` remembers Prints a session may update without asking again (`printGrants`).
+- `app/Sources/Threadbear/Pages.swift` opens a card's Print in the side pane and moves the pane to new versions.
+- `app/Sources/ThreadbearCore/Protocol/Page.swift` has `PagePath`, which reads a Print file's id and version and finds the newer one.
+- `web/src/print-fence.ts` reads a reply's Print block; `web/src/print-card.tsx` draws its card from the published list.

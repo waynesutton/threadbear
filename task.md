@@ -4,12 +4,10 @@
 
 Status and gap list: prds/prints-status.md
 
-- [ ] Prints: a card for published prints in replies on the iPhone app and the website (today the link opens in a browser).
-- [ ] Prints: open a print in the thread's side pane (today the project page opens it in its own window), and reload the open pane on `pages.updated`. prds/threadbear-pages.md
-- [ ] Prints: only ask once per print for `update_print` from the thread that owns it (adapter change). prds/threadbear-pages.md
-- [ ] Deferred by Wayne: editable CSV sheets. Preserve the uncommitted work in slot-12; leave it out of diagram and outside-agent changes.
-- [ ] Prints: scheduled refresh, as a line in the make-print skill and the guide (no code).
 - [ ] Prints: decide at the 14 Nov check-in whether the experiment becomes standard.
+- [ ] Deferred by Wayne: editable CSV sheets. Preserve the uncommitted work in slot-12; leave it out of diagram and outside-agent changes.
+- [ ] Prints: a view of every Print on the Mac, in a project or not.
+- [ ] Prints: ask once per Print on Codex threads too.
 - [ ] Prints: optional HyperFrames share clip for any print. prds/threadbear-pages.md
 
 ## In Progress
@@ -17,6 +15,8 @@ Status and gap list: prds/prints-status.md
 Nothing.
 
 ## Completed
+
+- [x] 2026-11-11 Prints round two. Ask once per Print for updates in Ask before edits (Claude adapter, `printGrants`). A reply's Print card opens in the thread's side pane, which follows new versions (`openPageHere`, `followPageVersions`, `PagePath`). Print cards on the website from `prints:list` (`web/src/print-card.tsx`, `print-fence.ts`). Scheduled refresh in the guide. iPhone parts left out on purpose. Verified: 32 adapter tests; PageTests, TipsTests, EveryClickShowsTests; 95 web tests and web typecheck; the side pane moving v1 to v2 to v3 in a debug app's state against a dev runner.
 
 - [x] 2026-11-11 Only make Prints when I ask: `printsWhenAsked` in runner.json and Settings > General > Prints (shown while Prints is on). With it on, `create_print` after a message that names no print, chart, graph, dashboard or diagram puts an approval card up first; its description tells agents too. runner config.ts, settings.ts, cli.ts, main.ts, threadbear-mcp.ts; app RunnerSettings.swift, RunnerSettingsModel.swift, SettingsView.swift; protocol, guide, features/prints.feature. Verified: runner typecheck; 107 tests in pages, context budget, threadbear tools and experiments; app SettingsTests, TipsTests and EveryClickShowsTests; the switch seen on and off in a debug app against a dev runner. prds/prints-only-when-asked.md
 
