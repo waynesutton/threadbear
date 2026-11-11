@@ -12,6 +12,7 @@ import { api } from '../../convex/_generated/api';
 import type { Id } from '../../convex/_generated/dataModel';
 import { go, threadPath, useRoute } from './route';
 import { useToken } from './token';
+import { PrintsProvider } from './print-card';
 import { RunCommand } from './run-command';
 import { lastWorkedOn, recapDue, recapParts } from './view-logic';
 import { MessageText, Pictures, picturesByRow, ToolRun, Worked, type PageMessage } from './messages';
@@ -51,7 +52,9 @@ export function App() {
   return (
     <Catch key={token}>
       <InboxProvider token={token}>
-        <Shell token={token} route={route} />
+        <PrintsProvider token={token}>
+          <Shell token={token} route={route} />
+        </PrintsProvider>
       </InboxProvider>
     </Catch>
   );

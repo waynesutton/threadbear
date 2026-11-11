@@ -16,8 +16,9 @@ export type Scenario = { name: string; play: (p: Play) => void; shows: string[] 
 
 export const SCENARIOS: Scenario[] = [
   {
-    // Print files stay on their creating Mac. Other routes keep the fence
-    // and the published link rather than pretending the local card exists.
+    // Print files stay on their creating Mac. The website draws a card from
+    // the published list (prints:list), or says it's kept on the Mac; the
+    // phone keeps the fence. The published link stays as written.
     name: 'a diagram Print reference and its portable published link',
     shows: ['Task flow diagram', 'Open published diagram'],
     play: (p) => {
