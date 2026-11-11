@@ -986,6 +986,10 @@ Ask in plain words, in any thread:
 
 You can also ask a thread for any of these: "refresh the sales dashboard", "go back to version 3", "delete the old chart", "bring it back", "download it", "what prints do I have".
 
+**Keeping one up to date.** Say "refresh it every weekday morning" (or any time you like) and the thread schedules itself to make the print again from its recipe and save a new version. It tells you when it will run. It shows on the Scheduled page, where you can change or stop it, or ask the thread to.
+
+**Asking once.** In Ask before edits, the first change to a print asks you. Once you allow it, later versions of that same print from that thread go ahead without asking again, until the thread is next restarted. A different print, or deleting one, still asks.
+
 **Diagrams** are drawn on your Mac with Pele, the same library used for diagrams in replies, and kept as static SVG with their Mermaid source. No package download or network access is needed to render one. Download includes `source.mmd` and `diagram.svg`. Published diagram HTML includes the diagram and its folded source, so both become public when you publish. Editable CSV sheets are deferred.
 
 **Outside agents** can list and read published Prints through the existing Threadbear MCP connector when their key allows **Can read all my threads and published Prints**. A key limited to its own threads sees no Prints. Only published copies are shared; nothing is read from your Mac's local Prints store. `list_prints` returns a page of metadata; `read_print` takes its slug and reads the HTML in bounded pieces. They cannot create, edit, publish or delete Prints. Unpublish removes access on the next read. Reconnect the outside app if it caches the old tool list.
