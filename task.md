@@ -2,19 +2,23 @@
 
 ## To Do
 
+Status and gap list: prds/prints-status.md
+
 - [ ] Prints: a card for published prints in replies on the iPhone app and the website (today the link opens in a browser).
+- [ ] Prints: open a print in the thread's side pane (today the project page opens it in its own window), and reload the open pane on `pages.updated`. prds/threadbear-pages.md
+- [ ] Prints: only ask once per print for `update_print` from the thread that owns it (adapter change). prds/threadbear-pages.md
 - [ ] Deferred by Wayne: editable CSV sheets. Preserve the uncommitted work in slot-12; leave it out of diagram and outside-agent changes.
 - [ ] Prints: scheduled refresh, as a line in the make-print skill and the guide (no code).
-
-- [ ] Pages: open a page in the thread's side pane (today the project page opens it in its own window), and reload the open pane on `pages.updated`. prds/threadbear-pages.md
-- [ ] Pages: only ask once per page for `update_page` from the thread that owns it (adapter change). prds/threadbear-pages.md
-- [ ] Pages: optional HyperFrames share clip for any page. prds/threadbear-pages.md
+- [ ] Prints: decide at the 14 Nov check-in whether the experiment becomes standard.
+- [ ] Prints: optional HyperFrames share clip for any print. prds/threadbear-pages.md
 
 ## In Progress
 
-- [ ] Diagram Prints and read-only published Prints for outside agents, rebased onto Mike's release `005659b0` in slot-15. 2026-11-11 04:17 UTC: runner/Convex typechecks, 71 focused runner/backend/parity tests and 14 focused app tests pass. Menu icons preserved; three desktop behavior specs are manual with GPUI pending. Diagram/editor and solid card were visually checked before the rebase. Mandatory landing check and release build are next; backend is not deployed. prds/prints-diagrams-and-agent-reads.md
+Nothing.
 
 ## Completed
+
+- [x] 2026-11-11 Diagram Prints and read-only published Prints for outside agents landed on main at `b221756c` and pushed to GitHub. Rebased onto the publishing recovery `e8dd6683` (backend API 73, live). Verified: `./check.sh --quick` passed in 2,916 s; runner typecheck and 25 guard tests (context budget, experiments, parity, scenarios, fork view). Three desktop specs stay manual until GPUI has Prints. prds/prints-diagrams-and-agent-reads.md
 
 - [x] 2026-11-10 20:05 UTC Publish a print (opt-in): backend API 73 (`prints` table, sync:publishPrint, sync:unpublishPrint, prints:view, prints:list), runner pages.publish and pages.unpublish with new versions following, publish_print and unpublish_print tools, Publish…, Copy Link, Open on the Web and Unpublish in both Mac menus, and the website's /p/<slug> page in a sandboxed frame. Verified: convex and web typecheck; runner pages.test.ts and runner-access tests; web tests; swift build and focused app tests.
 

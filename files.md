@@ -20,3 +20,8 @@
 - `convex/mcpRpc.ts` defines and dispatches read-only Print tools on the authenticated MCP endpoint.
 - `convex/http.ts` wires the endpoint to internal backend functions.
 - `runner/test/unit/outside-agents-backend.test.ts` verifies authorization, pagination, response bounds, revocation and unpublishing.
+
+## Prints docs
+
+- `prds/prints-status.md` says how Prints work today, what's missing and what's next.
+- `changelog.md` lists what shipped in Prints by day.

@@ -56,3 +56,7 @@ Added 2026-11-11 01:51 UTC: Wayne asked to remove the preview gradient and match
 - Preserved the recorded GPUI parity results rather than replacing them with empty local reports. The added Print behavior is listed separately as pending.
 
 Implementation is not on main yet. Its mandatory landing check, app release build and backend deployment remain pending. No launcher install, push or public publication was performed.
+
+## Landed
+
+2026-11-11: on main at `b221756c` and pushed to GitHub, after `./check.sh --quick` passed. Rebased onto the publishing recovery `e8dd6683`, which put backend API 73 back and is live. The three desktop specs stay manual until the GPUI port has Prints. What's left is in `prds/prints-status.md`.
