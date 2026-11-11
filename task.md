@@ -4,8 +4,6 @@
 
 - [ ] Prints: a card for published prints in replies on the iPhone app and the website (today the link opens in a browser).
 - [ ] Deferred by Wayne: editable CSV sheets. Preserve the uncommitted work in slot-12; leave it out of diagram and outside-agent changes.
-- [ ] Prints: a diagram kind (Mermaid source drawn with Pele, Edit Text).
-- [ ] Prints: read-only list and read for outside agents (Grok).
 - [ ] Prints: scheduled refresh, as a line in the make-print skill and the guide (no code).
 
 - [ ] Pages: open a page in the thread's side pane (today the project page opens it in its own window), and reload the open pane on `pages.updated`. prds/threadbear-pages.md
@@ -14,7 +12,7 @@
 
 ## In Progress
 
-- [ ] Diagram Prints and read-only published Prints for outside agents, implemented locally in slot-15. 2026-11-11 02:09 UTC: 64 focused runner/backend checks, typechecks and 14 focused app tests pass; diagram, Mermaid editor and solid native card in light and dark mode inspected in the debug app. Final review fixed live-version restoration. The broader check is retrying three skill-trust/process-cleanup files. Not landed or deployed. prds/prints-diagrams-and-agent-reads.md
+- [ ] Diagram Prints and read-only published Prints for outside agents, rebased onto Mike's release `005659b0` in slot-15. 2026-11-11 04:17 UTC: runner/Convex typechecks, 71 focused runner/backend/parity tests and 14 focused app tests pass. Menu icons preserved; three desktop behavior specs are manual with GPUI pending. Diagram/editor and solid card were visually checked before the rebase. Mandatory landing check and release build are next; backend is not deployed. prds/prints-diagrams-and-agent-reads.md
 
 ## Completed
 

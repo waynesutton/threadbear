@@ -10,6 +10,9 @@
 - `app/Sources/Threadbear/Pages.swift` loads and saves doc or diagram source through the shared text editor.
 - `app/Sources/Threadbear/Transcript/PageCards.swift` draws solid Print cards and their existing actions.
 - `app/Sources/Threadbear/Transcript/RichRenderer.swift` applies the app's native palette to diagram card previews without changing their files.
+- `features/prints.feature` records diagram editing, invalid edits and project assignment as manual desktop behavior specs while GPUI support is pending.
+- `features/steps/prints.steps.ts` owns the manual Print specs until the shared driver supports the local Print store.
+- `runner/test/helpers/scenario-list.ts` includes the diagram Print reference and published link in cross-route transcript checks.
 
 ## Outside-agent Print reads
 

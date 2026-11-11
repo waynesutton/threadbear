@@ -44,3 +44,15 @@ Added 2026-11-11 01:51 UTC: Wayne asked to remove the preview gradient and match
 - Temporary debug app and runner stopped. No real model turn, backend deployment or public publication was used for these checks. CSV work in slot-12 remains untouched.
 
 2026-11-11 02:09 UTC: the broad run passed 2,586 tests and retried three failing skill-trust/process-cleanup files in isolation. Final review also caught live-HTML-to-diagram conversion revoking the Print-wide permission and preventing restoration; preserving that permission fixes it. All 22 page/renderer tests pass after the fix (64 focused runner/backend tests in total across the focused runs). Native card integration review found no further issues. Broad retry and landing remain pending.
+
+## Integration with Mike's release
+
+2026-11-11 04:17 UTC: rebased onto `005659b0`. Resolved two menu conflicts by keeping Mike's new icons while enabling Edit Text for diagrams. Regenerated experiment docs from the merged sources.
+
+- Runner and Convex typechecks pass. A focused run of page, renderer, outside-agent, context budget, generated experiment docs, request parity and cross-route scenario tests passes all 71 tests.
+- The rebased Swift build and 14 focused PageTests, RichBlockTests, EveryClickShowsTests and TipsTests pass, through the machine's build lock.
+- `features/prints.feature` records three manual desktop flows: editing/version restore, malformed edits and no-project/project assignment. Their shared-driver automation and GPUI implementation remain pending. `features` pairing and Cucumber dry-run checks pass; no actual shared-driver UI scenarios were run.
+- Added the Print fence and published-link scenario to the existing three-route backend harness. Local Print files are not newly mirrored; the portable text and link survive the relay and phone/web routes.
+- Preserved the recorded GPUI parity results rather than replacing them with empty local reports. The added Print behavior is listed separately as pending.
+
+Implementation is not on main yet. Its mandatory landing check, app release build and backend deployment remain pending. No launcher install, push or public publication was performed.

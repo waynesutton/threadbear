@@ -748,3 +748,7 @@ built parsers and gates with no launch of the app, which is the trap.)
 - Remaining: the rest of the daily driver.
 - Verification: `TB_APP=swift cucumber-js` on Tinker Desk, 24 of 24 scenarios;
   `TB_APP=gpui cucumber-js` on `cloud` under Xvfb, 17 of 24 at this point.
+
+## Fork additions awaiting a shared spec run
+
+`prints.diagram` has three manual behavior scenarios in `features/prints.feature` for source editing, invalid edits and project assignment. The Swift flow was checked with an isolated dev runner; automated shared-driver coverage and GPUI support remain pending. The recorded results above are preserved until a shared spec run produces new reports.
