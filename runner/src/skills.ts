@@ -301,7 +301,7 @@ export class SkillStore {
   }
 
   list(): { skills: Skill[]; suggested: SuggestedSkill[]; enabled: boolean } {
-    return { skills: this.skills.map((s) => ({ ...s })), suggested: this.suggested(), enabled: this.enabled };
+    return { skills: this.skills.map((s) => ({ ...s })).sort(byName), suggested: this.suggested(), enabled: this.enabled };
   }
 
   /** Turns the whole store on or off for every thread. */
@@ -323,7 +323,7 @@ export class SkillStore {
         const fm = readFrontmatter(fs.readFileSync(path.join(BUILTIN_DIR, n, 'SKILL.md'), 'utf8'));
         return { id: n, name: n, description: fm.description ?? '' };
       });
-    return [...builtin, ...SUGGESTED.filter((s) => !have.has(s.name)).map((s) => ({ ...s }))];
+    return [...builtin, ...SUGGESTED.filter((s) => !have.has(s.name)).map((s) => ({ ...s }))].sort(byName);
   }
 
   /** Puts the plugin and the Codex links back as the list says (at start, and when logins change). */
@@ -685,6 +685,12 @@ function run(cmd: string, args: string[], cwd?: string): Promise<void> {
     child.on('error', reject);
     child.on('close', (code) => (code === 0 ? resolve() : reject(new Error(`${path.basename(cmd)} ${args[0]} failed: ${err.trim().slice(-300)}`))));
   });
+}
+
+// The Skills page shows both lists in the order they're sent, so a new
+// or imported skill lands in its alphabetical place, not at the end.
+function byName(a: { name: string }, b: { name: string }): number {
+  return a.name < b.name ? -1 : a.name > b.name ? 1 : 0;
 }
 
 function bad(message: string): RpcError {

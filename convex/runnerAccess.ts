@@ -244,7 +244,7 @@ export const ACCESS: Record<string, Access> = {
   closeRequest: 'own',
   appendBodies: 'own',
   addHeldPicture: 'own',
-  // moves.ts (API 64): only the main Mac starts or cancels a move; each
+  // moves.ts (API 72): only the main Mac starts or cancels a move; each
   // step is the move's own runner on that side, which the function checks.
   startMove: 'owner',
   cancelMove: 'owner',

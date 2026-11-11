@@ -1142,6 +1142,16 @@ the summary and then the reply.
 | `projects.get` | `{ projectId }` | `{ project: Project, threadIds: string[] }`, its threads newest activity first, put away ones included |
 | `projects.create` | `{ title: string, folders?: string[], goals?, state?, notes?, links?: { title?, url }[], threadIds?: string[] }` | `{ project: Project }`, made by Mike (`createdBy: "mike"`). `threadIds` are put in it, pinned. Folders must exist (`-32602` otherwise) |
 | `projects.update` | `{ projectId, title?, folders?: string[], goals?, state?, notes?, links?: { title?, url }[], notion?: string, archived?: boolean }` | `{ project: Project }`. Replaces what's given. A new title is Mike's (`titleBy: "mike"`), so the librarian never renames it. A link that isn't http(s), or more than 8, is `-32602`. A change of folders reloads its threads' patches. `notion` is a Notion page or database address (notion.so, notion.site, notion.com, or a `collection://` data source), read straight away (see Project tasks); empty takes it off; anything else is `-32602` |
+| `pages.list` | `{ project?: string, thread?: string, none?: boolean, deleted?: boolean }` | `{ pages: Page[] }`, newest `updatedAt` first: in a project, made by a thread, or in no project; with `deleted`, only deleted ones (kept 7 days). Empty with the pages experiment off. A runner older than this answers `-32601` |
+| `pages.get` | `{ pageId, version?: number }` | `{ page: Page, file: string, versions: number[], markdown?: string }`: `file` is that version's (default the newest) `index.html` on this Mac; `versions` the ones still kept, oldest first; `markdown` a doc's text, for the editor. `-32602` for an unknown page or version, or with the experiment off |
+| `pages.saveDoc` | `{ pageId, markdown: string, title?: string }` | `{ page: Page }`: the user's edit of a doc, saved as a new version with `editedBy: "user"` |
+| `pages.restoreVersion` | `{ pageId, version: number }` | `{ page: Page }`: that version's files become a new, newest version. `-32602` for one no longer kept |
+| `pages.delete` | `{ pageId }` | `{ page: Page }` with `deletedAt`. Left out of lists and `pages.updated`; removed with its files 7 days later |
+| `pages.restore` | `{ pageId }` | `{ page: Page }`: a deleted page back. Nothing for one that isn't deleted |
+| `pages.export` | `{ pageId, dest: string, version?: number }` | `{ file: string }`: the version's files copied into `dest`, an absolute folder that's new or empty; `file` is its `index.html`. For Download |
+| `pages.refresh` | `{ pageId }` | `{ threadId, started: boolean }`: a message asking to make the page again from its `recipe` goes to the thread that made it, queued behind its turn; when that thread is gone, a new thread starts in the page's project's first folder (`started: true`). The runner never runs the recipe itself |
+| `pages.edit` | `{ pageId, text: string }` | `{ threadId, started: boolean }`: as `pages.refresh`, with the user's words for what should change |
+| `pages.setProjects` | `{ pageId, add?: string[], remove?: string[] }` | `{ page: Page }`. Mike's change, pinned. A page can be in several projects or none |
 | `projects.refreshTasks` | `{ projectId, force?: boolean }` | `{ project: Project }` once its Notion board has been read again, unless it was read in the last minute (`force` reads it anyway). The project page asks when it opens. `-32602` for a project with no `notion` |
 | `projects.setIcon` | `{ projectId, path?: string, symbol?: string }` | `{ project: Project }`. Mike's choice: `path` a picture on this Mac (PNG, JPEG, WebP, SVG, ICNS or ICO, copied in), or `symbol` an SF Symbol name; neither puts it back to automatic, and the librarian finds one again within seconds. `-32602` for a missing file or a name that isn't a symbol's |
 | `projects.merge` | `{ projectId, intoId }` | `{ project: Project }` (the one kept). Folders and threads move over, notes are joined, and `projectId` is deleted |
@@ -1277,6 +1287,7 @@ one process per live thread, over stdio. With it off no account, pool or
 | `schedules.updated` | `{ schedules: Schedule[] }` sent to every connected client whenever any schedule changes (made, edited, run, deleted, or its thread deleted). The whole list, in `schedules.list` order |
 | `remoteThreads.updated` | `RemoteThreads` sent to every connected client whenever another runner's threads, or what's known of that runner, change. The whole list, as `remoteThreads.list` |
 | `projects.updated` | `{ projects: Project[] }` sent to every connected client when any project changes, as `projects.list` with `archived: true` would answer. Thread membership changes come as `thread.updated` |
+| `pages.updated` | `{ pages: Page[] }` sent to every connected client when any page is made, updated or moved between projects, with the pages experiment on. The whole list, as `pages.list` with nothing given. A card showing a page reloads it when its `version` moves on |
 | `librarian.updated` | `{ librarian: LibrarianStatus }` sent to every connected client when the librarian's status changes |
 | `connectors.updated` | `{ connectors: ConnectorsStatus }` sent to every connected client when what the Connectors panel would show changes (a service signs out or back in, the gateway stops or starts answering); not when only `checkedAt` moves |
 | `settings.updated` | `{ settings: Settings }` sent to every connected client when a setting or the key changes, and at most once a minute while model calls are adding to the spend |
@@ -2264,6 +2275,15 @@ Ayush's "Plan View UI".
   that don't know these events still see Claude's approval as an ordinary
   one ("Finish the plan"). A thread on another Mac (Other runners'
   threads) can't take `plans.approve` yet; writing to it still works.
+- **On the phone.** Sync sends each `plan.proposed` as a message row with
+  `plan: true` (backend API 64): the whole plan, scrubbed as a reply is,
+  up to 24,000 characters. The iPhone app draws it as a plan card that
+  opens the plan in a sheet (Copy, and Share as a `.md` file), and Claude's
+  `ExitPlanMode` card as "The plan is ready" with Read plan and Go ahead.
+  Go ahead is `allow` on that card; the sheet's Send back is a message,
+  which sends the plan back as anything Mike writes does. A Codex plan has
+  no card, so the phone only sends it back. An older backend gets the
+  plan as an ordinary reply.
 
 ## Slash commands
 
@@ -4192,6 +4212,7 @@ access none of this changes anything.
 |---|---|---|
 | `convex` | a folder with `convex/` and a `package.json` or `convex.json` beside it (a bare folder called `convex` isn't enough) | `convex.dashboard`, a `url` panel: `https://dashboard.convex.dev/d/<name>` for the `CONVEX_DEPLOYMENT` in `.env.local` (then `.env`), `http://127.0.0.1:6790` for an anonymous local deployment, the dashboard's front page with no deployment yet. A cloud deployment's panel also has `convex`, with the deployment's URL from the `.env.local` (then `.env`) line ending `CONVEX_URL` (`CONVEX_URL`, `VITE_CONVEX_URL`, ...). Only those lines of the file are read, and a file over 64 KB is skipped as if it weren't there |
 | `xcode` | a folder with an `.xcodeproj` or `.xcworkspace` | `xcode.simulator`, an `image` panel drawn by `panels.render` |
+| `git` | the Git panel experiment on (`gitPanel`), and a folder with a `.git` (a folder, or a worktree's or submodule's file), found from the thread's folder up to home, else from each project folder's | `git.git`, a `url` panel the runner serves itself (The Git panel, below), with a badge of staged files plus commits to push; and the `prompt` actions `git.commit-staged-push` and `git.sync`, shown only when there's something to do |
 | `worktree` | a thread with a worktree of its own (see Worktrees) | no panel: the action `worktree.land`, "Land", which runs `tb land` |
 
 A client shows what it can: a `url` panel in a web view, an `image` panel
@@ -4241,6 +4262,62 @@ the dashboard. The app opens `url` only if it's Convex's own device page
 maybe another Mac's, sends it, and any other answer, first or on a later
 `check`, stops the sign-in with that said rather than opening it. `-32041` (the login can't reach the deployment) gets Sign in
 as someone else, the same with `force`. No terminal either way.
+
+### The Git panel
+
+The `git` built-in's panel is a page the runner serves from its own
+port, the one `/rpc` is on, under `/git/` (`src/git-panel.ts`, its page
+`src/git-panel/page.html`). No new port, and nothing in the app: a client
+shows it as any `url` panel. Its address is
+
+```
+http://127.0.0.1:<port>/git/?repo=<the repo's folder>&k=<key>
+```
+
+where `key` is an HMAC-SHA256 of `git-panel\0<folder>` under the
+runner's token, base64url: only the runner can make one, and it opens
+that one repo. The panel is in the summary, which only goes to clients
+on the local connection (it isn't part of the mirror). The runner
+answers `/git/` only:
+
+- from the loopback address, with a `Host` of `127.0.0.1:<port>` or
+  `localhost:<port>`, so a runner listening on the tailnet doesn't serve
+  it there and a page can't reach it by DNS rebinding;
+- for a repo a thread of this runner has had the panel for since it
+  started, with that repo's key;
+- for the API, with the key in an `X-Threadbear-Git` header, and a POST
+  only as `application/json` and from no other `Origin`, which another
+  page can't send without a preflight the runner never answers.
+
+The page itself (`GET /git/`) is sent with a Content-Security-Policy that
+lets it talk only to its own origin. The API, under `/git/api/`:
+
+| call | body | does |
+|---|---|---|
+| `GET state?repo=` | | the branch, upstream, remote, ahead and behind (as of the last fetch), commits no remote has, the staged, changed and conflicting files, the last 8 commits (a pushed one with its web link), a rebase or merge in progress, when it last fetched, `push` (`{ ok }` or `{ ok: false, why }`) and whether `generate` is there. `{ problem }` instead for a repo the panel won't read |
+| `POST stage`, `unstage` | `{ repo, files }` or `{ repo, all: true }` | `git add` or `git restore --staged` (`git rm --cached` before the first commit). A file is a path in the repo: one that's absolute or has `..` is dropped |
+| `POST commit` | `{ repo, message }` | commits what's staged, with the repo's hooks |
+| `POST push` | `{ repo }` | pushes to the upstream, or publishes the branch to its remote with `-u` |
+| `POST sync` | `{ repo }` | fetch, `pull --rebase --autostash`, then push. On a clash it aborts the rebase and lists the files |
+| `POST fetch` | `{ repo }` | `fetch --prune` |
+| `POST generate` | `{ repo }` | `{ ok, text }`: a commit message for the staged diff (the first 60,000 characters) and the last 12 subjects, from the runner's Models (`generate`, Haiku on the pool, feature `git-panel`), never for a private folder |
+
+Each answers `{ ok, message }`. Git runs with `execFile`, never a shell,
+and paths after `--`. What the runner reads by itself (state, the chips'
+and badge's counts, the diff for generate) runs with `liveCommandEnv`'s
+settings (Shell allowlist), so the repo's own config can't make it run a
+hook, fsmonitor or anything else, and not at all in a repo whose own
+config sets a `filter`, `diff` or `merge` driver. What's pressed runs as
+git in a terminal would, hooks and all, with no prompt or editor. Nothing
+force-pushes or passes `--no-verify`.
+
+A push (and Sync's) goes only to a remote whose owner, from its URL, is
+allowed: `runner.json`'s `gitPanel.pushOwners` (case aside; `"*"` for
+any), or with none set, the GitHub login `gh config get user -h
+github.com` names, for a `github.com` remote. Anything else is refused
+with why, and the chips' prompts tell the agent the same rule and to ask
+first. `gitPanel.chips` is `"when-needed"` (the default), `"always"` or
+`"off"`.
 
 ## Ask mode
 
@@ -4631,12 +4708,13 @@ ProfilePageSettings = {
   home: boolean           // visitors at the site's front page see it; only while published
   name: string; bio: string
   links: { title: string; url: string }[]   // at most 4
-  show: ("picture" | "background" | "activity" | "github" | "numbers" | "projects" | "memberSince")[]
+  show: ("picture" | "background" | "activity" | "github" | "numbers" | "projects" | "memberSince" | "changelog")[]
   numbers: ("threads" | "activeDays" | "streak" | "projects" | "models")[]
   projectIds: string[]    // at most 12
   order: ("numbers" | "activity" | "github" | "projects")[]  // the page's cards, top to bottom
   picturePath?: string; backgroundPath?: string; backgroundDim?: number  // files on this Mac
   githubUser?: string
+  changelogRepo?: string  // "owner/repo" on GitHub; the changelog needs it and githubUser
 }
 ProfilePageStatus = { profile: ProfilePageSettings | null; url?: string /* <site>/profile, or <site>/ with home */; sentAt?: string; problem?: string }
 ```
@@ -4645,7 +4723,10 @@ Only parts in `show` are sent. Activity is the count of threads started
 each local day for 372 days; numbers are counts; a project is its title,
 SF Symbol and thread count. Thread titles, prompts, replies, folders and
 project goals, state and notes are never sent, and threads in a private
-folder (`models.privateFolders`) aren't counted. Both sides ignore fields
+folder (`models.privateFolders`) aren't counted. The changelog sends only
+`{ repo, author }`: the visitor's browser lists that author's commits on the
+repo's default branch from GitHub's public API, so only public commits can
+show and nothing about them is stored. Both sides ignore fields
 they don't know; an older runner answers `-32601` and the app says to
 update.
 
@@ -5055,6 +5136,39 @@ Threadbear only shows the board; cards are moved in Notion, by people
 or by agents with the Notion tools. `read_project` lists the open cards,
 and a thread's brief has one line saying the board is there and how many
 are open. With no gateway, `error` says so.
+
+## Prints
+
+The pages experiment (`runner/src/pages.ts`). People and agents call these **Prints** since 10 Nov 2026 (Wayne picked the name, in the app's sewing-box vocabulary: threads, patches, pins, pocket). Only the words changed: the methods, the notification, the `Page` type, the `pg_` ids, the experiment's id and the `pages` folder keep "page", so an app and a runner from either side of the rename work together. A Print is a named, versioned page an agent makes for the user (a bundle size report, a progress card) that outlives the reply it was posted in. The runner keeps it, not a folder, so it can be in zero, one or several projects whatever folder its thread ran in.
+
+```ts
+type Page = {
+  id: string            // "pg_bundle_size"
+  title: string
+  summary: string       // at most 280 characters, for lists and other apps
+  ownerThread: string   // the thread that made it
+  projects: { id: string; by: "mike" | "agent" | "librarian"; pinned?: boolean }[]
+  version: number       // 1 up; each content change is a new version
+  bytes: number
+  live: boolean         // scripts allowed, run only after Run them in the side pane
+  source?: string       // what made it ("bundle-analyzer summary"), so a rerun updates it
+  kind?: "page" | "chart" | "dashboard" | "report" | "doc" | "bundle"  // absent: "page"
+  recipe?: string       // how to make it again, for Refresh; an agent follows it
+  editedBy?: "agent" | "user"  // who wrote the newest version
+  deletedAt?: string    // while deleted
+  createdAt: string
+  updatedAt: string
+}
+```
+
+- **Stored** in `<home>/pages/`: `index.json`, and each version as a folder `<id>/v<n>/` holding `index.html` and the assets it names (`.css .svg .png .jpg .webp .gif .mp4 .webm .woff2`). The last 10 versions are kept. Never sent to Convex.
+- **Static by default.** A page whose HTML has `<script` is refused unless it was made `live`. Links, `.js` and `.json` files are refused in a page folder. `index.html` is at most 1 MB and the folder 25 MB.
+- **Projects.** Made with no `projects`, a page joins its thread's project when the thread is pinned to exactly one; `[]` means none.
+- **Docs.** A page given as `markdown` is a doc: the runner draws it (`runner/src/page-doc.ts`, a small escaped subset: headings, lists, task lists, tables, quotes, code, http(s) and mailto links; no HTML passes through) and keeps the text as `source.md` beside it, so the user can edit it (`pages.saveDoc`) and the next agent starts from their words.
+- **Deleted** pages are kept 7 days (`pages.restore`), then removed with their files when the store next loads.
+- **Agent tools:** `create_print` (`kind`, `markdown`, `recipe`), `update_print` (`markdown`, `recipe`, `restoreVersion`), `list_prints` (`deleted`), `read_print` (`version`; shows the recipe, the kept versions and a doc's markdown), `delete_print`, `restore_print`, `export_print`, `add_print_to_project`, `remove_print_from_project`, only while the experiment is on. `list_prints` and `read_print` never ask. The older arguments still work, and so does each tool's name from before the rename (`create_page` and the rest), for sessions that loaded them.
+- **Skills.** `make-print` builds charts, dashboards and reports from CSV, TSV, JSON or XLSX through a spec, and exports PDFs; `bundle-report` is its recipe for Convex bundle size. Both live in the user's skills folder, not the repo.
+- **In a reply**, an agent shows a print with a ```` ```print <id> ```` block (```` ```page ````, its name before the rename, still works; the id in the info string, or alone on the fence's one line; `PageFence`). The Mac app draws it as a card (`PageCardCell`, "Preview on top", Wayne picked it on 10 Nov 2026): the top of the newest version's `index.html` from `pages.get`, drawn off screen under the html block's lockdown at 1080 by 470 and scaled down, over a footer with the kind, title, version and age and Open, Refresh and a ⋯ menu. It follows `pages.updated`, so every card naming a page shows its newest version; a version newer than the first made in the last 15 minutes is marked "New version". With the experiment off, or in an app that doesn't know pages, the block shows as code.
 
 ## Schedules
 

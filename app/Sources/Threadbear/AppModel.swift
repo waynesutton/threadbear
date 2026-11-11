@@ -117,6 +117,13 @@ final class AppModel {
     /// This Mac's runner's experiments that are on (hello's `experiments`),
     /// for the ones that live in the app: Voice mode.
     var experiments: Set<String> = []
+    /// The pages experiment's pages (Pages.swift), newest first.
+    var pages: [Page] = [] {
+        // The cards in replies follow it (PageCards).
+        didSet { PageCards.shared.update(pages, enabled: pagesOn) }
+    }
+    /// Deleted pages, kept 7 days for Restore (Pages.swift).
+    var deletedPages: [Page] = []
     /// How long a thread may sit idle with one of Mike's messages still
     /// queued before the app gives up on it showing.
     static let queuedGrace: Double = 10
@@ -715,6 +722,10 @@ final class AppModel {
     var highlightsUnsupported = false
     /// A file or page open in the pane in place of its section, per thread.
     var panePreview: [String: PanePreview] = [:]
+    /// Files left open under other sections, per thread then section id:
+    /// a file opened from Files stays open while Highlights is looked at,
+    /// and is there again when Files comes back (`bringPreview`).
+    var parkedPreviews: [String: [String: PanePreview]] = [:]
     /// Each thread's Explain side conversation (ExplainModel.swift).
     var explainers: [String: ExplainSession] = [:]
     @ObservationIgnored var explainCount = 0

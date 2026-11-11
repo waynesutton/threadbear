@@ -472,6 +472,7 @@ private struct GeneralSettings: View {
     private func chooseFolder(from current: String) {
         let panel = NSOpenPanel()
         panel.canChooseDirectories = true
+        panel.canCreateDirectories = true
         panel.canChooseFiles = false
         panel.allowsMultipleSelection = false
         panel.directoryURL = URL(fileURLWithPath: (current as NSString).expandingTildeInPath)
@@ -552,6 +553,7 @@ private struct ModelSettings: View {
     private func addPrivateFolder(_ current: [String]) {
         let panel = NSOpenPanel()
         panel.canChooseDirectories = true
+        panel.canCreateDirectories = true
         panel.canChooseFiles = false
         panel.allowsMultipleSelection = true
         panel.prompt = "Add"
@@ -771,6 +773,7 @@ private struct PoolSettings: View {
     private func addFolders(to pool: Pool) {
         let panel = NSOpenPanel()
         panel.canChooseDirectories = true
+        panel.canCreateDirectories = true
         panel.canChooseFiles = false
         panel.allowsMultipleSelection = true
         panel.prompt = "Add"
@@ -1043,10 +1046,12 @@ enum SettingsWindow {
 // MARK: Look
 
 /// Pictures of your own on Threadbear's pages (Looks), both off by default
-/// and kept on this Mac: Customize on the Librarian page, and a background
+/// and kept on this Mac: Customize on the Librarian, Scheduled and Projects pages, and a background
 /// picture in the main window, chosen here.
 private struct LookSettings: View {
     @AppStorage(Looks.librarianOnKey) private var librarianOn = false
+    @AppStorage(Looks.scheduledOnKey) private var scheduledOn = false
+    @AppStorage(Looks.projectsOnKey) private var projectsOn = false
     @AppStorage(Looks.mainBackgroundOnKey) private var backgroundOn = false
     @AppStorage(Looks.mainBackgroundKey) private var background = ""
     @AppStorage(Looks.mainBackgroundEverywhereKey) private var everywhere = false
@@ -1061,10 +1066,14 @@ private struct LookSettings: View {
 
     var body: some View {
         SettingsSection("Look",
-                        about: "Customize the Librarian page adds Customize at the top right of the Librarian page: change or remove the bear, put a photo behind the page, move each part to the top, middle or bottom, hide parts and numbers, and show your GitHub activity. Turning it off puts the page back as it ships and keeps your changes for next time. Background picture puts a photo of yours behind a new thread in the main window, or behind every thread, faded so text stays readable in light and dark. Pictures are copied into Threadbear's data folder and never sent anywhere.",
-                        ask: "change the Librarian page or the background for you.") {
+                        about: "Customize the Librarian page adds Customize at the top right of the Librarian page: change or remove the bear, put a photo behind the page, move each part to the top, middle or bottom, hide parts and numbers, and show your GitHub activity. Customize the Scheduled page does the same for the Scheduled page: its picture, a background photo, and the picture, title and numbers each at the top, middle or bottom, or hidden. Customize the Projects page adds a picture of your own (it has none as it ships), a background photo, the title and search and the cards each at the top, middle or bottom, or hidden, and what each card shows. Turning any of them off puts its page back as it ships and keeps your changes for next time. Background picture puts a photo of yours behind a new thread in the main window, or behind every thread, faded so text stays readable in light and dark. Pictures are copied into Threadbear's data folder and never sent anywhere.",
+                        ask: "change the Librarian, Scheduled or Projects page, or the background, for you.") {
             Toggle("Customize the Librarian page", isOn: $librarianOn)
                 .tip("Add Customize to the Librarian page: its picture, a background, the layout, and what shows")
+            Toggle("Customize the Scheduled page", isOn: $scheduledOn)
+                .tip("Add Customize to the Scheduled page: its picture, a background, the layout, and what shows")
+            Toggle("Customize the Projects page", isOn: $projectsOn)
+                .tip("Add Customize to the Projects page: a picture, a background, the layout, and what each card shows")
             Toggle("Background picture in the main window", isOn: $backgroundOn)
                 .tip("A photo of yours behind new threads")
             if backgroundOn {
@@ -1076,6 +1085,8 @@ private struct LookSettings: View {
                                 .aspectRatio(contentMode: .fill)
                                 .frame(width: 56, height: 32)
                                 .clipShape(RoundedRectangle(cornerRadius: 4, style: .continuous))
+                                // A clipped photo's hidden overflow still takes clicks.
+                                .allowsHitTesting(false)
                         }
                         Button(background.isEmpty ? "Choose…" : "Replace…") { choose() }
                             .tip("Pick a photo from your Mac. A copy is kept, so the original can move")
@@ -1108,7 +1119,10 @@ private struct LookSettings: View {
     }
 
     private func choose() {
-        guard let url = Looks.choosePicture(prompt: "Use as Background") else { return }
+        Looks.choosePicture(prompt: "Use as Background") { use($0) }
+    }
+
+    private func use(_ url: URL) {
         guard let name = Looks.importPicture(from: url, maxSide: 2880, prefix: "window") else {
             problem = "That file isn't a picture Threadbear can read."
             return

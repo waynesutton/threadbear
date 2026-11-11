@@ -59,6 +59,7 @@ extension AppModel {
     /// detail area. The thread that was showing stays selected, so ⌘1
     /// goes back to it.
     func showProjects() {
+        closeOverlayPages()
         sidebarMode = .projects
         openProjectId = nil
         showsProjectsHome = true
@@ -66,6 +67,7 @@ extension AppModel {
 
     /// The Librarian view in the sidebar, and its page in the detail area.
     func showLibrarian() {
+        closeOverlayPages()
         sidebarMode = .librarian
         openProjectId = nil
         showsLibrarianHome = true
@@ -111,6 +113,9 @@ extension AppModel {
         guard let project = project(id) else { return }
         projectFilePicker.choose(configure: { panel in
             panel.canChooseDirectories = true
+            // Off by default in NSOpenPanel, which leaves no way to make the
+            // folder you meant to pick.
+            panel.canCreateDirectories = true
             panel.canChooseFiles = false
             panel.allowsMultipleSelection = false
             panel.prompt = "Add"

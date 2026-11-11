@@ -1,0 +1,102 @@
+import XCTest
+@testable import ThreadbearCore
+
+final class PageTests: XCTestCase {
+    func testAPageDecodesAsTheRunnerSendsIt() throws {
+        let json = """
+        {"pages":[{"id":"pg_bundle_size","title":"Bundle size","summary":"20.22 MB total","ownerThread":"th1",
+        "projects":[{"id":"p_tb","by":"agent","pinned":true},{"id":"p_x","by":"mike"}],"version":3,"bytes":90123,"live":false,
+        "source":"bundle-analyzer summary","createdAt":"2026-11-10T09:00:00.000Z","updatedAt":"2026-11-10T09:30:00.000Z"},
+        {"id":"broken"}]}
+        """
+        let pages = try JSONDecoder().decode(PagesResult.self, from: Data(json.utf8)).pages
+        XCTAssertEqual(pages.count, 1, "one without a title is dropped, not the whole list")
+        let page = try XCTUnwrap(pages.first)
+        XCTAssertEqual(page.version, 3)
+        XCTAssertEqual(page.source, "bundle-analyzer summary")
+        XCTAssertTrue(page.isIn(project: "p_tb"))
+        XCTAssertTrue(page.isIn(project: "p_x"))
+        XCTAssertFalse(page.isIn(project: "p_other"))
+        XCTAssertEqual(page.projects.map(\.pinned), [true, false])
+        XCTAssertEqual(page.updatedAt, ISO8601.parse("2026-11-10T09:30:00.000Z"))
+    }
+
+    func testAPageInNoProjectIsInNone() throws {
+        let json = #"{"id":"pg_a","title":"A","summary":"","ownerThread":"t","projects":[],"version":1,"bytes":1,"live":true,"updatedAt":"2026-11-10T09:30:00Z"}"#
+        let page = try JSONDecoder().decode(Page.self, from: Data(json.utf8))
+        XCTAssertTrue(page.projects.isEmpty)
+        XCTAssertTrue(page.live)
+    }
+
+    func testKindsRecipeEditsAndDeletionDecode() throws {
+        let json = #"{"id":"pg_d","title":"Plan","summary":"","ownerThread":"t","projects":[],"version":12,"bytes":1,"live":false,"kind":"doc","recipe":"write it","editedBy":"user","deletedAt":"2026-11-10T09:30:00Z","updatedAt":"2026-11-10T09:30:00Z"}"#
+        let page = try JSONDecoder().decode(Page.self, from: Data(json.utf8))
+        XCTAssertTrue(page.isDoc)
+        XCTAssertEqual(page.symbol, "doc.plaintext")
+        XCTAssertEqual(page.recipe, "write it")
+        XCTAssertTrue(page.editedByUser)
+        XCTAssertNotNil(page.deletedAt)
+        XCTAssertEqual(page.keptVersions, [12, 11, 10, 9, 8, 7, 6, 5, 4, 3], "the newest ten, newest first")
+        let old = try JSONDecoder().decode(Page.self, from: Data(#"{"id":"pg_o","title":"Old","version":2}"#.utf8))
+        XCTAssertEqual(old.kind, "page", "a page from before kinds")
+        XCTAssertEqual(old.kindLabel, "Print")
+        XCTAssertEqual(page.kindLabel, "Doc")
+        XCTAssertEqual(old.keptVersions, [2, 1])
+        XCTAssertFalse(old.editedByUser)
+    }
+}
+
+final class PageFenceTests: XCTestCase {
+    func testAPageFenceNamesItsPage() {
+        XCTAssertEqual(PageFence.id(language: "page pg_bundle_size", code: ""), "pg_bundle_size")
+        XCTAssertEqual(PageFence.id(language: "print pg_bundle_size", code: ""), "pg_bundle_size")
+        XCTAssertEqual(PageFence.id(language: "print", code: "pg_sales_2026\n"), "pg_sales_2026")
+        XCTAssertNil(PageFence.id(language: "printer pg_a", code: ""))
+        XCTAssertEqual(PageFence.id(language: "page", code: "pg_sales_2026\n"), "pg_sales_2026")
+        XCTAssertEqual(PageFence.id(language: "PAGE", code: "  pg_a  "), "pg_a")
+        XCTAssertNil(PageFence.id(language: "page", code: "not a page"))
+        XCTAssertNil(PageFence.id(language: "page", code: ""))
+        XCTAssertNil(PageFence.id(language: "html", code: "pg_a"))
+        XCTAssertNil(PageFence.id(language: "page pg_Bad", code: ""), "ids are lower case")
+        XCTAssertNil(PageFence.id(language: "page pg_", code: ""))
+    }
+
+    func testAPageThumbIsANewDrawingPerVersion() {
+        let v1 = RichBlock.pageThumb(file: "/p/pg_a/v1/index.html", version: 1)
+        let v2 = RichBlock.pageThumb(file: "/p/pg_a/v2/index.html", version: 2)
+        XCTAssertNotEqual(v1.id, v2.id)
+        XCTAssertEqual(v1.pageFile, "/p/pg_a/v1/index.html")
+        XCTAssertNil(RichBlock(kind: .html, source: "<p>").pageFile)
+        XCTAssertNil(RichBlock.from(language: "page", code: "pg_a"), "a page fence is never an html or mermaid box")
+    }
+}
+
+final class PagePDFTests: XCTestCase {
+    /// A tall one-page PDF, as WebKit makes one, with a mark near the bottom.
+    private func tall(width: CGFloat, height: CGFloat) -> Data {
+        let out = NSMutableData()
+        var box = CGRect(x: 0, y: 0, width: width, height: height)
+        let ctx = CGContext(consumer: CGDataConsumer(data: out as CFMutableData)!, mediaBox: &box, nil)!
+        ctx.beginPDFPage(nil)
+        ctx.setFillColor(CGColor(gray: 0, alpha: 1))
+        ctx.fill(CGRect(x: 10, y: 10, width: 50, height: 50))
+        ctx.endPDFPage()
+        ctx.closePDF()
+        return out as Data
+    }
+
+    func testATallPageIsCutIntoLetterPages() throws {
+        // 800 wide scales to 540 pt; a Letter page holds 720 pt, about 1067 px.
+        XCTAssertEqual(PagePDF.pageCount(sourceWidth: 800, sourceHeight: 1000), 1)
+        XCTAssertEqual(PagePDF.pageCount(sourceWidth: 800, sourceHeight: 1067), 1)
+        XCTAssertEqual(PagePDF.pageCount(sourceWidth: 800, sourceHeight: 3000), 3)
+        let pdf = try XCTUnwrap(PagePDF.paginate(tall(width: 800, height: 3000)))
+        let doc = try XCTUnwrap(CGPDFDocument(CGDataProvider(data: pdf as CFData)!))
+        XCTAssertEqual(doc.numberOfPages, 3)
+        XCTAssertEqual(doc.page(at: 1)?.getBoxRect(.mediaBox).size, PagePDF.paper)
+    }
+
+    func testNotAPDFGivesNothing() {
+        XCTAssertNil(PagePDF.paginate(Data("not a pdf".utf8)))
+    }
+}

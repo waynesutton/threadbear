@@ -849,7 +849,31 @@ enum Automation {
                 try? await Task.sleep(for: .milliseconds(300))
                 return "ok editor ends \(String(controller.textView.string.suffix(40)).debugDescription), file ends \(((try? String(contentsOf: controller.url, encoding: .utf8)) ?? "").suffix(40).debugDescription)"
             } else if let path = c["path"] as? String {
+                // "search": a folder opened with that already typed in its
+                // search (FolderSearchView), as a text field can't be clicked here.
+                if let query = c["search"] as? String { FolderSearchMemory.queries["\(thread.id) \(path)"] = query }
                 app.preview(path: path, in: thread)
+                if let line = c["hit"] as? Int, let query = c["search"] as? String, let current = app.panePreview[thread.id] {
+                    // "hit": then a click on that line's result in that file ("file").
+                    let file = (c["file"] as? String).map { ($0 as NSString).isAbsolutePath ? $0 : (path as NSString).appendingPathComponent($0) } ?? path
+                    app.openSearchHit(FolderSearch.Hit(path: file, line: line, text: ""), query: query, showing: current, in: thread)
+                }
+            } else if let find = c["find"] as? Bool, find {
+                // The bar's magnifying glass over the open file.
+                guard let file = app.panePreview[thread.id]?.fileURL,
+                      let controller = TextFileController.showing(path: file.path, threadId: thread.id) else { return "error no text file is open in the pane" }
+                controller.showFind()
+                try? await Task.sleep(for: .milliseconds(300))
+                return "ok find bar \(controller.scroll.isFindBarVisible ? "showing" : "hidden"), replace \(controller.textView.isEditable ? "on" : "off")"
+            } else if c["place"] as? Bool == true {
+                guard let file = app.panePreview[thread.id]?.fileURL,
+                      let controller = TextFileController.showing(path: file.path, threadId: thread.id) else { return "error no text file is open in the pane" }
+                if let y = c["scrollTo"] as? Double {
+                    controller.scroll.contentView.scroll(to: NSPoint(x: 0, y: y))
+                    controller.scroll.reflectScrolledClipView(controller.scroll.contentView)
+                }
+                let sel = controller.textView.selectedRange()
+                return "ok scrolled to \(Int(controller.scroll.contentView.bounds.origin.y)), selected \((controller.textView.string as NSString).substring(with: sel).debugDescription)"
             } else if let text = c["url"] as? String, let url = URL(string: text) {
                 app.preview(page: url, title: HighlightText.address(url.absoluteString), in: thread)
             } else {
@@ -1070,6 +1094,18 @@ enum Automation {
             }
             try? await Task.sleep(for: .milliseconds(400))
             return "ok"
+        case "pagePDF":
+            // {"cmd":"pagePDF","id":"pg_…","path":"/tmp/x.pdf"} runs Download
+            // as PDF's drawing without its save panel, for checking it.
+            guard let id = c["id"] as? String, let path = c["path"] as? String, let client = app.client else { return "error give an id and a path" }
+            do {
+                let got = try await client.getPage(id)
+                let pdf = try await RichRenderer.shared.pagePDF(file: got.file)
+                try pdf.write(to: URL(fileURLWithPath: path))
+                return "ok \(pdf.count) bytes"
+            } catch {
+                return "error \(error.localizedDescription)"
+            }
         case "project":
             // {"cmd":"project","id":"p_…"} (or "title") opens a project's page in the
             // detail area; {"cmd":"project","close":true} closes it, and
@@ -1213,6 +1249,35 @@ enum Automation {
             default: return "error phase is listening, hearing or off"
             }
             return "ok"
+        case "note":
+            // Opens Notes on a new note with "body", or the newest one.
+            // "tick" clicks the task box whose "[" is at that character, and
+            // "returnAt" puts the caret there and presses Return, both
+            // through the editor's own handlers. Says the note's text.
+            NotesStore.shared.load()
+            if let body = c["body"] as? String, let note = NotesStore.shared.create() {
+                NotesStore.shared.setBody(note.id, body)
+            }
+            app.showNotes()
+            try? await Task.sleep(for: .milliseconds(400))
+            func editor(_ view: NSView?) -> NSTextView? {
+                guard let view else { return nil }
+                if let text = view as? NSTextView, text.accessibilityLabel() == "Note" { return text }
+                for sub in view.subviews { if let found = editor(sub) { return found } }
+                return nil
+            }
+            guard let view = editor(Self.mainWindow?.contentView) else { return "error no note editor on screen" }
+            if let at = number(c["tick"]).map { Int($0) } {
+                guard at >= 0, at < view.string.utf16.count,
+                      let link = view.textStorage?.attribute(.link, at: at, effectiveRange: nil) else { return "error no box at \(at)" }
+                _ = view.delegate?.textView?(view, clickedOnLink: link, at: at)
+            }
+            if let at = number(c["returnAt"]).map { Int($0) } {
+                view.setSelectedRange(NSRange(location: min(max(at, 0), view.string.utf16.count), length: 0))
+                view.doCommand(by: #selector(NSResponder.insertNewline(_:)))
+            }
+            try? await Task.sleep(for: .milliseconds(200))
+            return "ok " + (NotesStore.shared.sorted.first?.body ?? view.string).replacingOccurrences(of: "\n", with: "\\n")
         case "dictation-stage":
             // Opens Notes on its newest note (making one if there's none)
             // and shows talking into it in a phase, with no microphone;
@@ -1545,6 +1610,8 @@ enum Automation {
             if c["new"] as? Bool == true { Terminals.shared.add(target) }
             if let text = c["type"] as? String { Terminals.shared.open(target).type(text) }
             if let command = c["put"] as? String { app.putInTerminal(ShellBlock(command: command), from: app.selection) { _ in } }
+            // {"rename": "server"} names the showing tab ("" for the shell's own).
+            if let name = c["rename"] as? String { Terminals.shared.existing(for: target)?.name = name.isEmpty ? nil : name }
             if let ms = c["wait"] as? Int { try? await Task.sleep(for: .milliseconds(ms)) }
             let focused = (NSApp.mainWindow?.firstResponder as? NSView).map { String(describing: type(of: $0)) } ?? "none"
             let tabs = Terminals.shared.tabs(for: target).map(\.tabTitle).joined(separator: " | ")

@@ -36,7 +36,7 @@ struct ActivityBar: View {
             ActivityButton(symbol: "bubble.left.and.bubble.right", title: "Threads", shortcut: AppShortcuts.shared.display(.showInbox),
                            badge: app.sections.inbox.count, active: app.sidebarMode == .inbox, slides: true) {
                 app.threadsCollapsed = false
-                app.sidebarMode = .inbox
+                app.showInbox()
             }
             // Only once the runner has said it knows about schedules.
             if app.schedulesSupported {

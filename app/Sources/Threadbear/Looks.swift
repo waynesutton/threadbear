@@ -1,10 +1,11 @@
 import AppKit
 import Observation
 import SwiftUI
+import UniformTypeIdentifiers
 import ThreadbearCore
 
-/// Pictures of the user's own on Threadbear's pages: the Librarian page's
-/// picture and background (Customize the Librarian page) and the main
+/// Pictures of the user's own on Threadbear's pages: the Librarian and
+/// Scheduled and Projects pages' pictures and backgrounds (their Customize switches) and the main
 /// window's background behind a new thread. Both are Settings > General >
 /// Look switches, off by default, kept on this Mac (UserDefaults) and
 /// never sent to the runner. Chosen pictures are copied into the data
@@ -16,6 +17,14 @@ enum Looks {
     static let librarianOnKey = "librarianLookOn"
     /// The Librarian page's LibrarianLook, as JSON.
     static let librarianKey = "librarianLook"
+    /// Settings > General > Look: "Customize the Scheduled page".
+    static let scheduledOnKey = "scheduledLookOn"
+    /// The Scheduled page's ScheduledLook, as JSON.
+    static let scheduledKey = "scheduledLook"
+    /// Settings > General > Look: "Customize the Projects page".
+    static let projectsOnKey = "projectsLookOn"
+    /// The Projects page's ProjectsLook, as JSON.
+    static let projectsKey = "projectsLook"
     /// Settings > General > Look: "Background picture in the main window".
     static let mainBackgroundOnKey = "mainBackgroundOn"
     /// The main window background's file name in `looks/`.
@@ -45,11 +54,60 @@ enum Looks {
         LibrarianLook.load(defaults.data(forKey: librarianKey))
     }
 
+    /// The look as a binding for the Customize panel. It reads the saved
+    /// look each time rather than the page's @AppStorage copy, which only
+    /// catches up on the next redraw: choosing your own picture makes three
+    /// changes in a row, and reading the stale copy made the second and
+    /// third undo the first and delete the new picture (8 Nov).
+    static func librarianBinding(_ defaults: UserDefaults = .standard) -> Binding<LibrarianLook> {
+        Binding(get: { librarianLook(defaults) }, set: { saveLibrarianLook($0, defaults) })
+    }
+
     static func saveLibrarianLook(_ look: LibrarianLook, _ defaults: UserDefaults = .standard) {
         let old = librarianLook(defaults)
         defaults.set(look.data(), forKey: librarianKey)
-        // A picture the look no longer uses goes with it.
-        for file in [old.pictureFile, old.background].compactMap({ $0 }) where file != look.pictureFile && file != look.background {
+        removeUnused(old: old, new: look)
+    }
+
+    // MARK: The Scheduled page's look
+
+    static func scheduledLook(_ defaults: UserDefaults = .standard) -> ScheduledLook {
+        ScheduledLook.load(defaults.data(forKey: scheduledKey))
+    }
+
+    /// Read fresh on every get, for the same reason as librarianBinding.
+    static func scheduledBinding(_ defaults: UserDefaults = .standard) -> Binding<ScheduledLook> {
+        Binding(get: { scheduledLook(defaults) }, set: { saveScheduledLook($0, defaults) })
+    }
+
+    static func saveScheduledLook(_ look: ScheduledLook, _ defaults: UserDefaults = .standard) {
+        let old = scheduledLook(defaults)
+        defaults.set(look.data(), forKey: scheduledKey)
+        removeUnused(old: old, new: look)
+    }
+
+    // MARK: The Projects page's look
+
+    static func projectsLook(_ defaults: UserDefaults = .standard) -> ProjectsLook {
+        ProjectsLook.load(defaults.data(forKey: projectsKey))
+    }
+
+    /// Read fresh on every get, for the same reason as librarianBinding.
+    static func projectsBinding(_ defaults: UserDefaults = .standard) -> Binding<ProjectsLook> {
+        Binding(get: { projectsLook(defaults) }, set: { saveProjectsLook($0, defaults) })
+    }
+
+    static func saveProjectsLook(_ look: ProjectsLook, _ defaults: UserDefaults = .standard) {
+        let old = projectsLook(defaults)
+        defaults.set(look.data(), forKey: projectsKey)
+        removeUnused(old: old, new: look)
+    }
+
+    /// A picture a page's look no longer uses goes with it. Each page's
+    /// files are its own (every copy gets a new name), so one page never
+    /// deletes another's.
+    private static func removeUnused(old: some PictureLook, new: some PictureLook) {
+        for file in [old.pictureFile, old.background].compactMap({ $0 }) where file != new.pictureFile && file != new.background {
             remove(file)
         }
     }
@@ -108,15 +166,51 @@ enum Looks {
         try? FileManager.default.removeItem(at: folder.appendingPathComponent(name))
     }
 
-    /// An open panel for one picture. Nil when cancelled.
-    static func choosePicture(prompt: String) -> URL? {
-        let panel = NSOpenPanel()
-        panel.canChooseFiles = true
-        panel.canChooseDirectories = false
-        panel.allowsMultipleSelection = false
-        panel.allowedContentTypes = [.image]
-        panel.prompt = prompt
-        return panel.runModal() == .OK ? panel.url : nil
+    private static let picker = ProjectFilePicker()
+
+    /// An open panel for one picture, as a sheet on the window, calling
+    /// back with the file (nothing when cancelled). Not a runModal from
+    /// the button's action: a nested modal loop there can re-enter the
+    /// action and lose the choice (ProjectFilePicker), which is how
+    /// Choose… for a background did nothing on Wayne's Mac (8 Nov).
+    static func choosePicture(prompt: String, then use: @escaping @MainActor (URL) -> Void) {
+        picker.choose(configure: { panel in
+            panel.canChooseFiles = true
+            panel.canChooseDirectories = false
+            panel.allowsMultipleSelection = false
+            panel.allowedContentTypes = [.image]
+            panel.prompt = prompt
+        }, completion: { url in
+            if let url { use(url) }
+        })
+    }
+
+    /// A picture dropped on a well: a file from Finder, or an image dragged
+    /// out of Photos or a browser, which comes as image data rather than a
+    /// file. Data is written to a temporary file first, so both import the
+    /// same way.
+    static func loadDropped(_ providers: [NSItemProvider], then use: @escaping @MainActor (URL) -> Void) -> Bool {
+        guard let provider = providers.first else { return false }
+        if provider.canLoadObject(ofClass: URL.self) {
+            _ = provider.loadObject(ofClass: URL.self) { url, _ in
+                guard let url, url.isFileURL else { return }
+                Task { @MainActor in use(url) }
+            }
+            return true
+        }
+        if provider.hasItemConformingToTypeIdentifier(UTType.image.identifier) {
+            provider.loadDataRepresentation(forTypeIdentifier: UTType.image.identifier) { data, _ in
+                guard let data else { return }
+                let file = FileManager.default.temporaryDirectory.appendingPathComponent("dropped-\(UUID().uuidString)")
+                guard (try? data.write(to: file)) != nil else { return }
+                Task { @MainActor in
+                    use(file)
+                    try? FileManager.default.removeItem(at: file)
+                }
+            }
+            return true
+        }
+        return false
     }
 }
 
@@ -154,7 +248,7 @@ struct BackdropPicture: View {
 
 /// The places a background photo is drawn.
 enum BackdropSlot: Hashable {
-    case main, librarian
+    case main, librarian, scheduled, projects
 }
 
 /// The size each background was last drawn at, for Position's preview.
@@ -276,6 +370,8 @@ final class GitHubActivity {
     }
 
     private(set) var states: [String: State] = [:]
+    /// Years showing a saved or earlier copy because the last fetch failed.
+    private(set) var stale: Set<String> = []
     @ObservationIgnored private var fetchedAt: [String: Date] = [:]
     @ObservationIgnored private var tasks: [String: Task<Void, Never>] = [:]
     @ObservationIgnored var session: URLSession = .shared
@@ -283,40 +379,67 @@ final class GitHubActivity {
     static func key(_ user: String, _ year: Int) -> String { "\(GitHubUser.clean(user).lowercased())/\(year)" }
 
     func state(user: String, year: Int) -> State? { states[Self.key(user, year)] }
+    func isStale(user: String, year: Int) -> Bool { stale.contains(Self.key(user, year)) }
+    func isFetching(user: String, year: Int) -> Bool { tasks[Self.key(user, year)] != nil }
+
+    /// The last answer for a year, kept in `looks/` so the card has
+    /// something to show at launch and while GitHub or the service is down.
+    private static func cacheFile(_ user: String, _ year: Int) -> URL {
+        Looks.folder.appendingPathComponent("github-\(GitHubUser.clean(user).lowercased())-\(year).json")
+    }
 
     func load(user: String, year: Int, force: Bool = false) {
         let key = Self.key(user, year)
         guard let url = GitHubContributions.url(user: user, year: year), tasks[key] == nil else { return }
+        if states[key] == nil, let data = try? Data(contentsOf: Self.cacheFile(user, year)),
+           let saved = try? GitHubContributions.parse(data, year: year) {
+            states[key] = .loaded(saved)
+            fetchedAt[key] = (try? Self.cacheFile(user, year).resourceValues(forKeys: [.contentModificationDateKey]))?.contentModificationDate
+        }
         let thisYear = Calendar.current.component(.year, from: Date())
         if !force, case .loaded = states[key] {
-            if year < thisYear { return }
+            if year < thisYear, fetchedAt[key] != nil { return }
             if let at = fetchedAt[key], Date().timeIntervalSince(at) < 3600 { return }
         }
-        if states[key] == nil || force { states[key] = .loading }
+        // A refresh keeps what's showing until the answer comes back.
+        if states[key] == nil { states[key] = .loading }
+        if case .failed = states[key] { states[key] = .loading }
         var request = URLRequest(url: url, timeoutInterval: 20)
         request.setValue("application/json", forHTTPHeaderField: "Accept")
         let session = self.session
+        let file = Self.cacheFile(user, year)
         tasks[key] = Task { [weak self] in
             let result: State
+            var fresh: Data?
             do {
                 let (data, response) = try await session.data(for: request)
                 let status = (response as? HTTPURLResponse)?.statusCode ?? 200
                 do {
                     result = .loaded(try GitHubContributions.parse(data, year: year))
-                } catch GitHubContributions.ParseError.service {
-                    result = .failed("GitHub has no user called \(GitHubUser.clean(user)).")
+                    fresh = data
+                } catch GitHubContributions.ParseError.service(let message) {
+                    result = .failed(GitHubContributions.failure(status: status, serviceMessage: message, user: user))
                 } catch {
-                    result = .failed(status == 200 ? "GitHub's answer couldn't be read." : "GitHub answered \(status). Try again in a bit.")
+                    result = .failed(status == 200 ? "GitHub's answer couldn't be read." : GitHubContributions.failure(status: status, serviceMessage: nil, user: user))
                 }
             } catch {
-                result = .failed("Couldn't reach GitHub: \(error.localizedDescription)")
+                result = .failed("Couldn't reach GitHub. Check you're online and try again.")
             }
             guard let self else { return }
             self.tasks[key] = nil
-            // A refresh that fails keeps what was already showing.
-            if case .failed = result, case .loaded = self.states[key] { return }
+            if case .failed = result, case .loaded = self.states[key] {
+                self.stale.insert(key)
+                return
+            }
             self.states[key] = result
-            if case .loaded = result { self.fetchedAt[key] = Date() }
+            if case .loaded = result {
+                self.fetchedAt[key] = Date()
+                self.stale.remove(key)
+                if let fresh {
+                    try? FileManager.default.createDirectory(at: Looks.folder, withIntermediateDirectories: true)
+                    try? fresh.write(to: file, options: .atomic)
+                }
+            }
         }
     }
 }

@@ -483,7 +483,8 @@ Tools/dev-app.sh do '{"cmd":"collapse","highlightSection":"subagents"}'   # a Hi
 Tools/dev-app.sh do '{"cmd":"point","settings":true,"x":200,"y":262,"toX":215,"toY":345,"holdMs":800}'   # real events in the Settings window; holdMs waits mid-drag for a `shot`
 Tools/dev-app.sh do '{"cmd":"click","tip":"Hide Links"}'   # presses a SwiftUI control by its tooltip, without moving the pointer
 Tools/dev-app.sh do '{"cmd":"error","text":"Thread not found"}'   # fills the error bar ({"cmd":"error"} clears it)
-Tools/dev-app.sh do '{"cmd":"terminal","send":"ls\r"}'   # types into the Terminal panel's open tab ("new":true adds one); answers its tabs and the links ⌘-click finds
+Tools/dev-app.sh do '{"cmd":"terminal","send":"ls\r"}'   # types into the Terminal panel's open tab ("new":true adds one, "rename" names it, "hover":true underlines the first link); answers its tabs and the links ⌘-click finds
+Tools/dev-app.sh do '{"cmd":"preview","path":"/a/folder","search":"port","hit":12,"file":"src/app.ts"}'   # a folder with its file search typed in, then a click on that hit; "find":true is the bar's magnifying glass, "place":true says where the open file is scrolled ("scrollTo" moves it)
 Tools/dev-app.sh dump            # sidebar, rows (id, kind, height, open, text), panels, actions, composer, banner
 Tools/dev-app.sh shot /tmp/a.png # the window alone
 Tools/dev-app.sh rebuild         # a new build, same options and runner, same thread open
@@ -538,6 +539,7 @@ is an error. Commands marked "the open thread" act on `id` when it's given
 | `subagent` | `thread` (default: the open one), `id`, `timeout` | shows a sub-agent's transcript, as clicking its row under the thread does, and waits until its rows are on screen |
 | `app-menu` | none | the app menu's items as macOS has them: each title, key and action, so a duplicate (two Settings…) shows |
 | `menu-key` | `key` (a letter, or `down`, `up`, `left`, `right`), `modifiers` (`cmd`, `opt`, `ctrl`, `shift`) | a key equivalent through the main menu, as pressing it would; says whether an item took it, the open thread and any end-of-inbox note |
+| `note` | `body`, `tick`, `returnAt` | opens Notes on a new note with `body` (or the newest note); `tick` clicks the task box whose `[` is at that character, `returnAt` puts the caret there and presses Return, both through the editor's own handlers; says the note's text |
 | `click-at` | `x`, `y` | a click at a point in the main window, in points from its top left, without moving the pointer |
 | `mouse-button` | `button` (`back`, `forward`) | a mouse's side-button click over the window, through the same handler as a real one; says the sidebar view, the thread and whether back and forward can go further |
 | `page-swipe` | `dx`, `dy` (right and down positive; right is Back), `steps`, `lift` (default true) | two fingers across the middle of the window, as synthetic trackpad events through the handler SwipeNavigation's monitor calls; `"lift": false` leaves the fingers down for a shot of the edge arrow. Says the way, how far along and whether it's past the line, then where the window went |

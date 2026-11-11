@@ -15,7 +15,7 @@ final class EveryClickShowsTests: XCTestCase {
         "convexPanelLogin", "convexPanelKey", "threadHighlights", "threadCommands", "contextUsage", "folderCommands", "explain", "panelShown",
         "events", "subscribe", "subagent", "unsubscribe", "markSeen", "startRequest", "importMedia", "usageStats",
         "listClis", "listSchedules", "listRunners", "remoteLogins", "remoteThreads", "previewSchedule",
-        "movePreview", "listProjects", "getProject", "refreshProjectTasks", "librarianStatus", "connectorsStatus", "listPools", "threadSummary",
+        "movePreview", "listProjects", "getProject", "listPages", "getPage", "refreshProjectTasks", "librarianStatus", "connectorsStatus", "listPools", "threadSummary",
         "profilePage",
         // Not calls: helpers on the request types in the same file.
         "applied", "params",
@@ -32,6 +32,8 @@ final class EveryClickShowsTests: XCTestCase {
         "connectorsSetup", "connectorsAdd", "agentsConnect", "agentsRevoke",
         // The public profile page (ProfilePageModel.swift).
         "updateProfilePage", "removeProfilePage",
+        // Pages (Pages.swift): each in whileBusy, the row spins.
+        "refreshPage", "editPageWithAgent", "savePageDoc", "restorePageVersion", "deletePage", "restorePage", "exportPage", "setPageProjects",
     ]
 
     /// Functions that show their click some other way, and how.

@@ -261,10 +261,25 @@ Mac's files have thumbnails and Quick Look.
 Files, the folder on a thread's right-hand rail, opens the thread's own
 folder that way, without a link to it. Click it again to close it.
 
+A folder on this Mac has a search box at the top that looks inside its
+files: type, and the list gives way to every line with those words, file
+by file, with line numbers. Folders like `.git`, `node_modules` and build
+output are left out, and so are big files and anything that isn't text.
+Click a line to open the file there with the words picked out, and the
+back arrow brings you back to the same results. Clear the box for the
+folder again.
+
+A file you open in the side pane stays open until you close it with the
+back arrow. Going to Highlights or another panel and back, or to another
+thread and back, finds it where you left it, scrolled to the same place.
+
 A text file in the side pane opens for reading. The pencil in its bar
 switches to the raw text for editing, with line numbers down the side.
 What you type is saved a moment after you stop, and ⌘S saves it straight
-away. If the file changes on disk while you have unsaved edits (an agent
+away. The magnifying glass in the bar, or ⌘F in the file, finds words in
+it, lighting up every match and counting them, with arrows for the next
+and the one before. While you're editing, the same bar has Replace and
+All, to change one match or every one. If the file changes on disk while you have unsaved edits (an agent
 rewrote it), nothing is written over: a bar asks whether to take the
 file's version or keep yours.
 
@@ -329,6 +344,10 @@ shown on the composer (the box you type in) and changed by clicking it.
   the thread had before (Ask before edits for a thread that started in Plan
   first). Send back, or just writing what you'd change, has
   it plan again. Once it's working, the same card ticks off its steps.
+  On the iPhone app the plan shows as a card in the thread: tap it to read
+  the whole plan, copy it, or share it as a Markdown file (Save to Files,
+  Notes, AirDrop). While it waits, Go ahead approves it from there, and
+  typing what should change sends it back.
 
 In Ask before edits and Auto, an edit to a file Threadbear runs by itself
 (a patch, a file a patch uses, or Claude Code's settings) always asks, with
@@ -678,7 +697,9 @@ archived thread (its worktree may be another thread's by now) and the
 new-thread page. Click + above it for another shell in the same folder,
 so a dev server can keep running in one while you work in the next; each
 shows as a tab, and its ✕ closes it and ends its shell. `exit` closes
-that tab, and in the last one New Shell starts another. A shell
+that tab, and in the last one New Shell starts another. Double-click a
+tab, or right-click it and choose Rename…, to give it a name of your own
+(like Dev server); an empty name goes back to the shell's own. A shell
 only starts when you ask for one, with ⌘J, a click on the empty panel or
 a command's play icon (below), so looking through threads with it open starts nothing. A thread's shell
 stops when the thread is archived or deleted, and they all stop when you
@@ -699,8 +720,9 @@ in a panel of its own, as the Terminal shows the main panel's thread's
 shell: open the thread in the main panel to use it. It's on the Mac app only.
 A block with control or invisible characters in it has no play icon.
 
-A link in the Terminal (one a program prints, or a path you click) opens
-the way a link in a reply does: a web page in your browser, a document in
+Pointing at a web address in the Terminal, like a dev server's
+`http://localhost:5173/`, underlines it. A link in the Terminal (one a
+program prints, or a path you ⌘-click) opens the way a link in a reply does: a web page in your browser, a document in
 its app, and anything that would run something, or start another app,
 only once you've said yes.
 
@@ -742,6 +764,48 @@ every change); then going Back, opening another file or thread, or
 closing the panel with changes asks Save, Don't Save or Cancel. Turn off
 Edit files like an editor and files open to read, and the pencil switches
 one to editing, saved as you go.
+
+## Git
+
+A thread working in a git repo gets a Git panel on the rail down the
+right, like VS Code's Source Control. It's an experiment for now: turn on
+Git panel in Settings > General > Experiments. The panel is for the repo
+the thread's folder is in, or, for a thread in a folder that isn't a
+repo, the first repo among its projects' folders.
+
+Along the top are the repo, the branch and how far it is from its remote,
+with Fetch, Sync and Push. Below them, write a message and press the one
+button, which changes with what's next: Commit when something's staged,
+Sync with the arrows counting what's to push and pull, or Publish branch
+for a branch the remote doesn't have yet. Its chevron has Commit,
+Commit & Push and Commit & Sync. ⌘↩ commits, ⇧⌘↩ commits and pushes. ✨ in
+the message box has Claude Haiku write the message from what's staged, in
+the style of the repo's recent commits (not in a private folder).
+
+The lists fold: Staged, Changes and Commits. Point at a file for + to
+stage it or − to unstage it, or at a list's heading to do them all. A dot
+marks a commit that isn't pushed yet, and a pushed one opens on the web.
+The panel's button counts what's waiting on you: staged files plus
+commits to push.
+
+Two chips above the message box do the same through the agent: Commit
+staged & push and Sync. They turn up only when there's something to do,
+and the agent writes the message, deals with a rejected push and says
+what it shipped. Saying "commit and push" in your own words does the
+same.
+
+Nothing here force-pushes or skips the repo's hooks, and Push and Sync
+only push to a remote you own: one under your GitHub login (the one `gh`
+is signed in as), or an owner you list in `runner.json`. `"*"` allows any.
+
+```json
+"gitPanel": { "pushOwners": ["you", "your-org"] }
+```
+
+`"chips"` in the same place says when the chips show: `"when-needed"`
+(the default), `"always"` or `"off"`. A repo whose own git settings would
+run something when it's read (a filter or a diff driver) is left alone,
+and the panel says so: ask the agent instead.
 
 ## Highlights
 <!-- slug: highlights -->
@@ -822,7 +886,23 @@ gotchas), links (its live site, an admin page) and folders, the repos its
 work lives in. The Projects view lists them, with New project at the top;
 click one for its page, with its threads, state and notes. The search at
 the top of the Projects page looks through their names, state, goals, notes
-and folders: Return opens the top result and Escape clears it.
+and folders: Return opens the top result and Escape clears it. Add folder…
+under Folders on a project's page picks one, and its New Folder button
+makes one first if the repo you want isn't there yet. Every folder picker
+in the app has that button.
+
+With Customize the Projects page on (Settings › General › Look, off by
+default), the page gets a Customize button at its top right, like the
+Librarian and Scheduled pages'. The page has no bear, so its picture is
+one of your own or none, which it starts as. Its panel also puts a photo
+behind the page, with Position and Fade; moves the picture, the title and
+search, and the cards to the top, middle or bottom, or hides them; and
+picks what each card shows: the icon tile, the open thread count, the
+status and where it's up to. With the tile off, the count sits by the
+project's name. Hiding the title and search shows every project, so a
+search left typed in can't hide any. Turning the switch off puts the page
+back as it ships and keeps your changes; Reset to the standard page
+clears them.
 
 To start a thread in a project, press New Thread at the top of its page
 (or New thread… by its Threads). The message box opens with the project's
@@ -855,6 +935,40 @@ to open the card; the arrow
 on a card, or its right-click menu, opens it in Notion. Boards are read through
 a Connectors gateway (see [Connectors](#connectors)); without one, the
 project's page says so and nothing is read.
+
+## Prints
+
+A Print is something a thread makes for you to keep. It can be a chart, a dashboard, a report or a doc. It stays after the reply that made it scrolls away, and asking again updates it rather than making another one. It's an experiment: turn it on in Settings > General > Experiments > Prints. (Prints were called Pages until 10 Nov 2026; an older reply's page still shows as a card.)
+
+Ask in plain words, in any thread:
+
+| Say | You get |
+|---|---|
+| "Make a pie chart of this spreadsheet by region" | A **chart** print. Attach the file or name it. CSV, TSV, JSON and Excel (.xlsx) work |
+| "Make a dashboard from this data" | A **dashboard**: big numbers, a few charts and a table |
+| "Give me a report on where this project stands" | A **report**: sections of text with charts |
+| "Write up the launch plan as a print" | A **doc**. You can edit it yourself too |
+| "Run bundle-analyzer summary" | A **bundle size** report for a Convex app |
+| "Add a figure that explains it" or "make a share clip" | A larger extra: an illustrated figure, or a short video. Only when you ask |
+
+**Where a print goes.** In a thread that belongs to one project, its prints go in that project and show under **Prints** on the project's page. Say "keep it out of projects" for none, or "put it in Poddle" for another. A print can be in several projects. Prints are kept on your Mac, in the `pages` folder in Threadbear's data folder. Nothing about them goes to your Convex mirror, so they don't show on your phone or the website yet.
+
+**In a reply**, a thread shows a print as a card: a picture of the top of it, then its title, kind, version and age, with Open, Refresh and a ⋯ menu. Click the picture or Open to open it. The card always shows the print as it is now, so when a print gets a new version, the card in an earlier reply moves to it too, marked "New version", rather than a second card appearing. While a refresh is under way, the card says so.
+
+**Every row under Prints on the project's page** opens its print in a window of its own when you click it. Its ⋯ menu, or a right-click, has:
+
+- **Refresh** sends the print to the thread that made it, to be made again the same way, and opens that thread so you can watch.
+- **Edit with Agent…** asks for what should change, for example "make the region chart a pie". The thread does it and saves a new version.
+- **Edit Text…** (docs only) opens the doc's text to edit yourself. Save makes a new version marked "edited by you", and an agent changing it later starts from your text.
+- **Download…** saves the print's files in a new folder. Its `index.html` opens in any browser.
+- **Download as PDF…** saves it as a PDF on US Letter pages, in the light look, so it prints and sends cleanly. A line that lands right on a page break can be cut across two pages. For print-perfect breaks, ask the thread to "download it as a PDF", which prints it through Chrome.
+- **Versions** lists the last 10. Open one, download it, or make it the newest again; nothing in between is lost.
+- **Projects** puts it in a project or takes it out.
+- **Delete** takes it away. It waits 7 days under **Recently deleted** at the bottom of the list, where **Restore** brings it back.
+
+You can also ask a thread for any of these: "refresh the sales dashboard", "go back to version 3", "delete the old chart", "bring it back", "download it", "what prints do I have".
+
+Prints are static: pictures, charts and text, with no scripts, so they open straight away and can't reach the internet. A thread can make a "live" print with scripts when you ask for one. Its scripts run only after you choose Run them, and again for each new version.
 
 ## The librarian
 <!-- slug: librarian -->
@@ -898,8 +1012,9 @@ picture of your own or have none, and pick its size; put a photo behind the
 page, drag it in Position to choose which part shows (it starts with its
 bottom edge on the window's), and fade it so the text stays readable in
 light and dark; move each
-part (a greeting, the picture, the title and status, a quote, the numbers, GitHub
-activity and Settings) to the top, middle or bottom, or hide it; hide the
+part (a greeting, the picture, the title and status, a quote, the numbers,
+Threadbear activity, GitHub activity and Settings) to the top, middle or
+bottom, or hide it; hide the
 title, the line under it or the status line on their own; and pick which
 numbers show. Greet me puts "Good morning, Wayne" at the top (afternoon
 from 12, evening from 5 pm, night from 10 pm, by your Mac's clock), with
@@ -913,6 +1028,13 @@ right-click copies it. The quotes ship with Threadbear, so nothing is
 fetched, and none are from politicians, religious figures or tech
 founders. Put it at the top, middle or bottom under Layout like any other
 part. Drop a picture from Finder on its spot in the panel, or choose one.
+Thread activity (off until you turn it on under Layout) adds the
+Threadbear activity card your profile page can show: a year of days shaded
+by how many threads you started each day, worked out on your Mac from your
+threads, with threads in a private folder left out. Hover a day for its
+count and step back through the years with the arrows. It sits with the
+numbers until you move it, and where you put it is where it goes on your
+profile page too.
 GitHub activity shows a year of your public contributions, as on your
 GitHub profile, once you type your user name: step through the years with
 the arrows, hover a day for its count, and click one to open that day on
@@ -926,19 +1048,31 @@ own Threadbear site, at `https://<your deployment>.convex.site/profile`.
 Your site is yours alone, so there's no user name to pick, and your Convex
 backend serves the page, so it needs one (Your phone and a browser). It
 saves as you change it, like the rest of Customize. Give it a name, a line
-about you and up to four links, then turn on each part you want on it: the Librarian page's picture, its background photo, Threadbear
+about you and up to four links, then turn on each part you want on it: the Librarian page's picture, Threadbear
 activity (a year of days shaded by the threads you started), GitHub
 activity, the numbers you pick (threads this year, active days, longest
 streak, projects, models used), the projects you tick (title and thread
-count only) and the month you started. Every part starts off. The cards go
-in the order the Librarian page has its numbers and GitHub activity. Until
+count only), the month you started, and a Changelog: your public commits
+to your Threadbear repo on GitHub, newest first and grouped by day, in a
+section at the bottom of the page that opens when clicked. It lists the
+commits of your GitHub user name (under GitHub activity) on
+`<that name>/threadbear` unless you type another repository, and the
+visitor's browser reads them from GitHub, so only public commits ever
+show. Every part starts off. The cards go
+in the order the Librarian page has its numbers, Threadbear activity and GitHub activity. Until
 Publish my profile page is on, only you can see it, in a browser signed in
 to your Threadbear site, with a line saying so. Published, Show it on my
 site's front page makes it what visitors see at your site's address; when
 you're signed in you still get your threads there, and Sign in at the
-bottom of the page says how. The page looks like Threadbear's own site. A link
+bottom of the page says how. Customize shows the page's addresses with Copy and Open
+for each: Profile page (your site's /profile) always opens the profile,
+signed in or not, and Front page, there while it's on the front page,
+opens your site's address, where visitors see the profile and you, signed
+in, see your threads. The page looks like Threadbear's own site. A link
 to a published page shows your name, line and picture when pasted into
-Slack, X or iMessage. Its numbers and activity refresh by themselves within
+Slack, X or iMessage. Published, the Librarian page gets a View profile
+page button beside Customize; the View profile page button switch under
+Profile page takes it away. Its numbers and activity refresh by themselves within
 the hour. Thread titles, prompts, replies, folders and project notes are
 never sent, and threads in a private folder aren't counted. Take the page
 down deletes it and its pictures from your backend.
@@ -961,6 +1095,18 @@ in the list). Click a heading to fold it away (Done starts folded); a
 folded one shows how many are under it. Its page
 says what's coming up next with a few numbers: how many are on, due in the
 next day, repeating, set by threads, paused, and how often they've run.
+
+With Customize the Scheduled page on (Settings › General › Look, off by
+default), the page gets a Customize button at its top right, like the
+Librarian page's. Its panel keeps the bear, uses a picture of your own or
+has none, and sets its size; puts a photo behind the page, with Position
+and Fade as on the Librarian page; moves the picture, the title and status,
+and the numbers to the top, middle or bottom, or hides them; and picks
+which numbers show. On this page the places are where a part sits in the
+window: middle is the middle of the space left, and bottom is the
+window's bottom edge. A page too tall for the window stacks them in order
+and scrolls. Turning the switch off puts the page back as it ships
+and keeps your changes; Reset to the standard page clears them.
 
 A schedule's message brings an archived thread out of the archive while it
 runs. If the run ends with nothing for you, the thread goes back into the
@@ -1668,7 +1814,17 @@ notes. New Note starts one called "Untitled note" (then "Untitled note
 with the bin or its right-click menu. The text box is a code editor's:
 line numbers down the side, a fixed-width font, and basic Markdown
 coloured as you type (headings, **bold**, *italics*, `code`, lists,
-links and quotes). Notes save as you type.
+links and quotes). Headings get bigger by level: `#` is the biggest, then
+`##` and `###`. Start a line with `- [ ] ` for a task: click its box to
+tick it (it turns to `[x]` and the task is struck through) or untick it,
+and ⌘Z undoes a click. Return on a list line starts the next item (the
+next number, or a fresh box on a task list); Return on an empty item ends
+the list. A note stays plain Markdown text underneath, so it copies out as
+it is. Notes save as you type. The sidebar button left of
+the Notes title folds the list of notes away for more room to write, and
+brings it back; Threadbear remembers which you left it on. To leave
+Notes, press Esc, click its X, or go anywhere else: ⌘1 to ⌘4, or any
+view in the bar (Threads, Scheduled, Projects, Librarian).
 
 Your notes stay on this Mac and are yours alone: each is encrypted, with
 a key Threadbear keeps beside its other secrets (readable only by you), so
@@ -2001,8 +2157,9 @@ it back. Fade lays the window's own colour over it so text stays
 readable in light and dark, and Show behind open threads too puts it behind
 every thread's transcript as well, a little more faded. The picture is
 copied, scaled down, into Threadbear's data folder (`looks/`), so the
-original can move; Remove deletes the copy. The Librarian page has its own
-background and layout (The librarian, above).
+original can move; Remove deletes the copy. The Librarian, Scheduled and
+Projects pages have their own backgrounds and layouts (The librarian,
+Schedules and Projects).
 
 ### A ding when a thread is done
 

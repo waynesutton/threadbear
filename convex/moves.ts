@@ -1,5 +1,5 @@
 // Moving a thread to another runner (docs/protocol.md, "Moving a thread to
-// another runner", API 64). The main Mac's runner (the owner key) starts a
+// another runner", API 72). The main Mac's runner (the owner key) starts a
 // move; after that each runner watches the moves it's in (`moves`) and
 // takes its step when the state says it's its turn: the runner that has the
 // thread (S) describes it (moveInfo), the runner taking it (T) says it can

@@ -41,6 +41,8 @@ import type { StartRequest } from './cross-runner.ts';
 import { SECRET_TIMEOUT_DEFAULT_MIN, SECRET_TIMEOUT_MAX_MIN } from './secrets.ts';
 import { cutSafely, firstLineSafely } from './safe-cut.ts';
 import { pickRunner } from './moves.ts';
+import { MAX_RECIPE, MAX_SUMMARY, MAX_TITLE, PAGE_KINDS, type PageRecord, type Pages } from './pages.ts';
+import { MAX_HANDLES, XaiKeyRejected, forgetXaiKey, formatXSearch, readXaiKey, saveXaiKey, xSearch, xSearchProblem } from './x-search.ts';
 
 // What the tools drive: the Runner itself, or during a handover
 // (docs/protocol.md) a ThreadRouter (handover.ts) that reaches threads on
@@ -132,7 +134,8 @@ const accessName = (t: Authority, caller: Authority): string => `${MODE_NAMES[t.
 export const ALWAYS_ASK_TOOLS = new Set([`mcp__${SERVER_NAME}__delete_thread`]);
 // Never asked about, whatever the mode: they read, end the turn, take a
 // pin out of this thread's Highlights, ask Mike for a secret (his
-// typing it is the yes), or make a reply button (his press is the yes, and
+// typing it is the yes), search X (x_search: it only reads, like web
+// search, and its key card was his yes to the cost), or make a reply button (his press is the yes, and
 // the runner keeps it within this thread's access: runner/buttons.ts). "Ask before edits" asking for end_turn held every
 // turn on an Allow card with no reply under it yet (6 Nov 2026). The rest
 // still ask outside full access, as they change something or act
@@ -145,7 +148,7 @@ export const ALWAYS_ASK_TOOLS = new Set([`mcp__${SERVER_NAME}__delete_thread`]);
 // Restart to Update asks only wake or file this thread, with the runner's
 // words, and the turn they start runs in its mode then, so they stay in.
 export const NEVER_ASK_TOOLS = new Set(
-  ['end_turn', 'list_threads', 'read_thread', 'list_accounts', 'list_schedules', 'list_projects', 'read_project', 'unpin', 'ask_secret', 'add_button'].map(
+  ['end_turn', 'list_threads', 'read_thread', 'list_accounts', 'list_schedules', 'list_projects', 'read_project', 'unpin', 'ask_secret', 'add_button', 'x_search', 'list_prints', 'read_print', 'list_pages', 'read_page'].map(
     (n) => `mcp__${SERVER_NAME}__${n}`,
   ),
 );
@@ -234,6 +237,12 @@ export function buildThreadbearTools(
     // The runAsks experiment: end_turn's asks[].run is only offered while
     // it's on.
     runAsks?: () => boolean;
+    // The xSearch experiment (x-search.ts): x_search is only handed out
+    // while it's on; the runner's secrets folder, where its key is kept.
+    xSearch?: () => { secretsDir: string; fetch?: typeof fetch } | undefined;
+    // The pages experiment (pages.ts): the page tools are only handed out
+    // while it's on.
+    pages?: () => Pages | undefined;
   } = {},
 ) {
   const codex = opts.provider === 'codex';
@@ -736,6 +745,226 @@ export function buildThreadbearTools(
         ),
       ]
     : [];
+
+  // The xSearch experiment (x-search.ts). With no key yet, the first call
+  // asks for one in a secret card and keeps it in the runner's secrets.
+  const xs = opts.xSearch?.();
+  const xSearchTools = xs
+    ? [
+        tool(
+          'x_search',
+          "Searches X (Twitter) through xAI's Grok and returns its answer with links to the posts it used, and what the call cost. Use it for what people are posting about something, or what an account said; your web search can't read X. Each call costs the user a few cents of xAI credit, so search once with a good question rather than many times.",
+          {
+            query: z.string().trim().min(1).max(2000).describe('What to find out, as a question.'),
+            handles: z.array(z.string()).max(MAX_HANDLES).optional().describe('Only posts from these accounts, without @.'),
+            excludeHandles: z.array(z.string()).max(MAX_HANDLES).optional().describe('Leave these accounts out. Not with handles.'),
+            from: z.string().optional().describe('First day, YYYY-MM-DD (UTC).'),
+            to: z.string().optional().describe('The day after the last, YYYY-MM-DD.'),
+          },
+          handle(async (args, extra) => {
+            const problem = xSearchProblem(args);
+            if (problem) throw new Error(problem);
+            let key = readXaiKey(xs.secretsDir);
+            if (!key) {
+              if (!askSecret) throw new Error("There's no xAI API key yet, and this thread can't ask for one. Ask the user to run x_search from a thread on their Mac.");
+              const a = await askSecret(selfId, {
+                label: 'xAI API key',
+                reason: 'For X search. Make one at console.x.ai under API Keys. Threadbear keeps it in its secrets folder for every thread, and each search uses a few cents of your xAI credit.',
+                placeholder: 'xai-...',
+                ...(extra?.signal ? { signal: extra.signal } : {}),
+              });
+              if (a.status !== 'saved') return a.status === 'declined' ? `The user declined to give an xAI key${a.message ? `: ${a.message}` : '.'} Don't ask again unless they say so.` : `No key: ${a.message ?? 'the request ended.'}`;
+              try {
+                saveXaiKey(xs.secretsDir, fs.readFileSync(a.file, 'utf8'));
+              } finally {
+                fs.rmSync(a.file, { force: true });
+                fs.rmSync(a.askpass, { force: true });
+              }
+              key = readXaiKey(xs.secretsDir);
+              if (!key) throw new Error('The key was empty. Call x_search again to enter it.');
+            }
+            try {
+              return formatXSearch(await xSearch(args, key, { fetch: xs.fetch, ...(extra?.signal ? { signal: extra.signal } : {}) }));
+            } catch (e) {
+              if (!(e instanceof XaiKeyRejected)) throw e;
+              forgetXaiKey(xs.secretsDir);
+              throw new Error(`${e.message} Threadbear forgot it: call x_search again and the user can enter a new one.`);
+            }
+          }),
+        ),
+      ]
+    : [];
+
+  // The pages experiment (pages.ts), called Prints since 10 Nov 2026 (Wayne
+  // picked the name; the code and protocol still say page): named,
+  // versioned pages the runner keeps, in zero or more projects. Only handed
+  // out while it's on.
+  const pageStore = opts.pages?.();
+  const pageLine = (p: PageRecord): string =>
+    `${p.id}  ${p.kind ?? 'page'}  v${p.version}  "${p.title}"${p.live ? '  live' : ''}${p.deletedAt ? `  deleted ${p.deletedAt}` : ''}  ${p.projects.length ? `in ${p.projects.map((x) => x.id).join(', ')}` : 'no project'}  thread ${p.ownerThread.slice(0, 8)}  ${p.updatedAt}${p.editedBy === 'user' ? '  edited by the user' : ''}${p.summary ? `\n  ${p.summary}` : ''}`;
+  const showPage = async (p: PageRecord, show: boolean | undefined): Promise<string> => {
+    if (!show) return '';
+    if (!control.pin) return ' This runner can\'t open it in the side pane.';
+    const { shown } = await control.pin(selfId, { path: pageStore!.file(p.id), title: p.title, show: true });
+    return shown === false ? ' It opens in the side pane when the user next looks at this thread.' : ' It is open in the side pane.';
+  };
+  const projectIds = async (qs: string[]): Promise<string[]> => Promise.all(qs.map(async (q) => (await project(q)).id));
+  const pageContent = {
+    html: z.string().optional().describe('The page as one HTML document. Give one of html, dir or markdown.'),
+    dir: z.string().optional().describe('A folder you built with index.html and its assets (svg, png, webp, mp4, css). Absolute, or relative to this thread’s folder.'),
+    markdown: z.string().optional().describe('For a doc: the text as markdown. Threadbear draws it, and the user can edit it in the app.'),
+  };
+  const recipeArg = z.string().max(MAX_RECIPE).optional().describe('How to make it again, for the Refresh button: the command, the data file, the steps. A thread follows it later.');
+  const absDir = (d: string | undefined, cwd: string | undefined): string | undefined => (d === undefined ? undefined : path.resolve(cwd ?? process.cwd(), d.replace(/^~(?=\/)/, home)));
+  const printTools = pageStore
+    ? [
+        tool(
+          'create_print',
+          `Makes a Print: a named, versioned page Threadbear keeps for the user (a chart, dashboard, report, doc), that outlives this reply and is updated in place with update_print. Use the make-print skill to build charts and dashboards from data. Static HTML, CSS and SVG unless live is true. Then put a \`\`\`page <id>\`\`\` block in your reply. If one from the same source exists (list_prints), update it instead.`,
+          {
+            title: z.string().min(1).max(MAX_TITLE).describe('Short, what it shows: "Bundle size".'),
+            summary: z.string().max(MAX_SUMMARY).describe('One or two lines of what it says now, for lists and other apps.'),
+            ...pageContent,
+            kind: z.enum(PAGE_KINDS).optional().describe('chart, dashboard, report, doc, bundle or page. markdown makes a doc.'),
+            recipe: recipeArg,
+            projects: z.array(z.string()).optional().describe('Projects to put it in, by id or title. Left out: this thread\'s project when it is pinned to exactly one. [] for none.'),
+            source: z.string().max(MAX_TITLE).optional().describe('What made it ("bundle-analyzer summary"), so the next run finds and updates it.'),
+            live: z.boolean().optional().describe('Allows inline scripts. They run only in the side pane after the user chooses Run them, never in the thread.'),
+            show: z.boolean().optional().describe('Open it in the side pane now.'),
+          },
+          handle(async (input, extra) => {
+            const me = (await all()).find((t) => t.id === selfId);
+            await confirm('create_print', await confinedReason(`Make the print "${input.title}"`), { title: input.title, ...(input.dir ? { dir: input.dir } : {}) }, extra?.signal);
+            const p = pageStore.create({
+              title: input.title,
+              summary: input.summary,
+              ownerThread: selfId,
+              ...(input.html !== undefined ? { html: input.html } : {}),
+              ...(input.dir !== undefined ? { dir: absDir(input.dir, me?.cwd) } : {}),
+              ...(input.markdown !== undefined ? { markdown: input.markdown } : {}),
+              ...(input.projects ? { projects: await projectIds(input.projects) } : {}),
+              ownerProjects: me?.projects ?? [],
+              ...(input.source ? { source: input.source } : {}),
+              ...(input.kind ? { kind: input.kind } : {}),
+              ...(input.recipe ? { recipe: input.recipe } : {}),
+              ...(input.live ? { live: true } : {}),
+            });
+            return `Made ${pageLine(p)}\nShow it with a \`\`\`page ${p.id}\`\`\` block.${await showPage(p, input.show)}`;
+          }),
+        ),
+        tool(
+          'update_print',
+          'Updates a Print in place: new content (html, dir or markdown) makes a new version, and the last 10 are kept. restoreVersion makes an older version the newest again. If the user edited a doc themselves (read_print says so), start from their markdown.',
+          {
+            id: z.string().min(1).describe('The print id (pg_...) or a unique prefix.'),
+            title: z.string().min(1).max(MAX_TITLE).optional(),
+            summary: z.string().max(MAX_SUMMARY).optional(),
+            ...pageContent,
+            recipe: recipeArg,
+            restoreVersion: z.number().int().min(1).optional().describe('Make this older version the newest again.'),
+            show: z.boolean().optional().describe('Open it in the side pane now.'),
+          },
+          handle(async (input) => {
+            const me = (await all()).find((t) => t.id === selfId);
+            if (input.restoreVersion !== undefined) {
+              const r = pageStore.restoreVersion(input.id, input.restoreVersion);
+              return `Version ${input.restoreVersion} is the newest again: ${pageLine(r)}${await showPage(r, input.show)}`;
+            }
+            const p = pageStore.update(input.id, {
+              ...(input.title !== undefined ? { title: input.title } : {}),
+              ...(input.summary !== undefined ? { summary: input.summary } : {}),
+              ...(input.recipe !== undefined ? { recipe: input.recipe } : {}),
+              ...(input.html !== undefined ? { html: input.html } : {}),
+              ...(input.dir !== undefined ? { dir: absDir(input.dir, me?.cwd) } : {}),
+              ...(input.markdown !== undefined ? { markdown: input.markdown } : {}),
+            });
+            return `Updated ${pageLine(p)}${await showPage(p, input.show)}`;
+          }),
+        ),
+        tool(
+          'list_prints',
+          'Lists Prints, newest first: by project, by the thread that made them, with no project, by source, or the deleted ones.',
+          {
+            project: z.string().optional().describe('Project id or title.'),
+            thread: z.string().optional().describe('Thread id. "self" for this thread.'),
+            none: z.boolean().optional().describe('Only prints in no project.'),
+            source: z.string().optional(),
+            deleted: z.boolean().optional().describe('Only deleted prints, kept 7 days for restore_print.'),
+          },
+          handle(async ({ project: q, thread, none, source, deleted }) => {
+            const list = pageStore.list({
+              ...(q ? { project: (await project(q)).id } : {}),
+              ...(thread ? { thread: thread === 'self' ? selfId : thread } : {}),
+              ...(none ? { none } : {}),
+              ...(source ? { source } : {}),
+              ...(deleted ? { deleted } : {}),
+            });
+            return list.length ? list.map(pageLine).join('\n') : 'No prints.';
+          }),
+        ),
+        tool(
+          'read_print',
+          "Reads a Print: title, summary, kind, version, projects, how to remake it, the versions kept, the path of its index.html, and a doc's markdown.",
+          { id: z.string().min(1), version: z.number().int().min(1).optional().describe('An older version. Default: the newest.') },
+          handle(({ id, version }) => {
+            const p = pageStore.find(id);
+            const md = pageStore.markdown(p.id, version);
+            return [
+              pageLine(p),
+              p.recipe ? `recipe: ${p.recipe}` : '',
+              `versions kept: ${pageStore.versions(p.id).join(', ')}`,
+              `file: ${pageStore.file(p.id, version)}`,
+              md !== undefined ? `markdown:\n${md}` : '',
+            ]
+              .filter(Boolean)
+              .join('\n');
+          }),
+        ),
+        tool(
+          'delete_print',
+          'Deletes a Print. It is kept 7 days, and restore_print brings it back until then.',
+          { id: z.string().min(1) },
+          handle(({ id }) => `Deleted ${pageStore.delete(id).id}. restore_print brings it back for 7 days.`),
+        ),
+        tool(
+          'restore_print',
+          'Brings back a deleted Print (list_prints with deleted: true shows them).',
+          { id: z.string().min(1) },
+          handle(({ id }) => `Restored ${pageLine(pageStore.restore(id))}`),
+        ),
+        tool(
+          'export_print',
+          "Copies a Print's files (index.html and its assets) into a new or empty folder, for the user to keep or send. For a PDF, run the make-print skill's export-pdf.mjs on the copied index.html.",
+          {
+            id: z.string().min(1),
+            folder: z.string().min(1).describe('Where to copy it. Absolute, or relative to this thread’s folder.'),
+            version: z.number().int().min(1).optional(),
+          },
+          handle(async ({ id, folder, version }) => {
+            const me = (await all()).find((t) => t.id === selfId);
+            return `Copied to ${pageStore.exportTo(id, absDir(folder, me?.cwd)!, version)}`;
+          }),
+        ),
+        tool(
+          'add_print_to_project',
+          'Puts a Print in a project, so it shows on that project. A page can be in several.',
+          { id: z.string().min(1), project: z.string().min(1).describe('Project id or title.') },
+          handle(async ({ id, project: q }) => pageLine(pageStore.setProjects(id, { add: [(await project(q)).id] }))),
+        ),
+        tool(
+          'remove_print_from_project',
+          'Takes a Print out of a project. It stays with the thread that made it.',
+          { id: z.string().min(1), project: z.string().min(1).describe('Project id or title.') },
+          handle(async ({ id, project: q }) => pageLine(pageStore.setProjects(id, { remove: [(await project(q)).id] }))),
+        ),
+      ]
+    : [];
+  // The names from before the rename: a session that loaded them keeps
+  // calling them (AGENTS.md, "keep taking the old ones").
+  const pageTools = [
+    ...printTools,
+    ...printTools.map((t) => ({ ...t, name: t.name.replace('prints', 'pages').replace('print', 'page'), description: `Old name for ${t.name}.` })),
+  ];
 
   // Highlights (docs/protocol.md): the list beside the transcript of what
   // the thread made and shared. Always this thread's own.
@@ -1561,6 +1790,8 @@ export function buildThreadbearTools(
     ...buttonTools,
     ...highlightTools,
     ...secretTools,
+    ...xSearchTools,
+    ...pageTools,
     ...pocketTools,
     ...(schedules ? scheduleTools : []),
     ...(projects ? projectTools : []),
@@ -2071,13 +2302,13 @@ export function serverInstructions(selfId: string, o: { one: boolean; bulletRepl
   );
 }
 
-export function threadbearMcpServer(control: ThreadControl, selfId: string, schedules?: ScheduleControl, projects?: ProjectControl, appRestarts?: AppRestartControl, bulletReplies: () => boolean = () => true, pocket?: () => PocketControl | undefined, oneReply: () => boolean = () => false, gateway?: () => string | undefined, gatewayHealth?: () => Promise<ConnectorService[] | undefined>, scheduleChecks?: () => boolean, remote?: () => RemoteControl | undefined, replyButtons?: () => boolean, runAsks?: () => boolean): McpSdkServerConfigWithInstance {
+export function threadbearMcpServer(control: ThreadControl, selfId: string, schedules?: ScheduleControl, projects?: ProjectControl, appRestarts?: AppRestartControl, bulletReplies: () => boolean = () => true, pocket?: () => PocketControl | undefined, oneReply: () => boolean = () => false, gateway?: () => string | undefined, gatewayHealth?: () => Promise<ConnectorService[] | undefined>, scheduleChecks?: () => boolean, remote?: () => RemoteControl | undefined, replyButtons?: () => boolean, runAsks?: () => boolean, xSearch?: () => { secretsDir: string } | undefined, pages?: () => Pages | undefined): McpSdkServerConfigWithInstance {
   const one = oneReply();
   const server = createSdkMcpServer({
     name: SERVER_NAME,
     version: RUNNER_VERSION,
     instructions: serverInstructions(selfId, { one, bulletReplies: bulletReplies(), pocket: Boolean(pocket?.()), projects: Boolean(projects) }),
-    tools: buildThreadbearTools(control, selfId, Date.now, schedules, projects, appRestarts, { bulletReplies, pocket, oneReply: () => one, gateway, gatewayHealth, scheduleChecks, remote, replyButtons, runAsks }),
+    tools: buildThreadbearTools(control, selfId, Date.now, schedules, projects, appRestarts, { bulletReplies, pocket, oneReply: () => one, gateway, gatewayHealth, scheduleChecks, remote, replyButtons, runAsks, xSearch, pages }),
   });
   server.tools = [...ALWAYS_ASK_TOOLS].map((name) => ({ name: name.split('__').at(-1)!, permission_policy: 'always_ask' as const }));
   return server;

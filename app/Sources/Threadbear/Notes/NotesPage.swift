@@ -14,11 +14,27 @@ struct NotesPage: View {
     @State private var dictation = NoteDictation.shared
     @AppStorage(NoteDictation.enabledKey) private var dictationWanted = false
     @AppStorage(VoiceMode.enabledKey) private var voiceEnabled = true
+    /// The list of notes folded away, for more room to write. Kept across
+    /// launches, as the Threads panel's fold is (Wayne, 9 Nov).
+    @AppStorage("notesListHidden") private var listHidden = false
     @FocusState private var titleFocused: Bool
 
     var body: some View {
         VStack(spacing: 0) {
             HStack(spacing: zoomed(10)) {
+                Button {
+                    withAnimation(Juice.reduceMotion ? nil : .snappy(duration: 0.25)) { listHidden.toggle() }
+                } label: {
+                    Image(systemName: "sidebar.left")
+                        .font(.system(size: zoomed(14)))
+                        .foregroundStyle(listHidden ? .secondary : .primary)
+                        .frame(width: zoomed(26), height: zoomed(26))
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .disabled(store.problem != nil)
+                .tip(listHidden ? "Show the list of notes" : "Hide the list of notes")
+                .accessibilityLabel(listHidden ? "Show note list" : "Hide note list")
                 Text("Notes")
                     .font(.system(size: zoomed(17), weight: .semibold))
                 Image(systemName: "lock.fill")
@@ -56,11 +72,15 @@ struct NotesPage: View {
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
                 HStack(spacing: 0) {
-                    list
-                        .frame(width: zoomed(220))
-                    Divider()
+                    if !listHidden {
+                        list
+                            .frame(width: zoomed(220))
+                            .transition(.move(edge: .leading).combined(with: .opacity))
+                        Divider()
+                    }
                     editor
                 }
+                .clipped()
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)

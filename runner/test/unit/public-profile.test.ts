@@ -6,7 +6,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { FakeClock } from '../../src/clock.ts';
-import { ACTIVITY_DAYS, PublicProfile, activityOf, localDay, numbersOf, readSettings } from '../../src/public-profile.ts';
+import { ACTIVITY_DAYS, PublicProfile, activityOf, changelogRepo, localDay, numbersOf, readSettings } from '../../src/public-profile.ts';
 import type { Project, ThreadSummary } from '../../src/protocol.ts';
 
 const NOW = new Date(2026, 10, 8, 15, 0).getTime();
@@ -99,6 +99,26 @@ test('what goes to the backend: only parts turned on, never titles, folders or p
   assert.equal(s.p.status().url, 'https://seal.convex.site/');
 });
 
+test('the changelog sends only a repo and a GitHub user, and needs both', async () => {
+  assert.equal(changelogRepo('', 'waynesutton'), 'waynesutton/threadbear', 'nothing typed: the fork\'s usual name');
+  assert.equal(changelogRepo(' https://github.com/waynesutton/tb.git ', 'waynesutton'), 'waynesutton/tb');
+  assert.equal(changelogRepo('mikecann/threadbear', 'waynesutton'), 'mikecann/threadbear');
+  assert.equal(changelogRepo('not a repo', 'waynesutton'), undefined);
+  assert.equal(changelogRepo('waynesutton/..', 'waynesutton'), undefined);
+  assert.equal(changelogRepo('waynesutton/threadbear', undefined), undefined, 'no GitHub user, no changelog');
+  assert.equal(readSettings({ ...settings, changelogRepo: 'waynes' }).changelogRepo, 'waynes', 'kept as typed');
+  const s = setup();
+  await s.p.update({ ...settings, show: ['changelog'], changelogRepo: 'waynesutton/threadbear' });
+  assert.ok(!('changelog' in s.sent.at(-1)!), 'no GitHub user, no changelog');
+  await s.p.update({ ...settings, show: ['changelog'], githubUser: 'waynesutton', changelogRepo: 'half typed' });
+  assert.ok(!('changelog' in s.sent.at(-1)!), 'not a repo, no changelog');
+  await s.p.update({ ...settings, show: ['changelog'], githubUser: 'waynesutton' });
+  assert.deepEqual(s.sent.at(-1)!.changelog, { repo: 'waynesutton/threadbear', author: 'waynesutton' });
+  assert.deepEqual(s.sent.at(-1)!.order, [], 'the changelog is not a card: it sits at the bottom');
+  await s.p.update({ ...settings, show: [], githubUser: 'waynesutton' });
+  assert.ok(!('changelog' in s.sent.at(-1)!), 'turned off, it goes');
+});
+
 test('a picture is uploaded once, and again only when the file changes', async () => {
   const s = setup();
   const pic = path.join(s.home, 'me.png');
@@ -112,6 +132,57 @@ test('a picture is uploaded once, and again only when the file changes', async (
   assert.equal(s.uploads.length, 2);
   await s.p.update({ ...settings, show: [], picturePath: pic });
   assert.ok(!('pictureId' in s.sent[3]!), 'turned off, the picture is not named, so the backend deletes it');
+});
+
+// The backend as convex/profile.ts behaves: a send that leaves a picture out
+// deletes its file, and naming a file that isn't there is refused.
+function strictBackend() {
+  const files = new Set<string>();
+  let n = 0;
+  const sent: Record<string, unknown>[] = [];
+  return {
+    files,
+    sent,
+    offReason: () => undefined,
+    site: () => 'https://seal.convex.site',
+    uploadProfilePicture: async () => {
+      const id = `_storage:${++n}`;
+      files.add(id);
+      return id;
+    },
+    publishProfile: async (p: Record<string, unknown> | undefined) => {
+      const named = [p?.pictureId, p?.backgroundId].filter((x): x is string => typeof x === 'string');
+      if (named.some((id) => !files.has(id))) throw Object.assign(new Error('ConvexError: bad'), { data: { kind: 'badProfile', message: 'A picture it names was never uploaded.' } });
+      for (const id of [...files]) if (!named.includes(id)) files.delete(id);
+      sent.push(p!);
+    },
+  };
+}
+
+test('a picture turned off and on again is uploaded again, as the backend deleted it', async () => {
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), 'tb-profile-'));
+  const backend = strictBackend();
+  const p = new PublicProfile({ home, backend: () => backend, threads: () => [], projects: () => [], isPrivate: () => false, clock: new FakeClock(NOW), log });
+  const pic = path.join(home, 'me.png');
+  fs.writeFileSync(pic, 'png-bytes');
+  await p.update({ ...settings, show: ['picture'], picturePath: pic });
+  await p.update({ ...settings, show: [], picturePath: pic });
+  const back = await p.update({ ...settings, show: ['picture'], picturePath: pic });
+  assert.equal(back.problem, undefined);
+  assert.ok(backend.files.has(backend.sent.at(-1)!.pictureId as string));
+});
+
+test('a picture id the backend no longer has (saved by an older runner) is uploaded again', async () => {
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), 'tb-profile-'));
+  const pic = path.join(home, 'me.png');
+  fs.writeFileSync(pic, 'png-bytes');
+  const hash = (await import('node:crypto')).createHash('sha256').update('png-bytes').digest('hex');
+  fs.writeFileSync(path.join(home, 'profile.json'), JSON.stringify({ files: { picture: { hash, storageId: '_storage:gone' } } }));
+  const backend = strictBackend();
+  const p = new PublicProfile({ home, backend: () => backend, threads: () => [], projects: () => [], isPrivate: () => false, clock: new FakeClock(NOW), log });
+  const st = await p.update({ ...settings, show: ['picture'], picturePath: pic });
+  assert.equal(st.problem, undefined);
+  assert.equal(backend.sent.at(-1)!.pictureId, '_storage:1');
 });
 
 test('the hourly resend goes only when the row has changed', async () => {

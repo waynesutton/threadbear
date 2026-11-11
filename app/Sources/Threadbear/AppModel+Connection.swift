@@ -81,6 +81,7 @@ extension AppModel {
                 loadRunners()
                 loadRemoteThreads()
                 loadProjects()
+                loadPages()
                 loadConnectors()
                 loadSettings()
                 loadSkills()
@@ -167,6 +168,8 @@ extension AppModel {
                 receive(remote: remote)
             case .projectsUpdated(let list):
                 receive(projects: list)
+            case .pagesUpdated(let list):
+                pages = list
             case .librarianUpdated(let status):
                 librarian = status
                 projectsSupported = true

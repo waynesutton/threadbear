@@ -36,58 +36,44 @@ struct LibrarianHome: View {
 private struct CustomizedLibrarianPage: View {
     @Environment(AppModel.self) private var app
     @AppStorage(Looks.librarianKey) private var saved = Data()
-    @State private var editing = false
     let stats: [HomeStat]
 
     private var look: LibrarianLook { LibrarianLook.load(saved) }
 
+    /// The profile page's address, only while it's published.
+    private var publishedProfile: URL? {
+        guard let status = app.profilePage, status.profile?.published == true else { return nil }
+        return status.profileURL
+    }
+
     private var lookBinding: Binding<LibrarianLook> {
-        Binding(get: { LibrarianLook.load(saved) }, set: { Looks.saveLibrarianLook($0) })
+        // `saved` above still redraws the page when the look changes.
+        Looks.librarianBinding()
     }
 
     var body: some View {
         let look = self.look
-        let backdrop = Looks.image(look.background)
-        HStack(spacing: 0) {
-            ScrollView {
-                VStack(alignment: .leading, spacing: zoomed(32)) {
-                    ForEach(look.layout) { block in
-                        part(block, look: look)
-                    }
-                    if look.layout.isEmpty {
-                        Text("Everything on this page is hidden. Customize puts it back.")
-                            .font(.system(size: TypeScale.label))
-                            .foregroundStyle(.secondary)
-                    }
+        CustomizedPage(backdrop: Looks.image(look.background), dim: look.backgroundDim, focus: look.backgroundFocus, slot: .librarian,
+                       filled: Set(look.layout.map(look.place)),
+                       customizeTip: "Change the picture, the background, and where each part of this page sits") { place in
+            ForEach(look.layout.filter { look.place($0) == place }) { block in
+                part(block, look: look)
+            }
+        } buttons: {
+            if look.profileButton, let url = publishedProfile {
+                Button { _ = OpenGate.openLink(url) } label: {
+                    Label("View profile page", systemImage: "person.crop.circle")
                 }
-                .frame(maxWidth: zoomed(1000), alignment: .leading)
-                .padding(.horizontal, zoomed(32))
-                .padding(.top, zoomed(28))
-                .padding(.bottom, zoomed(48))
-                .frame(maxWidth: .infinity)
+                .controlSize(.small)
+                .tip("Open your public profile page in the browser. Customize > Profile page turns this button off")
             }
-            .background {
-                if let backdrop { BackdropPicture(image: backdrop, dim: look.backgroundDim, focus: look.backgroundFocus, slot: .librarian) }
-            }
-            .environment(\.onPicture, backdrop != nil)
-            .overlay(alignment: .topTrailing) {
-                if !editing {
-                    Button { withAnimation(.easeOut(duration: 0.18)) { editing = true } } label: {
-                        Label("Customize", systemImage: "paintbrush")
-                    }
-                    .controlSize(.small)
-                    .padding(zoomed(14))
-                    .tip("Change the picture, the background, and where each part of this page sits")
-                }
-            }
-            if editing {
-                Divider()
-                LibrarianLookEditor(look: lookBinding) {
-                    withAnimation(.easeOut(duration: 0.18)) { editing = false }
-                }
-                .frame(width: zoomed(320))
-                .transition(.move(edge: .trailing).combined(with: .opacity))
-            }
+        } editor: { done in
+            LibrarianLookEditor(look: lookBinding, done: done)
+        }
+        // The button needs to know the page is published, which only the
+        // runner knows: asked once it's connected, when not held already.
+        .task(id: app.connection == .connected) {
+            if app.connection == .connected, app.profilePage == nil, !app.profilePageMissing { app.loadProfilePage() }
         }
     }
 
@@ -114,17 +100,10 @@ private struct CustomizedLibrarianPage: View {
             LibrarianAbout(status: app.librarian, hidden: look.hiddenAbout)
                 .frame(maxWidth: zoomed(620), alignment: .leading)
         case .numbers:
-            let shown = stats.filter { !look.hiddenNumbers.contains($0.key) }
-            if !shown.isEmpty {
-                LazyVGrid(
-                    columns: [GridItem(.adaptive(minimum: zoomed(170)), spacing: zoomed(14), alignment: .top)],
-                    alignment: .leading,
-                    spacing: zoomed(14)
-                ) {
-                    ForEach(shown) { HomeStatTile(stat: $0) }
-                }
-                .frame(maxWidth: zoomed(620), alignment: .leading)
-            }
+            LookNumbers(stats: stats, hidden: look.hiddenNumbers)
+        case .activity:
+            ThreadbearActivityCard()
+                .frame(maxWidth: zoomed(760), alignment: .leading)
         case .github:
             GitHubActivityCard(user: look.githubUser)
                 .frame(maxWidth: zoomed(760), alignment: .leading)

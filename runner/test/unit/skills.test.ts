@@ -255,3 +255,19 @@ test('saving, editing and renaming a skill of his own', async () => {
   await assert.rejects(s.save({ name: 'empty', text: '   ' }), /needs some text/);
   await assert.rejects(s.update({ name: 'house-style', latest: true }), /nothing newer/);
 });
+
+test('skills and suggestions come back in alphabetical order, however they were added', async () => {
+  const { s, published } = store((async () => new Response('', { status: 404 })) as typeof fetch);
+  await s.save({ name: 'zebra', text: 'Z.' });
+  await s.save({ name: 'alpha', text: 'A.' });
+  const res = await s.save({ name: 'mango', text: 'M.' });
+  assert.deepEqual(res.skills.map((k) => k.name), ['alpha', 'mango', 'zebra']);
+  assert.deepEqual(s.list().skills.map((k) => k.name), ['alpha', 'mango', 'zebra']);
+  const last = published.at(-1) as { params: { skills: { name: string }[] } };
+  assert.deepEqual(last.params.skills.map((k) => k.name), ['alpha', 'mango', 'zebra']);
+  // A rename moves it to its new place.
+  await s.save({ name: 'banana', text: 'B.', replacing: 'zebra' });
+  assert.deepEqual(s.list().skills.map((k) => k.name), ['alpha', 'banana', 'mango']);
+  const names = s.list().suggested.map((x) => x.name);
+  assert.deepEqual(names, [...names].sort());
+});

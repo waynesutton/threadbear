@@ -34,6 +34,7 @@ struct ProfilePageSection: View {
                 partsSection
                 if draft.shows(.numbers) { numbersSection }
                 if draft.shows(.projects) { projectsSection }
+                changelogSection
                 footerSection
             }
         }
@@ -50,8 +51,11 @@ struct ProfilePageSection: View {
         .onChange(of: draft) { _, _ in saveSoon() }
         // The page's picture, background, layout and GitHub name come from
         // the Librarian page's look, so a change there goes too.
-        .onChange(of: look) { _, _ in
-            if status?.profile != nil { saveSoon(force: true) }
+        .onChange(of: look) { old, new in
+            // The View profile page switch is the Mac's alone: nothing to send.
+            var was = old
+            was.profileButton = new.profileButton
+            if was != new, status?.profile != nil { saveSoon(force: true) }
         }
     }
 
@@ -95,25 +99,32 @@ struct ProfilePageSection: View {
                 Toggle("Show it on my site's front page", isOn: $draft.home)
                     .tip("Visitors to your site's address see this page first. Signed in, you still get your threads there")
             }
-            if let url = status?.url, let link = URL(string: url) {
-                HStack {
-                    Text(url)
-                        .font(.system(size: TypeScale.label))
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
-                        .truncationMode(.middle)
-                        .textSelection(.enabled)
-                    Spacer()
-                    Button("Copy") {
-                        NSPasteboard.general.clearContents()
-                        NSPasteboard.general.setString(url, forType: .string)
+            // Open always goes to the profile page. With it on the front
+            // page too, Open site shows what visitors see at the site's
+            // address (signed in, that's your threads).
+            // Two rows, so it's clear what each address shows: the
+            // profile page always, at /profile, and while it's on the front
+            // page, the site's address as well.
+            if let profile = status?.profileURL {
+                ProfileLinkRow(title: "Profile page", url: profile,
+                               note: "Opens your profile, signed in or not.",
+                               what: "your profile page")
+            }
+            if let site = status?.siteURL {
+                ProfileLinkRow(title: "Front page", url: site,
+                               note: "Visitors see your profile here. Signed in, you see your threads.",
+                               what: "your site's front page")
+            }
+            if draft.published {
+                Toggle("View profile page button", isOn: Binding(
+                    get: { look.profileButton },
+                    set: { on in
+                        var next = Looks.librarianLook()
+                        next.profileButton = on
+                        Looks.saveLibrarianLook(next)
                     }
-                    .controlSize(.small)
-                    .tip("Copy your profile page's link")
-                    Button("Open") { _ = OpenGate.openLink(link) }
-                        .controlSize(.small)
-                        .tip("Open your profile page in the browser")
-                }
+                ))
+                .tip("A View profile page button beside Customize on the Librarian page, while your page is published")
             }
             LabeledContent("Name") {
                 TextField("Name", text: $draft.name, prompt: Text("Your name"))
@@ -159,7 +170,8 @@ struct ProfilePageSection: View {
 
     private var partsSection: some View {
         Section("What's on it") {
-            ForEach(ProfilePageSettings.Part.allCases) { part in
+            // The Changelog has its own section, under Projects on your page.
+            ForEach(ProfilePageSettings.offered.filter { $0 != .changelog }) { part in
                 Toggle(part.title, isOn: Binding(get: { draft.shows(part) }, set: { draft.setShown($0, part) }))
                     .tip(part.tip)
             }
@@ -168,11 +180,50 @@ struct ProfilePageSection: View {
                     .font(.system(size: TypeScale.label))
                     .foregroundStyle(.secondary)
             }
-            if draft.shows(.background), look.background == nil {
-                Text("Choose a background photo above first.")
-                    .font(.system(size: TypeScale.label))
-                    .foregroundStyle(.secondary)
+        }
+    }
+
+    /// The Changelog, below Projects on your page: the switch, then which
+    /// repository it lists once it's on.
+    private var changelogSection: some View {
+        Section("Changelog") {
+            Toggle("Show my changelog on my page", isOn: Binding(get: { draft.shows(.changelog) }, set: { draft.setShown($0, .changelog) }))
+                .tip(ProfilePageSettings.Part.changelog.tip)
+            if draft.shows(.changelog) {
+                if GitHubUser.clean(look.githubUser).isEmpty {
+                    Text("Type your GitHub user name under GitHub activity above.")
+                        .font(.system(size: TypeScale.label))
+                        .foregroundStyle(.secondary)
+                }
+                changelogRows
             }
+        }
+    }
+
+    /// Which repository the changelog lists: your fork's usual name unless
+    /// you type another. What's typed is sent as it is and read by the
+    /// runner, so the field never changes under the cursor.
+    @ViewBuilder
+    private var changelogRows: some View {
+        let user = GitHubUser.clean(look.githubUser)
+        LabeledContent("Repository") {
+            TextField("Repository", text: Binding(get: { draft.changelogRepo ?? "" }, set: { draft.changelogRepo = $0.isEmpty ? nil : $0 }),
+                      prompt: Text(user.isEmpty ? "owner/threadbear" : "\(user)/threadbear"))
+                .labelsHidden()
+                .frame(maxWidth: zoomed(170))
+        }
+        .tip("The GitHub repository whose commits it lists, as owner/name. Leave it empty for your fork, your user name/threadbear")
+        if !user.isEmpty {
+            Group {
+                if let repo = draft.changelogRepo(for: user) {
+                    Text("Lists public commits by @\(user) to \(repo), newest first. A private repository shows nothing.")
+                } else {
+                    Text("Type it as owner/name, as on GitHub.")
+                }
+            }
+            .font(.system(size: TypeScale.label))
+            .foregroundStyle(.secondary)
+            .fixedSize(horizontal: false, vertical: true)
         }
     }
 
@@ -268,5 +319,42 @@ struct ProfilePageSection: View {
             return x
         }
         return core(a) == core(b)
+    }
+}
+
+/// One of the profile page's addresses: what it is, the address, and Copy
+/// and Open, with a line on what someone sees there.
+private struct ProfileLinkRow: View {
+    let title: String
+    let url: URL
+    let note: String
+    let what: String
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: zoomed(4)) {
+            HStack(spacing: zoomed(8)) {
+                Text(title)
+                Spacer(minLength: zoomed(8))
+                Button("Copy") {
+                    NSPasteboard.general.clearContents()
+                    NSPasteboard.general.setString(url.absoluteString, forType: .string)
+                }
+                .controlSize(.small)
+                .tip("Copy the link to \(what)")
+                Button("Open") { _ = OpenGate.openLink(url) }
+                    .controlSize(.small)
+                    .tip("Open \(what) in the browser")
+            }
+            Text(url.absoluteString)
+                .font(.system(size: TypeScale.label))
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+                .truncationMode(.middle)
+                .textSelection(.enabled)
+            Text(note)
+                .font(.system(size: zoomed(11)))
+                .foregroundStyle(.tertiary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
     }
 }

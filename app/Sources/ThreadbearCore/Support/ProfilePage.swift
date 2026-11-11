@@ -7,7 +7,7 @@ import Foundation
 /// backend; every part starts off.
 public struct ProfilePageSettings: Codable, Equatable, Sendable {
     public enum Part: String, CaseIterable, Codable, Sendable, Identifiable {
-        case picture, background, activity, github, numbers, projects, memberSince
+        case picture, background, activity, github, numbers, projects, memberSince, changelog
         public var id: String { rawValue }
 
         public var title: String {
@@ -19,6 +19,7 @@ public struct ProfilePageSettings: Codable, Equatable, Sendable {
             case .numbers: "Numbers"
             case .projects: "Projects"
             case .memberSince: "Using Threadbear since"
+            case .changelog: "Changelog"
             }
         }
 
@@ -31,9 +32,16 @@ public struct ProfilePageSettings: Codable, Equatable, Sendable {
             case .numbers: "The numbers you pick below. Counts only, never what a thread said"
             case .projects: "The projects you pick below: title and thread count only, never goals, state, notes or folders"
             case .memberSince: "The month of your first thread"
+            case .changelog: "Your public commits to your Threadbear repo on GitHub, newest first, in a section at the bottom that opens when clicked. The visitor's browser reads them from GitHub, so only public commits ever show"
             }
         }
     }
+
+    /// The parts Customize offers. The background photo is held back for
+    /// now (Wayne, 8 Nov): the runner and site still know it, so putting
+    /// it back is taking it off `heldBack`.
+    public static let heldBack: Set<Part> = [.background]
+    public static var offered: [Part] { Part.allCases.filter { !heldBack.contains($0) } }
 
     public struct Link: Codable, Equatable, Sendable, Identifiable {
         public var title: String
@@ -70,8 +78,36 @@ public struct ProfilePageSettings: Codable, Equatable, Sendable {
     public var backgroundPath: String?
     public var backgroundDim: Double?
     public var githubUser: String?
+    /// The changelog's GitHub repository, owner/name. Empty means
+    /// `<GitHub user>/threadbear`, a fork's usual name (`changelogRepo(for:)`).
+    public var changelogRepo: String?
 
     public init() {}
+
+    /// The repository the changelog lists, for this GitHub user: the one
+    /// typed, or their fork's usual name. Nil when there's no user or what's
+    /// typed isn't owner/name.
+    public func changelogRepo(for githubUser: String) -> String? {
+        let typed = Self.cleanRepo(changelogRepo ?? "")
+        if !typed.isEmpty { return typed }
+        guard (changelogRepo ?? "").trimmingCharacters(in: .whitespaces).isEmpty else { return nil }
+        let user = GitHubUser.clean(githubUser)
+        return user.isEmpty ? nil : "\(user)/threadbear"
+    }
+
+    /// owner/name as typed or pasted (a github.com link, a trailing .git),
+    /// or empty when it isn't one.
+    public static func cleanRepo(_ typed: String) -> String {
+        var s = typed.trimmingCharacters(in: .whitespacesAndNewlines)
+        if let range = s.range(of: "github.com/", options: .caseInsensitive) { s = String(s[range.upperBound...]) }
+        if s.hasSuffix(".git") { s.removeLast(4) }
+        let parts = s.split(separator: "/", omittingEmptySubsequences: true).prefix(2).map(String.init)
+        guard parts.count == 2, GitHubUser.clean(parts[0]) == parts[0], parts[1] != ".", parts[1] != "..",
+              parts[1].count <= 100,
+              parts[1].unicodeScalars.allSatisfy({ $0.isASCII && (CharacterSet.alphanumerics.contains($0) || "._-".unicodeScalars.contains($0)) })
+        else { return "" }
+        return "\(parts[0])/\(parts[1])"
+    }
 
     public func shows(_ part: Part) -> Bool { show.contains(part) }
 
@@ -85,6 +121,12 @@ public struct ProfilePageSettings: Codable, Equatable, Sendable {
         var s = self
         s.links = links.filter { Self.linkProblem($0.url) == nil }
         s.home = published && home
+        // A part held back is never sent, even if an older build turned it on.
+        s.show = show.filter { !Self.heldBack.contains($0) }
+        if Self.heldBack.contains(.background) {
+            s.backgroundPath = nil
+            s.backgroundDim = nil
+        }
         return s
     }
 
@@ -96,12 +138,13 @@ public struct ProfilePageSettings: Codable, Equatable, Sendable {
     }
 
     /// The web page's cards top to bottom, from where the Librarian page
-    /// puts its parts: the numbers with Threadbear activity just under them,
-    /// GitHub activity where it sits, and projects at the bottom.
+    /// puts its parts: the numbers, Threadbear activity (just under the
+    /// numbers unless moved on its own), GitHub activity where it sits, and
+    /// projects at the bottom.
     public static func cardOrder(_ look: LibrarianLook) -> [String] {
         let cards: [(String, LibrarianLook.Place, Int)] = [
             ("numbers", look.place(.numbers), 0),
-            ("activity", look.place(.numbers), 1),
+            ("activity", look.place(.activity), 1),
             ("github", look.place(.github), 2),
             ("projects", .bottom, 3),
         ]
@@ -110,7 +153,7 @@ public struct ProfilePageSettings: Codable, Equatable, Sendable {
     }
 
     private enum CodingKeys: String, CodingKey {
-        case published, home, name, bio, links, show, numbers, projectIds, order, picturePath, backgroundPath, backgroundDim, githubUser
+        case published, home, name, bio, links, show, numbers, projectIds, order, picturePath, backgroundPath, backgroundDim, githubUser, changelogRepo
     }
 
     public init(from decoder: Decoder) throws {
@@ -130,6 +173,7 @@ public struct ProfilePageSettings: Codable, Equatable, Sendable {
         backgroundPath = try? c.decode(String.self, forKey: .backgroundPath)
         backgroundDim = try? c.decode(Double.self, forKey: .backgroundDim)
         githubUser = try? c.decode(String.self, forKey: .githubUser)
+        changelogRepo = try? c.decode(String.self, forKey: .changelogRepo)
     }
 
     public func encode(to encoder: Encoder) throws {
@@ -147,6 +191,7 @@ public struct ProfilePageSettings: Codable, Equatable, Sendable {
         try c.encodeIfPresent(backgroundPath, forKey: .backgroundPath)
         try c.encodeIfPresent(backgroundDim, forKey: .backgroundDim)
         try c.encodeIfPresent(githubUser, forKey: .githubUser)
+        try c.encodeIfPresent(changelogRepo, forKey: .changelogRepo)
     }
 }
 
@@ -164,5 +209,26 @@ public struct ProfilePageStatus: Decodable, Equatable, Sendable {
         self.url = url
         self.sentAt = sentAt
         self.problem = problem
+    }
+}
+
+extension ProfilePageStatus {
+    /// The profile page itself, always <site>/profile. The runner gives the
+    /// site's front page instead while "Show it on my site's front page"
+    /// is on, and signed in that page is your threads, not the profile.
+    public var profileURL: URL? {
+        guard let url, var parts = URLComponents(string: url), parts.host != nil else { return nil }
+        parts.path = "/profile"
+        parts.query = nil
+        parts.fragment = nil
+        return parts.url
+    }
+
+    /// The site's front page, only while the profile is shown there.
+    public var siteURL: URL? {
+        guard let url, var parts = URLComponents(string: url), parts.host != nil,
+              parts.path.isEmpty || parts.path == "/" else { return nil }
+        parts.path = "/"
+        return parts.url
     }
 }

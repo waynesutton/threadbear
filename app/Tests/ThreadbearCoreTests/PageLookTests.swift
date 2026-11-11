@@ -58,6 +58,10 @@ final class PageLookTests: XCTestCase {
         XCTAssertEqual(loaded.hidden, [.github])
         XCTAssertEqual(loaded.backgroundDim, 1)
         XCTAssertEqual(loaded.backgroundFocus, .bottom, "a look saved before photos could move keeps them on the bottom")
+        XCTAssertTrue(loaded.profileButton, "a look saved before the View profile page button has it on")
+        var noButton = LibrarianLook()
+        noButton.profileButton = false
+        XCTAssertFalse(LibrarianLook.load(noButton.data()).profileButton)
         let wild = LibrarianLook.load(Data(#"{"backgroundFocus":{"x":-3,"y":9}}"#.utf8))
         XCTAssertEqual(wild.backgroundFocus, BackdropFocus(x: 0, y: 1))
         XCTAssertEqual(LibrarianLook.load(Data("nonsense".utf8)), .standard)
@@ -168,5 +172,25 @@ final class PageLookTests: XCTestCase {
         XCTAssertFalse(old.greetingShown)
         XCTAssertTrue(old.greetingClock)
         XCTAssertEqual(old.hiddenAbout, [])
+    }
+
+    func testGitHubTroubleOnlyBlamesTheNameWhenItIsTheName() {
+        XCTAssertEqual(GitHubContributions.failure(status: 504, serviceMessage: "GitHub: Gateway timeout.", user: "waynesutton"),
+                       "GitHub isn't answering right now. Try again in a few minutes.")
+        XCTAssertEqual(GitHubContributions.failure(status: 500, serviceMessage: nil, user: "waynesutton"),
+                       "GitHub isn't answering right now. Try again in a few minutes.")
+        XCTAssertEqual(GitHubContributions.failure(status: 404, serviceMessage: nil, user: "nobody-here"), "GitHub has no user called nobody-here.")
+        XCTAssertEqual(GitHubContributions.failure(status: 200, serviceMessage: "User not found", user: "x"), "GitHub has no user called x.")
+    }
+
+    func testProfileOpensTheProfileEvenWhenItIsTheFrontPage() {
+        let home = ProfilePageStatus(url: "https://wayne.convex.site/")
+        XCTAssertEqual(home.profileURL?.absoluteString, "https://wayne.convex.site/profile")
+        XCTAssertEqual(home.siteURL?.absoluteString, "https://wayne.convex.site/")
+        let plain = ProfilePageStatus(url: "https://wayne.convex.site/profile")
+        XCTAssertEqual(plain.profileURL?.absoluteString, "https://wayne.convex.site/profile")
+        XCTAssertNil(plain.siteURL, "no Open Site unless it's on the front page")
+        XCTAssertNil(ProfilePageStatus(url: nil).profileURL)
+        XCTAssertNil(ProfilePageStatus(url: "not a link").profileURL)
     }
 }

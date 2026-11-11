@@ -69,10 +69,15 @@ File references are where to look.
   `schedule-runs/`, schedule runs your Convex backend hasn't been told
   of yet, a file each, kept only until it has, and
   with the standing instructions experiment on, `instructions.md`, which every
-  agent is given, and `instructions.sig`, which says Settings saved it). In `secrets/`, `asked/` holds the answers you
+  agent is given, and `instructions.sig`, which says Settings saved it, and
+  with the Prints experiment on, `pages/`, the prints agents make for you:
+  `index.json` and the last 10 versions of each page's files, kept on this
+  Mac and never sent to Convex). In `secrets/`, `asked/` holds the answers you
   type into an agent's secret card, one owner-only file each with a small
   script beside it that prints it for `sudo -A`, removed after 24 hours,
   and `secret-box.key` is the key your phone seals those answers to;
+  `xai-api-key`, with the X search experiment on, is the xAI key you gave
+  its first search, owner-only, until xAI turns it down;
   `made-deploy-keys` lists, by name, the deploy keys this Mac made (setup's
   and the Convex panel's), so `tb runner rotate-owner` can tell them from
   others;
@@ -193,8 +198,8 @@ item is deleted. In the Keychain, macOS asked for your password after every
 update, as each update re-signs the app.
 They're never sent anywhere, and the runner never reads them.
 Pictures you choose under Settings > General > Look (the main window's
-background, and the Librarian page's picture and background when Customize
-the Librarian page is on; both off by default) are copied, scaled down,
+background, and the Librarian, Scheduled and Projects pages' pictures and
+backgrounds when their Customize switches are on; all off by default) are copied, scaled down,
 into `looks/` in the data folder; removing or replacing one deletes its
 copy. The rest of those settings are in the app's own settings. Neither
 is ever sent anywhere (`app/Sources/Threadbear/Looks.swift`), except as
@@ -208,7 +213,9 @@ the bear), counts of threads per day and the numbers, the titles and thread
 counts of projects you ticked, and your GitHub user name. It sends it as you
 change it, then checks every hour and sends again only if something changed
 (`runner/src/public-profile.ts`). A visitor's browser fetches the GitHub
-activity from the GitHub Contributions API itself. The page's font, Geist,
+activity from the GitHub Contributions API itself, and, with the Changelog
+on, opening it lists your public commits from GitHub's API (api.github.com,
+no token), so only the repo's name and your GitHub user name are sent for it. The page's font, Geist,
 is served from your own site (`web/public/fonts`), not a font service.
 The bear at the top right of the sidebar, the first time it's clicked,
 makes `~/ThreadbearThreads/Bear` with a `CLAUDE.md` of instructions for
@@ -443,6 +450,17 @@ shared. Notifications say which profile they're from.
   again. It never reads it. Without the access macOS refuses, with no prompt.
 - Whether `Threadbear.app` is in `/Applications` or `~/Applications`, as a Mac
   without it is probably one nobody sits at.
+- With the Git panel experiment on, the git repos your threads work in
+  (and their projects' folders): `git status`, `log`, `diff --cached` and
+  the like while the panel is open or a chip needs its counts, with the
+  repo's own hooks and fsmonitor turned off for them, and not at all in a
+  repo whose own config sets a filter or diff driver. Its page is served
+  by the runner from its own port under `/git/`, to this Mac only
+  (`runner/src/git-panel.ts`). For the push rule it runs `gh config get
+  user -h github.com`, which reads your GitHub login from gh's settings
+  and nothing of its token. Push, Sync and Fetch reach your repo's own
+  remote when you press them; ✨ sends the staged diff to Haiku on your
+  pool, as the librarian's calls do.
 - The `.env*` files in the folders your threads work in (the folder, the
   folders directly inside it, and up to its repo's root; not `.env.example`
   and the like, your home folder or external drives), and everything in its
@@ -470,6 +488,7 @@ shared. Notifications say which profile they're from.
 | GitHub | the skill's author | Only when you import or update a skill: the repo's commit and files, read without signing in. Nothing of yours is sent. |
 | GitHub, Hugging Face | Kyutai's | Only with the `voiceMode` experiment on, the first time Voice is used: the pocket-tts download, then its model and voices. Nothing of yours is sent. |
 | Your Convex deployment, for the profile page | yours | Only once you make a profile page in the Librarian page's Customize panel: the parts you turned on (see the data folder above), as you change them and then at most once an hour when something changed. Published, anyone with its link can read them; Take the page down deletes them. |
+| xAI (api.x.ai) | xAI's | Only with the `xSearch` experiment on, when an agent calls `x_search`: its question, any accounts and days it names, and your xAI key, to xAI's Responses API. It answers with Grok's reply, links to the X posts it used and what it billed your xAI credit (`runner/src/x-search.ts`). Nothing else of yours goes. |
 | GitHub Contributions API (github-contributions-api.jogruber.de) | Jonathan Gruber's, a free public service | Only with Customize the Librarian page on (Settings > General > Look, off by default) and a GitHub user name typed in its GitHub activity: that user name and a year, when the page shows, at most once an hour for the current year. It answers with that profile's public contribution calendar. No token, nothing else of yours (`GitHubActivity` in `app/Sources/Threadbear/Looks.swift`). |
 | Sentry | Mike's | Nothing from your copy. Only a copy whose `origin` is Mike's own repo reports errors or uploads the app's debug symbols (`runner/src/sentry.ts`, `app/Sources/Threadbear/CrashReporting.swift`, `app/build-app.sh`). The App Store iPhone app sends anonymous crash reports. |
 

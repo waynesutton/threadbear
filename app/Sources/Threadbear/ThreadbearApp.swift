@@ -165,7 +165,7 @@ struct ThreadbearApp: App {
                     // inbox now: these unfold them.
                     // Each brings the Threads panel back if ⌘/ folded it
                     // away, as the activity bar's icons do.
-                    Button("Show Inbox", systemImage: "tray") { app.threadsCollapsed = false; app.sidebarMode = .inbox }
+                    Button("Show Inbox", systemImage: "tray") { app.threadsCollapsed = false; app.showInbox() }
                         .shortcut(.showInbox)
                     Button("Show Scheduled", systemImage: "clock") { app.threadsCollapsed = false; app.showSchedules() }
                         .shortcut(.showScheduled)

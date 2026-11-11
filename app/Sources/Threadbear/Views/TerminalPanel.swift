@@ -289,6 +289,13 @@ final class PromptWatchingTerminalView: LocalProcessTerminalView {
         super.paste(sender)
     }
 
+    /// A link under the pointer is underlined, without ⌘ held, and
+    /// ⌘-click opens it (requestOpenLink, through OpenGate). SwiftTerm's
+    /// own highlight, which only shows with ⌘ down until told otherwise.
+    func watchLinks() {
+        linkHighlightMode = .hover
+    }
+
     /// Dictation and input methods. A key that lands here has been seen
     /// already (Terminals.watchKeys), and Return mustn't count as text.
     override func insertText(_ string: Any, replacementRange: NSRange) {
@@ -356,8 +363,13 @@ final class TerminalSession: NSObject, LocalProcessTerminalViewDelegate {
     /// Told when the shell exits (Terminals closes its tab if it has others).
     @ObservationIgnored var onExit: (() -> Void)?
 
-    /// What its tab says: the shell's own title, else "Terminal 2".
+    /// A name you gave its tab (double-click or Rename…), over the shell's own.
+    var name: String?
+
+    /// What its tab says: your name for it, the shell's own title, else
+    /// "Terminal 2".
     var tabTitle: String {
+        if let name { return name }
         let own = title.trimmingCharacters(in: .whitespacesAndNewlines)
         return own.isEmpty ? "Terminal \(number)" : own
     }
@@ -381,6 +393,7 @@ final class TerminalSession: NSObject, LocalProcessTerminalViewDelegate {
         view.processDelegate = self
         view.onText = { [weak self] in self?.noteText() }
         view.linkFolder = target.cwd
+        view.watchLinks()
         view.font = TerminalStyle.font
         TerminalStyle.apply(to: view)
         start()
@@ -614,6 +627,8 @@ private struct TerminalTabStrip: View {
     }
 }
 
+/// One tab: click to pick it, double-click (or Rename… in its right-click
+/// menu) to give it a name of your own, ✕ to close it.
 private struct TerminalTabButton: View {
     let tab: TerminalSession
     let selected: Bool
@@ -621,15 +636,30 @@ private struct TerminalTabButton: View {
     let select: () -> Void
     let close: () -> Void
     @State private var hovering = false
+    @State private var renaming = false
+    @State private var draft = ""
+    @FocusState private var fieldFocused: Bool
 
     var body: some View {
         HStack(spacing: zoomed(4)) {
-            Text(tab.tabTitle)
-                .font(.system(size: zoomed(11.5), weight: selected ? .medium : .regular))
-                .foregroundStyle(selected ? .primary : .secondary)
-                .lineLimit(1)
-                .truncationMode(.middle)
-                .frame(maxWidth: zoomed(140), alignment: .leading)
+            if renaming {
+                TextField("Name", text: $draft)
+                    .textFieldStyle(.plain)
+                    .font(.system(size: zoomed(11.5), weight: .medium))
+                    .frame(width: zoomed(120))
+                    .focused($fieldFocused)
+                    .onSubmit(commit)
+                    .onExitCommand { renaming = false }
+                    .onChange(of: fieldFocused) { _, focused in if !focused && renaming { commit() } }
+                    .tip("Press Return to keep the name, Escape to leave it. Empty goes back to the shell's own")
+            } else {
+                Text(tab.tabTitle)
+                    .font(.system(size: zoomed(11.5), weight: selected ? .medium : .regular))
+                    .foregroundStyle(selected ? .primary : .secondary)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                    .frame(maxWidth: zoomed(140), alignment: .leading)
+            }
             if closable {
                 Button(action: close) {
                     Image(systemName: "xmark")
@@ -652,12 +682,38 @@ private struct TerminalTabButton: View {
             in: RoundedRectangle(cornerRadius: zoomed(5))
         )
         .contentShape(Rectangle())
+        // Both at once, so a single click picks the tab without waiting to
+        // see whether a second click is coming.
         .onTapGesture(perform: select)
+        .simultaneousGesture(TapGesture(count: 2).onEnded { startRenaming() })
         .onHover { hovering = $0 }
-        .tip(tab.exited ? "This shell has ended" : "Switch to \(tab.tabTitle)")
+        .iconContextMenu {
+            Button("Rename…", systemImage: "pencil", action: startRenaming)
+            if tab.name != nil { Button("Use the Shell's Name", systemImage: "arrow.uturn.backward") { tab.name = nil } }
+            if closable {
+                Divider()
+                Button("Close Terminal", systemImage: "xmark", action: close)
+            }
+        }
+        .tip(tab.exited ? "This shell has ended" : "Switch to \(tab.tabTitle). Double-click to rename it")
         .accessibilityElement(children: .combine)
         .accessibilityAddTraits(selected ? [.isButton, .isSelected] : .isButton)
+        .accessibilityAction(named: "Rename") { startRenaming() }
         .accessibilityAction(named: "Close") { if closable { close() } }
+    }
+
+    private func startRenaming() {
+        select()
+        draft = tab.tabTitle
+        renaming = true
+        DispatchQueue.main.async { fieldFocused = true }
+    }
+
+    private func commit() {
+        guard renaming else { return }
+        renaming = false
+        let name = draft.trimmingCharacters(in: .whitespacesAndNewlines)
+        tab.name = name.isEmpty ? nil : String(name.prefix(60))
     }
 }
 
