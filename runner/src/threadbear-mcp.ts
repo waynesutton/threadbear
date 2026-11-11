@@ -755,10 +755,10 @@ export function buildThreadbearTools(
     ? [
         tool(
           'x_search',
-          "Searches X (Twitter) through xAI's Grok and returns its answer with links to the posts it used, and what the call cost. Use it for what people are posting about something, or what an account said; your web search can't read X. Each call costs the user a few cents of xAI credit, so search once with a good question rather than many times.",
+          "Searches X (Twitter) through xAI's Grok and returns its answer with links to the posts it used, and what the call cost. Use it for what people are posting about something, or what an account said; your web search can't read X. Each call is billed to the user's xAI credit, often $0.10 to $0.30, so search once with a good question rather than many times.",
           {
             query: z.string().trim().min(1).max(2000).describe('What to find out, as a question.'),
-            handles: z.array(z.string()).max(MAX_HANDLES).optional().describe('Only posts from these accounts, without @.'),
+            handles: z.array(z.string()).max(MAX_HANDLES).optional().describe('Keep to posts from these accounts, without @. Sources from others are listed apart.'),
             excludeHandles: z.array(z.string()).max(MAX_HANDLES).optional().describe('Leave these accounts out. Not with handles.'),
             from: z.string().optional().describe('First day, YYYY-MM-DD (UTC).'),
             to: z.string().optional().describe('The day after the last, YYYY-MM-DD.'),
@@ -771,7 +771,7 @@ export function buildThreadbearTools(
               if (!askSecret) throw new Error("There's no xAI API key yet, and this thread can't ask for one. Ask the user to run x_search from a thread on their Mac.");
               const a = await askSecret(selfId, {
                 label: 'xAI API key',
-                reason: 'For X search. Make one at console.x.ai under API Keys. Threadbear keeps it in its secrets folder for every thread, and each search uses a few cents of your xAI credit.',
+                reason: 'For X search. Make one at console.x.ai under API Keys. Threadbear keeps it in its secrets folder for every thread, and each search is billed to your xAI credit, often $0.10 to $0.30.',
                 placeholder: 'xai-...',
                 ...(extra?.signal ? { signal: extra.signal } : {}),
               });
@@ -786,7 +786,7 @@ export function buildThreadbearTools(
               if (!key) throw new Error('The key was empty. Call x_search again to enter it.');
             }
             try {
-              return formatXSearch(await xSearch(args, key, { fetch: xs.fetch, ...(extra?.signal ? { signal: extra.signal } : {}) }));
+              return formatXSearch(await xSearch(args, key, { fetch: xs.fetch, ...(extra?.signal ? { signal: extra.signal } : {}) }), args.handles);
             } catch (e) {
               if (!(e instanceof XaiKeyRejected)) throw e;
               forgetXaiKey(xs.secretsDir);
