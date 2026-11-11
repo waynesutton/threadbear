@@ -487,6 +487,17 @@ struct PaletteSearchField: View {
                     .foregroundStyle(.tertiary)
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
+            // Closes the palette, as Esc does (Wayne, 11 Nov).
+            Button { finish(); onKey?(.escape) } label: {
+                Image(systemName: "xmark")
+                    .font(.system(size: TypeScale.label - 1, weight: .semibold))
+                    .frame(width: zoomed(18), height: zoomed(18))
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .foregroundStyle(.secondary)
+            .tip("Close the palette (Esc)")
+            .accessibilityLabel("Close the palette")
         }
         .font(.system(size: TypeScale.label + 1))
         .padding(.horizontal, zoomed(14))

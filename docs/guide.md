@@ -536,7 +536,7 @@ the box so you can type its details after it, and Esc closes the palette.
 Clicking a category shows only those; double-clicking a command runs it.
 Click the search field along the palette's top to find a skill or
 command by any word in its name or description. The arrows, Return and
-Esc work there too, and clicking back in the message box carries on
+Esc work there too, the X at its right closes the palette, and clicking back in the message box carries on
 typing there.
 Drag the palette's top edge or sides to make it bigger or smaller (the
 border lights up where it will drag), as wide as the window, and the
