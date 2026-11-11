@@ -4441,8 +4441,13 @@ made to work in the thread's CLI before the agent gets it
 (`src/skill-mentions.ts`; the transcript keeps what he typed): Claude Code
 runs a slash command only as a message's first word, so one later on gets
 a line after the message asking the agent to use that skill; Codex names
-skills as `$name`, so `/name` becomes `$name`. Nothing while the store is
-off.
+skills as `$name`, so `/name` becomes `$name`. Nothing for the store's
+own while it's off. Skills the CLI finds itself (`~/.claude/skills`, the
+folder's, plugins') count too, as the command list (`threads.commands`,
+`folders.commands`) last found them for the thread's login and folder
+(`listedSkills` in `src/runner/commands.ts`), except ones that run only
+as the first word (`userOnly`). The app asks for that list when a
+thread's box opens, so it's there before the first message.
 
 A change reaches running threads too: every live CLI is given a fresh one
 before its next message (the same conversation, resumed, with the new

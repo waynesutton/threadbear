@@ -379,6 +379,7 @@ extension AppModel {
             defer { self?.slashFetches[threadId] = nil }
             do {
                 let list = try await client.threadCommands(threadId: threadId)
+                Self.noteSkills(list)
                 if self?.slashCommands[threadId] != list { self?.slashCommands[threadId] = list }
             } catch {
                 // An older runner (-32601) or one that couldn't list them:
@@ -387,6 +388,13 @@ extension AppModel {
                 AppLog.write("rpc", "threads.commands failed: \(error.localizedDescription)")
             }
         }
+    }
+
+    /// The skills a command list names, as mentions that turn blue and run
+    /// partway through a message (SkillMentions), Skills store or not. Not
+    /// the ones that run only as a message's first word.
+    nonisolated static func noteSkills(_ list: [SlashCommand]) {
+        SkillMentions.addListed(list.filter { $0.isSkill && $0.userOnly != true }.map { ($0.name, $0.path) })
     }
 
     /// Where a new thread's palette keeps its list: per login and folder,
@@ -415,6 +423,7 @@ extension AppModel {
             defer { self?.slashFetches[key] = nil }
             do {
                 let list = try await client.folderCommands(cwd: cwd, accountId: accountId, permissionMode: mode)
+                Self.noteSkills(list)
                 if self?.slashCommands[key] != list { self?.slashCommands[key] = list }
             } catch {
                 // An older runner (-32601): none, as for a thread.

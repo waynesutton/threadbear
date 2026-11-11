@@ -317,8 +317,13 @@ final class TranscriptTextView: NSTextView {
         }
         // NSTextView follows web links itself, but ignores file URLs.
         // /pele in his message: the skill it ran, on the Skills page.
-        if let url = link as? URL, SkillMentions.name(of: url) != nil {
-            MainActor.assumeIsolated { AppModel.shared.showSkills() }
+        // One the CLI found itself (~/.claude/skills): its file, as it's not there.
+        if let url = link as? URL, let name = SkillMentions.name(of: url) {
+            if !SkillMentions.inStore(name), let path = SkillMentions.path(of: name) {
+                _ = openFileLink(URL(fileURLWithPath: path))
+            } else {
+                MainActor.assumeIsolated { AppModel.shared.showSkills() }
+            }
             return
         }
         if let url = link as? URL, let text = FilePathRefs.text(of: url) {

@@ -161,6 +161,11 @@ struct ComposerView: View {
             )
             .frame(height: 1)
         }
+        // The thread's skills, before any / is typed, so their names turn
+        // blue in the box from the first letter (SkillMentions).
+        .task(id: paletteListKey) {
+            if let thread { app.loadSlashCommands(thread.id) } else { app.loadNewThreadSlashCommands() }
+        }
         .task(id: paletteQuery(draft.wrappedValue.text) != nil ? paletteListKey : nil) {
             guard paletteQuery(draft.wrappedValue.text) != nil else { return }
             if let thread { app.loadSlashCommands(thread.id) } else { app.loadNewThreadSlashCommands() }

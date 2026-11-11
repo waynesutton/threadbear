@@ -1830,9 +1830,12 @@ and it's there only when you ask by name: type its slash command, like
 /pele, in a message. Typing / at the start of a word opens the slash
 palette (see Slash commands), or, with Settings > General > Slash
 commands set to the small list, lists your skills over the cursor, narrowing as you type: ↑ and ↓ to choose, Return or Tab
-to put it in, Esc to close. An installed skill's command turns blue as
-you type it, and shows as a link in your message once sent (click it for
-the Skills page), so you can see a skill will run. It works anywhere in
+to put it in, Esc to close. A skill's command turns blue as you type it,
+and shows as a link in your message once sent, so you can see a skill
+will run. That's any skill the thread can use: the Skills page's, and
+the ones Claude or Codex find themselves, such as those in
+`~/.claude/skills` or the folder's own. Click one for the Skills page,
+or for one that isn't there, its SKILL.md. It works anywhere in
 the message, in Claude and Codex threads alike. A change reaches threads
 that are already running too: each gets a fresh start before its next
 message, carrying on the same conversation with the new skills. Remove
