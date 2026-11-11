@@ -21,13 +21,13 @@ enum PageMenuBuilder {
         menu.addItem(.separator())
         menu.addItem(ClosureItem("Download…") { app.downloadPage(page) })
         menu.addItem(ClosureItem("Download as PDF…") { app.downloadPagePDF(page) })
-        let versions = NSMenuItem(title: "Versions", action: nil, keyEquivalent: "")
+        let versions = NSMenuItem(title: "Versions", symbol: "clock.arrow.circlepath", action: nil)
         let sub = NSMenu()
         for v in page.keptVersions {
             if v == page.version {
                 sub.addItem(ClosureItem("Open Version \(v) (newest)") { app.openPage(page, version: v) })
             } else {
-                let item = NSMenuItem(title: "Version \(v)", action: nil, keyEquivalent: "")
+                let item = NSMenuItem(title: "Version \(v)", symbol: "doc", action: nil)
                 let inner = NSMenu()
                 inner.addItem(ClosureItem("Open") { app.openPage(page, version: v) })
                 inner.addItem(ClosureItem("Make This the Newest") { app.restorePageVersion(page, version: v) })

@@ -392,7 +392,7 @@ private struct PageRow: View {
             }
             .buttonStyle(.plain)
             .tip("Open this print in a window of its own")
-            Menu {
+            IconMenu {
                 PageMenu(page: page, ask: ask, edit: edit)
             } label: {
                 Image(systemName: "ellipsis.circle")
@@ -409,7 +409,7 @@ private struct PageRow: View {
         .padding(.horizontal, zoomed(8))
         .background(RoundedRectangle(cornerRadius: zoomed(6)).fill(Color.primary.opacity(hovering ? 0.06 : 0)))
         .onHover { hovering = $0 }
-        .contextMenu { PageMenu(page: page, ask: ask, edit: edit) }
+        .iconContextMenu { PageMenu(page: page, ask: ask, edit: edit) }
     }
 
     /// "Dashboard · v3 · 2h · edited by you".
@@ -428,34 +428,34 @@ private struct PageMenu: View {
     let edit: () -> Void
 
     var body: some View {
-        Button("Open") { app.openPage(page) }
-        Button("Refresh") { app.refreshPage(page) }
-        Button("Edit with Agent…") { ask() }
-        if page.isDoc { Button("Edit Text…") { edit() } }
+        Button("Open", systemImage: "macwindow") { app.openPage(page) }
+        Button("Refresh", systemImage: "arrow.clockwise") { app.refreshPage(page) }
+        Button("Edit with Agent…", systemImage: "sparkles") { ask() }
+        if page.isDoc { Button("Edit Text…", systemImage: "pencil") { edit() } }
         Divider()
-        Button("Download…") { app.downloadPage(page) }
-        Button("Download as PDF…") { app.downloadPagePDF(page) }
-        Menu("Versions") {
+        Button("Download…", systemImage: "arrow.down.circle") { app.downloadPage(page) }
+        Button("Download as PDF…", systemImage: "doc.richtext") { app.downloadPagePDF(page) }
+        IconMenu {
             ForEach(page.keptVersions, id: \.self) { v in
                 if v == page.version {
-                    Button("Open Version \(v) (newest)") { app.openPage(page, version: v) }
+                    Button("Open Version \(v) (newest)", systemImage: "macwindow") { app.openPage(page, version: v) }
                 } else {
-                    Menu("Version \(v)") {
-                        Button("Open") { app.openPage(page, version: v) }
-                        Button("Make This the Newest") { app.restorePageVersion(page, version: v) }
-                        Button("Download…") { app.downloadPage(page, version: v) }
-                        Button("Download as PDF…") { app.downloadPagePDF(page, version: v) }
-                    }
+                    IconMenu {
+                        Button("Open", systemImage: "macwindow") { app.openPage(page, version: v) }
+                        Button("Make This the Newest", systemImage: "arrow.uturn.backward") { app.restorePageVersion(page, version: v) }
+                        Button("Download…", systemImage: "arrow.down.circle") { app.downloadPage(page, version: v) }
+                        Button("Download as PDF…", systemImage: "doc.richtext") { app.downloadPagePDF(page, version: v) }
+                    } label: { Label("Version \(v)", systemImage: "doc") }
                 }
             }
-        }
-        Menu("Projects") {
+        } label: { Label("Versions", systemImage: "clock.arrow.circlepath") }
+        IconMenu {
             ForEach(app.projects.filter { !$0.archived }) { project in
                 Toggle(project.title, isOn: Binding(get: { page.isIn(project: project.id) }, set: { _ in app.togglePage(page, inProject: project.id) }))
             }
-        }
+        } label: { Label("Projects", systemImage: "square.stack") }
         Divider()
-        Button("Delete", role: .destructive) { app.deletePage(page) }
+        Button("Delete", systemImage: "trash", role: .destructive) { app.deletePage(page) }
     }
 }
 
