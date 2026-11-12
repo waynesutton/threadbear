@@ -1018,6 +1018,8 @@ Ask in plain words, in any thread:
 | "Give me a report on where this project stands" | A **report**: sections of text with charts |
 | "Write up the launch plan as a print" | A **doc**. You can edit it yourself too |
 | "Draw this flow as a diagram print" | A **diagram** from Mermaid source, with text you can edit and an SVG you can download |
+| "Make a todo list for the launch" | A **todo list** you tick by clicking, with how many are done |
+| "Put these tasks on a kanban board" | A **board**: columns of cards you move with each card's arrows |
 | "Run bundle-analyzer summary" | A **bundle size** report for a Convex app |
 | "Make a Convex insights report" | A **dashboard** of the app's insights from the last 72 hours: write conflicts and functions near their read limits, by function, with each one's table and when it was last seen. Add "for prod" for production |
 | "Map my Convex API" | A **dashboard** of every function and HTTP route the app's deployment runs: public or internal, the arguments each takes, and any missing validators, listed first |
@@ -1048,6 +1050,8 @@ You can also ask a thread for any of these: "refresh the sales dashboard", "go b
 **Keeping one up to date.** Say "refresh it every weekday morning" (or any time you like) and the thread schedules itself to make the print again from its recipe and save a new version. It tells you when it will run. It shows on the Scheduled page, where you can change or stop it, or ask the thread to.
 
 **Asking once.** In Ask before edits, the first change to a print asks you. Once you allow it, later versions of that same print from that thread go ahead without asking again, until the thread is next restarted. A different print, or deleting one, still asks.
+
+**Todo lists and boards** are Prints you change with a click. In a todo list, click an item to tick it or untick it. On a board, each card has arrows to move it to the column before or after. Each click saves a new version, so Versions takes back one you didn't mean. Edit Text opens the list as Markdown (`- [ ] item` for a todo, a `##` heading per column for a board) to add, rename or reorder things. Clicks work in the side pane and a Print's window on your Mac; published or downloaded, it's a plain list.
 
 **Diagrams** are drawn on your Mac with Pele, the same library used for diagrams in replies, and kept as static SVG with their Mermaid source. No package download or network access is needed to render one. A wide diagram uses the whole window and scrolls sideways rather than shrinking its labels too small to read; printed or saved as a PDF, it fits the page. Download includes `source.mmd` and `diagram.svg`. Published diagram HTML includes the diagram and its folded source, so both become public when you publish. Editable CSV sheets are deferred.
 

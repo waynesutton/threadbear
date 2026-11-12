@@ -851,6 +851,14 @@ public extension RPCClient {
         try await call("pages.saveDiagram", .object(["pageId": .string(pageId), "mermaid": .string(mermaid)]), as: PageResult.self).page
     }
 
+    func togglePageItem(_ pageId: String, version: Int, item: Int) async throws -> Page {
+        try await call("pages.toggleItem", .object(["pageId": .string(pageId), "version": .number(Double(version)), "item": .number(Double(item))]), as: PageResult.self).page
+    }
+
+    func movePageCard(_ pageId: String, version: Int, card: Int, to: Int) async throws -> Page {
+        try await call("pages.moveCard", .object(["pageId": .string(pageId), "version": .number(Double(version)), "card": .number(Double(card)), "to": .number(Double(to))]), as: PageResult.self).page
+    }
+
     func restorePageVersion(_ pageId: String, version: Int) async throws -> Page {
         try await call("pages.restoreVersion", .object(["pageId": .string(pageId), "version": .number(Double(version))]), as: PageResult.self).page
     }

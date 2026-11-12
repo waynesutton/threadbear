@@ -54,12 +54,45 @@ extension AppModel {
         whileBusy(BusyKey.page(page.id)) { [self] in
             do {
                 let got = try await client.getPage(page.id, version: version)
+                notePrintsRoot(got.file)
                 let v = version ?? got.page.version
                 RichBlockWindowController.show(URL(fileURLWithPath: got.file), id: "page:\(page.id):\(v)", title: got.page.title, subtitle: v == got.page.version ? "Version \(v)" : "Version \(v) of \(got.page.version)")
             } catch {
                 show(error)
             }
         }
+    }
+
+    /// A click in a todo list or board (PrintLink), from the page `file`
+    /// shows. Only a page in the runner's own Print folder is listened to, so
+    /// another local page can't tick a Print by carrying the same link. The
+    /// side pane follows the new version by itself (followPageVersions); an
+    /// open window is moved onto it here.
+    func handlePrintLink(_ link: PrintLink, from file: URL) {
+        guard let client, let root = printsRoot, file.standardizedFileURL.path.hasPrefix(root + "/"),
+              let (id, shown) = PagePath.parse(file.path), let page = pages.first(where: { $0.id == id }) else { return }
+        whileBusy(BusyKey.page(id), note: page.isList ? "Saving \(page.title)" : nil) { [self] in
+            do {
+                let saved: Page
+                switch link {
+                case let .toggle(version, item): saved = try await client.togglePageItem(id, version: version, item: item)
+                case let .move(version, card, to): saved = try await client.movePageCard(id, version: version, card: card, to: to)
+                }
+                if saved.version != shown {
+                    let next = file.deletingLastPathComponent().deletingLastPathComponent().appendingPathComponent("v\(saved.version)").appendingPathComponent("index.html")
+                    RichBlockWindowController.follow(pageId: id, from: shown, to: next, version: saved.version)
+                }
+            } catch {
+                show(error)
+            }
+        }
+    }
+
+    /// The runner's Print folder (`<home>/pages`), learned from any Print it
+    /// hands over, for handlePrintLink.
+    func notePrintsRoot(_ file: String) {
+        let root = ((((file as NSString).deletingLastPathComponent as NSString).deletingLastPathComponent as NSString).deletingLastPathComponent as NSString).standardizingPath
+        if (root as NSString).lastPathComponent == "pages" { printsRoot = root }
     }
 
     /// From a reply's card: in this thread's side pane, as a highlight
@@ -70,6 +103,7 @@ extension AppModel {
         whileBusy(BusyKey.page(page.id)) { [self] in
             do {
                 let got = try await client.getPage(page.id)
+                notePrintsRoot(got.file)
                 preview(path: got.file, title: got.page.title, in: thread)
             } catch {
                 show(error)

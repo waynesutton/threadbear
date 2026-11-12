@@ -4300,6 +4300,8 @@ Fixes from Codex's review of the slice before:
 ## Fork additions awaiting a shared spec run
 
 `prints.whenasked` has one manual scenario in `features/prints.feature`: the Settings switch, and the approval card the runner puts up before an unasked Print. The runner's side is covered by `runner/test/unit/pages.test.ts`.
+`prints.todo` has one manual scenario in `features/prints.feature`: ticking a todo list and moving a board's card. The runner side is `page-list.test.ts` and `pages.test.ts`; the app's link parsing is `PageTests`.
+
 `prints.list` has one manual scenario in `features/prints.feature`: Prints in Highlights and the rail's Prints list, with their projects. `PrintRows` is covered by `PageTests`.
 
 `prints.pane` has one manual scenario in `features/prints.feature`: a Print card's Open goes to the side pane, which follows new versions. `PagePath` is covered by `PageTests`.

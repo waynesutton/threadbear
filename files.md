@@ -55,3 +55,9 @@
 
 - `runner/skills/make-print/` builds Prints: charts, dashboards, reports, docs, progress, the Convex insights report (`insights.mjs`) and the Convex API map (`apimap.mjs`).
 - `runner/skills/bundle-report/` builds the Convex bundle size Print.
+
+## Todo lists and boards
+
+- `runner/src/page-list.ts` parses, draws, ticks and moves todo lists and boards from Markdown.
+- `app/Sources/ThreadbearCore/Protocol/Page.swift` has `PrintLink`, the `threadbear-print:` click.
+- `app/Sources/Threadbear/Pages.swift` has `handlePrintLink`; `Views/PanelsView.swift` catches the link in a Print's view.

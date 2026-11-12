@@ -20,6 +20,8 @@ Every kind ends the same way. The page is static HTML, CSS and SVG, saved with `
 | "dashboard for this data" | `dashboard` | A spec with tiles, 2 to 4 charts and a table |
 | "report on X", "how is the project going" | `report` | A spec with `sections`: markdown text plus charts |
 | "write up / doc / plan / notes as a print" | `doc` | `create_print` with `markdown`. No build step. The user can edit it in the app |
+| "todo list", "checklist", "track these tasks" | `todo` | `create_print` with `kind: "todo"` and `markdown`: `- [ ] item` lines, `- [x]` for done ones, `##` headings to group them. No build step. The user ticks items by clicking |
+| "kanban", "board", "put these on a board" | `board` | `create_print` with `kind: "board"` and `markdown`: one `##` heading per column (To do, Doing, Done) and a `- card` line per card. No build step. The user moves cards with each card's arrows |
 | "bundle report", "run bundle-analyzer" | `bundle` | The `bundle-report` skill |
 | "insights report", "convex insights", "any OCC conflicts?" | `dashboard` | `insights.mjs`, below. A Convex app's insights for the last 72 hours |
 | "API map", "map my Convex functions", "what does the backend expose?" | `dashboard` | `apimap.mjs`, below. Every function and HTTP route, public or internal, and what it takes |

@@ -13,6 +13,7 @@ How Prints work today, what's missing and what's next: [Prints status](https://g
 
 ### Added
 
+- Todo list and kanban board Prints: click an item to tick it, or a card's arrow to move it to the next column. Each click saves a new version, and Edit Text edits the Markdown underneath.
 - Only make Prints when I ask, in Settings > General > Prints. Prints stay on, but a thread asks before making one your message didn't ask for.
 - Open on a reply's Print card opens it in the thread's side pane, which moves to each new version as it's saved.
 - Print cards in replies on the website: published ones open their page, the rest say they're kept on the Mac.

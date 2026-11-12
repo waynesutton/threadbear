@@ -907,12 +907,12 @@ export function buildThreadbearTools(
     ? [
         tool(
           'create_print',
-          `Makes a Print: a named, versioned page Threadbear keeps (a chart, dashboard, report, doc or diagram). Update it with update_print. Use make-print for charts and dashboards; give mermaid for diagrams. Static HTML, CSS and SVG unless live is true. Show it with a \`\`\`print <id>\`\`\` block. If one from the same source exists (list_prints), update it instead.${whenAsked ? ' Only when the user asks for one: they turned on asking first for any other.' : ''}`,
+          `Makes a Print: a named, versioned page Threadbear keeps (a chart, dashboard, report, doc, diagram, todo list or kanban board). Update it with update_print. Use make-print for charts and dashboards; give mermaid for diagrams. Static HTML, CSS and SVG unless live is true. Show it with a \`\`\`print <id>\`\`\` block. If one from the same source exists (list_prints), update it instead.${whenAsked ? ' Only when the user asks for one: they turned on asking first for any other.' : ''}`,
           {
             title: z.string().min(1).max(MAX_TITLE).describe('Short, what it shows: "Bundle size".'),
             summary: z.string().max(MAX_SUMMARY).describe('One or two lines of what it says now, for lists and other apps.'),
             ...pageContent,
-            kind: z.enum(PAGE_KINDS).optional().describe('chart, dashboard, report, doc, diagram or bundle. Left out, or page: a plain print. markdown makes a doc; mermaid a diagram.'),
+            kind: z.enum(PAGE_KINDS).optional().describe('chart, dashboard, report, doc, diagram, bundle, todo or board. Left out, or page: a plain print. markdown makes a doc; mermaid a diagram. With markdown, todo is a checklist (- [ ] items) and board a kanban board (## column headings, - cards); the user ticks and moves them by clicking.'),
             recipe: recipeArg,
             projects: z.array(z.string()).optional().describe('Projects to put it in, by id or title. Left out: this thread\'s project when it is pinned to exactly one. [] for none.'),
             source: z.string().max(MAX_TITLE).optional().describe('What made it ("bundle-analyzer summary"), so the next run finds and updates it.'),

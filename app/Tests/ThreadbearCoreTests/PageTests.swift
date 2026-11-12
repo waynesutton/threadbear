@@ -100,6 +100,21 @@ final class PageTests: XCTestCase {
         XCTAssertEqual(PrintRows.projects(of: try XCTUnwrap(pages.first { $0.id == "pg_other" }), titles: titles), "No project")
         XCTAssertEqual(PrintRows.kindAndVersion(new), "Doc · v3")
     }
+
+    func testAClickInATodoListOrBoardIsReadWithItsVersion() throws {
+        let url = { (s: String) in try XCTUnwrap(URL(string: s)) }
+        XCTAssertEqual(PrintLink.parse(try url("threadbear-print:toggle?v=3&item=2")), .toggle(version: 3, item: 2))
+        XCTAssertEqual(PrintLink.parse(try url("threadbear-print:move?v=1&card=0&to=2")), .move(version: 1, card: 0, to: 2))
+        for bad in ["threadbear-print:toggle?item=2", "threadbear-print:toggle?v=0&item=1", "threadbear-print:toggle?v=2&item=-1",
+                    "threadbear-print:move?v=2&card=1", "threadbear-print:delete?v=2&item=1", "https://example.com/toggle?v=1&item=1"] {
+            XCTAssertNil(PrintLink.parse(try url(bad)), bad)
+        }
+        let todo = try JSONDecoder().decode(Page.self, from: Data(#"{"id":"pg_a","title":"A","kind":"todo"}"#.utf8))
+        XCTAssertTrue(todo.isList)
+        XCTAssertTrue(todo.hasEditableSource, "Edit Text works on a list's markdown")
+        XCTAssertEqual(todo.kindLabel, "Todo list")
+        XCTAssertEqual(todo.symbol, "checklist")
+    }
 }
 
 final class PageFenceTests: XCTestCase {

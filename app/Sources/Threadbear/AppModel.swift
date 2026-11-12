@@ -118,6 +118,8 @@ final class AppModel {
     /// for the ones that live in the app: Voice mode.
     var experiments: Set<String> = []
     /// The pages experiment's pages (Pages.swift), newest first.
+    /// The runner's Print folder, once a Print has been opened (notePrintsRoot).
+    var printsRoot: String?
     var pages: [Page] = [] {
         // The cards in replies follow it (PageCards).
         didSet { PageCards.shared.update(pages, enabled: pagesOn) }

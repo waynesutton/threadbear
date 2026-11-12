@@ -443,3 +443,35 @@ test('only when asked: off unless runner.json turns it on, and settings.update s
   assert.equal(loadConfig({ THREADBEAR_HOME: h }).printsWhenAsked, true, 'read back');
   assert.throws(() => rpc['settings.update']!({ printsWhenAsked: 'yes' }), /printsWhenAsked must be a boolean/);
 });
+
+test('todo lists and boards: made from markdown, ticked and moved by click as new versions, a stale click refused', async () => {
+  const store = new Pages(home());
+  const todo = store.create({ title: 'Launch', summary: '', ownerThread: 't', markdown: '- [ ] Write it\n- [ ] Ship it\n', kind: 'todo' });
+  assert.equal(todo.kind, 'todo');
+  assert.match(fs.readFileSync(store.file(todo.id), 'utf8'), /threadbear-print:toggle\?v=1&amp;item=0/);
+  const ticked = store.toggleItem(todo.id, 1, 0);
+  assert.equal(ticked.version, 2);
+  assert.equal(ticked.editedBy, 'user');
+  assert.equal(store.markdown(todo.id), '- [x] Write it\n- [ ] Ship it\n');
+  assert.match(fs.readFileSync(store.file(todo.id), 'utf8'), /1 of 2 done/);
+  assert.throws(() => store.toggleItem(todo.id, 1, 1), /changed since version 1/, 'a click from an older version is refused');
+  assert.throws(() => store.toggleItem(todo.id, 2, 7), /no item 7/);
+  // Editing its text keeps it a list; restoring an older version too.
+  assert.equal(store.update(todo.id, { markdown: '- [ ] Only this\n', by: 'user' }).kind, 'todo');
+  const restored = store.restoreVersion(todo.id, 1);
+  assert.equal(restored.kind, 'todo');
+  assert.match(fs.readFileSync(store.file(todo.id), 'utf8'), new RegExp(`toggle\\?v=${restored.version}&amp;`), 'a restored list links to its new version');
+
+  const board = store.create({ title: 'Work', summary: '', ownerThread: 't', markdown: '## To do\n- A\n## Done\n', kind: 'board' });
+  assert.equal(board.kind, 'board');
+  assert.equal(store.moveCard(board.id, 1, 0, 1).version, 2);
+  assert.equal(store.markdown(board.id), '## To do\n## Done\n- A\n');
+  assert.throws(() => store.toggleItem(board.id, 2, 0), /isn't a todo list/);
+  assert.equal(store.create({ title: 'Plain', summary: '', ownerThread: 't', markdown: '# Hi' }).kind, 'doc', 'markdown alone is still a doc');
+
+  const { pageMethods } = await import('../../src/pages.ts');
+  const rpc = pageMethods(() => store);
+  const r = (await rpc['pages.toggleItem']!({ pageId: todo.id, version: store.find(todo.id).version, item: 0 })) as { page: { version: number } };
+  assert.equal(r.page.version, store.find(todo.id).version);
+  await assert.rejects(async () => rpc['pages.moveCard']!({ pageId: board.id, card: 0 }), /version, card and to are required/);
+});

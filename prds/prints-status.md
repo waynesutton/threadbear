@@ -1,6 +1,6 @@
 # Where Prints stand
 
-Updated 2026-11-12, after the recipes moved into the repo. On main at `b221756c`, pushed to GitHub. Prints stay the `pages` experiment, off by default and on for Wayne. Wayne decided on 11 Nov to keep it an experiment rather than make it standard. The full user-facing walkthrough is the Prints section of `docs/guide.md`. This page is the short version plus the gap list.
+Updated 2026-11-12, after todo lists and boards. On main at `b221756c`, pushed to GitHub. Prints stay the `pages` experiment, off by default and on for Wayne. Wayne decided on 11 Nov to keep it an experiment rather than make it standard. The full user-facing walkthrough is the Prints section of `docs/guide.md`. This page is the short version plus the gap list.
 
 ## How Prints work
 
@@ -9,7 +9,7 @@ A Print is a page a thread makes for you to keep. Ask for a chart, a dashboard, 
 | Piece | How it works |
 |---|---|
 | Storage | Files on your Mac in `~/Library/Application Support/Threadbear/pages/<id>/v<n>/`. Last 10 versions kept. Nothing goes to Convex unless you publish |
-| Kinds | chart, dashboard, report, doc, diagram, bundle |
+| Kinds | chart, dashboard, report, doc, diagram, bundle, todo, board |
 | Projects | A thread pinned to one project files its Prints there. A Print can sit in several projects, or none |
 | In a reply | A card with a preview, title, kind, version and age. It follows the newest version and says "New version" |
 | Project page | Prints are listed with Open, Refresh, Edit with Agent, Edit Text, Download, Download as PDF, Versions, Projects, Publish and Delete |
@@ -26,6 +26,7 @@ A Print is a page a thread makes for you to keep. Ask for a chart, a dashboard, 
 | Prints on the rail | A Prints button on the right-hand rail, under Files, while Prints is on and at least one exists. It lists every Print, newest first, with its projects. A click opens it in the pane; Back returns to the list |
 | Convex insights | "Make a Convex insights report" runs `npx convex insights --details --json` in the app's folder and builds a dashboard: insights, calls affected, errors, functions, calls by function and by kind, and each insight's table and last time seen. No insights gives a short all-clear report. Read only, last 72 hours, cloud deployments only |
 | Convex API map | "Map my Convex API" runs `npx convex function-spec` and builds a dashboard of every function and HTTP route: public or internal, the arguments each takes, and missing validators, listed first. Reads metadata only |
+| Todo lists and boards | `kind: "todo"` or `"board"` with Markdown. Click an item to tick it, or a card's arrow to move it; each click is a new version, so Versions undoes it. Edit Text edits the Markdown. Works in the side pane and a Print's window; published, it's a plain list. No scripts: each click is a link the app catches |
 | Outside agents | A key with read-all access can `list_prints` and `read_print` published Prints, in bounded pages. Read only. Local Prints are never visible |
 
 The agent side is the `create_print`, `update_print`, `read_print`, `list_prints`, `publish_print` family of tools. The older `*_page` names still work. The recipes ship with Threadbear as built-in skills in `runner/skills/`: make-print (charts, dashboards, reports, docs, progress, the Convex insights report and the Convex API map) and bundle-report (the Convex bundle size Print). Add them from the Skills page. make-print keeps the saved style in `~/.config/threadbear/print-style.json`.

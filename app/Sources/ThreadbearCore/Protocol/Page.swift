@@ -66,10 +66,18 @@ public struct Page: Sendable, Hashable, Decodable, Identifiable {
 
     public var isDoc: Bool { kind == "doc" }
     public var isDiagram: Bool { kind == "diagram" }
-    public var hasEditableSource: Bool { isDoc || isDiagram }
+    /// A checklist or a kanban board: markdown the user changes by clicking.
+    public var isList: Bool { kind == "todo" || kind == "board" }
+    public var hasEditableSource: Bool { isDoc || isDiagram || isList }
 
     /// What its kind is called: a plain one is a Print.
-    public var kindLabel: String { kind == "page" ? "Print" : kind.capitalized }
+    public var kindLabel: String {
+        switch kind {
+        case "page": "Print"
+        case "todo": "Todo list"
+        default: kind.capitalized
+        }
+    }
 
     /// The versions the runner still keeps: the newest ten.
     public var keptVersions: [Int] { Array(Swift.max(1, version - 9)...version).reversed() }
@@ -83,6 +91,8 @@ public struct Page: Sendable, Hashable, Decodable, Identifiable {
         case "doc": "doc.plaintext"
         case "diagram": "point.3.connected.trianglepath.dotted"
         case "bundle": "shippingbox"
+        case "todo": "checklist"
+        case "board": "rectangle.split.3x1"
         default: "doc.richtext"
         }
     }
@@ -181,5 +191,30 @@ public enum PrintRows {
     /// "Chart · v3", for a row's right-hand side.
     public static func kindAndVersion(_ page: Page) -> String {
         "\(page.kindLabel) · v\(page.version)"
+    }
+}
+
+/// A click inside a todo list or board Print (runner/src/page-list.ts):
+/// `threadbear-print:toggle?v=3&item=2` or `threadbear-print:move?v=3&card=1&to=2`,
+/// with the version the page was drawn from.
+public enum PrintLink: Equatable, Sendable {
+    case toggle(version: Int, item: Int)
+    case move(version: Int, card: Int, to: Int)
+
+    public static let scheme = "threadbear-print"
+
+    public static func parse(_ url: URL) -> PrintLink? {
+        guard url.scheme == scheme, let parts = URLComponents(url: url, resolvingAgainstBaseURL: false) else { return nil }
+        let number = { (name: String) in parts.queryItems?.first(where: { $0.name == name })?.value.flatMap { Int($0) }.flatMap { $0 >= 0 ? $0 : nil } }
+        guard let version = number("v"), version > 0 else { return nil }
+        switch parts.path {
+        case "toggle":
+            return number("item").map { .toggle(version: version, item: $0) }
+        case "move":
+            guard let card = number("card"), let to = number("to") else { return nil }
+            return .move(version: version, card: card, to: to)
+        default:
+            return nil
+        }
     }
 }

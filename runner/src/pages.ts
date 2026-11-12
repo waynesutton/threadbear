@@ -15,6 +15,7 @@ import { atomicWriteFileSync, readJsonSync } from './fsutil.ts';
 import type { ProjectMaker, ThreadProject } from './protocol.ts';
 import { ErrorCode, RpcError } from './protocol.ts';
 import { DOC_SOURCE, renderDoc } from './page-doc.ts';
+import { LIST_KINDS, moveCard, renderBoard, renderTodo, toggleItem, type ListKind } from './page-list.ts';
 import { DIAGRAM_SOURCE, renderDiagram } from './page-diagram.ts';
 
 export const MAX_VERSIONS = 10;
@@ -34,7 +35,9 @@ export const PUBLISH_HTML_MAX = 700_000;
 export const DELETED_KEEP_MS = 7 * 24 * 3600 * 1000;
 // What a page is, for its icon and what Refresh and Edit mean. A doc is
 // markdown the runner draws (page-doc.ts), which the user can edit too.
-export const PAGE_KINDS = ['page', 'chart', 'dashboard', 'report', 'doc', 'diagram', 'bundle'] as const;
+// todo and board are markdown too, drawn as a checklist or a kanban board
+// the user changes with a click (page-list.ts).
+export const PAGE_KINDS = ['page', 'chart', 'dashboard', 'report', 'doc', 'diagram', 'bundle', 'todo', 'board'] as const;
 export type PageKind = (typeof PAGE_KINDS)[number];
 
 export type PageProject = { id: string; by: ProjectMaker; pinned?: boolean };
@@ -70,7 +73,8 @@ export type PageRecord = {
 };
 
 // One of: HTML, a built folder, Markdown for a doc, or Mermaid for a diagram.
-export type PageContent = { html?: string; dir?: string; markdown?: string; mermaid?: string };
+// list: draw the markdown as a todo list or a board rather than a doc.
+export type PageContent = { html?: string; dir?: string; markdown?: string; mermaid?: string; list?: ListKind };
 
 export type CreatePage = PageContent & {
   title: string;
@@ -138,8 +142,9 @@ export class Pages {
     const projects = c.projects
       ? [...new Set(c.projects)].map((pid): PageProject => ({ id: pid, by: 'agent', pinned: true }))
       : inherited(c.ownerProjects ?? []);
-    const kind = c.mermaid !== undefined ? 'diagram' : c.markdown !== undefined ? 'doc' : (c.kind ?? 'page');
-    const bytes = this.write(id, 1, c, live, title);
+    const list = c.markdown !== undefined ? asList(c.list ?? c.kind) : undefined;
+    const kind = c.mermaid !== undefined ? 'diagram' : c.markdown !== undefined ? (list ?? 'doc') : (c.kind ?? 'page');
+    const bytes = this.write(id, 1, { ...c, ...(list ? { list } : {}) }, live, title);
     const rec: PageRecord = {
       id,
       title,
@@ -168,21 +173,24 @@ export class Pages {
     if (u.summary !== undefined) next.summary = cleanSummary(u.summary);
     if (u.recipe !== undefined) next.recipe = u.recipe.trim().slice(0, MAX_RECIPE) || undefined;
     if (u.html !== undefined || u.dir !== undefined || u.markdown !== undefined || u.mermaid !== undefined) {
-      if (u.markdown !== undefined) next.kind = 'doc';
+      // A list stays a list when its markdown is edited, unless told otherwise.
+      const list = u.markdown !== undefined ? asList(u.list ?? p.kind) : undefined;
+      if (u.markdown !== undefined) next.kind = list ?? 'doc';
       // Script permission belongs to the Print, not its current format.
       // Keeping it lets a live Print restore its older scripted versions.
       if (u.mermaid !== undefined || (u.dir && fs.existsSync(path.join(u.dir, DIAGRAM_SOURCE)))) next.kind = 'diagram';
       else if (u.dir && fs.existsSync(path.join(u.dir, DOC_SOURCE))) next.kind = 'doc';
-      else if (u.markdown === undefined && (next.kind === 'doc' || next.kind === 'diagram')) next.kind = 'page';
+      else if (u.markdown === undefined && (next.kind === 'doc' || next.kind === 'diagram' || asList(next.kind))) next.kind = 'page';
       next.version = p.version + 1;
-      next.bytes = this.write(p.id, next.version, u, p.live, next.title);
+      next.bytes = this.write(p.id, next.version, { ...u, ...(list ? { list } : {}) }, p.live, next.title);
       next.editedBy = u.by ?? 'agent';
       this.prune(p.id, next.version);
-    } else if (u.title !== undefined && (next.kind === 'doc' || next.kind === 'diagram')) {
+    } else if (u.title !== undefined && (next.kind === 'doc' || next.kind === 'diagram' || asList(next.kind))) {
       // The title is drawn into source-based Prints, so rename versions it too.
       const md = this.markdown(p.id);
       const mermaid = this.mermaid(p.id);
-      const content = next.kind === 'diagram' && mermaid !== undefined ? { mermaid } : md !== undefined ? { markdown: md } : undefined;
+      const listKind = asList(next.kind);
+      const content = next.kind === 'diagram' && mermaid !== undefined ? { mermaid } : md !== undefined ? { markdown: md, ...(listKind ? { list: listKind } : {}) } : undefined;
       if (content) {
         next.version = p.version + 1;
         next.bytes = this.write(p.id, next.version, content, p.live, next.title);
@@ -193,6 +201,31 @@ export class Pages {
     this.records = this.records.map((r) => (r.id === p.id ? next : r));
     this.persist();
     return next;
+  }
+
+  // A click on a todo list's box or a board card's arrow, from the version
+  // the user was looking at: a newer one means the click is stale.
+  toggleItem(id: string, version: number, item: number): PageRecord {
+    return this.changeList(id, version, 'todo', (md) => toggleItem(md, item));
+  }
+
+  moveCard(id: string, version: number, card: number, to: number): PageRecord {
+    return this.changeList(id, version, 'board', (md) => moveCard(md, card, to));
+  }
+
+  private changeList(id: string, version: number, kind: ListKind, change: (md: string) => string): PageRecord {
+    const p = this.live(id);
+    if (p.kind !== kind) throw new PageError(`${p.title} isn't a ${kind === 'todo' ? 'todo list' : 'board'}.`);
+    if (version !== p.version) throw new PageError(`${p.title} changed since version ${version}. Open its newest version and try again.`);
+    const md = this.markdown(p.id);
+    if (md === undefined) throw new PageError(`${p.title} has no list to change.`);
+    let next: string;
+    try {
+      next = change(md);
+    } catch (error) {
+      throw new PageError(error instanceof Error ? error.message : 'That change could not be made.');
+    }
+    return next === md ? p : this.update(p.id, { markdown: next, by: 'user' });
   }
 
   // A doc's markdown, newest or at a version, for the editor.
@@ -220,6 +253,11 @@ export class Pages {
     const p = this.live(id);
     const from = this.versionDir(p.id, version);
     if (!fs.existsSync(from)) throw new PageError(`Version ${version} of ${p.id} isn't kept. read_print lists the versions there are.`);
+    // A list is drawn again from that version's markdown, so it stays a list
+    // and its links name the new version, not the old one.
+    const list = asList(p.kind);
+    const md = list ? this.markdown(p.id, version) : undefined;
+    if (list && md !== undefined) return this.update(p.id, { markdown: md, list, by: 'user' });
     return this.update(p.id, { dir: from });
   }
 
@@ -350,7 +388,7 @@ export class Pages {
         ? [{ rel: 'index.html', data: Buffer.from(diagram.html) }, { rel: DIAGRAM_SOURCE, data: Buffer.from(c.mermaid!) }, { rel: 'diagram.svg', data: Buffer.from(diagram.svg) }]
         : c.markdown !== undefined
         ? [
-            { rel: 'index.html', data: Buffer.from(renderDoc(title, c.markdown, `Version ${v} · ${at.toISOString().slice(0, 16).replace('T', ' ')} UTC`), 'utf8') },
+            { rel: 'index.html', data: Buffer.from((c.list === 'todo' ? (m: string, meta: string) => renderTodo(title, m, meta, v) : c.list === 'board' ? (m: string, meta: string) => renderBoard(title, m, meta, v) : (m: string, meta: string) => renderDoc(title, m, meta))(c.markdown, `Version ${v} · ${at.toISOString().slice(0, 16).replace('T', ' ')} UTC`), 'utf8') },
             { rel: DOC_SOURCE, data: Buffer.from(c.markdown, 'utf8') },
           ]
         : c.html !== undefined
@@ -586,6 +624,14 @@ export function pageMethods(pages: () => Pages | undefined, ask?: PageAsk, pub?:
       const title = str(p, 'title');
       return found(() => ({ page: must().update(id(p), { markdown, by: 'user', ...(title ? { title } : {}) }) }));
     },
+    'pages.toggleItem': (p) => {
+      if (typeof p.version !== 'number' || typeof p.item !== 'number') throw new RpcError(ErrorCode.badParams, 'version and item are required');
+      return found(() => ({ page: must().toggleItem(id(p), p.version as number, p.item as number) }));
+    },
+    'pages.moveCard': (p) => {
+      if (typeof p.version !== 'number' || typeof p.card !== 'number' || typeof p.to !== 'number') throw new RpcError(ErrorCode.badParams, 'version, card and to are required');
+      return found(() => ({ page: must().moveCard(id(p), p.version as number, p.card as number, p.to as number) }));
+    },
     'pages.saveDiagram': (p) => {
       const mermaid = str(p, 'mermaid');
       if (mermaid === undefined) throw new RpcError(ErrorCode.badParams, 'mermaid is required');
@@ -640,4 +686,9 @@ export function pageMethods(pages: () => Pages | undefined, ask?: PageAsk, pub?:
       return found(() => ({ page: must().setProjects(id(p), { ...(add ? { add } : {}), ...(remove ? { remove } : {}), by: 'mike' }) }));
     },
   };
+}
+
+// todo or board, for a kind that's one, else undefined.
+function asList(kind: string | undefined): ListKind | undefined {
+  return (LIST_KINDS as readonly string[]).includes(kind ?? '') ? (kind as ListKind) : undefined;
 }

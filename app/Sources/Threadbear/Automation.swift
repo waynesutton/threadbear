@@ -997,6 +997,11 @@ enum Automation {
                 guard FilePreviewView.current?.debugPlay() == true else { return "error no video is showing" }
                 return "ok playing"
             }
+            if let link = c["navigate"] as? String {
+                // A link inside the file in the pane, through its own view.
+                guard let file = app.panePreview[thread.id]?.fileURL, let url = URL(string: link) else { return "error no file in the pane, or a bad link" }
+                return WebPanelPool.shared.debugNavigate(file: file, to: url) ? "ok" : "error the pane's page isn't loaded"
+            }
             if c["close"] as? Bool == true {
                 app.closePreview(in: thread.id)
             } else if c["back"] as? Bool == true {
