@@ -107,13 +107,14 @@ ${body}
 </html>
 `;
 
-const BASE_CSS = `main{max-width:880px;margin:auto;padding:28px 22px}h1{font-size:24px;line-height:1.25;margin:0 0 4px}.meta,.hint{font-size:12px;color:var(--dim)}.hint{margin:6px 0 0}
-h2{font-size:14px;margin:22px 0 8px}p{margin:10px 0}a{color:inherit;text-decoration:none}code{font:12px ui-monospace,monospace}`;
+const BASE_CSS = `main{max-width:760px;margin:auto;padding:48px 24px 64px}header{margin-bottom:8px}.hint{font-size:13px;color:var(--faint);margin:28px 0 0}
+h2{font-size:13px;font-weight:600;letter-spacing:.02em;text-transform:uppercase;color:var(--dim);margin:32px 0 8px}p{margin:0 0 14px}
+@media (max-width:600px){main{padding:28px 18px 48px}h1{font-size:30px}}`;
 
-const TODO_CSS = `.bar{height:6px;border-radius:3px;background:var(--line);margin:16px 0 4px;overflow:hidden}.bar i{display:block;height:100%;background:var(--teal)}
-.item{display:flex;gap:10px;align-items:flex-start;padding:8px 10px;border-radius:8px;cursor:pointer}.item:hover{background:var(--card)}
-.box{flex:none;width:16px;height:16px;margin-top:2px;border:1.5px solid var(--dim);border-radius:4px;display:grid;place-items:center;font-size:11px;line-height:1;color:var(--bg)}
-.done .box{background:var(--teal);border-color:var(--teal)}.done .text{color:var(--dim);text-decoration:line-through}`;
+const TODO_CSS = `.progress{display:flex;align-items:center;gap:14px;margin:22px 0 4px;color:var(--dim);font-size:13px}.bar{flex:1;height:4px;border-radius:2px;background:var(--line);overflow:hidden}.bar i{display:block;height:100%;background:var(--text)}
+.item{display:flex;gap:12px;align-items:flex-start;padding:10px 12px;margin:0 -12px;border-radius:8px;cursor:pointer;text-decoration:none}.item:hover{background:var(--card)}
+.box{flex:none;width:18px;height:18px;margin-top:3px;border:1.5px solid var(--faint);border-radius:5px;display:grid;place-items:center;font-size:12px;line-height:1;color:var(--bg)}
+.done .box{background:var(--text);border-color:var(--text)}.done .text{color:var(--faint);text-decoration:line-through;text-decoration-thickness:1px}`;
 
 export function renderTodo(title: string, md: string, meta: string, version: number): string {
   const { items, done, notes } = parseTodo(md);
@@ -130,17 +131,17 @@ export function renderTodo(title: string, md: string, meta: string, version: num
   for (const r of rows) at(r.group).rows.push(r.html);
   const pct = items.length ? Math.round((done / items.length) * 100) : 0;
   const body = [
-    `<div class="bar"><i style="width:${pct}%"></i></div><div class="meta">${done} of ${items.length} done</div>`,
+    `<div class="progress"><div class="bar"><i style="width:${pct}%"></i></div><span>${done} of ${items.length} done</span></div>`,
     ...groups.map((g) => `${g.name !== undefined ? `<h2>${inline(g.name)}</h2>` : ''}${g.rows.join('\n')}`),
     `<p class="hint">In Threadbear, click an item to tick it. Each change saves a new version.</p>`,
   ].join('\n');
   return page(title, meta, TODO_CSS, body);
 }
 
-const BOARD_CSS = `main{max-width:none}.board{display:grid;grid-auto-flow:column;grid-auto-columns:minmax(220px,1fr);gap:12px;overflow-x:auto;margin-top:18px;align-items:start}
-.col{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:10px}.col h2{margin:2px 4px 10px}.count{color:var(--dim);font-weight:400}
-.card{background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:8px 10px;margin-bottom:8px;font-size:14px}.moves{display:flex;justify-content:space-between;margin-top:6px;font-size:12px}
-.moves a{color:var(--dim);padding:2px 6px;border-radius:6px}.moves a:hover{background:var(--card);color:var(--text)}.empty{color:var(--dim);font-size:13px;padding:4px}`;
+const BOARD_CSS = `main{max-width:none;padding-left:32px;padding-right:32px}.board{display:grid;grid-auto-flow:column;grid-auto-columns:minmax(240px,1fr);gap:16px;overflow-x:auto;margin-top:28px;align-items:start}
+.col{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:12px}.col h2{margin:4px 4px 12px}.count{color:var(--faint);font-weight:500;margin-left:4px}
+.card{background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:12px 14px;margin-bottom:10px;font-size:14px;line-height:1.5}.moves{display:flex;justify-content:space-between;margin-top:10px;font-size:12px}
+.moves a{color:var(--faint);text-decoration:none;padding:2px 6px;margin:0 -6px;border-radius:6px}.moves a:hover{background:var(--card);color:var(--text)}.empty{color:var(--faint);font-size:13px;padding:6px 4px}`;
 
 export function renderBoard(title: string, md: string, meta: string, version: number): string {
   const { columns } = parseBoard(md);

@@ -29,6 +29,7 @@ How Prints work today, what's missing and what's next: [Prints status](https://g
 
 ### Changed
 
+- Prints have a new look in dark and light: neutral near-black and white, larger titles, calmer type, dotted links and quieter borders, using the system font so nothing extra loads. The bundle report lost its gradient.
 - make-print and bundle-report ship with Threadbear as built-in skills, so every install can make Prints. The saved Print style moved to `~/.config/threadbear/print-style.json`, so a skill update keeps it.
 - In Ask before edits, a thread asks once per Print for updates instead of every time (Claude threads).
 
