@@ -2447,6 +2447,14 @@ looks for the file: `skills/<name>/SKILL.md`, then `commands/<name>.md`
 `user` and the thread's folder's `.claude` for `project`. Codex's
 `skills/list` gives the path and scope itself (`repo` is `project`).
 
+The Skills store's skills reach Claude as the `threadbear` plugin, which
+Claude names `threadbear:<name>`. The list has them as `<name>` with
+`scope: "store"` (both names run them), unless another command already
+has that name, and then they keep the prefix. Listing a folder's commands
+loads the plugin as a session does, so they're in the list whether or not
+the thread has a CLI running. In a mention, `/threadbear:<name>` means
+the store skill `<name>`, and `/plugin:name` names a plugin's skill.
+
 ## Context breakdown
 
 The composer's context ring shows `contextTokens` out of `contextWindow`.

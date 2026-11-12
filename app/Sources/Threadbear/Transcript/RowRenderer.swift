@@ -1400,7 +1400,8 @@ enum RowRenderer {
         guard !found.isEmpty else { return text }
         let out = NSMutableAttributedString(attributedString: text)
         for range in found {
-            let name = String((text.string as NSString).substring(with: range).dropFirst()).lowercased()
+            let word = String((text.string as NSString).substring(with: range).dropFirst())
+            let name = SkillMentions.skill(named: word) ?? word.lowercased()
             let font = out.attribute(.font, at: range.location, effectiveRange: nil) as? NSFont ?? Theme.bodyFont
             out.addAttributes([
                 .foregroundColor: NSColor.controlAccentColor,

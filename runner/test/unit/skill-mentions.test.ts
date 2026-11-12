@@ -62,3 +62,13 @@ test('listedSkills: the cached list for that login and folder, skills only, not 
     '/make-print then /builder-sec-check\n\n(Threadbear: the user named the skill "builder-sec-check" with /builder-sec-check; use it for this, through the Skill tool.)',
   );
 });
+
+// Claude names a store skill `threadbear:name`; that's the skill `name`,
+// never the store skill called "threadbear" (Wayne, 12 Nov).
+test('/threadbear:name is the store skill name; plugin:name mentions work', () => {
+  const known = ['threadbear', 'pele', 'convex:add'];
+  assert.deepEqual(mentionedSkills('use /threadbear:pele and /convex:add', known), ['pele', 'convex:add']);
+  assert.deepEqual(mentionedSkills('/threadbear:nope here', known), []);
+  assert.equal(withSkillMentions('draw it with /threadbear:pele', known, 'codex'), 'draw it with $pele');
+  assert.equal(withSkillMentions('/threadbear:pele draw it', known, 'claude'), '/threadbear:pele draw it');
+});

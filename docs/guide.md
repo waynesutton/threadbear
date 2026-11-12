@@ -1983,7 +1983,8 @@ palette (see Slash commands), or, with Settings > General > Slash
 commands set to the small list, lists your skills over the cursor, narrowing as you type: ↑ and ↓ to choose, Return or Tab
 to put it in, Esc to close. A skill's command turns blue as you type it,
 and shows as a link in your message once sent, so you can see a skill
-will run. That's any skill the thread can use: the Skills page's, and
+will run. Skills page skills show under their own names, as `/pele`
+(`/threadbear:pele` works too). That's any skill the thread can use: the Skills page's, and
 the ones Claude or Codex find themselves, such as those in
 `~/.claude/skills` or the folder's own. Click one for the Skills page,
 or for one that isn't there, its SKILL.md. It works anywhere in

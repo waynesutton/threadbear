@@ -195,6 +195,11 @@ export class ClaudeAdapter implements AgentAdapter {
       abortController: abort,
       spawnClaudeCodeProcess: groupSpawner(deps.registry, deps.log, () => {}, `commands:${account.id}`),
     };
+    // The Skills store's plugin, as every session gets it: without it the
+    // list had none of the store's skills until a live CLI's list replaced
+    // it, so the palette showed them only some of the time (Wayne, 12 Nov).
+    const plugins = deps.plugins?.() ?? [];
+    if (plugins.length) options.plugins = plugins;
     const queryFn = deps.queryFn ?? sdkQuery;
     const q = queryFn({ prompt: never, options });
     try {

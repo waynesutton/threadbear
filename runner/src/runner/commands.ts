@@ -11,7 +11,7 @@ import { ErrorCode, RpcError, isEffortLevel } from '../protocol.ts';
 import { expandHome } from '../config.ts';
 import type { QueuedSend } from '../store.ts';
 import { claudeOptions, claudeSettingsWithoutCommands } from '../claude-trust.ts';
-import { commandList, parseCommand, planCommand, type CommandPlan, type SlashCommand } from '../slash-commands.ts';
+import { commandList, storeNames, parseCommand, planCommand, type CommandPlan, type SlashCommand } from '../slash-commands.ts';
 
 // A folder's command list (its skills, its .claude/commands) changes
 // rarely, and asking a CLI for it takes a second or two.
@@ -161,7 +161,7 @@ export const commandsPart = {
     const out = new Set<string>();
     for (const [key, entry] of this.commandCache) {
       if (!key.startsWith(prefix)) continue;
-      for (const c of entry.commands) if (c.source === 'skill' && !c.userOnly) out.add(c.name);
+      for (const c of storeNames(entry.commands)) if (c.source === 'skill' && !c.userOnly) out.add(c.name);
     }
     return [...out];
   },
