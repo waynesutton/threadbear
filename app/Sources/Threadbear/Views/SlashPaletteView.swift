@@ -5,6 +5,19 @@ import ThreadbearCore
 /// cursor stays in the box, so typing keeps narrowing the list.
 enum PaletteKey {
     case up, down, tab, enter, escape
+    /// Left and right step through the categories (All, Threadbear, the
+    /// CLI's, Skills, Recent), so the keyboard reaches them too (Wayne,
+    /// 10 Nov).
+    case left, right
+}
+
+/// Whether Return (and a double-click) in the slash palette sends the
+/// command at once. Off by default: it puts the command in the box, and
+/// the next Return sends it, so a new thread's box doesn't start a thread
+/// by surprise (Wayne, 11 Nov). The Run button always sends.
+enum SlashReturn {
+    static let key = "slashReturnRuns"
+    static var runs: Bool { UserDefaults.standard.bool(forKey: key) }
 }
 
 /// What the composer keeps for its palette: which category and command
@@ -14,6 +27,10 @@ struct PaletteState: Equatable {
     var category: SlashPalette.Category = .all
     var selected: String?
     var closedAt: String?
+    /// What's typed in the palette's own search field: narrows every
+    /// category on top of what's typed after the slash, matching names
+    /// and descriptions.
+    var search = ""
 }
 
 /// The palette over the composer while a message starts with "/" (mockup
@@ -41,8 +58,15 @@ struct SlashPaletteView: View {
     /// The column widths Mike dragged (AppModel.slashPaletteLayout).
     @Binding var layout: SlashPalette.Layout
 
+    /// The search field's arrows, Return and Esc, handled as the box's own
+    /// (ComposerView.paletteKey), since the field has the keyboard then.
+    var onKey: ((PaletteKey) -> Void)?
+
     var body: some View {
-        let all = commands ?? []
+        // Widths from every command, so the columns hold still while
+        // searching; the lists from what the search leaves.
+        let everything = commands ?? []
+        let all = Self.searched(everything, search: state.search, recent: recent)
         let matches = SlashPalette.matches(all, query: query, category: state.category, recent: recent)
         let picked = matches.first { $0.name == state.selected } ?? matches.first
         // Each column as wide as its longest entry needs, the description
@@ -52,10 +76,13 @@ struct SlashPaletteView: View {
             let total = geo.size.width
             let widths = SlashPalette.columnWidths(
                 total: total,
-                categories: layout.categories ?? Self.categoriesWidth(all, query: query, recent: recent, provider: provider),
-                list: layout.list ?? Self.listWidth(all),
+                categories: layout.categories ?? Self.categoriesWidth(everything, query: query, recent: recent, provider: provider),
+                list: layout.list ?? Self.listWidth(everything),
                 chosen: layout.list != nil
             )
+            VStack(spacing: 0) {
+            PaletteSearchField(search: $state.search, onKey: onKey)
+            Divider()
             HStack(spacing: 0) {
                 categories(all)
                     .frame(width: widths.categories)
@@ -72,6 +99,7 @@ struct SlashPaletteView: View {
                              reset: { layout.list = nil })
                 detail(picked)
                     .frame(maxWidth: .infinity, alignment: .topLeading)
+            }
             }
         }
         // It fills its panel (SlashPalettePanel), whose own edges size it.
@@ -129,7 +157,8 @@ struct SlashPaletteView: View {
         if commands == nil {
             placeholder("Getting this thread's commands…")
         } else if matches.isEmpty {
-            placeholder(query.isEmpty ? "Nothing here yet." : "No command matches /\(query). Send it and it goes to the agent as words.")
+            placeholder(!state.search.isEmpty ? "Nothing matches \u{201C}\(state.search)\u{201D}."
+                        : query.isEmpty ? "Nothing here yet." : "No command matches /\(query). Send it and it goes to the agent as words.")
         } else {
             ScrollViewReader { proxy in
                 ScrollView {
@@ -166,10 +195,11 @@ struct SlashPaletteView: View {
             // double-click time has passed (half a second, Mike, 6 Nov).
             // A second click is read from the click itself instead.
             .onTapGesture {
-                if NSApp.currentEvent?.clickCount ?? 1 >= 2, state.selected == command.name { onRun(command) }
-                else { state.selected = command.name }
+                if NSApp.currentEvent?.clickCount ?? 1 >= 2, state.selected == command.name {
+                    if SlashReturn.runs { onRun(command) } else { onFill(command) }
+                } else { state.selected = command.name }
             }
-            .tip("/\(command.name): double-click to run it")
+            .tip("/\(command.name): double-click to \(SlashReturn.runs ? "run it" : "put it in the box")")
     }
 
     @ViewBuilder
@@ -234,9 +264,9 @@ struct SlashPaletteView: View {
                 .tip("Put /\(command.name) in the message, for the agent to run (Return or Tab)")
         } else {
             Button("Run") { onRun(command) }
-                .tip("Send /\(command.name) now (Return)")
+                .tip("Send /\(command.name) now" + (SlashReturn.runs ? " (Return)" : ""))
             Button("Add details") { onFill(command) }
-                .tip("Put /\(command.name) in the box to type more after it (Tab)")
+                .tip("Put /\(command.name) in the box to type more after it (\(SlashReturn.runs ? "Tab" : "Return or Tab"))")
         }
         // With the other buttons, so it's always in sight: under
         // the path it scrolled away in a short palette.
@@ -295,6 +325,13 @@ extension SlashPaletteView {
         return longest + zoomed(10) * 2 + zoomed(8) * 2 + zoomed(14)
     }
 
+    /// What the palette's search field leaves of `commands`: all of them
+    /// while it's empty.
+    static func searched(_ commands: [SlashCommand], search: String, recent: [String]) -> [SlashCommand] {
+        let s = search.trimmingCharacters(in: .whitespaces)
+        return s.isEmpty ? commands : SlashPalette.matches(commands, query: s, category: .all, recent: recent)
+    }
+
     static func categoryTip(_ category: SlashPalette.Category, provider: String) -> String {
         switch category {
         case .all: "Every command this thread can run"
@@ -307,15 +344,23 @@ extension SlashPaletteView {
 
     /// What a palette key does with these matches: moves the pick, or
     /// gives the command to fill in (Tab) or run (Return). Nil: not taken.
-    static func handle(_ key: PaletteKey, matches: [SlashCommand], state: inout PaletteState, text: String) -> (SlashCommand, run: Bool)? {
+    static func handle(_ key: PaletteKey, matches: [SlashCommand], categories: [SlashPalette.Category] = [], state: inout PaletteState, text: String) -> (SlashCommand, run: Bool)? {
         let index = matches.firstIndex { $0.name == state.selected } ?? 0
         switch key {
+        case .left, .right:
+            // Wraps around, as the list's own arrows don't need to.
+            guard !categories.isEmpty else { return nil }
+            let at = categories.firstIndex(of: state.category) ?? 0
+            let step = key == .right ? 1 : categories.count - 1
+            state.category = categories[(at + step) % categories.count]
+            state.selected = nil
         case .up:
             if !matches.isEmpty { state.selected = matches[max(0, index - 1)].name }
         case .down:
             if !matches.isEmpty { state.selected = matches[min(matches.count - 1, index + 1)].name }
         case .escape:
             state.closedAt = text
+            state.search = ""
         case .tab, .enter:
             guard matches.indices.contains(index) else { return nil }
             return (matches[index], key == .enter)
@@ -334,6 +379,7 @@ extension AppModel {
             defer { self?.slashFetches[threadId] = nil }
             do {
                 let list = try await client.threadCommands(threadId: threadId)
+                Self.noteSkills(list)
                 if self?.slashCommands[threadId] != list { self?.slashCommands[threadId] = list }
             } catch {
                 // An older runner (-32601) or one that couldn't list them:
@@ -342,6 +388,13 @@ extension AppModel {
                 AppLog.write("rpc", "threads.commands failed: \(error.localizedDescription)")
             }
         }
+    }
+
+    /// The skills a command list names, as mentions that turn blue and run
+    /// partway through a message (SkillMentions), Skills store or not. Not
+    /// the ones that run only as a message's first word.
+    nonisolated static func noteSkills(_ list: [SlashCommand]) {
+        SkillMentions.addListed(list.filter { $0.isSkill && $0.userOnly != true }.map { ($0.name, $0.path) })
     }
 
     /// Where a new thread's palette keeps its list: per login and folder,
@@ -370,6 +423,7 @@ extension AppModel {
             defer { self?.slashFetches[key] = nil }
             do {
                 let list = try await client.folderCommands(cwd: cwd, accountId: accountId, permissionMode: mode)
+                Self.noteSkills(list)
                 if self?.slashCommands[key] != list { self?.slashCommands[key] = list }
             } catch {
                 // An older runner (-32601): none, as for a thread.
@@ -411,5 +465,81 @@ struct ResizeHandle: View {
         )
         .onTapGesture(count: 2) { reset() }
         .tip(tip)
+    }
+}
+
+/// The search field along the palette's top. The palette's panel never
+/// takes the keyboard on its own (the box keeps typing), so the field is a
+/// button until it's clicked: then the panel becomes key, the field takes
+/// the keys, and its arrows, Return and Esc work the palette as the box's
+/// do. Clicking back in the box hands the keyboard back.
+struct PaletteSearchField: View {
+    @Binding var search: String
+    var onKey: ((PaletteKey) -> Void)?
+    @State private var editing = false
+    @FocusState private var focused: Bool
+
+    var body: some View {
+        HStack(spacing: zoomed(6)) {
+            Image(systemName: "magnifyingglass")
+                .foregroundStyle(.secondary)
+            if editing || !search.isEmpty {
+                TextField("Search skills and commands", text: $search)
+                    .textFieldStyle(.plain)
+                    .focused($focused)
+                    .onSubmit { onKey?(.enter) }
+                    .onKeyPress(.upArrow) { onKey?(.up); return .handled }
+                    .onKeyPress(.downArrow) { onKey?(.down); return .handled }
+                    .onKeyPress(.tab) { onKey?(.tab); return .handled }
+                    .onKeyPress(.escape) { finish(); onKey?(.escape); return .handled }
+                    .onChange(of: focused) { _, on in if !on, search.isEmpty { editing = false } }
+                    .tip("Narrows every category by name and description. Arrows move, Return picks, Esc closes")
+                if !search.isEmpty {
+                    Button { search = "" } label: { Image(systemName: "xmark.circle.fill") }
+                        .buttonStyle(.plain)
+                        .foregroundStyle(.tertiary)
+                        .tip("Clear the search")
+                        .accessibilityLabel("Clear the search")
+                }
+            } else {
+                Text("Search skills and commands")
+                    .foregroundStyle(.tertiary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            // Closes the palette, as Esc does (Wayne, 11 Nov).
+            Button { finish(); onKey?(.escape) } label: {
+                Image(systemName: "xmark")
+                    .font(.system(size: TypeScale.label - 1, weight: .semibold))
+                    .frame(width: zoomed(18), height: zoomed(18))
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .foregroundStyle(.secondary)
+            .tip("Close the palette (Esc)")
+            .accessibilityLabel("Close the palette")
+        }
+        .font(.system(size: TypeScale.label + 1))
+        .padding(.horizontal, zoomed(14))
+        .padding(.vertical, zoomed(9))
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .contentShape(Rectangle())
+        .onTapGesture { begin() }
+        .tip("Click to search skills and commands by name or description")
+    }
+
+    private func begin() {
+        // The panel only becomes key when asked: the box keeps the keys
+        // the rest of the time (SlashPalettePanel).
+        if let panel = NSApp.currentEvent?.window as? SlashPalettePanel ?? NSApp.windows.first(where: { $0 is SlashPalettePanel && $0.isVisible }) as? SlashPalettePanel {
+            panel.takesKeys = true
+            panel.makeKey()
+        }
+        editing = true
+        DispatchQueue.main.async { focused = true }
+    }
+
+    private func finish() {
+        focused = false
+        editing = false
     }
 }

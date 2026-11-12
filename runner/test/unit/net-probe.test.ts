@@ -4,7 +4,7 @@
 // steady stream and no line end kept one probe going, its buffer growing,
 // until the runner ran out of memory; and an https:// proxy got a plain
 // connection.
-import { test } from 'node:test';
+import { test, type TestContext } from 'node:test';
 import assert from 'node:assert/strict';
 import net from 'node:net';
 import { makeReachable, probeTarget, PROXY_HEAD_MAX } from '../../src/net-probe.ts';
@@ -34,37 +34,51 @@ function proxy(onConnect: (sock: net.Socket, first: Buffer) => void): Promise<{ 
   );
 }
 
-test('a proxy sending a steady stream with no line end is given up on by the deadline, not kept', async () => {
-  let sent = 0;
-  const p = await proxy((sock) => {
-    const t = setInterval(() => {
-      if (sock.destroyed) return clearInterval(t);
-      sock.write('A', () => {});
-      sent += 1;
-    }, 20);
-    sock.on('close', () => clearInterval(t));
-  });
-  // Under the cap per write, so only the deadline can end it.
-  const r = makeReachable({ env: { HTTPS_PROXY: `http://127.0.0.1:${p.port}` }, timeoutMs: 400 });
-  const started = Date.now();
-  const ok = await r('claude');
-  const took = Date.now() - started;
-  p.close();
-  assert.equal(ok, false);
-  assert.ok(took >= 350 && took < 1500, `took ${took} ms`);
-  assert.ok(sent < PROXY_HEAD_MAX, 'ended by the deadline, not the cap');
+// Scheduling delays are not probe failures. Control time and socket input
+// for the bounds; the tests below still exercise real TCP and TLS sockets.
+function controlledProxy(t: TestContext) {
+  const socket = new net.Socket();
+  t.after(() => socket.destroy());
+  t.mock.method(net, 'connect', () => socket);
+  t.mock.method(socket, 'write', () => true);
+  // An active stream never fires the socket's inactivity timeout.
+  t.mock.method(socket, 'setTimeout', () => socket);
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const result = makeReachable({ env: { HTTPS_PROXY: 'http://proxy.example' }, timeoutMs: 400 })('claude');
+  socket.emit('connect');
+  return { socket, result };
+}
+
+test('a proxy sending a steady stream with no line end is given up on by the deadline, not kept', async (t) => {
+  const { socket, result } = controlledProxy(t);
+  let answer: boolean | undefined;
+  void result.then((ok) => { answer = ok; });
+  // Each chunk is below the cap, and all of them together are too.
+  for (let i = 0; i < 19; i++) {
+    t.mock.timers.tick(20);
+    socket.emit('data', Buffer.from('A'));
+  }
+  t.mock.timers.tick(19);
+  await Promise.resolve();
+  assert.equal(answer, undefined, 'still waiting immediately before the deadline');
+  assert.equal(socket.destroyed, false);
+  t.mock.timers.tick(1);
+  await Promise.resolve();
+  assert.equal(answer, false, 'the absolute deadline ends an active stream');
+  assert.equal(socket.destroyed, true);
 });
 
-test('a proxy answer longer than a status line without its end is refused at once, and not kept', async () => {
-  const p = await proxy((sock) => {
-    sock.write(Buffer.alloc(4 * 1024 * 1024, 0x41), () => {});
-  });
-  const r = makeReachable({ env: { HTTPS_PROXY: `http://127.0.0.1:${p.port}` }, timeoutMs: 10_000 });
-  const started = Date.now();
-  const ok = await r('claude');
-  p.close();
-  assert.equal(ok, false);
-  assert.ok(Date.now() - started < 2000, 'well before the deadline');
+test('a proxy answer longer than a status line without its end is refused at once, and not kept', async (t) => {
+  const { socket, result } = controlledProxy(t);
+  let answer: boolean | undefined;
+  void result.then((ok) => { answer = ok; });
+  socket.emit('data', Buffer.alloc(PROXY_HEAD_MAX, 0x41));
+  await Promise.resolve();
+  assert.equal(answer, undefined, 'the cap itself is allowed');
+  socket.emit('data', Buffer.alloc(4 * 1024 * 1024, 0x41));
+  await Promise.resolve();
+  assert.equal(answer, false, 'the cap ends the probe without advancing its deadline');
+  assert.equal(socket.destroyed, true);
   assert.ok(PROXY_HEAD_MAX <= 4096);
 });
 

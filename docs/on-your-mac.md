@@ -124,7 +124,8 @@ File references are where to look.
   agent is given, and `instructions.sig`, which says Settings saved it, and
   with the Prints experiment on, `pages/`, the prints agents make for you:
   `index.json` and the last 10 versions of each page's files, kept on this
-  Mac and never sent to Convex). In `secrets/`, `asked/` holds the answers you
+  Mac (diagrams include `source.mmd` and `diagram.svg`, rendered offline with the bundled Pele library); one you choose to Publish has its page sent to your Convex backend,
+  where anyone with its link can open it, until you unpublish or delete it). In `secrets/`, `asked/` holds the answers you
   type into an agent's secret card, one owner-only file each with a small
   script beside it that prints it for `sudo -A`, removed after 24 hours,
   and `secret-box.key` is the key your phone seals those answers to;
@@ -255,7 +256,14 @@ is given (`runner/src/skills.ts`). For each Codex login the runner puts a
 link to each skill in that login's `CODEX_HOME/skills/` folder, and only
 ever touches links of its own there. Adding the built-in Pele runs
 `npm ci --omit=dev --ignore-scripts` in its folder, which fetches the
-`pele` package from npm.
+`pele` package from npm. The built-in make-print and bundle-report need
+nothing installed. make-print saves the Print style you pick, once, in
+`~/.config/threadbear/print-style.json` (or `$XDG_CONFIG_HOME`, or the
+file `MAKE_PRINT_STYLE` names), outside the skill's folder so an update
+keeps it. Its Convex recipes run `npx convex insights`, `npx convex
+function-spec` and `npx @convex-dev/bundle-analyzer` in your app's folder
+only when you ask for one: they read the deployment's health, function
+list or bundle, never its data, using your own Convex login.
 The Terminal panel runs your login shell (`$SHELL -l`, else zsh) in the
 thread's folder, one per thread for as long as the app runs, without the
 thread's own THREADBEAR_ and CLAUDE variables; they all end when the

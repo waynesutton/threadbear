@@ -141,10 +141,9 @@ final class NotesStore {
         guard let key else { return }
         do {
             let data = try NoteCrypto.seal(note, key: key)
-            // No .completeFileProtection: macOS refuses it ("Operation not
-            // permitted") and nothing was saved. The file is sealed, 0600,
-            // in a 0700 folder, under FileVault.
-            try data.write(to: file(note.id), options: [.atomic])
+            // Sealed with the notes' key and kept to you (0600): macOS refuses
+            // .completeFileProtection outright here, so every save failed.
+            try data.write(to: file(note.id), options: .atomic)
             try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: file(note.id).path)
         } catch {
             AppLog.write("notes", "couldn't save a note: \(error.localizedDescription)")

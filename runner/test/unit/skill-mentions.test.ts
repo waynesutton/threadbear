@@ -40,3 +40,25 @@ test('the runner gives the agent the message with its skill mentions made to wor
   await tick();
   assert.equal(h.adapter.last.sent.at(-1)!.text, 'Again with /pele');
 });
+
+// Skills the CLI finds itself (~/.claude/skills) count as mentions too, from
+// the command list cached for the thread's login and folder (Wayne, 11 Nov).
+test('listedSkills: the cached list for that login and folder, skills only, not first-word-only ones', async () => {
+  const { commandsPart } = await import('../../src/runner/commands.ts');
+  const commandCache = new Map([
+    ['acct\0/work\0trusted', { at: 0, commands: [
+      { name: 'make-print', source: 'skill' },
+      { name: 'builder-sec-check', source: 'skill', path: '/x/SKILL.md' },
+      { name: 'deploy', source: 'skill', userOnly: true },
+      { name: 'compact', source: 'cli' },
+    ] }],
+    ['acct\0/elsewhere\0trusted', { at: 0, commands: [{ name: 'other', source: 'skill' }] }],
+    ['other\0/work\0trusted', { at: 0, commands: [{ name: 'theirs', source: 'skill' }] }],
+  ]);
+  const names = commandsPart.listedSkills.call({ commandCache } as never, 'acct', '/work');
+  assert.deepEqual(names.sort(), ['builder-sec-check', 'make-print']);
+  assert.equal(
+    withSkillMentions('/make-print then /builder-sec-check', names, 'claude'),
+    '/make-print then /builder-sec-check\n\n(Threadbear: the user named the skill "builder-sec-check" with /builder-sec-check; use it for this, through the Skill tool.)',
+  );
+});

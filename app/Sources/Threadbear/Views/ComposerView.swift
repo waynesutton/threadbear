@@ -163,6 +163,11 @@ struct ComposerView: View {
             )
             .frame(height: 1)
         }
+        // The thread's skills, before any / is typed, so their names turn
+        // blue in the box from the first letter (SkillMentions).
+        .task(id: paletteListKey) {
+            if let thread { app.loadSlashCommands(thread.id) } else { app.loadNewThreadSlashCommands() }
+        }
         .task(id: paletteQuery(draft.wrappedValue.text) != nil ? paletteListKey : nil) {
             guard paletteQuery(draft.wrappedValue.text) != nil else { return }
             if let thread { app.loadSlashCommands(thread.id) } else { app.loadNewThreadSlashCommands() }
@@ -213,8 +218,11 @@ struct ComposerView: View {
     /// The command being typed as the message's last word, at its start or
     /// partway through it (David, 9 Nov 2026: skills named mid-message).
     private func paletteTyped(_ text: String) -> SlashPalette.Typed? {
-        guard palette.closedAt != text else { return nil }
-        return SlashPalette.typed(in: text)
+        guard palette.closedAt != text, let typed = SlashPalette.typed(in: text) else { return nil }
+        // With the small list picked in Settings, a /skill partway through a
+        // message is its own (SkillPicker), so the two never show at once.
+        if typed.midMessage, SlashListChoice.current == .mine { return nil }
+        return typed
     }
 
     /// The palette's list for what's typed: partway through a message only
@@ -276,7 +284,15 @@ struct ComposerView: View {
                 palette.closedAt = draft.wrappedValue.text
                 app.preview(path: path, in: thread)
             } : nil },
-            layout: Binding(get: { app.slashPaletteLayout }, set: { app.slashPaletteLayout = $0 })
+            layout: Binding(get: { app.slashPaletteLayout }, set: { app.slashPaletteLayout = $0 }),
+            onKey: { key in
+                _ = paletteKey(key, text: draft.wrappedValue.text)
+                // Esc in the search field closed it: the box has the keys again.
+                if key == .escape, let textView = handle.textView {
+                    textView.window?.makeKey()
+                    textView.window?.makeFirstResponder(textView)
+                }
+            }
         )
     }
 
@@ -313,11 +329,14 @@ struct ComposerView: View {
         let commands = paletteCommands(typed) ?? []
         // Partway through a message, a closed palette leaves the keys alone.
         if typed.midMessage, SlashPalette.matches(commands, query: typed.query, category: .all, recent: []).isEmpty { return false }
-        let matches = SlashPalette.matches(commands, query: typed.query, category: palette.category, recent: app.recentSlashCommands)
+        let searched = SlashPaletteView.searched(commands, search: palette.search, recent: app.recentSlashCommands)
+        let matches = SlashPalette.matches(searched, query: typed.query, category: palette.category, recent: app.recentSlashCommands)
         // Return with nothing to pick sends what's typed, as words.
         if key == .enter, matches.isEmpty { return false }
-        if let (command, run) = SlashPaletteView.handle(key, matches: matches, state: &palette, text: text) {
-            pick(command, run: run && !typed.midMessage)
+        let categories = SlashPalette.counts(searched, query: typed.query, recent: app.recentSlashCommands).map(\.0)
+        if let (command, run) = SlashPaletteView.handle(key, matches: matches, categories: categories, state: &palette, text: text) {
+            // Return only fills it in unless Settings says it sends (SlashReturn).
+            pick(command, run: run && !typed.midMessage && SlashReturn.runs)
         }
         return true
     }
@@ -338,6 +357,8 @@ struct ComposerView: View {
             let length = (textView.string as NSString).length
             let cut = min(typedLength, length)
             textView.insertText(text, replacementRange: NSRange(location: length - cut, length: cut))
+            // A pick from the palette's search field: the box takes the keys back.
+            textView.window?.makeKey()
             textView.window?.makeFirstResponder(textView)
         } else {
             let kept = String(current.utf16.dropLast(typedLength)) ?? ""
@@ -382,7 +403,7 @@ struct ComposerView: View {
     }
 
     /// Return with nothing typed sends picked answers on their own (once
-    /// every ask has one, or with ⌘), or else allows the sole approval (below).
+    /// every ask has one, or with ⌘), or else allows the waiting approval (below).
     private func returnWhenEmpty(_ draft: Draft, command: Bool) -> Bool {
         // An edit with only pictures left still sends; an empty one does nothing.
         if let thread, app.editing[thread.id] != nil {
@@ -397,24 +418,17 @@ struct ComposerView: View {
             send()
             return true
         }
-        return draft.images.isEmpty && allowSoleApproval()
+        return draft.images.isEmpty && allowWaitingApproval()
     }
 
     /// Return in an empty box allows the open thread's approval card, the
-    /// ⏎ its Allow button shows, when there's exactly one waiting (with
-    /// two, Return can't know which). Read when the key is pressed, so the
-    /// composer doesn't redraw as approvals come and go.
-    private func allowSoleApproval() -> Bool {
+    /// ⏎ its Allow button shows. With several waiting it's the oldest, the
+    /// only one showing the ⏎ (ThreadSession.allowNextApproval). Read when
+    /// the key is pressed, so the composer doesn't redraw as approvals come
+    /// and go.
+    private func allowWaitingApproval() -> Bool {
         guard let thread else { return false }
-        let session = app.session(for: thread.id)
-        let pending = session.model.pendingApprovalIds
-        guard pending.count == 1, let id = pending.first else { return false }
-        // Another runner asking for a thread is started only by a click on
-        // its card, after reading it: a card that lands as Mike presses
-        // Return in an empty box mustn't start what he never saw.
-        if case .approval(let item)? = session.model.item(id: "ap:" + id)?.content, item.isStartRequest { return false }
-        session.respond(approvalId: id, decision: .allow, answers: nil, message: nil)
-        return true
+        return app.session(for: thread.id).allowNextApproval()
     }
 
     /// Whether pictures can go in this box, saying why not when they can't
@@ -960,6 +974,9 @@ final class ComposerTextView: NSTextView {
 
     /// The list for what's typed now: shown, moved or put away.
     private func offerSkills() {
+        // Mike's palette (the default in Settings) lists skills partway
+        // through a message too; this list only shows when it's picked.
+        guard SlashListChoice.current == .mine else { skillPicker.hide(); return }
         guard isEditable, window != nil, let range = skillToken() else { skillPicker.hide(); return }
         // A message starting with / is the slash palette's (SlashPaletteView): it lists skills too.
         if string.prefix(range.location).trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { skillPicker.hide(); return }
@@ -1232,6 +1249,8 @@ final class ComposerTextView: NSTextView {
         case 48: return .tab
         case 36, 76: return .enter
         case 53: return .escape
+        case 123: return .left
+        case 124: return .right
         default: return nil
         }
     }

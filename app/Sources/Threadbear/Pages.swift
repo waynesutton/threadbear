@@ -9,6 +9,12 @@ import ThreadbearCore
 extension AppModel {
     var pagesOn: Bool { experiments.contains(Page.experiment) }
 
+    /// The rail's Prints button: Prints on, at least one Print, and a
+    /// thread of this runner's (another Mac's Prints aren't here).
+    var showsPrintsRail: Bool {
+        pagesOn && openProject == nil && paneThread?.isRemote != true && !PrintRows.all(pages).isEmpty
+    }
+
     /// The list after hello; `pages.updated` keeps it current from then on.
     func loadPages() {
         guard let client, pagesOn else {
@@ -56,6 +62,34 @@ extension AppModel {
         }
     }
 
+    /// From a reply's card: in this thread's side pane, as a highlight
+    /// opens, where it follows new versions. A thread on another runner, or
+    /// none selected, gets the window instead (its file is on that Mac).
+    func openPageHere(_ page: Page) {
+        guard let client, let thread = selectedThread, !thread.isRemote else { return openPage(page) }
+        whileBusy(BusyKey.page(page.id)) { [self] in
+            do {
+                let got = try await client.getPage(page.id)
+                preview(path: got.file, title: got.page.title, in: thread)
+            } catch {
+                show(error)
+            }
+        }
+    }
+
+    /// A side pane showing a Print's newest version moves to the new one
+    /// when it lands, rather than staying on the file it opened.
+    func followPageVersions(before: [Page]) {
+        for (threadId, shown) in panePreview {
+            guard let path = shown.fileURL?.path,
+                  let next = PagePath.newer(than: path, before: before, after: pages),
+                  FileManager.default.fileExists(atPath: next) else { continue }
+            var moved = shown
+            moved.target = .file(next)
+            show(moved, in: threadId)
+        }
+    }
+
     /// Sends the page to the thread that made it to be made again from its
     /// recipe, and opens that thread so its work can be watched.
     func refreshPage(_ page: Page) {
@@ -84,11 +118,16 @@ extension AppModel {
         }
     }
 
-    /// A doc's markdown for the editor sheet, or nil (shown as an error).
+    /// Source for the shared text editor; older runners may have no source.
     func pageMarkdown(_ page: Page) async -> String? {
         guard let client else { return nil }
         do {
-            return try await client.getPage(page.id).markdown ?? ""
+            let got = try await client.getPage(page.id)
+            guard let source = page.isDiagram ? got.mermaid : got.markdown else {
+                showError("This print has no editable source. Ask its thread to rebuild it.", in: page.ownerThread, doing: "Opening the Print editor")
+                return nil
+            }
+            return source
         } catch {
             show(error)
             return nil
@@ -100,7 +139,10 @@ extension AppModel {
         guard let client else { return done(false) }
         whileBusy(BusyKey.page(page.id)) { [self] in
             do {
-                replace(page: try await client.savePageDoc(page.id, markdown: markdown))
+                let saved = page.isDiagram
+                    ? try await client.savePageDiagram(page.id, mermaid: markdown)
+                    : try await client.savePageDoc(page.id, markdown: markdown)
+                replace(page: saved)
                 done(true)
             } catch {
                 show(error)
@@ -213,6 +255,53 @@ extension AppModel {
                 show(error)
             }
         }
+    }
+
+    /// A published print's link on the website, while sync is on.
+    func printLink(_ page: Page) -> URL? {
+        guard let slug = page.publishedSlug else { return nil }
+        return websiteURL?.appendingPathComponent("p").appendingPathComponent(slug)
+    }
+
+    /// Asks first (anyone with the link can open it), then sends the print
+    /// to the Convex backend and copies its link.
+    func publishPage(_ page: Page) {
+        guard let client else { return }
+        let alert = NSAlert()
+        alert.messageText = "Publish \u{201C}\(page.title)\u{201D}?"
+        alert.informativeText = "It goes to your Convex backend, so it opens on your phone and the website, and anyone with its link can open it. New versions go up by themselves. Unpublish takes it down."
+        alert.addButton(withTitle: "Publish")
+        alert.addButton(withTitle: "Cancel")
+        guard alert.runModal() == .alertFirstButtonReturn else { return }
+        whileBusy(BusyKey.page(page.id), note: "Publishing \(page.title)") { [self] in
+            do {
+                let got = try await client.publishPage(page.id)
+                replace(page: got.page)
+                if let link = got.url ?? printLink(got.page)?.absoluteString {
+                    NSPasteboard.general.clearContents()
+                    NSPasteboard.general.setString(link, forType: .string)
+                }
+            } catch {
+                show(error)
+            }
+        }
+    }
+
+    func unpublishPage(_ page: Page) {
+        guard let client else { return }
+        whileBusy(BusyKey.page(page.id), note: "Unpublishing \(page.title)") { [self] in
+            do {
+                replace(page: try await client.unpublishPage(page.id))
+            } catch {
+                show(error)
+            }
+        }
+    }
+
+    func copyPrintLink(_ page: Page) {
+        guard let link = printLink(page) else { return }
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(link.absoluteString, forType: .string)
     }
 
     private func replace(page: Page) {

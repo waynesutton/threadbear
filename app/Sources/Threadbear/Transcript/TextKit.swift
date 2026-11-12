@@ -317,8 +317,13 @@ final class TranscriptTextView: NSTextView {
         }
         // NSTextView follows web links itself, but ignores file URLs.
         // /pele in his message: the skill it ran, on the Skills page.
-        if let url = link as? URL, SkillMentions.name(of: url) != nil {
-            MainActor.assumeIsolated { AppModel.shared.showSkills() }
+        // One the CLI found itself (~/.claude/skills): its file, as it's not there.
+        if let url = link as? URL, let name = SkillMentions.name(of: url) {
+            if !SkillMentions.inStore(name), let path = SkillMentions.path(of: name) {
+                _ = openFileLink(URL(fileURLWithPath: path))
+            } else {
+                MainActor.assumeIsolated { AppModel.shared.showSkills() }
+            }
             return
         }
         if let url = link as? URL, let text = FilePathRefs.text(of: url) {
@@ -759,7 +764,7 @@ final class TranscriptTextView: NSTextView {
         guard let page = cell.page else { return }
         let app = AppModel.shared
         switch action {
-        case .open, .preview: app.openPage(page)
+        case .open, .preview: app.openPageHere(page)
         case .refresh: app.refreshPage(page)
         case .more:
             let menu = PageMenuBuilder.menu(for: page, app: app)
@@ -1373,6 +1378,16 @@ final class TranscriptTextView: NSTextView {
     // Don't let a row's text view swallow scroll-wheel events or show an
     // insertion point; the table owns scrolling.
     override var acceptsFirstResponder: Bool { true }
+
+    /// Return with a row's text focused allows the waiting approval
+    /// (TranscriptTableView.keyDown): a click to select or read takes the
+    /// keys from the composer, and the card's ⏎ did nothing after it.
+    override func keyDown(with event: NSEvent) {
+        if !isEditable, TranscriptTableView.isPlainReturn(event), let id = transcriptThreadId,
+           AppModel.shared.session(for: id).allowNextApproval() { return }
+        super.keyDown(with: event)
+    }
+
     override func scrollWheel(with event: NSEvent) {
         closeChipCard()
         closeSelectionBar()

@@ -15,6 +15,7 @@ import { atomicWriteFileSync, readJsonSync } from './fsutil.ts';
 import type { ProjectMaker, ThreadProject } from './protocol.ts';
 import { ErrorCode, RpcError } from './protocol.ts';
 import { DOC_SOURCE, renderDoc } from './page-doc.ts';
+import { DIAGRAM_SOURCE, renderDiagram } from './page-diagram.ts';
 
 export const MAX_VERSIONS = 10;
 export const MAX_HTML_BYTES = 1_000_000;
@@ -25,13 +26,15 @@ export const MAX_TITLE = 120;
 // What a page folder may hold besides index.html: passive assets only.
 // No .js (scripts live inline, and only on live pages) and no .json (a
 // page can't read data files; that's for a later host channel).
-export const PAGE_ASSETS = new Set(['.html', '.css', '.svg', '.png', '.jpg', '.jpeg', '.webp', '.gif', '.mp4', '.webm', '.woff2', '.md']);
+export const PAGE_ASSETS = new Set(['.html', '.css', '.svg', '.png', '.jpg', '.jpeg', '.webp', '.gif', '.mp4', '.webm', '.woff2', '.md', '.mmd']);
 export const MAX_RECIPE = 1000;
+// The backend's cap on a published print's HTML (convex/sync.ts PRINT_HTML_MAX).
+export const PUBLISH_HTML_MAX = 700_000;
 // A deleted page is kept this long so Restore can bring it back.
 export const DELETED_KEEP_MS = 7 * 24 * 3600 * 1000;
 // What a page is, for its icon and what Refresh and Edit mean. A doc is
 // markdown the runner draws (page-doc.ts), which the user can edit too.
-export const PAGE_KINDS = ['page', 'chart', 'dashboard', 'report', 'doc', 'bundle'] as const;
+export const PAGE_KINDS = ['page', 'chart', 'dashboard', 'report', 'doc', 'diagram', 'bundle'] as const;
 export type PageKind = (typeof PAGE_KINDS)[number];
 
 export type PageProject = { id: string; by: ProjectMaker; pinned?: boolean };
@@ -57,14 +60,17 @@ export type PageRecord = {
   recipe?: string;
   // Who wrote the newest version: an agent, or the user in the editor.
   editedBy?: 'agent' | 'user';
+  // Set while it's published (docs/protocol.md, "Prints"): its link's
+  // slug, made here, and the version last sent to the backend.
+  published?: { slug: string; at: string; version: number };
   // Set while it's deleted; gone for good DELETED_KEEP_MS later.
   deletedAt?: string;
   createdAt: string;
   updatedAt: string;
 };
 
-// One of: a whole HTML document, a built folder, or markdown for a doc.
-export type PageContent = { html?: string; dir?: string; markdown?: string };
+// One of: HTML, a built folder, Markdown for a doc, or Mermaid for a diagram.
+export type PageContent = { html?: string; dir?: string; markdown?: string; mermaid?: string };
 
 export type CreatePage = PageContent & {
   title: string;
@@ -128,11 +134,11 @@ export class Pages {
     const title = cleanTitle(c.title);
     const at = new Date(this.now()).toISOString();
     const id = this.newId(title);
-    const live = c.live === true;
+    const live = c.mermaid === undefined && c.live === true;
     const projects = c.projects
       ? [...new Set(c.projects)].map((pid): PageProject => ({ id: pid, by: 'agent', pinned: true }))
       : inherited(c.ownerProjects ?? []);
-    const kind = c.markdown !== undefined ? 'doc' : (c.kind ?? 'page');
+    const kind = c.mermaid !== undefined ? 'diagram' : c.markdown !== undefined ? 'doc' : (c.kind ?? 'page');
     const bytes = this.write(id, 1, c, live, title);
     const rec: PageRecord = {
       id,
@@ -161,19 +167,25 @@ export class Pages {
     if (u.title !== undefined) next.title = cleanTitle(u.title);
     if (u.summary !== undefined) next.summary = cleanSummary(u.summary);
     if (u.recipe !== undefined) next.recipe = u.recipe.trim().slice(0, MAX_RECIPE) || undefined;
-    if (u.html !== undefined || u.dir !== undefined || u.markdown !== undefined) {
-      if (u.markdown !== undefined && next.kind !== 'doc' && (u.html !== undefined || u.dir !== undefined)) throw new PageError('Give the print as html, dir or markdown, one of them.');
+    if (u.html !== undefined || u.dir !== undefined || u.markdown !== undefined || u.mermaid !== undefined) {
       if (u.markdown !== undefined) next.kind = 'doc';
+      // Script permission belongs to the Print, not its current format.
+      // Keeping it lets a live Print restore its older scripted versions.
+      if (u.mermaid !== undefined || (u.dir && fs.existsSync(path.join(u.dir, DIAGRAM_SOURCE)))) next.kind = 'diagram';
+      else if (u.dir && fs.existsSync(path.join(u.dir, DOC_SOURCE))) next.kind = 'doc';
+      else if (u.markdown === undefined && (next.kind === 'doc' || next.kind === 'diagram')) next.kind = 'page';
       next.version = p.version + 1;
       next.bytes = this.write(p.id, next.version, u, p.live, next.title);
       next.editedBy = u.by ?? 'agent';
       this.prune(p.id, next.version);
-    } else if (u.title !== undefined && next.kind === 'doc') {
-      // A doc's title is drawn in it: a new title is a new version.
+    } else if (u.title !== undefined && (next.kind === 'doc' || next.kind === 'diagram')) {
+      // The title is drawn into source-based Prints, so rename versions it too.
       const md = this.markdown(p.id);
-      if (md !== undefined) {
+      const mermaid = this.mermaid(p.id);
+      const content = next.kind === 'diagram' && mermaid !== undefined ? { mermaid } : md !== undefined ? { markdown: md } : undefined;
+      if (content) {
         next.version = p.version + 1;
-        next.bytes = this.write(p.id, next.version, { markdown: md }, p.live, next.title);
+        next.bytes = this.write(p.id, next.version, content, p.live, next.title);
         this.prune(p.id, next.version);
       }
     }
@@ -193,6 +205,15 @@ export class Pages {
     }
   }
 
+  mermaid(id: string, version?: number): string | undefined {
+    const p = this.must(id);
+    try {
+      return fs.readFileSync(path.join(this.versionDir(p.id, version ?? p.version), DIAGRAM_SOURCE), 'utf8');
+    } catch {
+      return undefined;
+    }
+  }
+
   // An older version becomes the newest again, as a new version, so
   // nothing in between is lost.
   restoreVersion(id: string, version: number): PageRecord {
@@ -202,10 +223,35 @@ export class Pages {
     return this.update(p.id, { dir: from });
   }
 
+  // Marks it published under a link (a new one only the first time, so a
+  // link survives new versions), or not published.
+  setPublished(id: string, on: boolean, sentVersion?: number): PageRecord {
+    const p = this.live(id);
+    if (!on) {
+      const { published: _was, ...rest } = p;
+      return this.replace(rest);
+    }
+    const slug = p.published?.slug ?? crypto.randomBytes(16).toString('base64url');
+    return this.replace({ ...p, published: { slug, at: new Date(this.now()).toISOString(), version: sentVersion ?? p.version } });
+  }
+
+  // What publishing sends: the newest version's index.html. Refused for a
+  // live print (its scripts would run for anyone with the link), one over
+  // the backend's size, and one that leans on files beside it.
+  publishable(id: string): { html: string } {
+    const p = this.live(id);
+    if (p.live) throw new PageError('A live print has scripts, so it can not be published. Make a static one.');
+    const html = fs.readFileSync(this.file(p.id), 'utf8');
+    if (SCRIPT.test(html)) throw new PageError('This print has a script, so it can not be published.');
+    if (html.length > PUBLISH_HTML_MAX) throw new PageError(`This print is ${html.length} characters; at most ${PUBLISH_HTML_MAX} can be published.`);
+    return { html };
+  }
+
   // Set aside for DELETED_KEEP_MS, then gone. Lists leave it out.
   delete(id: string): PageRecord {
     const p = this.live(id);
-    return this.replace({ ...p, deletedAt: new Date(this.now()).toISOString() });
+    const { published: _was, ...rest } = p;
+    return this.replace({ ...rest, deletedAt: new Date(this.now()).toISOString() });
   }
 
   restore(id: string): PageRecord {
@@ -288,11 +334,21 @@ export class Pages {
   // Checks everything before anything is written, then copies into a temp
   // folder and renames it into place, so a refused page leaves nothing.
   private write(id: string, v: number, c: PageContent, live: boolean, title: string): number {
-    const given = [c.html, c.dir, c.markdown].filter((x) => x !== undefined).length;
-    if (given !== 1) throw new PageError('Give the print as html, dir or markdown, one of them.');
+    const given = [c.html, c.dir, c.markdown, c.mermaid].filter((x) => x !== undefined).length;
+    if (given !== 1) throw new PageError('Give the print as html, dir, markdown or mermaid, one of them.');
     const at = new Date(this.now());
+    let diagram: { html: string; svg: string } | undefined;
+    if (c.mermaid !== undefined) {
+      try {
+        diagram = renderDiagram(title, c.mermaid, `Version ${v} · ${at.toISOString().slice(0, 16).replace('T', ' ')} UTC`);
+      } catch (error) {
+        throw new PageError(error instanceof Error ? error.message : 'Could not render the diagram.');
+      }
+    }
     const files: { rel: string; data: Buffer }[] =
-      c.markdown !== undefined
+      diagram
+        ? [{ rel: 'index.html', data: Buffer.from(diagram.html) }, { rel: DIAGRAM_SOURCE, data: Buffer.from(c.mermaid!) }, { rel: 'diagram.svg', data: Buffer.from(diagram.svg) }]
+        : c.markdown !== undefined
         ? [
             { rel: 'index.html', data: Buffer.from(renderDoc(title, c.markdown, `Version ${v} · ${at.toISOString().slice(0, 16).replace('T', ' ')} UTC`), 'utf8') },
             { rel: DOC_SOURCE, data: Buffer.from(c.markdown, 'utf8') },
@@ -411,10 +467,72 @@ export function editText(p: PageRecord, change: string): string {
 
 export type PageAsk = (page: PageRecord, text: string) => { threadId: string; started: boolean };
 
+// What publishing needs from the Convex mirror (sync.ts), and the website
+// a link is on.
+export type PagePublisher = {
+  problem(): string | undefined;
+  site(): string | undefined;
+  publish(print: { id: string; slug: string; title: string; kind: string; version: number; summary: string; html: string; updatedAt: string }): Promise<void>;
+  unpublish(id: string): Promise<void>;
+};
+
+export function printLink(site: string | undefined, slug: string): string | undefined {
+  return site ? `${site.replace(/\/+$/, '')}/p/${slug}` : undefined;
+}
+
+// Sends a print's newest version and marks it published, or takes it down.
+export async function publishPage(pages: Pages, pub: PagePublisher, id: string): Promise<{ page: PageRecord; url?: string }> {
+  const problem = pub.problem();
+  if (problem) throw new PageError(problem);
+  const p = pages.find(id);
+  const { html } = pages.publishable(p.id);
+  const marked = pages.setPublished(p.id, true);
+  try {
+    await pub.publish({ id: marked.id, slug: marked.published!.slug, title: marked.title, kind: marked.kind ?? 'page', version: marked.version, summary: marked.summary, html, updatedAt: marked.updatedAt });
+  } catch (e) {
+    // Never marked published when nothing went up.
+    if (!p.published) pages.setPublished(p.id, false);
+    throw e;
+  }
+  const url = printLink(pub.site(), marked.published!.slug);
+  return { page: marked, ...(url ? { url } : {}) };
+}
+
+export async function unpublishPage(pages: Pages, pub: PagePublisher, id: string): Promise<PageRecord> {
+  const p = pages.find(id);
+  await pub.unpublish(p.id);
+  return p.published ? pages.setPublished(p.id, false) : p;
+}
+
+// After any change: a published print whose newest version isn't the one
+// sent goes up again, and one deleted while published comes down. Returns
+// what it did, for the log; failures are left for the next change.
+export async function followPublished(pages: Pages, pub: PagePublisher, known: Map<string, string>): Promise<void> {
+  if (pub.problem()) return;
+  const live = new Set<string>();
+  for (const p of pages.list()) {
+    if (!p.published) continue;
+    live.add(p.id);
+    known.set(p.id, p.published.slug);
+    if (p.published.version === p.version) continue;
+    try {
+      await publishPage(pages, pub, p.id);
+    } catch {
+      // A new version that can't be published (too big, a script) leaves
+      // the last published one up.
+    }
+  }
+  for (const id of [...known.keys()]) {
+    if (live.has(id)) continue;
+    known.delete(id);
+    await pub.unpublish(id).catch(() => {});
+  }
+}
+
 // docs/protocol.md, "Prints". `pages` is undefined while the experiment is
 // off: lists come back empty and the rest say so. `ask` sends Refresh and
 // Edit with agent to a thread.
-export function pageMethods(pages: () => Pages | undefined, ask?: PageAsk): Record<string, (p: Record<string, unknown>) => unknown> {
+export function pageMethods(pages: () => Pages | undefined, ask?: PageAsk, pub?: PagePublisher): Record<string, (p: Record<string, unknown>) => unknown> {
   const must = (): Pages => {
     const s = pages();
     if (!s) throw new RpcError(ErrorCode.badParams, 'Prints is off. Turn it on in Settings > General > Experiments.');
@@ -459,13 +577,19 @@ export function pageMethods(pages: () => Pages | undefined, ask?: PageAsk): Reco
         const page = s.find(id(p));
         const version = typeof p.version === 'number' ? p.version : undefined;
         const markdown = s.markdown(page.id, version);
-        return { page, file: s.file(page.id, version), versions: s.versions(page.id), ...(markdown !== undefined ? { markdown } : {}) };
+        const mermaid = s.mermaid(page.id, version);
+        return { page, file: s.file(page.id, version), versions: s.versions(page.id), ...(markdown !== undefined ? { markdown } : {}), ...(mermaid !== undefined ? { mermaid } : {}) };
       }),
     'pages.saveDoc': (p) => {
       const markdown = str(p, 'markdown');
       if (markdown === undefined) throw new RpcError(ErrorCode.badParams, 'markdown is required');
       const title = str(p, 'title');
       return found(() => ({ page: must().update(id(p), { markdown, by: 'user', ...(title ? { title } : {}) }) }));
+    },
+    'pages.saveDiagram': (p) => {
+      const mermaid = str(p, 'mermaid');
+      if (mermaid === undefined) throw new RpcError(ErrorCode.badParams, 'mermaid is required');
+      return found(() => ({ page: must().update(id(p), { mermaid, by: 'user' }) }));
     },
     'pages.restoreVersion': (p) => {
       if (typeof p.version !== 'number') throw new RpcError(ErrorCode.badParams, 'version is required');
@@ -478,6 +602,22 @@ export function pageMethods(pages: () => Pages | undefined, ask?: PageAsk): Reco
       if (!dest || !path.isAbsolute(dest)) throw new RpcError(ErrorCode.badParams, 'dest must be an absolute folder');
       const version = typeof p.version === 'number' ? p.version : undefined;
       return found(() => ({ file: must().exportTo(id(p), dest, version) }));
+    },
+    'pages.publish': async (p) => {
+      if (!pub) throw new RpcError(ErrorCode.badParams, "This runner can't publish.");
+      try {
+        return await publishPage(must(), pub, id(p));
+      } catch (e) {
+        throw new RpcError(ErrorCode.badParams, (e as Error).message);
+      }
+    },
+    'pages.unpublish': async (p) => {
+      if (!pub) throw new RpcError(ErrorCode.badParams, "This runner can't publish.");
+      try {
+        return { page: await unpublishPage(must(), pub, id(p)) };
+      } catch (e) {
+        throw new RpcError(ErrorCode.badParams, (e as Error).message);
+      }
     },
     'pages.refresh': (p) =>
       found(() => {

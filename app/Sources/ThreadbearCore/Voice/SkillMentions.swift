@@ -18,6 +18,11 @@ public enum SkillMentions {
     }
 
     private static let state = OSAllocatedUnfairLock<Set<String>>(initialState: [])
+    /// Skills the CLI finds itself (~/.claude/skills, a folder's own,
+    /// plugins'), by name, with their files: what the threads' command
+    /// lists named. They count as mentions too, so /make-print turns blue
+    /// like a Skills-store skill (Wayne, 11 Nov).
+    private static let listed = OSAllocatedUnfairLock<[String: String]>(initialState: [:])
     private static let entries = OSAllocatedUnfairLock<[Entry]>(initialState: [])
 
     /// The skills with their descriptions, for the composer's / list. Setting
@@ -30,11 +35,31 @@ public enum SkillMentions {
         }
     }
 
-    /// The skills' names, set by the app when its list changes. Read from
-    /// any thread (the transcript renders off the main one).
+    /// The skills' names, set by the app when its list changes, with the
+    /// listed ones. Read from any thread (the transcript renders off the
+    /// main one).
     public static var names: Set<String> {
-        get { state.withLock { $0 } }
+        get { state.withLock { $0 }.union(listed.withLock { $0.keys }) }
         set { state.withLock { $0 = newValue } }
+    }
+
+    /// Whether `name` is one of the Skills store's own (its Skills page).
+    public static func inStore(_ name: String) -> Bool {
+        state.withLock { $0.contains(name.lowercased()) }
+    }
+
+    /// Adds skills a thread's command list named, with their files ("" when
+    /// not known). Never removes: a skill seen once stays known for the
+    /// app's life.
+    public static func addListed(_ skills: [(name: String, path: String?)]) {
+        listed.withLock { map in
+            for s in skills { map[s.name.lowercased()] = s.path ?? map[s.name.lowercased()] ?? "" }
+        }
+    }
+
+    /// A listed skill's file, if known.
+    public static func path(of name: String) -> String? {
+        listed.withLock { $0[name.lowercased()] }.flatMap { $0.isEmpty ? nil : $0 }
     }
 
     /// Each mention's range (the slash and the name) in `text`.

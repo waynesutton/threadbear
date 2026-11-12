@@ -7,7 +7,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { tmpDir } from '../helpers/fakes.ts';
 import { buildThreadbearTools, NEVER_ASK_TOOLS, type ThreadControl } from '../../src/threadbear-mcp.ts';
-import { XAI_MODEL, XAI_RESPONSES_URL, formatXSearch, parseXSearch, readXaiKey, saveXaiKey, xSearchBody, xSearchProblem, xaiKeyPath } from '../../src/x-search.ts';
+import { XAI_MODEL, XAI_RESPONSES_URL, formatXSearch, postHandle, parseXSearch, readXaiKey, saveXaiKey, xSearchBody, xSearchMethods, xSearchProblem, xaiKeyPath } from '../../src/x-search.ts';
 import type { SecretAnswer, SecretRequest } from '../../src/runner/approvals.ts';
 
 const KEY = 'xai-test-0123456789abcdef';
@@ -145,4 +145,36 @@ test('x_search: a declined card, bad arguments and a rejected key', async () => 
   const e = await down.call({ query: 'q' });
   assert.match(e.text, /xAI said 500: nope\./);
   assert.equal(readXaiKey(down.dir), KEY, 'kept on other errors');
+});
+
+test('xSearchBody: with handles, the prompt keeps Grok to those accounts', () => {
+  const sys = (xSearchBody({ query: 'q', handles: ['convex'] }).input as { content: string }[])[0].content;
+  assert.match(sys, /only posts written by @convex/);
+  assert.doesNotMatch((xSearchBody({ query: 'q' }).input as { content: string }[])[0].content, /only posts written/);
+  assert.equal(xSearchBody({ query: 'q' }).max_turns, 2);
+});
+
+test('formatXSearch: sources from other accounts than the handles are listed apart', () => {
+  assert.equal(postHandle('https://x.com/Convex/status/1'), 'convex');
+  assert.equal(postHandle('https://twitter.com/a_b/status/2?s=1'), 'a_b');
+  assert.equal(postHandle('https://luma.com/x'), undefined);
+  const r = { answer: 'a', sources: ['https://x.com/convex/status/1', 'https://x.com/waynesutton/status/2', 'https://luma.com/e'], posts: 3 };
+  const text = formatXSearch(r, ['@Convex']);
+  assert.match(text, /Sources:\n- https:\/\/x\.com\/convex\/status\/1\n- https:\/\/luma\.com\/e\n\nFrom other accounts than @convex:\n- https:\/\/x\.com\/waynesutton\/status\/2/);
+  assert.doesNotMatch(formatXSearch(r), /other accounts/);
+});
+
+test('xSearch.status and xSearch.forgetKey: whether a key is saved, never the key', async () => {
+  const dir = path.join(tmpDir(), 'secrets');
+  let on = true;
+  const m = xSearchMethods({ on: () => on, secretsDir: dir });
+  assert.deepEqual(await m['xSearch.status']!({}), { on: true, keySaved: false });
+  saveXaiKey(dir, KEY);
+  const saved = await m['xSearch.status']!({});
+  assert.deepEqual(saved, { on: true, keySaved: true });
+  assert.ok(!JSON.stringify(saved).includes(KEY));
+  assert.deepEqual(await m['xSearch.forgetKey']!({}), { on: true, keySaved: false });
+  assert.equal(readXaiKey(dir), undefined);
+  on = false;
+  assert.deepEqual(await m['xSearch.status']!({}), { on: false, keySaved: false });
 });

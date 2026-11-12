@@ -7,7 +7,8 @@ import ThreadbearCore
 /// the pane's edges, so it has a window of its own, which can be as wide
 /// as the whole window. Its edges are PaletteFrame's wide bands rather
 /// than the system's few points (Mike, 7 Nov: "the hit area for the drag
-/// handles is small"). It never becomes key: the message box keeps the
+/// handles is small"). It only becomes key while its search field is in
+/// use (PaletteSearchField); otherwise the message box keeps the
 /// cursor and the palette's keys.
 final class SlashPalettePanel: NSPanel {
     init() {
@@ -23,7 +24,11 @@ final class SlashPalettePanel: NSPanel {
         minSize = NSSize(width: 480, height: 220)
     }
 
-    override var canBecomeKey: Bool { false }
+    /// Set while the palette's search field is in use (PaletteSearchField):
+    /// the only time the panel takes the keyboard. Cleared when it loses it.
+    var takesKeys = false
+
+    override var canBecomeKey: Bool { takesKeys }
     override var canBecomeMain: Bool { false }
 }
 
@@ -100,8 +105,14 @@ final class SlashPaletteCoordinator: NSObject, NSWindowDelegate {
         if !panel.isVisible { panel.orderFront(nil) }
     }
 
+    func windowDidResignKey(_ notification: Notification) {
+        panel?.takesKeys = false
+    }
+
     func hide() {
         guard let panel, panel.isVisible || panel.parent != nil else { return }
+        if panel.isKeyWindow { panel.parent?.makeKey() }
+        panel.takesKeys = false
         panel.parent?.removeChildWindow(panel)
         panel.orderOut(nil)
     }

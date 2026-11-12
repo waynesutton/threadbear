@@ -1669,7 +1669,7 @@ export class Runner {
     this.markDirty(st);
     // A change reaches a running turn too, or a clear could wait out as many
     // messages as were sent into it (Codex review).
-    this.sendWithInstructionsNews(st, { id: msg.turnId, text: this.forAgent(msg, st.rec.provider), images: msg.images, ...(msg.mode ? { readOnly: true } : {}) });
+    this.sendWithInstructionsNews(st, { id: msg.turnId, text: this.forAgent(msg, st.rec.provider, st.rec), images: msg.images, ...(msg.mode ? { readOnly: true } : {}) });
   }
 
   // A turn that had its end_turn, opened again once the agent has read a
@@ -1698,11 +1698,13 @@ export class Runner {
   // keeps what he typed. "Phone app", not "iPhone app": the origin doesn't say
   // which, and an Android phone (android-native/, or Keith's) sends the same.
   // `mode` "plan" is a message logged before Plan first took over planning: read-only, as Ask.
-  forAgent(msg: { text: string; origin?: MessageOrigin; mode?: TurnMode | 'plan' }, provider?: Provider): string {
-    if (msg.mode) return `${modeInstructions('ask')}\n\n${this.forAgent({ ...msg, mode: undefined }, provider)}`;
-    // /name for a Threadbear skill, made to work in this thread's CLI (skill-mentions.ts).
-    if (provider && this.skillNames) {
-      const names = this.skillNames();
+  forAgent(msg: { text: string; origin?: MessageOrigin; mode?: TurnMode | 'plan' }, provider?: Provider, place?: { accountId: string; cwd: string }): string {
+    if (msg.mode) return `${modeInstructions('ask')}\n\n${this.forAgent({ ...msg, mode: undefined }, provider, place)}`;
+    // /name for a Threadbear skill, or one the CLI finds itself in this
+    // thread's folder and login (~/.claude/skills: listedSkills), made to
+    // work in this thread's CLI (skill-mentions.ts).
+    if (provider) {
+      const names = [...(this.skillNames?.() ?? []), ...(place ? this.listedSkills(place.accountId, place.cwd) : [])];
       if (names.length) msg = { ...msg, text: withSkillMentions(msg.text, names, provider) };
     }
     if (msg.origin !== 'phone') return msg.text;
@@ -1831,7 +1833,7 @@ export class Runner {
       rt.turn.command = true;
       if (/^\/(compact|review|clear)\b/i.test(msg.text.trim())) rt.turn.noSteer = true;
     }
-    let text = command ? msg.text : this.forAgent(msg, rec.provider);
+    let text = command ? msg.text : this.forAgent(msg, rec.provider, rec);
     // Claude's CLI starts a new session for /clear, which the runner follows
     // (its next init), but says nothing.
     if (command && rec.provider === 'claude' && /^\/clear\b/i.test(msg.text.trim())) {
@@ -2767,7 +2769,7 @@ export class Runner {
             // transcript carried to a new folder that wouldn't resume gets
             // the move's note, any other thread with earlier turns the
             // not-found one.
-            let text = this.forAgent(first, rec.provider);
+            let text = this.forAgent(first, rec.provider, rec);
             // What it was told of presses went with the session that's gone:
             // a new one hears all it was told, the old one going on only this
             // turn's (Codex's second look).
@@ -2786,7 +2788,7 @@ export class Runner {
             // order, matched to their ids when the counts agree.
             if (msgs.length === turn.messages.length) {
               msgs.slice(1).forEach((m, i) => {
-                if (m.type === 'user.message') rt.session!.send({ id: turn.messages[i + 1], text: this.forAgent(m, rec.provider), images: m.images });
+                if (m.type === 'user.message') rt.session!.send({ id: turn.messages[i + 1], text: this.forAgent(m, rec.provider, rec), images: m.images });
               });
             }
             return;

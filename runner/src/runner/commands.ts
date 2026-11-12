@@ -151,6 +151,21 @@ export const commandsPart = {
     return this.listCommands(accountId, cwd, params.permissionMode ?? 'auto');
   },
 
+  // The skills the command list last found for this login and folder,
+  // whatever its age: their names are what counts, so /name partway
+  // through a message works for them as for a Skills-store one. Not the
+  // ones that run only as a message's first word. Empty until the list has
+  // been asked for (the app asks when a thread's box opens).
+  listedSkills(this: Runner, accountId: string, cwd: string): string[] {
+    const prefix = `${accountId}\0${cwd}\0`;
+    const out = new Set<string>();
+    for (const [key, entry] of this.commandCache) {
+      if (!key.startsWith(prefix)) continue;
+      for (const c of entry.commands) if (c.source === 'skill' && !c.userOnly) out.add(c.name);
+    }
+    return [...out];
+  },
+
   async listCommands(this: Runner, accountId: string, cwd: string, permissionMode: PermissionMode, live?: () => Promise<SlashCommand[]>): Promise<{ commands: SlashCommand[] }> {
     const account = this.accounts.get(accountId);
     const provider = account?.provider ?? 'claude';

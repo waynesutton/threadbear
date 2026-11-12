@@ -354,7 +354,10 @@ shown on the composer (the box you type in) and changed by clicking it.
   used day to day, and it's fine for a folder you trust it with.
 - **Ask before edits**: the agent stops for your OK before it edits a file
   or runs a command. A card shows in the thread with Allow, Always allow and
-  Deny. Always allow only lasts for that thread. A Codex thread in this mode
+  Deny. Always allow only lasts for that thread. Return allows the card
+  showing ⏎, from an empty message box or after a click in the thread;
+  with several cards waiting that's the oldest, and Return again takes the
+  next. A Codex thread in this mode
   can read files but not change them unless you agree. It also asks before
   it does anything to Threadbear itself: messaging or starting another
   thread, changing this one, schedules, projects, pins, panels and the
@@ -568,9 +571,17 @@ it, and the one picked is described on the right: how to use it, its
 other names, what `/model` and `/effort` are set to now, and where it
 comes from (yours, this folder's, a plugin's) with its file and an Open
 button that shows the file beside the thread.
-Up and Down move, Return runs it, Tab puts it in the box so you can type
-its details after it, and Esc closes the palette. Clicking a category
-shows only those; double-clicking a command runs it.
+Up and Down move, Left and Right step through the categories (All,
+Threadbear, the CLI's, Skills, Recent), Return or Tab puts it in the box
+(Return again sends it, so a new thread never starts by surprise), and
+Esc closes the palette. The Run button sends it at once; to have Return
+do that too, turn on Settings > General > Slash commands > Return sends
+a command right away. Clicking a category shows only those;
+double-clicking a command does what Return does.
+Click the search field along the palette's top to find a skill or
+command by any word in its name or description. The arrows, Return and
+Esc work there too, the X at its right closes the palette, and clicking back in the message box carries on
+typing there.
 Drag the palette's top edge or sides to make it bigger or smaller (the
 border lights up where it will drag), as wide as the window, and the
 lines between its columns to size them. It keeps the sizes for next
@@ -582,7 +593,9 @@ lists the skills the agent can run when it reads one named there. Return
 or Tab puts the skill in your words, and nothing is sent until you send
 the message. Claude Code's own commands, and skills set to run only when
 you type them (`disable-model-invocation: true`), work only at the start
-of a message, so they aren't listed there.
+of a message, so they aren't listed there. If you'd rather have the
+small list at the cursor for these (described under Skills), pick it in
+Settings > General > Slash commands. Only one of the two shows.
 
 The iPhone app has it too: type `/` in a thread's reply box and a list of
 its commands opens above it, with the categories as buttons along the top.
@@ -771,11 +784,12 @@ only once you've said yes.
 
 ## Files and Terminal
 
-Two buttons on the rail down the right, below the folder's own panels
-(such as Worktrees): **Files** lists the thread's folder, to go into
-folders and open files in the panel (a thread on another Mac lists that
-Mac's folder), and **Terminal** opens the Terminal under the thread, as
-⌘J does (see Terminal above). It's there for threads on this Mac.
+**Files** on the rail down the right, below the folder's own panels
+(such as Worktrees), lists the thread's folder, to go into folders and
+open files in the panel (a thread on another Mac lists that Mac's
+folder). Turn on Settings > General > Terminal for a **Terminal** button
+beside it, which opens the Terminal under the thread as ⌘J does (see
+Terminal above), for threads on this Mac. It's off unless you turn it on.
 
 Clicking a file in a reply, Highlights or Files opens it here in the
 panel: code with syntax colours, Markdown drawn, and Edit for text. To
@@ -1003,25 +1017,41 @@ Ask in plain words, in any thread:
 | "Make a dashboard from this data" | A **dashboard**: big numbers, a few charts and a table |
 | "Give me a report on where this project stands" | A **report**: sections of text with charts |
 | "Write up the launch plan as a print" | A **doc**. You can edit it yourself too |
+| "Draw this flow as a diagram print" | A **diagram** from Mermaid source, with text you can edit and an SVG you can download |
 | "Run bundle-analyzer summary" | A **bundle size** report for a Convex app |
+| "Make a Convex insights report" | A **dashboard** of the app's insights from the last 72 hours: write conflicts and functions near their read limits, by function, with each one's table and when it was last seen. Add "for prod" for production |
+| "Map my Convex API" | A **dashboard** of every function and HTTP route the app's deployment runs: public or internal, the arguments each takes, and any missing validators, listed first |
 | "Add a figure that explains it" or "make a share clip" | A larger extra: an illustrated figure, or a short video. Only when you ask |
 
-**Where a print goes.** In a thread that belongs to one project, its prints go in that project and show under **Prints** on the project's page. Say "keep it out of projects" for none, or "put it in Poddle" for another. A print can be in several projects. Prints are kept on your Mac, in the `pages` folder in Threadbear's data folder. Nothing about them goes to your Convex mirror, so they don't show on your phone or the website yet.
+**Where a print goes.** A thread pinned to exactly one project puts its new prints there automatically, under **Prints** on the project's page. Say "keep it out of projects" for none, or "put it in Poddle" for another. A print can be in several projects without duplicating its files. All Prints are stored in `~/Library/Application Support/Threadbear/pages/<print-id>/v<version>/`, separate from your code folders. With no project, reopen its card in the thread or ask "show my prints with no project". Download saves a separate copy wherever you choose. Nothing about a print goes to your Convex backend unless you publish it (below).
 
-**In a reply**, a thread shows a print as a card: a picture of the top of it, then its title, kind, version and age, with Open, Refresh and a ⋯ menu. Click the picture or Open to open it. The card always shows the print as it is now, so when a print gets a new version, the card in an earlier reply moves to it too, marked "New version", rather than a second card appearing. While a refresh is under way, the card says so.
+**Only when you ask.** Threads also make Prints on their own, like a progress Print on a long task. To keep Prints but have them made only when you ask, turn on **Only make Prints when I ask** in Settings > General > Prints. A thread that goes to make one your message didn't ask for then asks you first, on a card, and No means none is made. A message that says print, chart, graph, dashboard or diagram counts as asking, so it goes ahead without a card. Changing a Print that already exists never asks.
+
+**In a reply**, a thread shows a print as a card: a picture of the top of it, then its title, kind, version and age, with Open, Refresh and a ⋯ menu. Click the picture or Open to open it in the side pane beside the thread. While it's open there, a new version replaces it in the pane as soon as it's saved. If you opened an older version on purpose, it stays put. A thread on another Mac opens it in a window of its own instead. On the website, the same reply shows a card too. A published print's card has its title and an Open button that goes to its page. One that isn't published says it's kept on your Mac, since its files never leave it. The iPhone app shows the block as text for now. The card always shows the print as it is now, so when a print gets a new version, the card in an earlier reply moves to it too, marked "New version", rather than a second card appearing. While a refresh is under way, the card says so.
+
+**In Highlights and on the rail.** A thread's Highlights list the Prints it made, under Prints, each with its kind, version and the projects it's in, or "No project". The Prints button on the right-hand rail, under Files, lists every Print you have, newest first, with the same details. It shows once there's at least one. Click a Print in either to open it beside the thread; right-click for Open in a Window and Refresh.
 
 **Every row under Prints on the project's page** opens its print in a window of its own when you click it. Its ⋯ menu, or a right-click, has:
 
 - **Refresh** sends the print to the thread that made it, to be made again the same way, and opens that thread so you can watch.
 - **Edit with Agent…** asks for what should change, for example "make the region chart a pie". The thread does it and saves a new version.
-- **Edit Text…** (docs only) opens the doc's text to edit yourself. Save makes a new version marked "edited by you", and an agent changing it later starts from your text.
+- **Edit Text…** opens a doc's Markdown or a diagram's Mermaid source to edit yourself. Save redraws it as a new version marked "edited by you". Invalid diagram source shows an error and keeps the previous version.
 - **Download…** saves the print's files in a new folder. Its `index.html` opens in any browser.
 - **Download as PDF…** saves it as a PDF on US Letter pages, in the light look, so it prints and sends cleanly. A line that lands right on a page break can be cut across two pages. For print-perfect breaks, ask the thread to "download it as a PDF", which prints it through Chrome.
 - **Versions** lists the last 10. Open one, download it, or make it the newest again; nothing in between is lost.
 - **Projects** puts it in a project or takes it out.
+- **Publish…** puts the print on your own Convex backend, after asking, and copies its link. It then opens on your phone, on the website, and for anyone you give the link to, and each new version goes up by itself. **Copy Link**, **Open on the Web** and **Unpublish** replace it once it's published. Unpublish, or Delete, takes it down and the link stops working. Only the print's one page goes up, and only prints with no scripts can be published.
 - **Delete** takes it away. It waits 7 days under **Recently deleted** at the bottom of the list, where **Restore** brings it back.
 
 You can also ask a thread for any of these: "refresh the sales dashboard", "go back to version 3", "delete the old chart", "bring it back", "download it", "what prints do I have".
+
+**Keeping one up to date.** Say "refresh it every weekday morning" (or any time you like) and the thread schedules itself to make the print again from its recipe and save a new version. It tells you when it will run. It shows on the Scheduled page, where you can change or stop it, or ask the thread to.
+
+**Asking once.** In Ask before edits, the first change to a print asks you. Once you allow it, later versions of that same print from that thread go ahead without asking again, until the thread is next restarted. A different print, or deleting one, still asks.
+
+**Diagrams** are drawn on your Mac with Pele, the same library used for diagrams in replies, and kept as static SVG with their Mermaid source. No package download or network access is needed to render one. A wide diagram uses the whole window and scrolls sideways rather than shrinking its labels too small to read; printed or saved as a PDF, it fits the page. Download includes `source.mmd` and `diagram.svg`. Published diagram HTML includes the diagram and its folded source, so both become public when you publish. Editable CSV sheets are deferred.
+
+**Outside agents** can list and read published Prints through the existing Threadbear MCP connector when their key allows **Can read all my threads and published Prints**. A key limited to its own threads sees no Prints. Only published copies are shared; nothing is read from your Mac's local Prints store. `list_prints` returns a page of metadata; `read_print` takes its slug and reads the HTML in bounded pieces. They cannot create, edit, publish or delete Prints. Unpublish removes access on the next read. Reconnect the outside app if it caches the old tool list.
 
 Prints are static: pictures, charts and text, with no scripts, so they open straight away and can't reach the internet. A thread can make a "live" print with scripts when you ask for one. Its scripts run only after you choose Run them, and again for each new version.
 
@@ -1609,6 +1639,11 @@ usually sorts itself out, such as the gateway not answering for a moment.
 The arrow in the panel checks again, and the ⓘ says more. If the gateway
 can't be reached at all, the panel says so.
 
+With the X search experiment on, the panel also has X search, under Built
+into Threadbear, as it doesn't go through the gateway. It says whether
+your xAI key is saved; Forget key deletes it, and the next search asks
+for one again.
+
 When an agent runs into a service that needs signing in, it asks you in its
 reply, with a button that opens the page to do it on. That's only when the
 gateway itself says the service is signed out (or claude.ai's own sign-in
@@ -1920,7 +1955,10 @@ A repo with several skills adds them all. Each is pinned to the commit it
 was imported at, so it never changes under you; Update to the Latest in
 its ... menu moves it on. Suggested lists ones worth having, such as Pele
 (Mermaid diagrams, which comes with Threadbear) and Anatomy (interactive
-drawings of how a machine works), with an Add button each.
+drawings of how a machine works), with an Add button each. Make-print and
+bundle-report come with Threadbear too: they're how a thread builds Prints
+(charts, dashboards, reports, progress, and the Convex bundle, insights and
+API map reports), so add them if you use Prints.
 
 To write one of your own, press New Skill at the top of the page: give
 it a name (its slash command: brand-voice becomes /brand-voice), say
@@ -1940,11 +1978,15 @@ description.
 Every skill works in every thread, on every login, Claude and Codex alike.
 With Always on, agents use it whenever it fits what you ask. Turn it off
 and it's there only when you ask by name: type its slash command, like
-/pele, in a message. Typing / at the start of a word lists your skills
-over the cursor, narrowing as you type: ↑ and ↓ to choose, Return or Tab
-to put it in, Esc to close. An installed skill's command turns blue as
-you type it, and shows as a link in your message once sent (click it for
-the Skills page), so you can see a skill will run. It works anywhere in
+/pele, in a message. Typing / at the start of a word opens the slash
+palette (see Slash commands), or, with Settings > General > Slash
+commands set to the small list, lists your skills over the cursor, narrowing as you type: ↑ and ↓ to choose, Return or Tab
+to put it in, Esc to close. A skill's command turns blue as you type it,
+and shows as a link in your message once sent, so you can see a skill
+will run. That's any skill the thread can use: the Skills page's, and
+the ones Claude or Codex find themselves, such as those in
+`~/.claude/skills` or the folder's own. Click one for the Skills page,
+or for one that isn't there, its SKILL.md. It works anywhere in
 the message, in Claude and Codex threads alike. A change reaches threads
 that are already running too: each gets a fresh start before its next
 message, carrying on the same conversation with the new skills. Remove

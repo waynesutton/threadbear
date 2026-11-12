@@ -252,6 +252,7 @@ enum Automation {
                 "oneReply": settings.oneReply,
                 "labReview": settings.labReview,
                 "keepAwake": settings.keepAwake.map { $0 as Any } ?? NSNull(),
+                "printsWhenAsked": settings.printsWhenAsked.map { $0 as Any } ?? NSNull(),
                 // "" is none (small jobs off), or an older runner with no pools.
                 "smallJobsPool": settings.models.pool ?? "",
                 "privateFolders": settings.models.privateFolders,
@@ -638,10 +639,12 @@ enum Automation {
             // The Escape key, where the cursor is.
             return pressAtCursor(window, characters: "\u{1b}", keyCode: 53)
         case "arrow":
-            // {"cmd":"arrow","dir":"down"} (or "up"), where the cursor is:
-            // the composer's slash command palette moves its pick.
-            let up = c["dir"] as? String == "up"
-            return pressAtCursor(window, characters: String(UnicodeScalar(up ? 0xF700 : 0xF701)!), keyCode: up ? 126 : 125)
+            // {"cmd":"arrow","dir":"down"} (or "up", "left", "right"), where
+            // the cursor is: the composer's slash command palette moves its
+            // pick, or its category with left and right.
+            let keys: [String: (UInt32, UInt16)] = ["up": (0xF700, 126), "down": (0xF701, 125), "left": (0xF702, 123), "right": (0xF703, 124)]
+            let (char, code) = keys[c["dir"] as? String ?? "down"] ?? keys["down"]!
+            return pressAtCursor(window, characters: String(UnicodeScalar(char)!), keyCode: code)
         case "tab":
             // The Tab key, where the cursor is.
             return pressAtCursor(window, characters: "\t", keyCode: 48)
@@ -872,7 +875,7 @@ enum Automation {
             // {"cmd":"panel"} toggles. On a project's page, the project's.
             guard let thread = app.paneThread else { return "error no thread selected" }
             if let id = c["id"] as? String {
-                let ids = (app.openProject == nil ? [PaneSection.highlightsId, AgentBrowser.panelId, BuiltinPanels.files, BuiltinPanels.terminal] : []) + thread.panels.map(\.id) + (thread.patches.isEmpty ? [] : [PaneSection.patchesId])
+                let ids = (app.openProject == nil ? [PaneSection.highlightsId, AgentBrowser.panelId, BuiltinPanels.files, BuiltinPanels.prints, BuiltinPanels.terminal] : []) + thread.panels.map(\.id) + (thread.patches.isEmpty ? [] : [PaneSection.patchesId])
                 guard ids.contains(id) else { return "error no panel \(id); this thread has \(ids.joined(separator: ", "))" }
                 app.choosePanel(id, in: thread.id)
             } else if let show = c["show"] as? Bool {

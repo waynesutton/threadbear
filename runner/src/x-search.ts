@@ -19,9 +19,12 @@ export const XAI_RESPONSES_URL = 'https://api.x.ai/v1/responses';
 // whichever model asks.
 export const XAI_MODEL = 'grok-4.7';
 export const MAX_HANDLES = 20;
-// One call can't run long or come back huge: Grok decides how many
-// searches to make, so turns are capped, and the answer is cut.
-const MAX_TURNS = 3;
+// One call can't run long or come back huge. Grok decides how many
+// searches to make, and max_turns caps its rounds, not the searches in
+// each (docs.x.ai, tool-usage-details): the first real call, with 3, ran
+// 41 searches for $0.26 (11 Nov). So rounds are 2, as xAI's own examples
+// use, and the prompt asks for few searches. The answer is cut too.
+const MAX_TURNS = 2;
 const TIMEOUT_MS = 120_000;
 const MAX_ANSWER = 8000;
 const MAX_SOURCES = 20;
@@ -97,12 +100,19 @@ export function xSearchBody(a: XSearchArgs): Record<string, unknown> {
   if (excluded.length) tool.excluded_x_handles = excluded;
   if (a.from) tool.from_date = a.from;
   if (a.to) tool.to_date = a.to;
+  // xAI applies the handles to keyword and semantic searches only: user
+  // search, thread fetches and quoted or parent posts can bring in other
+  // accounts (docs.x.ai, x-search). The first real call, kept to one
+  // handle, quoted three others (11 Nov), so the prompt says it too.
+  const keep = handles.length
+    ? ` Use and quote only posts written by ${handles.map((h) => `@${h}`).join(', ')}. If they posted nothing about it, say so rather than citing other accounts.`
+    : '';
   return {
     model: XAI_MODEL,
     input: [
       {
         role: 'system',
-        content: 'Search X to answer. Be brief and factual. Quote posts exactly when you quote them, with the handle and date, and cite each post you rely on. Say plainly when you found little or nothing.',
+        content: `Search X to answer, with as few searches as you need: two or three is usually enough. Be brief and factual. Quote posts exactly when you quote them, with the handle and date, and cite each post you rely on. Say plainly when you found little or nothing.${keep}`,
       },
       { role: 'user', content: a.query },
     ],
@@ -146,10 +156,24 @@ export function parseXSearch(json: unknown): XSearchResult {
   };
 }
 
-export function formatXSearch(r: XSearchResult): string {
+// The account a post link is from: x.com/<handle>/status/<id>.
+export function postHandle(url: string): string | undefined {
+  const m = /^https:\/\/(?:www\.)?(?:x|twitter)\.com\/([A-Za-z0-9_]{1,15})\/status\//.exec(url);
+  return m?.[1].toLowerCase();
+}
+
+// With handles asked for, sources from other accounts are listed apart, as
+// xAI's filter doesn't cover every search (xSearchBody), so the agent can
+// tell what's really from those accounts.
+export function formatXSearch(r: XSearchResult, handles: readonly string[] = []): string {
   const answer = r.answer ? (r.answer.length > MAX_ANSWER ? `${r.answer.slice(0, MAX_ANSWER)}…` : r.answer) : 'Grok gave no answer.';
   const lines = [answer];
-  if (r.sources.length) lines.push('', 'Sources:', ...r.sources.slice(0, MAX_SOURCES).map((u) => `- ${u}`));
+  const asked = new Set(cleanHandles(handles).map((h) => h.toLowerCase()));
+  const sources = r.sources.slice(0, MAX_SOURCES);
+  const outside = asked.size ? sources.filter((u) => { const h = postHandle(u); return h !== undefined && !asked.has(h); }) : [];
+  const inside = sources.filter((u) => !outside.includes(u));
+  if (inside.length) lines.push('', 'Sources:', ...inside.map((u) => `- ${u}`));
+  if (outside.length) lines.push('', `From other accounts than ${[...asked].map((h) => `@${h}`).join(', ')}:`, ...outside.map((u) => `- ${u}`));
   const used = [
     r.searches !== undefined ? `${r.searches} search${r.searches === 1 ? '' : 'es'}` : '',
     r.posts !== undefined ? `${r.posts} post${r.posts === 1 ? '' : 's'}` : '',
@@ -199,4 +223,17 @@ export async function xSearch(a: XSearchArgs, key: string, deps: { fetch?: typeo
   } catch {
     throw new Error("xAI's answer wasn't JSON.");
   }
+}
+
+// xSearch.status and xSearch.forgetKey (docs/protocol.md, "X search"): the
+// Connectors panel's X search row. Whether a key is saved, never the key.
+export function xSearchMethods(deps: { on: () => boolean; secretsDir: string }): Record<string, (p: Record<string, unknown>) => unknown> {
+  const status = () => ({ on: deps.on(), keySaved: readXaiKey(deps.secretsDir) !== undefined });
+  return {
+    'xSearch.status': () => status(),
+    'xSearch.forgetKey': () => {
+      forgetXaiKey(deps.secretsDir);
+      return status();
+    },
+  };
 }

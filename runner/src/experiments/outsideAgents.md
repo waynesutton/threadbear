@@ -9,6 +9,8 @@ reminder: f7ab4c06
 
 ## What it does
 
+Keys allowed to read all can also list and read published Prints. These tools return public metadata and bounded HTML as data, with no write tools. Unpublished Prints stay on the Mac. Unpublish ends access on the next read.
+
 Lets an agent that runs in the cloud, such as Grok Bot or a Notion Custom Agent, use Threadbear as an MCP server. In the Connectors panel, Connect an agent lets you pick Grok Bot, Notion or Slack, says what each needs, makes a key for it and shows the server address (your backend's `/mcp`). Slack can't take a key yet (Slackbot only connects to servers that sign in with OAuth), so it says so instead. A read-only key can list and read threads it started, or every live thread if you tick that. A key that can write can also start threads, which always run in Ask mode so every tool asks you first, and message the threads it started while they stay in Ask mode. It never sees approvals, secrets, schedules or archived threads. Messages from it say who sent them, so threads don't take them as yours. Revoke ends a key on its next call, and turning this off ends every key.
 
 ## Lives in

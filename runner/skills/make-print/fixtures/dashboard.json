@@ -1,0 +1,12 @@
+{ "kind": "dashboard", "title": "Sales 2026", "data": { "file": "sales.xlsx", "sheet": "Sales 2026" },
+  "tiles": [
+    { "label": "Revenue", "value": "Revenue", "agg": "sum", "unit": "$" },
+    { "label": "Seats", "value": "Seats", "agg": "sum" },
+    { "label": "Average order", "value": "Revenue", "agg": "avg", "unit": "$" },
+    { "label": "Rows", "agg": "count" } ],
+  "charts": [
+    { "type": "line", "title": "Revenue by month", "by": "Month", "value": "Revenue", "series": "Product", "unit": "$" },
+    { "type": "bar", "title": "Revenue by region", "by": "Region", "value": "Revenue", "unit": "$" },
+    { "type": "column", "title": "Seats by month", "by": "Month", "value": "Seats" },
+    { "type": "segmented", "title": "Revenue by plan", "by": "Product", "value": "Revenue", "unit": "$" } ],
+  "table": { "columns": ["Month", "Region", "Product", "Revenue", "Seats"], "sort": "Revenue", "limit": 12, "title": "Biggest rows", "units": { "Revenue": "$" } } }

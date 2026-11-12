@@ -236,6 +236,9 @@ private struct GeneralSettings: View {
     @AppStorage(BearChat.shownKey) private var bearShown = true
     @AppStorage(NotesStore.shownKey) private var notesShown = true
     @AppStorage(FileOpenPlace.key) private var fileOpenPlace: FileOpenPlace = .threadbear
+    @AppStorage(SlashListChoice.key) private var slashList: SlashListChoice = .mike
+    @AppStorage(SlashReturn.key) private var slashReturnRuns = false
+    @AppStorage(RailTerminal.key) private var railTerminal = false
     @AppStorage(FileEditorMode.key) private var editLikeAnEditor = true
     @AppStorage(FileAutosave.key) private var saveFilesAutomatically = true
     @AppStorage(TurnModes.enabledKey) private var turnModesOn = true
@@ -338,6 +341,24 @@ private struct GeneralSettings: View {
                         .onChange(of: notesShown) { _, on in if !on { app.showsNotesPage = false } }
                 }
 
+                SettingsSection("Slash commands",
+                                about: "Typing / in the message box opens the slash palette: every command and skill, with a search field, categories you can step through with the left and right arrows, and Esc to close. Return puts the picked command in the box, and the next Return sends it; turn on Return sends a command right away to skip that step (the Run button always sends). A /skill typed partway through a message opens the palette too, or, if you pick it here, the small list at the cursor instead. Only one of them shows at a time.",
+                                ask: "change what the slash palette lists or how it looks.") {
+                    Picker("Skills partway through a message", selection: $slashList) {
+                        ForEach(SlashListChoice.allCases) { Text($0.title).tag($0) }
+                    }
+                    .tip("Which list a /skill typed after other words brings up")
+                    Toggle("Return sends a command right away", isOn: $slashReturnRuns)
+                        .tip("Off: Return puts the command in the box and the next Return sends it, so a new thread doesn't start by surprise. The Run button always sends")
+                }
+
+                SettingsSection("Terminal",
+                                about: "⌘J (or View > Show Terminal) opens a terminal under the thread, in the thread's folder. Turn this on for a Terminal button on the right-hand rail as well; it opens the same terminal.",
+                                ask: "change how the Terminal opens or looks.") {
+                    Toggle("Show Terminal on the right-hand rail", isOn: $railTerminal)
+                        .tip("Add a Terminal button to the rail beside Files. ⌘J works either way")
+                }
+
                 SettingsSection("Shift-Tab modes",
                                 about: "Shift-Tab in the message box steps through Plan first (the agent reads and plans, changes nothing, and puts its plan to you on a card to approve or send back; the plan is also saved in the thread's plans/ folder, named for the date and project, and opens beside the thread), Ask (nothing changes; it just answers), then off, back to the access the thread had. Off shows nothing and messages work as they always have. Turning this off takes Shift-Tab back to what it did before; Plan first stays in the access menu.",
                                 ask: "explain or change what Plan first and Ask do.") {
@@ -417,6 +438,18 @@ private struct GeneralSettings: View {
                         Toggle("Keep the Mac awake while threads work",
                                isOn: Binding(get: { keepAwake }, set: { app.updateSettings(SettingsUpdate(keepAwake: $0)) }))
                             .tip("Stop your Mac sleeping on its own while a thread is working")
+                    }
+                }
+
+                // Only while Prints is on: with it off there are no Prints
+                // to hold back (Wayne, 11 Nov).
+                if let whenAsked = settings.printsWhenAsked, settings.experiments.contains(where: { $0.id == "pages" && $0.on }) {
+                    SettingsSection("Prints",
+                                    about: "Threads can still make Prints, but only when you ask for one. If a thread goes to make one your message didn't ask for, like a progress Print on a long task, it asks you first, and No means none is made. Saying print, chart, graph, dashboard or diagram counts as asking.",
+                                    ask: "make a Print for something, or turn this on or off.") {
+                        Toggle("Only make Prints when I ask",
+                               isOn: Binding(get: { whenAsked }, set: { app.updateSettings(SettingsUpdate(printsWhenAsked: $0)) }))
+                            .tip("Have threads ask before making a Print you didn't ask for")
                     }
                 }
 

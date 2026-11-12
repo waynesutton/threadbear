@@ -10,6 +10,79 @@ const home = () => fs.mkdtempSync(path.join(os.tmpdir(), 'tb-pages-'));
 const proj = (id: string, pinned: boolean): ThreadProject => ({ id, title: id, by: 'agent', at: '2026-11-10T00:00:00.000Z', ...(pinned ? { pinned } : {}) });
 const page = (body: string) => `<!doctype html><title>t</title><body>${body}</body>`;
 
+test('diagram Prints keep Mermaid through edits, restore, rename and export without scripts', () => {
+  const store = new Pages(home());
+  const source = 'flowchart LR\n A[Start] --> B[Done]';
+  const made = store.create({ title: 'Checkout <flow>', summary: '', ownerThread: 't', mermaid: source });
+  assert.equal(made.kind, 'diagram');
+  assert.equal(store.mermaid(made.id), source);
+  const html = fs.readFileSync(store.file(made.id), 'utf8');
+  assert.match(html, /<svg/);
+  assert.match(html, /Checkout &lt;flow&gt;/);
+  assert.match(html, /Mermaid source/);
+  assert.doesNotMatch(html, /<script\b|\son\w+\s*=/i);
+  assert.ok(store.publishable(made.id).html.includes('<svg'));
+  const changed = store.update(made.id, { mermaid: 'sequenceDiagram\n Alice->>Bob: Hello', by: 'user' });
+  assert.equal(changed.version, 2);
+  assert.equal(changed.editedBy, 'user');
+  assert.equal(store.mermaid(made.id, 1), source);
+  store.update(made.id, { markdown: '# A different kind' });
+  assert.equal(store.restoreVersion(made.id, 1).kind, 'diagram');
+  assert.equal(store.mermaid(made.id), source);
+  assert.equal(store.update(made.id, { title: 'New title' }).version, 5);
+  assert.match(fs.readFileSync(store.file(made.id), 'utf8'), /New title/);
+  const output = fs.mkdtempSync(path.join(os.tmpdir(), 'tb-diagram-export-'));
+  store.exportTo(made.id, output);
+  assert.equal(fs.readFileSync(path.join(output, 'source.mmd'), 'utf8'), source);
+  assert.match(fs.readFileSync(path.join(output, 'diagram.svg'), 'utf8'), /<svg/);
+});
+
+test('invalid diagram input leaves the old version intact; editor RPC and tools return Mermaid', async () => {
+  const store = new Pages(home());
+  const made = store.create({ title: 'Flow', summary: '', ownerThread: 't', mermaid: 'flowchart LR\n A --> B' });
+  assert.throws(() => store.update(made.id, { mermaid: 'not a diagram' }), /diagram/i);
+  assert.throws(() => store.update(made.id, { mermaid: 'x'.repeat(20_001) }), /20,?000/);
+  assert.throws(() => store.update(made.id, { html: page('mixed'), mermaid: 'flowchart LR\n A --> B' }), /one of them/);
+  assert.equal(store.get(made.id)?.version, 1);
+  const { pageMethods } = await import('../../src/pages.ts');
+  const methods = pageMethods(() => store);
+  methods['pages.saveDiagram']!({ pageId: made.id, mermaid: 'flowchart LR\n B --> C' });
+  assert.equal((methods['pages.get']!({ pageId: made.id }) as { mermaid: string }).mermaid, 'flowchart LR\n B --> C');
+  assert.equal(store.get(made.id)?.editedBy, 'user');
+  const { buildThreadbearTools } = await import('../../src/threadbear-mcp.ts');
+  const control = { list: async () => [{ id: 't', cwd: os.tmpdir(), projects: [] }], get: async () => ({ permissionMode: 'full' }) } as never;
+  const tools = buildThreadbearTools(control, 't', Date.now, undefined, undefined, undefined, { pages: () => store }) as unknown as Tool[];
+  assert.match((await call(tools, 'read_print', { id: made.id })).text, /mermaid:\nflowchart LR\n B --> C/);
+  const result = await call(tools, 'create_print', { title: 'Tool flow', summary: '', mermaid: 'flowchart LR\n A --> B' });
+  assert.equal(result.err, false, result.text);
+  assert.equal(store.get('pg_tool_flow')?.kind, 'diagram');
+});
+
+test('replacing diagram source with HTML and restoring an HTML version clears its editable kind', () => {
+  const store = new Pages(home());
+  const made = store.create({ title: 'Flow', summary: '', ownerThread: 't', html: page('original') });
+  store.update(made.id, { mermaid: 'flowchart LR\n A --> B' });
+  assert.equal(store.restoreVersion(made.id, 1).kind, 'page');
+  assert.equal(store.mermaid(made.id), undefined);
+  store.restoreVersion(made.id, 2);
+  assert.equal(store.get(made.id)?.kind, 'diagram');
+  assert.equal(store.update(made.id, { html: page('replacement') }).kind, 'page');
+  assert.equal(store.mermaid(made.id), undefined);
+});
+
+test('diagram edits preserve a live Print permission so its old scripted version can be restored', () => {
+  const store = new Pages(home());
+  const live = store.create({ title: 'Live flow', summary: '', ownerThread: 't', html: page('<script>1</script>'), live: true });
+  const diagram = store.update(live.id, { mermaid: 'flowchart LR\n A --> B' });
+  assert.equal(diagram.live, true, 'an edit must not revoke the existing Print permission');
+  assert.doesNotMatch(fs.readFileSync(store.file(live.id), 'utf8'), /<script\b/i, 'Mermaid still renders static content');
+  assert.equal(store.restoreVersion(live.id, 1).live, true);
+  assert.match(fs.readFileSync(store.file(live.id), 'utf8'), /<script>1<\/script>/);
+  assert.equal(store.restoreVersion(live.id, 2).kind, 'diagram');
+  const fresh = store.create({ title: 'New flow', summary: '', ownerThread: 't', mermaid: 'flowchart LR\n A --> B' });
+  assert.equal(fresh.live, false);
+});
+
 test('create writes v1, update bumps the version in place, and both survive a reload', () => {
   const h = home();
   let t = Date.parse('2026-11-10T00:00:00Z');
@@ -111,7 +184,7 @@ test('setProjects adds and removes, and list filters by project, thread and none
 });
 
 // The tools, against a fake runner that knows one thread pinned to a project.
-type Tool = { name: string; handler: (a: never, e: never) => Promise<{ content: { text: string }[]; isError?: boolean }> };
+type Tool = { name: string; description: string; handler: (a: never, e: never) => Promise<{ content: { text: string }[]; isError?: boolean }> };
 const call = async (tools: Tool[], name: string, args: Record<string, unknown>) => {
   const r = await tools.find((t) => t.name === name)!.handler(args as never, {} as never);
   return { text: r.content[0]!.text, err: r.isError === true };
@@ -131,7 +204,7 @@ test('page tools: off without the experiment; create inherits the pinned project
   const tools = buildThreadbearTools(control, 'th1', Date.now, undefined, projects, undefined, { pages: () => store }) as unknown as Tool[];
   const made = await call(tools, 'create_print', { title: 'Bundle size', summary: '20.22 MB', html: page('v1'), source: 'bundle-analyzer summary' });
   assert.equal(made.err, false, made.text);
-  assert.match(made.text, /pg_bundle_size {2}page {2}v1 .*in p_tb/);
+  assert.match(made.text, /pg_bundle_size {2}print {2}v1 .*in p_tb/);
   const bad = await call(tools, 'create_print', { title: 'X', summary: '', html: page('<script></script>') });
   assert.equal(bad.err, true);
 
@@ -258,6 +331,115 @@ test('the old page tool names still work after the rename to Prints', async () =
   for (const n of ['create_page', 'update_page', 'list_pages', 'read_page', 'delete_page', 'restore_page', 'export_page', 'add_page_to_project', 'remove_page_from_project']) assert.ok(names.includes(n), n);
   const made = await call(tools, 'create_page', { title: 'Old name', summary: '', html: page('x') });
   assert.match(made.text, /Made pg_old_name/);
+  assert.match(made.text, /```print pg_old_name```/, 'agents are told the print block');
   assert.match((await call(tools, 'list_prints', {})).text, /pg_old_name/);
   for (const n of ['list_prints', 'read_print', 'list_pages', 'read_page']) assert.ok(NEVER_ASK_TOOLS.has(`mcp__threadbear__${n}`), n);
+});
+
+test('publish: a link made once, new versions follow, live and scripted prints refused, delete takes it down', async () => {
+  const { publishPage, unpublishPage, followPublished, printLink, PUBLISH_HTML_MAX } = await import('../../src/pages.ts');
+  const sent: { id: string; slug: string; version: number; html: string }[] = [];
+  const down: string[] = [];
+  let problem: string | undefined;
+  const pub = { problem: () => problem, site: () => 'https://x.convex.site/', publish: async (p: never) => void sent.push(p), unpublish: async (id: string) => void down.push(id) };
+  const known = new Map<string, string>();
+  const store = new Pages(home());
+  const p = store.create({ title: 'Sales', summary: 's', ownerThread: 't', html: page('one'), projects: [] });
+  const first = await publishPage(store, pub, p.id);
+  const slug = first.page.published!.slug;
+  assert.match(slug, /^[A-Za-z0-9_-]{22}$/);
+  assert.equal(first.url, `https://x.convex.site/p/${slug}`);
+  assert.equal(printLink(undefined, slug), undefined);
+  assert.match(sent[0]!.html, /one/);
+
+  store.update(p.id, { html: page('two') });
+  await followPublished(store, pub, known);
+  assert.equal(sent.length, 2);
+  assert.equal(sent[1]!.slug, slug, 'the link survives a new version');
+  assert.equal(sent[1]!.version, 2);
+  await followPublished(store, pub, known);
+  assert.equal(sent.length, 2, 'nothing to send when the newest is up');
+
+  const live = store.create({ title: 'Live', summary: '', ownerThread: 't', html: page('<script>1</script>'), live: true });
+  await assert.rejects(publishPage(store, pub, live.id), /scripts/);
+  assert.equal(store.find(live.id).published, undefined);
+  const big = store.create({ title: 'Big', summary: '', ownerThread: 't', html: page('x'.repeat(PUBLISH_HTML_MAX)) });
+  await assert.rejects(publishPage(store, pub, big.id), /at most/);
+
+  problem = 'The backend is too old';
+  const other = store.create({ title: 'Other', summary: '', ownerThread: 't', html: page('o') });
+  await assert.rejects(publishPage(store, pub, other.id), /too old/);
+  problem = undefined;
+
+  store.delete(p.id);
+  await followPublished(store, pub, known);
+  assert.deepEqual(down, [p.id]);
+  assert.equal(store.list({ deleted: true })[0]!.published, undefined);
+
+  const again = await publishPage(store, pub, other.id);
+  assert.equal((await unpublishPage(store, pub, other.id)).published, undefined);
+  assert.ok(again.page.published);
+});
+
+test('only when asked: create_print after a message that asks for no print puts a card up first', async () => {
+  const { buildThreadbearTools } = await import('../../src/threadbear-mcp.ts');
+  const thread = { id: 'th1', title: 'Work', cwd: home(), projects: [] };
+  let said = 'Fix the login bug';
+  const cards: string[] = [];
+  let answer: 'allow' | 'deny' = 'deny';
+  const control = {
+    list: async () => [thread],
+    get: async () => ({ ...thread, permissionMode: 'full' }),
+    events: async () => ({ firstSeq: 1, events: [{ seq: 1, type: 'user.message', text: said, images: [] }, { seq: 2, type: 'turn.started' }] }),
+    requestAgentApproval: async (_id: string, req: { title: string }) => { cards.push(req.title); return { decision: answer }; },
+  } as never;
+  const store = new Pages(home());
+  let on = true;
+  const tools = buildThreadbearTools(control, 'th1', Date.now, undefined, undefined, undefined, { pages: () => store, printsWhenAsked: () => on }) as unknown as Tool[];
+  assert.match(tools.find((t) => t.name === 'create_print')!.description, /only when the user asks/i);
+
+  const denied = await call(tools, 'create_print', { title: 'Progress', summary: '', html: page('a') });
+  assert.equal(denied.err, true);
+  assert.match(denied.text, /said no/);
+  assert.match(cards[0]!, /Make the print "Progress"\? You asked to approve Prints you didn't ask for/);
+  assert.equal(store.list().length, 0);
+
+  answer = 'allow';
+  assert.equal((await call(tools, 'create_print', { title: 'Progress', summary: '', html: page('a') })).err, false);
+  assert.equal(cards.length, 2);
+
+  said = 'Make a pie chart of this spreadsheet';
+  assert.equal((await call(tools, 'create_print', { title: 'Regions', summary: '', html: page('b') })).err, false);
+  said = 'Draw this flow as a diagram';
+  assert.equal((await call(tools, 'create_print', { title: 'Flow', summary: '', mermaid: 'flowchart LR\n A --> B' })).err, false);
+  assert.equal(cards.length, 2, 'asked for, so no card');
+
+  on = false;
+  said = 'Fix the login bug';
+  assert.equal((await call(tools, 'create_print', { title: 'Notes', summary: '', html: page('c') })).err, false);
+  assert.equal(cards.length, 2, 'setting off, so no card');
+  const plain = buildThreadbearTools(control, 'th1', Date.now, undefined, undefined, undefined, { pages: () => store }) as unknown as Tool[];
+  assert.doesNotMatch(plain.find((t) => t.name === 'create_print')!.description, /only when the user asks/i);
+});
+
+test('only when asked: the words that count as asking for a print', async () => {
+  const { asksForPrint } = await import('../../src/threadbear-mcp.ts');
+  for (const s of ['make a print of it', 'Prints please', 'a bar CHART', 'graph the latency', 'build a dashboard', 'diagrams of the flow']) assert.ok(asksForPrint(s), s);
+  for (const s of ['fix the page header', 'write the docs', 'report back when done', 'blueprint', 'printf debugging', 'chartreuse button', '']) assert.ok(!asksForPrint(s), s);
+});
+
+test('only when asked: off unless runner.json turns it on, and settings.update saves it at once', async () => {
+  const { loadConfig } = await import('../../src/config.ts');
+  const { SettingsService, settingsMethods } = await import('../../src/settings.ts');
+  const h = home();
+  const cfg = loadConfig({ THREADBEAR_HOME: h });
+  assert.equal(cfg.printsWhenAsked, false, 'off with nothing in runner.json');
+  const s = new SettingsService({ config: cfg, publish: () => {} });
+  assert.equal(s.get().printsWhenAsked, false);
+  const rpc = settingsMethods(s);
+  assert.equal((rpc['settings.update']!({ printsWhenAsked: true }) as { settings: { printsWhenAsked: boolean } }).settings.printsWhenAsked, true);
+  assert.equal(cfg.printsWhenAsked, true, 'applies at once');
+  assert.equal(JSON.parse(fs.readFileSync(path.join(h, 'runner.json'), 'utf8')).printsWhenAsked, true, 'saved');
+  assert.equal(loadConfig({ THREADBEAR_HOME: h }).printsWhenAsked, true, 'read back');
+  assert.throws(() => rpc['settings.update']!({ printsWhenAsked: 'yes' }), /printsWhenAsked must be a boolean/);
 });

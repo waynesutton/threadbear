@@ -211,8 +211,7 @@ enum Theme {
     /// A ```mermaid or ```html box's Diagram / Source switch (RichBlockCell).
     static let switchTrack = dynamic(dark: NSColor(white: 1, alpha: 0.06), light: NSColor(white: 0, alpha: 0.05))
     static let switchThumb = dynamic(dark: NSColor(white: 1, alpha: 0.16), light: NSColor(white: 1, alpha: 1))
-    /// codeBackground over the transcript, as one solid colour, for a fade
-    /// that has to end in it (RichPalette's bg is the same).
+    /// Solid card surface matching RichPalette's preview background.
     static let codeBackgroundOpaque = dynamic(dark: NSColor(srgbRed: 0x28 / 255, green: 0x28 / 255, blue: 0x28 / 255, alpha: 1),
                                               light: NSColor(srgbRed: 0xf7 / 255, green: 0xf7 / 255, blue: 0xf7 / 255, alpha: 1))
     static let hairline = dynamic(dark: NSColor(white: 1, alpha: 0.1), light: NSColor(white: 0, alpha: 0.1))

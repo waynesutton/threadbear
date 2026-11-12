@@ -388,6 +388,7 @@ let librarian;
 let mockProfile = { profile: null };
 let mockProfileSaves = 0;
 const MOCK_GATEWAY = 'https://bruce.example.ts.net:8443';
+let mockXSearch = { on: true, keySaved: true };
 let mockAgents = { on: true, url: 'https://demo-seal-123.convex.site/mcp', keys: [] };
 const MOCK_BLENDER = {
   kind: 'local', id: 'blender', title: 'Blender', blurb: 'Build and change scenes in the Blender open on this Mac',
@@ -1536,6 +1537,13 @@ async function dispatch(client, method, p) {
       mockAgents = { ...mockAgents, keys: [...mockAgents.keys, key] };
       return { key, secret: 'tba_' + 'f00d'.repeat(16), url: mockAgents.url };
     }
+    // X search (docs/protocol.md, "X search"): a made-up saved key.
+    case 'xSearch.status':
+      if (oldRunner) throw rpcError(-32601, `Unknown method ${method}`);
+      return mockXSearch;
+    case 'xSearch.forgetKey':
+      mockXSearch = { ...mockXSearch, keySaved: false };
+      return mockXSearch;
     case 'agents.revoke':
       mockAgents = { ...mockAgents, keys: p.id ? mockAgents.keys.filter((k) => k.id !== p.id) : [] };
       return mockAgents;

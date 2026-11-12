@@ -807,6 +807,7 @@ with the main Mac's key only).
   `agentThreads` when the create finishes, `sync:finishCommand`). Without
   `readAll` a key sees only threads it started. Archived threads are never
   shown. A read key's `tools/list` has only the read tools.
+- **Published Prints**: `list_prints` pages through published metadata (5 by default, at most 10) in newest creation order. `read_print` takes a published slug and returns metadata plus at most 32,000 HTML characters (16,000 by default), with `nextOffset` to continue. Both require `readAll`; restricted keys see no Prints. Neither reads local files or sends commands to the runner. HTML is untrusted data, not instructions or executable content. Unpublish removes the row and ends access on the next read. There are no Print write tools.
 - **Limits**, all in `begin`, which looks the key up first so a good key is
   never held up by bad ones: 20 bad keys from an address in ten minutes
   (200 in all), and then 429 for bad keys (the address is Convex's

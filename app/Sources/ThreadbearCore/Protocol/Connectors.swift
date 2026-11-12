@@ -205,6 +205,26 @@ public struct AgentsList: Sendable, Hashable, Decodable {
     enum CodingKeys: String, CodingKey { case on, reason, url, keys }
 }
 
+/// xSearch.status (docs/protocol.md, "X search"): whether X search is on
+/// and an xAI key is saved. Never the key.
+public struct XSearchStatus: Sendable, Hashable, Decodable {
+    public var on: Bool
+    public var keySaved: Bool
+
+    public init(on: Bool = false, keySaved: Bool = false) {
+        self.on = on
+        self.keySaved = keySaved
+    }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        on = ((try? c.decodeIfPresent(Bool.self, forKey: .on)) ?? nil) ?? false
+        keySaved = ((try? c.decodeIfPresent(Bool.self, forKey: .keySaved)) ?? nil) ?? false
+    }
+
+    enum CodingKeys: String, CodingKey { case on, keySaved }
+}
+
 /// agents.connect: the new key, the key itself (shown once) and the address.
 public struct AgentConnected: Sendable, Decodable {
     public var key: AgentKey
@@ -239,6 +259,15 @@ public extension RPCClient {
 
     func agentsConnect(name: String, write: Bool, readAll: Bool) async throws -> AgentConnected {
         try await call("agents.connect", .object(["name": .string(name), "scope": .string(write ? "write" : "read"), "readAll": .bool(readAll)]), as: AgentConnected.self)
+    }
+
+    func xSearchStatus() async throws -> XSearchStatus {
+        try await call("xSearch.status", .object([:]), as: XSearchStatus.self)
+    }
+
+    /// Deletes the saved xAI key; the next x_search asks for one.
+    func xSearchForgetKey() async throws -> XSearchStatus {
+        try await call("xSearch.forgetKey", .object([:]), as: XSearchStatus.self)
     }
 
     /// One key, or every key with nil.

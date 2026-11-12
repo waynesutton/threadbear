@@ -1,0 +1,6 @@
+{ "kind": "report", "title": "Sales review, January to October", "data": "sales.csv",
+  "tiles": [ { "label": "Revenue", "value": "Revenue", "agg": "sum", "unit": "$" }, { "label": "Seats", "value": "Seats", "agg": "sum" } ],
+  "sections": [
+    { "heading": "Where it stands", "markdown": "Revenue grew every month. **North America** is still the biggest region, and **Pro** is most of the money.\n\n- Europe is close behind\n- Africa and the Middle East are small but growing" },
+    { "heading": "By region", "chart": { "type": "bar", "title": "Revenue by region", "by": "Region", "value": "Revenue", "unit": "$" } },
+    { "heading": "Next", "markdown": "1. Push Team seats in Europe\n2. Try a cheaper Starter plan in Latin America" } ] }

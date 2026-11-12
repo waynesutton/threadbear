@@ -741,6 +741,11 @@ type Settings = {
                         // to bring in Mike's releases, in days (1 to 365;
                         // 5 by default), only for important ones, or never
                         // (runner.json releases.bringIn; "Mike's releases")
+  printsWhenAsked?: boolean // Prints only when the user asks: create_print
+                        // after a message that doesn't ask for one puts an
+                        // approval card up first (Prints, "Only when asked").
+                        // Off by default; absent from an older runner, so a
+                        // client shows no switch
   models: {
     pool: string | null      // the pool whose Claude logins answer small
                              // jobs; "claude" by default, null: none, so
@@ -1177,12 +1182,15 @@ the summary and then the reply.
 | `projects.create` | `{ title: string, folders?: string[], goals?, state?, notes?, links?: { title?, url }[], threadIds?: string[], parentId?: string }` | `{ project: Project }`, made by Mike (`createdBy: "mike"`). `threadIds` are put in it, pinned. Folders must exist (`-32602` otherwise). `parentId` makes it a part of that project (Projects, "Parts") |
 | `projects.update` | `{ projectId, title?, folders?: string[], goals?, state?, notes?, links?: { title?, url }[], notion?: string, archived?: boolean }` | `{ project: Project }`. Replaces what's given. A new title is Mike's (`titleBy: "mike"`), so the librarian never renames it. A link that isn't http(s), or more than 8, is `-32602`. A change of folders reloads its threads' patches. `notion` is a Notion page or database address (notion.so, notion.site, notion.com, or a `collection://` data source), read straight away (see Project tasks); empty takes it off; anything else is `-32602`. `parentId` makes it a part of that project, or `""` (or `null`) its own project again (Projects, "Parts"); a parent that's itself or a part already, or a project that has parts of its own, is `-32602`, and one that doesn't exist `-32007` |
 | `pages.list` | `{ project?: string, thread?: string, none?: boolean, deleted?: boolean }` | `{ pages: Page[] }`, newest `updatedAt` first: in a project, made by a thread, or in no project; with `deleted`, only deleted ones (kept 7 days). Empty with the pages experiment off. A runner older than this answers `-32601` |
-| `pages.get` | `{ pageId, version?: number }` | `{ page: Page, file: string, versions: number[], markdown?: string }`: `file` is that version's (default the newest) `index.html` on this Mac; `versions` the ones still kept, oldest first; `markdown` a doc's text, for the editor. `-32602` for an unknown page or version, or with the experiment off |
+| `pages.get` | `{ pageId, version?: number }` | `{ page: Page, file: string, versions: number[], markdown?: string, mermaid?: string }`: `file` is that version's (default the newest) `index.html` on this Mac; `versions` the ones still kept, oldest first; `markdown` a doc's text and `mermaid` a diagram's source, for the editor. `-32602` for an unknown page or version, or with the experiment off |
 | `pages.saveDoc` | `{ pageId, markdown: string, title?: string }` | `{ page: Page }`: the user's edit of a doc, saved as a new version with `editedBy: "user"` |
+| `pages.saveDiagram` | `{ pageId, mermaid: string }` | `{ page: Page }`: renders Mermaid as a static diagram and saves the user's edit as a new version. Malformed or oversized source leaves the current version unchanged. `pages.get` returns diagram source as `mermaid?: string` |
 | `pages.restoreVersion` | `{ pageId, version: number }` | `{ page: Page }`: that version's files become a new, newest version. `-32602` for one no longer kept |
 | `pages.delete` | `{ pageId }` | `{ page: Page }` with `deletedAt`. Left out of lists and `pages.updated`; removed with its files 7 days later |
 | `pages.restore` | `{ pageId }` | `{ page: Page }`: a deleted page back. Nothing for one that isn't deleted |
 | `pages.export` | `{ pageId, dest: string, version?: number }` | `{ file: string }`: the version's files copied into `dest`, an absolute folder that's new or empty; `file` is its `index.html`. For Download |
+| `pages.publish` | `{ pageId }` | `{ page: Page, url?: string }`: sends the newest version's `index.html` to the Convex backend (`sync:publishPrint`, API 77) under a link whose slug the runner makes once (16 random bytes), and marks the page `published`; `url` is `<site>/p/<slug>`. From then on each new version goes up by itself. `-32602` with the reason for a live print, one with a script, one over 700,000 characters, sync off, or a backend older than 77 |
+| `pages.unpublish` | `{ pageId }` | `{ page: Page }`: the backend's row removed (`sync:unpublishPrint`), so the link stops working; the print stays on the Mac. Deleting a published print does the same |
 | `pages.refresh` | `{ pageId }` | `{ threadId, started: boolean }`: a message asking to make the page again from its `recipe` goes to the thread that made it, queued behind its turn; when that thread is gone, a new thread starts in the page's project's first folder (`started: true`). The runner never runs the recipe itself |
 | `pages.edit` | `{ pageId, text: string }` | `{ threadId, started: boolean }`: as `pages.refresh`, with the user's words for what should change |
 | `pages.setProjects` | `{ pageId, add?: string[], remove?: string[] }` | `{ page: Page }`. Mike's change, pinned. A page can be in several projects or none |
@@ -1198,12 +1206,14 @@ the summary and then the reply.
 | `agents.list` | `{}` | `{ on, reason?, url?, keys: AgentKey[] }`. Outside agents (an experiment, see "Outside agents"): `url` is the backend's `/mcp`; `reason` says why none can be made (sync off) |
 | `agents.connect` | `{ name?: string, scope?: "read" \| "write", readAll?: boolean }` | `{ key: AgentKey, secret, url }`. Makes a key, `read` and own threads only unless asked. `secret` is in this reply and nowhere else |
 | `agents.revoke` | `{ id?: string }` | As `agents.list`. One key, or every key with no `id` |
+| `xSearch.status` | `{}` | `{ on: boolean, keySaved: boolean }`. X search (an experiment, see "X search"): whether it's on and an xAI key is saved |
+| `xSearch.forgetKey` | `{}` | As `xSearch.status`. Deletes the saved xAI key, so the next `x_search` asks for one |
 | `librarian.run` | `{ threadId?: string }` | `{ librarian: LibrarianStatus }`. Queues a look at the thread now (reason `asked`), or with no `threadId`, at every thread it has never looked at (a backfill, newest first) |
 | `librarian.update` | `{ paused?: boolean }` | `{ librarian: LibrarianStatus }` |
 | `pools.list` | `{}` | `{ pools: Pool[] }` (see Pools) |
 | `pools.save` | `{ pools: Pool[] }` | `{ pools: Pool[] }`. Replaces the whole list in `runner.json` (`builtIn` is dropped; an empty list goes back to the built-in ones). `-32602` for a duplicate id, a blank id or title, an empty `accountIds`, or an account id the runner doesn't know. A blank or non-string `icon` is dropped. Every client gets `pools.updated` |
 | `settings.get` | `{}` | `{ settings: Settings }` |
-| `settings.update` | `{ defaultCwd?, idleMinutes?, maxLiveCLIs?, followMain?, bulletReplies?, oneReply?, labReview?, keepAwake?, bringIn?, models?: { pool?: string \| null, privateFolders? }, experiments?: { [id]: boolean } }` | `{ settings: Settings }`. Saves what's given to `runner.json` and applies it straight away, except `followMain` (next restart). `experiments` sets those switches under runner.json's `experiments`, keeping the rest; `Settings.experiments` lists every one as `{ id, name, does, on }`, oldest first. `defaultCwd` must be an existing folder, `idleMinutes` at least 1, `maxLiveCLIs` 1 to 20, `pool` a pool id or `null`, each `experiments` key an experiment's id; otherwise `-32602` saying which. Every client gets `settings.updated` |
+| `settings.update` | `{ defaultCwd?, idleMinutes?, maxLiveCLIs?, followMain?, bulletReplies?, oneReply?, labReview?, keepAwake?, bringIn?, printsWhenAsked?, models?: { pool?: string \| null, privateFolders? }, experiments?: { [id]: boolean } }` | `{ settings: Settings }`. Saves what's given to `runner.json` and applies it straight away, except `followMain` (next restart). `experiments` sets those switches under runner.json's `experiments`, keeping the rest; `Settings.experiments` lists every one as `{ id, name, does, on }`, oldest first. `defaultCwd` must be an existing folder, `idleMinutes` at least 1, `maxLiveCLIs` 1 to 20, `pool` a pool id or `null`, each `experiments` key an experiment's id; otherwise `-32602` saying which. Every client gets `settings.updated` |
 | `instructions.get` | `{}` | `{ instructions: StandingInstructions }` (see Standing instructions). `-32601` with the experiment off, and from an older runner: the app then shows no box |
 | `instructions.set` | `{ text: string }` | `{ instructions: StandingInstructions }`. Saves and signs the text, trimmed; an empty one clears them and removes both files. `-32602` for a `text` that isn't a string or is over 20,000 characters, `-32601` as for `instructions.get`. Every client gets `instructions.updated` |
 | `devices.list` | `{}` | `{ devices: Device[], site?: string, reason?: string }` (see Devices). `site` is the website's root while sync is on; `reason` says why nothing can pair when it's off |
@@ -4680,7 +4690,7 @@ A path with a `SKILL.md` is one skill; otherwise every `SKILL.md` under it
 Nothing it fetches is run. A page that isn't GitHub is read for an
 `npx skills add owner/repo` line or a `github.com/owner/repo` link.
 
-**Built-in skills** live in `runner/skills/<name>/`. Adding one copies it
+**Built-in skills** live in `runner/skills/<name>/`: Pele, make-print and bundle-report (the Prints recipes; make-print keeps its saved style in `~/.config/threadbear/print-style.json`, outside its folder). Adding one copies it
 into the store and, if it has a `package-lock.json`, runs `npm ci
 --omit=dev --ignore-scripts` there. **Suggested** are the built-in ones plus
 a short list in `src/skills.ts` (Anatomy), each until it's added.
@@ -4690,8 +4700,13 @@ made to work in the thread's CLI before the agent gets it
 (`src/skill-mentions.ts`; the transcript keeps what he typed): Claude Code
 runs a slash command only as a message's first word, so one later on gets
 a line after the message asking the agent to use that skill; Codex names
-skills as `$name`, so `/name` becomes `$name`. Nothing while the store is
-off.
+skills as `$name`, so `/name` becomes `$name`. Nothing for the store's
+own while it's off. Skills the CLI finds itself (`~/.claude/skills`, the
+folder's, plugins') count too, as the command list (`threads.commands`,
+`folders.commands`) last found them for the thread's login and folder
+(`listedSkills` in `src/runner/commands.ts`), except ones that run only
+as the first word (`userOnly`). The app asks for that list when a
+thread's box opens, so it's there before the first message.
 
 A change reaches running threads too: every live CLI is given a fresh one
 before its next message (the same conversation, resumed, with the new
@@ -5161,6 +5176,19 @@ env }`, the args the exact pin, with `-y` before it for npx) and its
 args and env and nothing more. Every remote add's message still forbids
 `stdio`.
 
+### X search
+
+An experiment (`xSearch`). Every thread's agent gets the `x_search`
+threadbear tool, which asks xAI's Grok to search X
+(`runner/src/x-search.ts`). Its xAI key is the user's own: the first call
+asks for it in a secret card and keeps it in `<home>/secrets/xai-api-key`
+(owner-only, masked like every file there), and a key xAI turns down is
+deleted. The app's Connectors panel shows an X search row while it's on,
+from `xSearch.status` (asked when the panel opens): whether a key is
+saved, and Forget key (`xSearch.forgetKey`). Neither ever sends the key.
+An older runner answers neither (method not found) and the row isn't
+shown.
+
 ### Outside agents
 
 An experiment (`outsideAgents`). An agent that runs in the cloud, like
@@ -5184,6 +5212,8 @@ every key.
 
 `AgentKey`: `{ id, name, scope: "read" | "write", readAll, createdAt,
 expiresAt, lastUsedAt?, expired }`.
+
+Outside-agent `list_prints { limit?, cursor? }` and `read_print { slug, offset?, limit? }` read only published Prints, and only for keys with `readAll: true`. A restricted key gets an empty list and not-found reads. Listing returns public metadata and a cursor in newest creation order; reading returns public metadata and a bounded HTML slice as data, with a next offset when truncated. Slugs identify a published Print across runners. No local source file, recipe or path is mirrored or returned. The existing key checks, expiry, revoke and rate limits apply, including for discovery; there are no Print write tools. Unpublish or delete ends access on the next call.
 
 ## Projects
 
@@ -5458,23 +5488,30 @@ type Page = {
   bytes: number
   live: boolean         // scripts allowed, run only after Run them in the side pane
   source?: string       // what made it ("bundle-analyzer summary"), so a rerun updates it
-  kind?: "page" | "chart" | "dashboard" | "report" | "doc" | "bundle"  // absent: "page"
+  kind?: "page" | "chart" | "dashboard" | "report" | "doc" | "diagram" | "bundle"  // absent: "page"
   recipe?: string       // how to make it again, for Refresh; an agent follows it
   editedBy?: "agent" | "user"  // who wrote the newest version
+  published?: { slug: string; at: string; version: number }  // while published: its link's slug, and the version last sent
   deletedAt?: string    // while deleted
   createdAt: string
   updatedAt: string
 }
 ```
 
-- **Stored** in `<home>/pages/`: `index.json`, and each version as a folder `<id>/v<n>/` holding `index.html` and the assets it names (`.css .svg .png .jpg .webp .gif .mp4 .webm .woff2`). The last 10 versions are kept. Never sent to Convex.
+- **Stored** in `<home>/pages/`: `index.json`, and each version as a folder `<id>/v<n>/` holding `index.html` and the assets it names (`.css .svg .png .jpg .webp .gif .mp4 .webm .woff2`). The last 10 versions are kept. Nothing about a print goes to Convex unless the user publishes it.
+- **Published** (opt-in, per print, API 77): `pages.publish` puts the newest `index.html` (only that file, static, at most 700,000 characters) in the backend's `prints` table. `prints:view { slug }` answers the website's `/p/<slug>` page for anyone with the link; it draws the HTML in a frame with an empty `sandbox` behind the same Content-Security-Policy as a page in a reply (`web/src/print-doc.ts`), so it can't run, load or go anywhere. `prints:list { token }` gives the phone and website the published ones without their HTML. The Mac asks before publishing; an agent's `publish_print` always asks the user.
 - **Static by default.** A page whose HTML has `<script` is refused unless it was made `live`. Links, `.js` and `.json` files are refused in a page folder. `index.html` is at most 1 MB and the folder 25 MB.
 - **Projects.** Made with no `projects`, a page joins its thread's project when the thread is pinned to exactly one; `[]` means none.
 - **Docs.** A page given as `markdown` is a doc: the runner draws it (`runner/src/page-doc.ts`, a small escaped subset: headings, lists, task lists, tables, quotes, code, http(s) and mailto links; no HTML passes through) and keeps the text as `source.md` beside it, so the user can edit it (`pages.saveDoc`) and the next agent starts from their words.
+- **Diagrams.** A Print given as `mermaid` is a diagram. The runner renders static SVG with the app's pinned Pele bundle, keeps `source.mmd`, and returns it from `pages.get` and `read_print`. Edit Text saves through `pages.saveDiagram`. Source and generated HTML are size-limited; rendering has a timeout. Source is never executed as code. Restore and export keep the Mermaid source. Only the resulting static HTML goes to Convex when published.
 - **Deleted** pages are kept 7 days (`pages.restore`), then removed with their files when the store next loads.
-- **Agent tools:** `create_print` (`kind`, `markdown`, `recipe`), `update_print` (`markdown`, `recipe`, `restoreVersion`), `list_prints` (`deleted`), `read_print` (`version`; shows the recipe, the kept versions and a doc's markdown), `delete_print`, `restore_print`, `export_print`, `add_print_to_project`, `remove_print_from_project`, only while the experiment is on. `list_prints` and `read_print` never ask. The older arguments still work, and so does each tool's name from before the rename (`create_page` and the rest), for sessions that loaded them.
+- **Agent tools:** `create_print` (`kind`, `markdown`, `mermaid`, `recipe`), `update_print` (`markdown`, `mermaid`, `recipe`, `restoreVersion`), `list_prints` (`deleted`), `read_print` (`version`; shows the recipe, kept versions and Markdown or Mermaid source), `delete_print`, `restore_print`, `export_print`, `publish_print` (always asks the user), `unpublish_print`, `add_print_to_project`, `remove_print_from_project`, only while the experiment is on. `list_prints` and `read_print` never ask. The older arguments still work, and so does each tool's name from before the rename (`create_page` and the rest), for sessions that loaded them.
+- **Only when asked.** With `Settings.printsWhenAsked` on, `create_print`'s description says to make a Print only when the user asks for one, and the runner checks: when the thread's latest `user.message` doesn't name a print, chart, graph, dashboard or diagram (whole words, either number), the call puts an approval card up first ("Make the print "<title>"? You asked to approve Prints you didn't ask for."). Deny makes nothing and tells the agent so. Other Print tools act on one that exists and don't ask.
+- **Updates ask once.** In Ask before edits, a Claude session that was allowed one `update_print` (or `update_page`) on a Print id lets later updates to that id through without a card (`printGrants` in `adapters/claude/adapter.ts`), for as long as the session lives. Only an Allow counts; a Deny asks again next time. Other Prints, and other Print tools, still ask. Codex threads ask every time.
 - **Skills.** `make-print` builds charts, dashboards and reports from CSV, TSV, JSON or XLSX through a spec, and exports PDFs; `bundle-report` is its recipe for Convex bundle size. Both live in the user's skills folder, not the repo.
 - **In a reply**, an agent shows a print with a ```` ```print <id> ```` block (```` ```page ````, its name before the rename, still works; the id in the info string, or alone on the fence's one line; `PageFence`). The Mac app draws it as a card (`PageCardCell`, "Preview on top", Wayne picked it on 10 Nov 2026): the top of the newest version's `index.html` from `pages.get`, drawn off screen under the html block's lockdown at 1080 by 470 and scaled down, over a footer with the kind, title, version and age and Open, Refresh and a ⋯ menu. It follows `pages.updated`, so every card naming a page shows its newest version; a version newer than the first made in the last 15 minutes is marked "New version". With the experiment off, or in an app that doesn't know pages, the block shows as code.
+- **In the Mac app's Highlights and rail** (app-side only, from `pages.list` and `pages.updated`): Highlights has a Prints section for the thread's own (`ownerThread`), and the rail's built-in `threadbear.prints` panel lists every Print with its projects. Neither is a patch panel, and another runner's thread doesn't show the rail button.
+- **On the website**, the same block is a card too (`print-card.tsx`, read with the Mac's rules in `web/src/print-fence.ts`). Its title, kind, version and summary come from `prints:list` (API 77), and Open goes to the Print's `/p/<slug>` page. A Print that isn't published has no row, so its card says it's kept on the Mac that made it. It never reads the Mac's files, and a shared page (`/s/`) has no list, so its cards all say that. The iPhone app still shows the block as code.
 
 ## Schedules
 
@@ -6904,6 +6941,8 @@ anyone's); "any runner" is any good key. Anything not sorted is owner only.
 | `dropShareImages` | its own | the thread's row is its runner's; none: nothing |
 | `setProjects` | its own | `runnerId` |
 | `upsertProjects` | its own | `runnerId` |
+| `publishPrint` | its own | `runnerId` |
+| `unpublishPrint` | its own | `runnerId` |
 | `projectIcons` | its own | `runnerId` |
 | `setProjectIcon` | its own | `runnerId`, and the file no other runner's row uses |
 | `iconUploadUrl` | any runner | a one-use URL, tied to the key that asked, that records the upload as its runner's; 300 an hour, 10 MB a file, 200 MB an hour |

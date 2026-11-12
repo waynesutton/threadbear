@@ -494,7 +494,7 @@ Tools/dev-app.sh do '{"cmd":"collapse","highlightSection":"subagents"}'   # a Hi
 Tools/dev-app.sh do '{"cmd":"point","settings":true,"x":200,"y":262,"toX":215,"toY":345,"holdMs":800}'   # real events in the Settings window; holdMs waits mid-drag for a `shot`
 Tools/dev-app.sh do '{"cmd":"click","tip":"Hide Links"}'   # presses a SwiftUI control by its tooltip, without moving the pointer
 Tools/dev-app.sh do '{"cmd":"error","text":"Thread not found"}'   # fills the error bar ({"cmd":"error"} clears it)
-Tools/dev-app.sh do '{"cmd":"terminal","send":"ls\r"}'   # types into the Terminal panel's open tab ("new":true adds one, "rename" names it, "hover":true underlines the first link); answers its tabs and the links ⌘-click finds
+Tools/dev-app.sh do '{"cmd":"terminal","type":"ls\r"}'   # types into the Terminal panel's open tab ("new":true adds one, "rename" names it, "hover":true underlines the first link); answers its tabs and the links ⌘-click finds
 Tools/dev-app.sh do '{"cmd":"preview","path":"/a/folder","search":"port","hit":12,"file":"src/app.ts"}'   # a folder with its file search typed in, then a click on that hit; "find":true is the bar's magnifying glass, "place":true says where the open file is scrolled ("scrollTo" moves it)
 Tools/dev-app.sh dump            # sidebar, rows (id, kind, height, open, text), panels, actions, composer, banner
 Tools/dev-app.sh shot /tmp/a.png # the window alone

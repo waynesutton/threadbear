@@ -2,6 +2,17 @@ import XCTest
 @testable import ThreadbearCore
 
 final class PageTests: XCTestCase {
+    func testDiagramSourceAndIconDecodeWithoutAffectingOlderPages() throws {
+        let json = #"{"page":{"id":"pg_flow","title":"Flow","kind":"diagram"},"file":"/flow/index.html","versions":[1],"mermaid":"flowchart LR\n A --> B"}"#
+        let result = try JSONDecoder().decode(PageGetResult.self, from: Data(json.utf8))
+        XCTAssertTrue(result.page.isDiagram)
+        XCTAssertTrue(result.page.hasEditableSource)
+        XCTAssertFalse(result.page.isDoc)
+        XCTAssertEqual(result.page.symbol, "point.3.connected.trianglepath.dotted")
+        XCTAssertEqual(result.mermaid, "flowchart LR\n A --> B")
+        XCTAssertNil(try JSONDecoder().decode(PageGetResult.self, from: Data(#"{"page":{"id":"pg_old","title":"Old"},"file":"/old","versions":[1]}"#.utf8)).mermaid)
+    }
+
     func testAPageDecodesAsTheRunnerSendsIt() throws {
         let json = """
         {"pages":[{"id":"pg_bundle_size","title":"Bundle size","summary":"20.22 MB total","ownerThread":"th1",
@@ -19,6 +30,32 @@ final class PageTests: XCTestCase {
         XCTAssertFalse(page.isIn(project: "p_other"))
         XCTAssertEqual(page.projects.map(\.pinned), [true, false])
         XCTAssertEqual(page.updatedAt, ISO8601.parse("2026-11-10T09:30:00.000Z"))
+    }
+
+    func testASidePaneShowingAPrintFollowsItsNewestVersion() throws {
+        let page = { (id: String, v: Int, deleted: Bool) in
+            try JSONDecoder().decode(Page.self, from: Data(#"{"id":"\#(id)","title":"T","version":\#(v)\#(deleted ? #","deletedAt":"2026-11-11T00:00:00Z""# : "")}"#.utf8))
+        }
+        let shown = "/Users/w/Library/Application Support/Threadbear/pages/pg_sales/v2/index.html"
+        XCTAssertEqual(PagePath.parse(shown)?.id, "pg_sales")
+        XCTAssertEqual(PagePath.parse(shown)?.version, 2)
+        let was = [try page("pg_sales", 2, false)]
+        XCTAssertEqual(PagePath.newer(than: shown, before: was, after: [try page("pg_other", 9, false), try page("pg_sales", 4, false)]),
+                       "/Users/w/Library/Application Support/Threadbear/pages/pg_sales/v4/index.html")
+        XCTAssertNil(PagePath.newer(than: shown, before: was, after: was), "already the newest")
+        XCTAssertNil(PagePath.newer(than: shown, before: [try page("pg_sales", 3, false)], after: [try page("pg_sales", 4, false)]),
+                     "an older version opened on purpose stays")
+        XCTAssertNil(PagePath.newer(than: shown, before: was, after: [try page("pg_sales", 5, true)]), "a deleted one stays as it was")
+        XCTAssertNil(PagePath.newer(than: shown, before: was, after: []))
+        for other in ["/Users/w/dev/site/v2/index.html", "/Users/w/pages/pg_a/v2/chart.svg", "/Users/w/pages/pg_a/vx/index.html", "index.html"] {
+            XCTAssertNil(PagePath.parse(other), other)
+        }
+    }
+
+    func testAPublishedPageCarriesItsLinksSlug() throws {
+        let json = #"{"id":"pg_a","title":"A","version":2,"published":{"slug":"abcDEF0123456789abcdef","at":"2026-11-10T09:30:00Z","version":2}}"#
+        XCTAssertEqual(try JSONDecoder().decode(Page.self, from: Data(json.utf8)).publishedSlug, "abcDEF0123456789abcdef")
+        XCTAssertNil(try JSONDecoder().decode(Page.self, from: Data(#"{"id":"pg_a","title":"A"}"#.utf8)).publishedSlug)
     }
 
     func testAPageInNoProjectIsInNone() throws {
@@ -43,6 +80,25 @@ final class PageTests: XCTestCase {
         XCTAssertEqual(page.kindLabel, "Doc")
         XCTAssertEqual(old.keptVersions, [2, 1])
         XCTAssertFalse(old.editedByUser)
+    }
+
+    func testPrintRowsForHighlightsAndTheRailList() throws {
+        let json = #"""
+        {"pages":[
+          {"id":"pg_old","title":"Old","ownerThread":"th1","version":1,"kind":"chart","projects":[{"id":"p_tb"}],"updatedAt":"2026-11-10T09:00:00Z"},
+          {"id":"pg_new","title":"New","ownerThread":"th1","version":3,"kind":"doc","projects":[{"id":"p_tb"},{"id":"p_pod"},{"id":"p_gone"}],"updatedAt":"2026-11-11T09:00:00Z"},
+          {"id":"pg_other","title":"Other","ownerThread":"th2","version":1,"projects":[],"updatedAt":"2026-11-11T08:00:00Z"},
+          {"id":"pg_deleted","title":"Deleted","ownerThread":"th1","version":2,"projects":[],"updatedAt":"2026-11-11T10:00:00Z","deletedAt":"2026-11-11T10:00:00Z"}
+        ]}
+        """#
+        let pages = try JSONDecoder().decode(PagesResult.self, from: Data(json.utf8)).pages
+        XCTAssertEqual(PrintRows.made(by: "th1", in: pages).map(\.id), ["pg_new", "pg_old"], "newest first, deleted left out")
+        XCTAssertEqual(PrintRows.all(pages).map(\.id), ["pg_new", "pg_other", "pg_old"])
+        let titles = ["p_tb": "Threadbear", "p_pod": "Poddle"]
+        let new = try XCTUnwrap(pages.first { $0.id == "pg_new" })
+        XCTAssertEqual(PrintRows.projects(of: new, titles: titles), "Threadbear, Poddle", "an unknown project is left out")
+        XCTAssertEqual(PrintRows.projects(of: try XCTUnwrap(pages.first { $0.id == "pg_other" }), titles: titles), "No project")
+        XCTAssertEqual(PrintRows.kindAndVersion(new), "Doc · v3")
     }
 }
 

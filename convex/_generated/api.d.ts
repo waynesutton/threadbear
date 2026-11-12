@@ -17,6 +17,7 @@ import type * as mcpRpc from "../mcpRpc.js";
 import type * as moves from "../moves.js";
 import type * as phone from "../phone.js";
 import type * as projectHeads from "../projectHeads.js";
+import type * as prints from "../prints.js";
 import type * as profile from "../profile.js";
 import type * as projectNotes from "../projectNotes.js";
 import type * as push from "../push.js";
@@ -49,6 +50,7 @@ declare const fullApi: ApiFromModules<{
   moves: typeof moves;
   phone: typeof phone;
   projectHeads: typeof projectHeads;
+  prints: typeof prints;
   profile: typeof profile;
   projectNotes: typeof projectNotes;
   push: typeof push;
