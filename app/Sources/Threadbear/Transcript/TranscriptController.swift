@@ -1053,10 +1053,19 @@ final class TranscriptController: NSObject, NSTableViewDataSource, NSTableViewDe
         if composerCard?.page != next, composerCard?.showAsk(next) == true {
             app.focusComposer(thread.id)
         } else {
+            #if DEBUG
+            Self.returnBeeps += 1
+            #endif
             NSSound.beep()
         }
         return true
     }
+
+    #if DEBUG
+    /// The beeps when Return has nowhere to go on the card, for the
+    /// automation's `beeps` (a script can't hear one).
+    nonisolated(unsafe) static var returnBeeps = 0
+    #endif
 
     /// Puts the cursor in ask `ask`'s Something else box on the card from `seq`.
     /// The open card is in the composer (ComposerCard).

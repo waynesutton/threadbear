@@ -41,9 +41,9 @@ struct PendingCard: View {
     private var card: some View {
         VStack(alignment: .leading, spacing: 12) {
             switch pending {
-            case let .approval(id, _, _, options, _) where plan != nil:
+            case let .approval(id, _, _, options, _, _) where plan != nil:
                 planCard(id, plan: plan!, options: options)
-            case let .approval(id, name, title, options, inputSummary):
+            case let .approval(id, name, title, options, inputSummary, _):
                 Label(title, systemImage: "hand.raised")
                     .font(.headline)
                 if let inputSummary, !inputSummary.isEmpty {
