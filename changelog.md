@@ -6,6 +6,10 @@ How Prints work today, what's missing and what's next: [Prints status](https://g
 
 ## [Unreleased]
 
+### Fixed
+
+- Network probe checks no longer fail runner updates just because a busy Mac delays test execution.
+
 ### Added
 
 - Only make Prints when I ask, in Settings > General > Prints. Prints stay on, but a thread asks before making one your message didn't ask for.

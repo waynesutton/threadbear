@@ -10,9 +10,11 @@ Status and gap list: prds/prints-status.md
 
 ## In Progress
 
-Nothing.
+- [ ] Land the network probe test fix and verify the runner update. prds/runner-update-probe-tests.md
 
 ## Completed
+
+- [x] 2026-11-12 04:54 UTC Remove network probe tests' wall-clock assumptions using a controlled socket and mock clock. runner/test/unit/net-probe.test.ts. Verified: four focused tests, runner typecheck, and mutation checks rejecting a missing absolute deadline and missing response-size limit. prds/runner-update-probe-tests.md
 
 - [x] 2026-11-11 Prints in Highlights and on the right-hand rail. Highlights lists the Prints a thread made; a Prints button under Files lists every Print, each with its projects or "No project", and opens it in the side pane (`PrintRows`, `PrintRow`, `PrintsList`, `BuiltinPanels.prints`). Wayne decided Prints stays an experiment. Verified: PageTests, TipsTests, EveryClickShowsTests; seen in a debug app against a dev runner with one Print in a project and one in none.
 

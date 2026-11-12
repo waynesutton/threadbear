@@ -1,5 +1,9 @@
 # Files
 
+## Runner checks
+
+- `runner/test/unit/net-probe.test.ts` checks proxy deadlines and response-size limits with controlled time, plus real TCP and TLS connections.
+
 ## Diagram Prints
 
 - `runner/src/page-diagram.ts` renders Mermaid as static SVG and themed HTML with source limits, render timeouts and passive SVG checks.
