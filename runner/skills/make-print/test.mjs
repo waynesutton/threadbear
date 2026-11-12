@@ -208,3 +208,25 @@ test("Convex API map: every function, gaps first, and a failed command stops", a
   assert.throws(() => apiSpec(null), /no "functions" list/);
   assert.equal(apiSpec({ url: "https://x.convex.cloud", functions: [] }).kind, "report");
 });
+
+// Installed, this folder sits under "Application Support": every command
+// must still run from a path with a space (it silently did nothing, 12 Nov).
+test("the commands run from a folder with a space in its path", async () => {
+  const { cpSync, existsSync, mkdtempSync } = await import("node:fs");
+  const { tmpdir } = await import("node:os");
+  const { execFileSync } = await import("node:child_process");
+  const root = mkdtempSync(join(tmpdir(), "make print "));
+  const skill = join(root, "Application Support", "make-print");
+  cpSync(HERE, skill, { recursive: true, filter: (p) => !p.includes("node_modules") });
+  const run = (...args) => execFileSync(process.execPath, args, { cwd: root, env: { ...process.env, MAKE_PRINT_STYLE: join(root, "style.json") } }).toString();
+  const state = join(root, "state.json");
+  run(join(skill, "progress.mjs"), state, "init", "T", "t");
+  run(join(skill, "progress.mjs"), state, "step", "One", "done");
+  assert.ok(existsSync(join(root, "page", "index.html")), "progress wrote its page");
+  run(join(skill, "build.mjs"), join(skill, "fixtures", "dashboard.json"), join(root, "built"));
+  assert.ok(existsSync(join(root, "built", "index.html")), "build wrote its page");
+  run(join(skill, "insights.mjs"), join(skill, "fixtures", "insights.json"), join(root, "insights"));
+  assert.ok(existsSync(join(root, "insights", "index.html")));
+  run(join(skill, "apimap.mjs"), join(skill, "fixtures", "functions.json"), join(root, "api"));
+  assert.ok(existsSync(join(root, "api", "index.html")));
+});

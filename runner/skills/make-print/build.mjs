@@ -6,7 +6,7 @@
 // Writes <out dir>/index.html: static HTML, CSS and SVG, no script, in the
 // Prints look, light or dark by the viewer's appearance. Paths in the spec
 // are relative to the spec file. SKILL.md has the spec.
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync, realpathSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { bar, column, fmt, line, pie, segmented, table, tiles } from "./charts.mjs";
@@ -14,7 +14,7 @@ import { group, numbers, readData, total } from "./data.mjs";
 import { markdown } from "./md.mjs";
 import { BASE_CSS, themeCss } from "./theme.mjs";
 import { PROGRESS_CSS, progressBody } from "./progress-view.mjs";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 
 // The user's style, asked once (SKILL.md). Kept outside this folder, which
 // Threadbear replaces when the skill updates; MAKE_PRINT_STYLE moves it.
@@ -139,7 +139,11 @@ ${body}
   return { html, kind };
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) {
+// Run directly, not imported. import.meta.url is the real, URL-encoded
+// path, so argv[1] is compared the same way: installed, this folder is
+// under "Application Support" and reached through a link, and a plain
+// file:// string matched neither, so the script did nothing (12 Nov).
+if (process.argv[1] && import.meta.url === pathToFileURL(realpathSync(process.argv[1])).href) {
   const [specPath, outDir] = process.argv.slice(2);
   if (!specPath || !outDir) {
     console.error("usage: node build.mjs <spec.json> <out dir>");

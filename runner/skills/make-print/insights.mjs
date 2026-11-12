@@ -8,7 +8,8 @@
 // or over their read limits (https://docs.convex.dev/cli/reference/insights).
 // Only the occRetried shape has been seen in real output; the other kinds are
 // read by their kind and severity, with their count found as best it can be.
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { pathToFileURL } from "node:url";
+import { mkdirSync, readFileSync, writeFileSync, realpathSync } from "node:fs";
 import { join } from "node:path";
 import { buildPage } from "./build.mjs";
 
@@ -109,7 +110,11 @@ export function insightsSpec(json, { title } = {}) {
   };
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) {
+// Run directly, not imported. import.meta.url is the real, URL-encoded
+// path, so argv[1] is compared the same way: installed, this folder is
+// under "Application Support" and reached through a link, and a plain
+// file:// string matched neither, so the script did nothing (12 Nov).
+if (process.argv[1] && import.meta.url === pathToFileURL(realpathSync(process.argv[1])).href) {
   const [input, outDir] = process.argv.slice(2);
   if (!input || !outDir) {
     console.error("Usage: node insights.mjs <insights.json> <out dir>");

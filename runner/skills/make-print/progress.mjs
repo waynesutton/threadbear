@@ -14,7 +14,8 @@
 // Every change also rebuilds <out dir> when the state has one (`init`
 // remembers the folder next to the state as page/). Times are the real
 // clock's, in ISO, so the page can say how long ago each thing happened.
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { pathToFileURL } from "node:url";
+import { existsSync, mkdirSync, readFileSync, writeFileSync, realpathSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { buildPage } from "./build.mjs";
 
@@ -83,7 +84,11 @@ export function apply(state, cmd, args, at = now()) {
   return s;
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) {
+// Run directly, not imported. import.meta.url is the real, URL-encoded
+// path, so argv[1] is compared the same way: installed, this folder is
+// under "Application Support" and reached through a link, and a plain
+// file:// string matched neither, so the script did nothing (12 Nov).
+if (process.argv[1] && import.meta.url === pathToFileURL(realpathSync(process.argv[1])).href) {
   const [file, cmd, ...args] = process.argv.slice(2);
   if (!file || !cmd) {
     console.error("usage: node progress.mjs <state.json> init|step|ask|answer|stuck|unstuck|deliver|note|build ...");
