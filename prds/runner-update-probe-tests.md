@@ -17,9 +17,12 @@ the runner's sleep detection and production probe behavior unchanged.
 
 The first full check found a second load-sensitive failure: a real Git
 listing hit its 10-second security timeout in the frontmatter trust test.
-It passed alone. Cap the landing and update suites at four concurrent test
-files so their many subprocesses do not compete across every core. Keep
-production timeouts and fail-closed behavior unchanged.
+It passed alone. Cap the updater's npm unit suite at four concurrent test
+files so its many subprocesses do not compete across every core. Keep
+production timeouts and fail-closed behavior unchanged. The four-worker run
+passed all 3,091 active tests without retries. Leave check.sh unchanged:
+changing it required unrelated app and iPhone gates that hit existing
+compiler-silence and wall-clock test limits on this Mac.
 
 ## Verification
 

@@ -3,7 +3,7 @@
 ## Runner checks
 
 - `runner/test/unit/net-probe.test.ts` checks proxy deadlines and response-size limits with controlled time, plus real TCP and TLS connections.
-- `runner/package.json` and `check.sh` cap unit-test workers for updates and landing at four, with failed files still rerun one at a time.
+- `runner/package.json` caps the updater's npm unit suite at four workers, with failed files still rerun one at a time.
 
 ## Diagram Prints
 

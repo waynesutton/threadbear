@@ -233,9 +233,7 @@ runner_unit_tests() {
   local name="runner unit tests" dir="$ROOT/runner"
   local log="$LOGS/runner-unit-tests.log" list="$LOGS/runner-unit-tests.failed"
   local start=$SECONDS
-  # Match package.json: leave room for threads and the tests' own Git
-  # subprocesses, instead of saturating every core with test workers.
-  local run=(node --import=./test/helpers/clean-env.ts --test --test-concurrency=4 --test-timeout=300000 --test-force-exit --test-reporter=spec)
+  local run=(node --import=./test/helpers/clean-env.ts --test --test-timeout=300000 --test-force-exit --test-reporter=spec)
   if (cd "$dir" && "${run[@]}" --test-reporter-destination=stdout \
       --test-reporter=./test/helpers/failed-files-reporter.mjs --test-reporter-destination="$list" \
       "test/unit/**/*.test.ts") >"$log" 2>&1; then
