@@ -1,6 +1,8 @@
 # Changelog
 
-How Prints work today and what's still missing: [prds/prints-status.md](prds/prints-status.md).
+## Prints
+
+How Prints work today, what's missing and what's next: [Prints status](https://github.com/waynesutton/threadbear/blob/main/prds/prints-status.md).
 
 ## [Unreleased]
 
