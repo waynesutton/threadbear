@@ -1234,10 +1234,12 @@ struct PrintRow: View {
         }
         .busy(app.isBusy(BusyKey.page(page.id)))
         .tip("Open \(page.title) beside the thread")
+        // The project page's whole menu: Show in Finder, Delete and the rest.
         .iconContextMenu {
-            Button("Open Here", systemImage: "sidebar.right") { app.openPageHere(page) }
-            Button("Open in a Window", systemImage: "macwindow") { app.openPage(page) }
-            Button("Refresh", systemImage: "arrow.clockwise") { app.refreshPage(page) }
+            PageMenu(page: page,
+                     ask: { PageSheets.present { close in AskPageSheet(page: page, close: close) } },
+                     edit: { PageSheets.present { close in EditDocSheet(page: page, close: close) } },
+                     openHere: { app.openPageHere(page) })
         }
     }
 }

@@ -196,6 +196,21 @@ extension AppModel {
         }
     }
 
+    /// Shows the Print's newest index.html, in its version's folder, in the
+    /// Finder: where its files are, to copy, attach or look through.
+    func revealPage(_ page: Page) {
+        guard let client else { return }
+        whileBusy(BusyKey.page(page.id)) { [self] in
+            do {
+                let got = try await client.getPage(page.id)
+                notePrintsRoot(got.file)
+                NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: got.file)])
+            } catch {
+                show(error)
+            }
+        }
+    }
+
     /// Takes the row away at once; the runner keeps it 7 days.
     func deletePage(_ page: Page) {
         guard let client else { return }

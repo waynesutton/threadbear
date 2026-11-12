@@ -9,6 +9,7 @@ enum PageMenuBuilder {
     static func menu(for page: Page, app: AppModel) -> NSMenu {
         let menu = NSMenu()
         menu.addItem(ClosureItem("Open") { app.openPage(page) })
+        menu.addItem(ClosureItem("Show in Finder") { app.revealPage(page) })
         menu.addItem(ClosureItem("Refresh") { app.refreshPage(page) })
         menu.addItem(ClosureItem("Edit with Agent…") {
             PageSheets.present { close in AskPageSheet(page: page, close: close) }

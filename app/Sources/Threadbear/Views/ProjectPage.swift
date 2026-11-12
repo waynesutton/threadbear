@@ -589,15 +589,20 @@ private struct PageRow: View {
     }
 }
 
-/// The same items in the row's ... menu and its right-click menu.
-private struct PageMenu: View {
+/// The same items in the row's ... menu and its right-click menu, and on a
+/// Print's row in Highlights and the rail's Prints list (PrintRow), where
+/// `openHere` puts Open Beside the Thread first.
+struct PageMenu: View {
     @Environment(AppModel.self) private var app
     let page: Page
     let ask: () -> Void
     let edit: () -> Void
+    var openHere: (() -> Void)? = nil
 
     var body: some View {
-        Button("Open", systemImage: "macwindow") { app.openPage(page) }
+        if let openHere { Button("Open Beside the Thread", systemImage: "sidebar.right") { openHere() } }
+        Button(openHere == nil ? "Open" : "Open in a Window", systemImage: "macwindow") { app.openPage(page) }
+        Button("Show in Finder", systemImage: "folder") { app.revealPage(page) }
         Button("Refresh", systemImage: "arrow.clockwise") { app.refreshPage(page) }
         Button("Edit with Agent…", systemImage: "sparkles") { ask() }
         if page.hasEditableSource { Button("Edit Text…", systemImage: "pencil") { edit() } }
