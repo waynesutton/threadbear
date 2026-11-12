@@ -32,7 +32,6 @@ The agent side is the `create_print`, `update_print`, `read_print`, `list_prints
 
 ## What's missing
 
-- **Editable CSV sheets.** Deferred by Wayne. The half-done work sits uncommitted in the slot-12 worktree.
 - **Live data.** Live Prints can run scripts, but nothing pushes new data into an open one. The PRD's postMessage phase isn't built.
 - **The project page still opens a window.** Cards, Highlights and the rail's Prints list open in the side pane. The project page has no thread beside it to open into.
 - **Another Mac's Prints.** The rail's Prints list shows this Mac's Prints only, and hides for a thread on another runner.
@@ -43,6 +42,7 @@ The agent side is the `create_print`, `update_print`, `read_print`, `list_prints
 
 ## Not planned
 
+- **Editable CSV sheets.** Dropped by Wayne on 12 Nov. The half-done work in the slot-12 worktree was never committed and isn't part of Prints.
 - **The iPhone app.** Wayne isn't shipping his own iPhone app, and changes under `ios/` would clash with Mike's. Print blocks show as text on the phone. Leave `ios/` alone unless a feature can't work without it.
 
 ## Not yet seen on screen
@@ -53,8 +53,7 @@ The agent side is the `create_print`, `update_print`, `read_print`, `list_prints
 ## What's next
 
 1. Check the insights report against a deployment with read-limit insights. Only write conflicts (`occRetried`) have shown up in real output so far, so the other kinds' counts are a best guess.
-2. Pick the CSV sheets work back up from slot-12, or drop it.
-3. Ask once per Print on Codex threads too.
-4. Group the rail's Prints list by project if it gets long.
+2. Ask once per Print on Codex threads too.
+3. Group the rail's Prints list by project if it gets long.
 
 The optional HyperFrames share clip stays parked until one of the above ships.

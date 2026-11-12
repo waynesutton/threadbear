@@ -4,7 +4,6 @@
 
 Status and gap list: prds/prints-status.md
 
-- [ ] Deferred by Wayne: editable CSV sheets. Preserve the uncommitted work in slot-12; leave it out of diagram and outside-agent changes.
 - [ ] Prints: ask once per Print on Codex threads too.
 - [ ] Prints: optional HyperFrames share clip for any print. prds/threadbear-pages.md
 
