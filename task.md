@@ -9,9 +9,11 @@ Status and gap list: prds/prints-status.md
 
 ## In Progress
 
-- [ ] Land the network probe test fix and verify the runner update. prds/runner-update-probe-tests.md
+Nothing.
 
 ## Completed
+
+- [x] 2026-11-12 05:15 UTC Cap landing and update unit suites at four workers to reduce contention from their Git subprocesses. check.sh, runner/package.json. Verified: actual npm test script with eight fixture files never exceeded four workers; runner typecheck, 26 probe and deploy-step tests, shell syntax. prds/runner-update-probe-tests.md
 
 - [x] 2026-11-12 04:54 UTC Remove network probe tests' wall-clock assumptions using a controlled socket and mock clock. runner/test/unit/net-probe.test.ts. Verified: four focused tests, runner typecheck, and mutation checks rejecting a missing absolute deadline and missing response-size limit. prds/runner-update-probe-tests.md
 

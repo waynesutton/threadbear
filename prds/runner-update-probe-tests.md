@@ -15,6 +15,12 @@ Drive the probe deadline and response-size checks with a controlled socket
 and Node's mock clock. Keep the real TCP and TLS integration checks. Leave
 the runner's sleep detection and production probe behavior unchanged.
 
+The first full check found a second load-sensitive failure: a real Git
+listing hit its 10-second security timeout in the frontmatter trust test.
+It passed alone. Cap the landing and update suites at four concurrent test
+files so their many subprocesses do not compete across every core. Keep
+production timeouts and fail-closed behavior unchanged.
+
 ## Verification
 
 Run the focused probe tests and typecheck. Confirm the deadline test rejects

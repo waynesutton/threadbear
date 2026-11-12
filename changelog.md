@@ -9,6 +9,7 @@ How Prints work today, what's missing and what's next: [Prints status](https://g
 ### Fixed
 
 - Network probe checks no longer fail runner updates just because a busy Mac delays test execution.
+- Landing and runner update checks run at most four unit-test files at once, reducing contention on busy machines.
 
 ### Added
 
