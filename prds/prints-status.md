@@ -1,6 +1,6 @@
 # Where Prints stand
 
-Updated 2026-11-11, after the third round. On main at `b221756c`, pushed to GitHub. Prints stay the `pages` experiment, off by default and on for Wayne. Wayne decided on 11 Nov to keep it an experiment rather than make it standard. The full user-facing walkthrough is the Prints section of `docs/guide.md`. This page is the short version plus the gap list.
+Updated 2026-11-12, after the Convex insights report. On main at `b221756c`, pushed to GitHub. Prints stay the `pages` experiment, off by default and on for Wayne. Wayne decided on 11 Nov to keep it an experiment rather than make it standard. The full user-facing walkthrough is the Prints section of `docs/guide.md`. This page is the short version plus the gap list.
 
 ## How Prints work
 
@@ -24,9 +24,10 @@ A Print is a page a thread makes for you to keep. Ask for a chart, a dashboard, 
 | On the website | A reply's Print block is a card. Published: title, kind, version and Open to its `/p/` page. Not published: says it's kept on the Mac |
 | In Highlights | A thread's Highlights list the Prints it made, under Prints, each with its kind, version and the projects it's in, or "No project". A click opens it beside the thread |
 | Prints on the rail | A Prints button on the right-hand rail, under Files, while Prints is on and at least one exists. It lists every Print, newest first, with its projects. A click opens it in the pane; Back returns to the list |
+| Convex insights | "Make a Convex insights report" runs `npx convex insights --details --json` in the app's folder and builds a dashboard: insights, calls affected, errors, functions, calls by function and by kind, and each insight's table and last time seen. No insights gives a short all-clear report. Read only, last 72 hours, cloud deployments only |
 | Outside agents | A key with read-all access can `list_prints` and `read_print` published Prints, in bounded pages. Read only. Local Prints are never visible |
 
-The agent side is the `create_print`, `update_print`, `read_print`, `list_prints`, `publish_print` family of tools. The older `*_page` names still work. The make-print skill holds the chart, dashboard and report recipes. The bundle-report skill builds the Convex bundle size Print.
+The agent side is the `create_print`, `update_print`, `read_print`, `list_prints`, `publish_print` family of tools. The older `*_page` names still work. The make-print skill holds the chart, dashboard and report recipes, and the Convex insights report (`insights.mjs`). The bundle-report skill builds the Convex bundle size Print.
 
 ## What's missing
 
@@ -50,8 +51,9 @@ The agent side is the `create_print`, `update_print`, `read_print`, `list_prints
 
 ## What's next
 
-1. Pick the CSV sheets work back up from slot-12, or drop it.
-2. Ask once per Print on Codex threads too.
-3. Group the rail's Prints list by project if it gets long.
+1. Check the insights report against a deployment with read-limit insights. Only write conflicts (`occRetried`) have shown up in real output so far, so the other kinds' counts are a best guess.
+2. Pick the CSV sheets work back up from slot-12, or drop it.
+3. Ask once per Print on Codex threads too.
+4. Group the rail's Prints list by project if it gets long.
 
 The optional HyperFrames share clip stays parked until one of the above ships.

@@ -964,6 +964,7 @@ Ask in plain words, in any thread:
 | "Write up the launch plan as a print" | A **doc**. You can edit it yourself too |
 | "Draw this flow as a diagram print" | A **diagram** from Mermaid source, with text you can edit and an SVG you can download |
 | "Run bundle-analyzer summary" | A **bundle size** report for a Convex app |
+| "Make a Convex insights report" | A **dashboard** of the app's insights from the last 72 hours: write conflicts and functions near their read limits, by function, with each one's table and when it was last seen. Add "for prod" for production |
 | "Add a figure that explains it" or "make a share clip" | A larger extra: an illustrated figure, or a short video. Only when you ask |
 
 **Where a print goes.** A thread pinned to exactly one project puts its new prints there automatically, under **Prints** on the project's page. Say "keep it out of projects" for none, or "put it in Poddle" for another. A print can be in several projects without duplicating its files. All Prints are stored in `~/Library/Application Support/Threadbear/pages/<print-id>/v<version>/`, separate from your code folders. With no project, reopen its card in the thread or ask "show my prints with no project". Download saves a separate copy wherever you choose. Nothing about a print goes to your Convex backend unless you publish it (below).
