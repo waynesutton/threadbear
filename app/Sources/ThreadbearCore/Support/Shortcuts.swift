@@ -140,6 +140,8 @@ public enum ShortcutCommand: String, CaseIterable, Sendable {
     case back, forward, nextInboxThread, showInbox, showScheduled, showProjects, showLibrarian, showHibernating, showArchived
     // Wayne's pages over the main panel, after the activity bar's first four.
     case showSkills, showNotes
+    // A project's page tabs (Decisions, Project), as Safari's tabs go.
+    case previousTab, nextTab
     case zoomIn, zoomOut, actualSize, toggleThreads, togglePanels, toggleTerminal, resetPanelLayout
     // ⌘/ folds the Threads panel away and back, keeping its place and width.
     case collapseThreads
@@ -150,7 +152,7 @@ public enum ShortcutCommand: String, CaseIterable, Sendable {
     public var group: ShortcutGroup {
         switch self {
         case .newThread, .archive, .hibernate, .stop, .copyTranscript: .threads
-        case .back, .forward, .nextInboxThread, .showInbox, .showScheduled, .showProjects, .showLibrarian, .showHibernating, .showArchived, .showSkills, .showNotes: .go
+        case .back, .forward, .nextInboxThread, .showInbox, .showScheduled, .showProjects, .showLibrarian, .showHibernating, .showArchived, .showSkills, .showNotes, .previousTab, .nextTab: .go
         case .zoomIn, .zoomOut, .actualSize, .toggleThreads, .togglePanels, .toggleTerminal, .resetPanelLayout, .collapseThreads: .view
         // The app menu's Settings…, over the main panel or in its window (SettingsPage).
         case .settings, .quit: .go
@@ -175,6 +177,8 @@ public enum ShortcutCommand: String, CaseIterable, Sendable {
         case .showArchived: "Show Archived"
         case .showSkills: "Show Skills"
         case .showNotes: "Show Notes"
+        case .previousTab: "Show Previous Tab"
+        case .nextTab: "Show Next Tab"
         case .settings: "Settings…"
         case .zoomIn: "Zoom In"
         case .zoomOut: "Zoom Out"
@@ -212,6 +216,8 @@ public enum ShortcutCommand: String, CaseIterable, Sendable {
         case .copyTranscript: ShortcutKey("c", shift: true)
         case .back: ShortcutKey("[")
         case .forward: ShortcutKey("]")
+        case .previousTab: ShortcutKey("[", shift: true)
+        case .nextTab: ShortcutKey("]", shift: true)
         case .nextInboxThread: ShortcutKey("down", option: true)
         case .showInbox: ShortcutKey("1")
         case .showScheduled: ShortcutKey("2")

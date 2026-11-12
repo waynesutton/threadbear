@@ -80,7 +80,7 @@ final class ShortcutsTests: XCTestCase {
     func testTheDefaultsAreTheKeysPeopleAlreadyKnow() {
         let expected: [ShortcutCommand: String] = [
             .newThread: "⌘N", .archive: "⌘E", .stop: "⌘.", .copyTranscript: "⇧⌘C",
-            .back: "⌘[", .forward: "⌘]", .nextInboxThread: "⌥⌘↓",
+            .back: "⌘[", .forward: "⌘]", .nextInboxThread: "⌥⌘↓", .previousTab: "⇧⌘[", .nextTab: "⇧⌘]",
             .showInbox: "⌘1", .showScheduled: "⌘2", .showProjects: "⌘3", .showLibrarian: "⌘4",
             .showSkills: "⌘5", .showNotes: "⌘6",
             .zoomIn: "⌘=", .zoomOut: "⌘-", .actualSize: "⌘0",

@@ -31,6 +31,26 @@ import Testing
         #expect(!Plans.canGoAhead(.approval(id: "a", name: "Bash", title: "Run", options: [.allow], inputSummary: "ls")))
     }
 
+    /// Codex review, 11 Nov: the card for plan B can reach the phone before
+    /// B's row, and pairing it with the newest plan showed A with B's Go ahead.
+    @Test func aCardPairsOnlyWithThePlanItNames() throws {
+        let messages = [m(3, .assistant, "# A", at: 0, plan: true), m(9, .assistant, "# B", at: 5, plan: true)]
+        let card = { (seq: Int?) in PendingApproval.approval(id: "a", name: "ExitPlanMode", title: "Finish the plan", options: [.allow, .deny], inputSummary: nil, planSeq: seq) }
+        #expect(Plans.plan(for: card(9), in: messages)?.text == "# B")
+        #expect(Plans.plan(for: card(12), in: messages) == nil, "its row isn't here yet")
+        #expect(Plans.plan(for: card(nil), in: messages) == nil, "an older runner's card names none")
+        #expect(Plans.plan(for: .approval(id: "a", name: "Bash", title: "Run", options: [.allow], inputSummary: nil, planSeq: 9), in: messages) == nil)
+        let row = ##"{"approvalId": "a", "kind": "approval", "name": "ExitPlanMode", "title": "Finish the plan", "options": ["deny"], "planSeq": 9.0}"##
+        let decoded = try JSONDecoder().decode(PendingApproval.self, from: Data(row.utf8))
+        #expect(Plans.plan(for: decoded, in: messages)?.seq == 9)
+        #expect(try JSONDecoder().decode(PendingApproval.self, from: JSONEncoder().encode(decoded)) == decoded)
+        // Sent back only from the newest plan, and not while a card names another.
+        #expect(Plans.canSendBack(messages[1], pending: card(9), in: messages))
+        #expect(!Plans.canSendBack(messages[1], pending: card(12), in: messages))
+        #expect(!Plans.canSendBack(messages[0], pending: nil, in: messages))
+        #expect(Plans.canSendBack(messages[1], pending: nil, in: messages))
+    }
+
     @Test func rowsCarryThePlanMark() throws {
         let row = ##"{"seq": 4.0, "role": "assistant", "text": "# P", "plan": true, "at": "2026-11-10T00:00:00.000Z"}"##
         let message = try JSONDecoder().decode(PhoneMessage.self, from: Data(row.utf8))

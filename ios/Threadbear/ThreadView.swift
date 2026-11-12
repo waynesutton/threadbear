@@ -167,9 +167,14 @@ struct ThreadView: View {
                             loadMore(thread, detail: detail, paged: paged)
                         }
                     }
+                    // Another lab's review goes over its turn's reply, as on the Mac (backend API 76).
+                    let reviewAt = thread.review == nil ? nil : LabReviewText.replySeq(in: messages, cardTurn: thread.cardTurn)
                     ForEach(items) { item in
                         switch item {
                         case let .message(message) where message.plan: PlanCard(message: message)
+                        case let .message(message) where message.seq == reviewAt:
+                            if let review = thread.review { ReviewRow(review: review, openThread: { pushThread($0) }) }
+                            MessageView(message: message, pinned: pins.under[message.seq] ?? [])
                         case let .message(message): MessageView(message: message, pinned: pins.under[message.seq] ?? [])
                         case let .tools(run): ToolRunView(items: run)
                         case let .worked(worked): WorkedView(worked: worked)
@@ -186,7 +191,7 @@ struct ThreadView: View {
                     }
                     if let pending = thread.pendingApproval {
                         PendingCard(threadId: thread.threadId, runnerId: thread.runnerId, pending: pending,
-                                    plan: Plans.waiting(pending) ? Plans.latest(in: messages) : nil) { sent = ($0, nil) }
+                                    plan: Plans.plan(for: pending, in: messages)) { sent = ($0, nil) }
                             // Its own state per question: a tapped button doesn't carry over to the next.
                             .id(pending.id)
                             .transition(Juice.cardGoes)
@@ -209,7 +214,7 @@ struct ThreadView: View {
                     } else if isDone(thread, messages: messages) {
                         // Ticked follow-ups go from the card's Send on their
                         // own; anything typed stays in the box for later.
-                        DoneCard(next: thread.next ?? [], picked: $nextPicks, busy: sendingCard) {
+                        DoneCard(next: thread.next ?? [], looseEnds: thread.looseEnds ?? [], openThread: { pushThread($0) }, picked: $nextPicks, busy: sendingCard) {
                             sendCard(thread, lastSeq: messages.last?.seq)
                         } archive: {
                             archive()
@@ -273,10 +278,10 @@ struct ThreadView: View {
             .sheet(item: $workLink) { WorkingSheet(link: $0).environment(\.threadPictures, pictures) }
             .environment(\.openPlan) { planShown = $0 }
             .sheet(item: $planShown) { plan in
-                let newest = Plans.latest(in: messages)?.seq == plan.seq
                 let pending = thread.pendingApproval
-                // Go ahead only on the newest plan's own card, when it can be allowed from here.
-                PlanSheet(plan: plan, approvalId: newest && Plans.canGoAhead(pending) ? pending?.id : nil, canSendBack: newest) { approvalId in
+                // Go ahead only on the card that waits on this very plan, when it can be allowed from here.
+                let waitsOnIt = Plans.plan(for: pending, in: messages)?.seq == plan.seq
+                PlanSheet(plan: plan, approvalId: waitsOnIt && Plans.canGoAhead(pending) ? pending?.id : nil, canSendBack: Plans.canSendBack(plan, pending: pending, in: messages)) { approvalId in
                     goAhead(approvalId)
                 } sendBack: { text in
                     await send(text, to: thread)
@@ -297,17 +302,14 @@ struct ThreadView: View {
                 if quick.voiceThreadId == threadId, !typing {
                     VoiceBar(threadId: threadId, afterSeq: messages.last?.seq ?? 0, working: thread.isBusy) { typing = true }
                 } else {
-                    VStack(spacing: 0) {
-                        RecapBox(thread: thread)
-                        Composer(text: $draft, placeholder: composerPlaceholder(thread), links: thread.links ?? [], threadId: thread.id, provider: thread.provider,
-                                 running: thread.isBusy, stopping: model.stopping.contains(thread.threadId),
-                                 onStop: model.canStop ? { model.stop(threadId: thread.threadId) } : nil) { text, photos in
-                            await send(text, photos: photos, to: thread)
-                        }
-                        // The turn is over (stopped, or finished first): Stop's spinner goes.
-                        .onChange(of: thread.isBusy) { _, busy in
-                            if !busy { model.stopped(thread.threadId) }
-                        }
+                    Composer(text: $draft, placeholder: composerPlaceholder(thread), links: thread.links ?? [], threadId: thread.id, provider: thread.provider,
+                             running: thread.isBusy, stopping: model.stopping.contains(thread.threadId),
+                             onStop: model.canStop ? { model.stop(threadId: thread.threadId) } : nil) { text, photos in
+                        await send(text, photos: photos, to: thread)
+                    }
+                    // The turn is over (stopped, or finished first): Stop's spinner goes.
+                    .onChange(of: thread.isBusy) { _, busy in
+                        if !busy { model.stopped(thread.threadId) }
                     }
                 }
             }

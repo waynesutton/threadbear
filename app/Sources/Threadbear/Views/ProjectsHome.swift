@@ -11,23 +11,32 @@ struct ProjectsHome: View {
     /// Settings > General > Look. Off, the page is as it ships, whatever
     /// look is saved; the look is kept for when it's back on.
     @AppStorage(Looks.projectsOnKey) private var customizable = false
+    /// It's kept built while hidden (DetailView, `keptAlive`).
+    var shown = true
+    /// While hidden it draws the sections as they were when it was hidden,
+    /// as ProjectsList does, so thread changes elsewhere don't rebuild it.
+    @State private var frozen: ProjectSections?
 
     var body: some View {
-        if customizable {
-            CustomizedProjectsPage()
-        } else {
-            ScrollView {
-                VStack(alignment: .leading, spacing: zoomed(22)) {
-                    ProjectsHeader(searchable: true)
-                    ProjectsGrid(searchable: true, hidden: [])
+        let sections = !shown ? frozen ?? app.projectSections : app.projectSections
+        Group {
+            if customizable {
+                CustomizedProjectsPage(sections: sections, shown: shown)
+            } else {
+                ScrollView {
+                    VStack(alignment: .leading, spacing: zoomed(22)) {
+                        ProjectsHeader(sections: sections, shown: shown, searchable: true)
+                        ProjectsGrid(sections: sections, searchable: true, hidden: [])
+                    }
+                    .frame(maxWidth: zoomed(1160), alignment: .leading)
+                    .padding(.horizontal, zoomed(32))
+                    .padding(.top, zoomed(28))
+                    .padding(.bottom, zoomed(48))
+                    .frame(maxWidth: .infinity)
                 }
-                .frame(maxWidth: zoomed(1160), alignment: .leading)
-                .padding(.horizontal, zoomed(32))
-                .padding(.top, zoomed(28))
-                .padding(.bottom, zoomed(48))
-                .frame(maxWidth: .infinity)
             }
         }
+        .onChange(of: shown) { _, now in frozen = now ? nil : app.projectSections }
     }
 
     /// "4 projects · 3 decisions · 2 working · 1 needs you", each thread
@@ -54,6 +63,8 @@ struct ProjectsHome: View {
 /// which parts of each card show.
 private struct CustomizedProjectsPage: View {
     @AppStorage(Looks.projectsKey) private var saved = Data()
+    let sections: ProjectSections
+    let shown: Bool
 
     var body: some View {
         // `saved` redraws the page as the panel changes the look.
@@ -69,9 +80,9 @@ private struct CustomizedProjectsPage: View {
                         PokeablePicture(picture: image, label: "Your picture", lines: [], side: look.pictureSize.side)
                     }
                 case .header:
-                    ProjectsHeader(searchable: searchable)
+                    ProjectsHeader(sections: sections, shown: shown, searchable: searchable)
                 case .cards:
-                    ProjectsGrid(searchable: searchable, hidden: look.hiddenCardParts)
+                    ProjectsGrid(sections: sections, searchable: searchable, hidden: look.hiddenCardParts)
                 }
             }
         } buttons: {
@@ -86,11 +97,12 @@ private struct CustomizedProjectsPage: View {
 /// New project.
 private struct ProjectsHeader: View {
     @Environment(AppModel.self) private var app
+    let sections: ProjectSections
+    let shown: Bool
     let searchable: Bool
 
     var body: some View {
         @Bindable var app = app
-        let sections = app.projectSections
         let all = ProjectCard.build(sections, decisions: app.projectDecisionsOn)
         let query = ProjectsHome.query(app, searchable: searchable)
         let cards = ProjectCard.matching(all, query)
@@ -115,7 +127,7 @@ private struct ProjectsHeader: View {
                 .layoutPriority(1)
                 // Return opens the top result, Escape clears, so a
                 // project is a few keys away from this page.
-                .onSubmit { if searching, let first = cards.first { app.openProjectPage(first.project.id) } }
+                .onSubmit { if shown, searching, let first = cards.first { app.openProjectPage(first.project.id) } }
                 .onExitCommand { app.projectSearchQuery = "" }
             Button { app.newProject(with: nil) } label: {
                 Label("New project", systemImage: "plus")
@@ -131,11 +143,12 @@ private struct ProjectsHeader: View {
 /// there are none.
 private struct ProjectsGrid: View {
     @Environment(AppModel.self) private var app
+    let sections: ProjectSections
     let searchable: Bool
     let hidden: Set<ProjectsLook.CardPart>
 
     var body: some View {
-        let all = ProjectCard.build(app.projectSections, decisions: app.projectDecisionsOn)
+        let all = ProjectCard.build(sections, decisions: app.projectDecisionsOn)
         let cards = ProjectCard.matching(all, ProjectsHome.query(app, searchable: searchable))
         if all.isEmpty {
             Text("No projects yet. The librarian makes them as threads run, or you can make one.")
@@ -195,6 +208,16 @@ private struct ProjectCardView: View {
                     }
                     if !hidden.contains(.status) {
                         StatusLine(card: card, now: app.now)
+                    }
+                    // Its parts are inside its card rather than cards of their
+                    // own (docs/protocol.md, Projects, "Parts"); its page lists
+                    // them with their state.
+                    if !card.parts.isEmpty {
+                        Label(card.parts.map(\.title).joined(separator: " · "), systemImage: "square.stack")
+                            .font(.system(size: TypeScale.sidebarMeta + 1))
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                            .labelStyle(.titleAndIcon)
                     }
                     if !hidden.contains(.state), !card.project.state.isEmpty {
                         Text(Self.firstLines(card.project.state))

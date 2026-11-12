@@ -145,14 +145,14 @@ struct ComposerControls: View {
             if !settings.usesPools {
                 ComposerChip(icon: "person.crop.circle", title: AccountName.short(account, accounts: settings.logins.accounts), help: settings.accountChipHelp,
                              badge: settings.accountBadge, busy: moving, popover: {
-                    NSHostingController(rootView: AccountPickerView(threadId: thread?.id, close: $0).environment(app))
+                    MenuAnchor.host(AccountPickerView(threadId: thread?.id, close: $0).environment(app))
                 }, openRequest: app.accountPickerRequest)
                 ChipDivider()
             }
             ComposerChip(icon: settings.modelChipIcon, logo: settings.modelChipLogo, title: settings.modelChipTitle, help: settings.modelChipHelp, badge: settings.modelChipBadge, busy: moving, popover: {
                 // The picker reads the thread live, so a pick made while
                 // it's open shows straight away.
-                NSHostingController(rootView: ModelPickerView(threadId: thread?.id, close: $0).environment(app))
+                MenuAnchor.host(ModelPickerView(threadId: thread?.id, close: $0).environment(app))
             }, openRequest: app.modelPickerRequest)
             ChipDivider()
             ComposerChip(
@@ -171,7 +171,7 @@ struct ComposerControls: View {
             // carry on, /compact or start afresh.
             if let thread, let meter = ContextMeter(thread) {
                 ContextRing(meter: meter, openRequest: app.contextMeterRequest) {
-                    NSHostingController(rootView: ContextPopover(threadId: thread.id).environment(app))
+                    MenuAnchor.host(ContextPopover(threadId: thread.id).environment(app))
                 }
             }
             // Voice for the thread, or on a new thread's composer, where
