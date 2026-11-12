@@ -38,7 +38,7 @@ The agent side is the `create_print`, `update_print`, `read_print`, `list_prints
 - **Ask once on Codex.** Codex threads still ask for every update to a Print.
 - **PDF page breaks.** The built-in PDF can cut a line across two pages. Asking the thread to print through Chrome avoids it.
 - **The GPUI app.** The desktop specs in `features/prints.feature` are manual. The GPUI port has no Prints yet.
-- **Upstream.** All of this is in Wayne's fork. Nothing has gone to mikecann/threadbear.
+- **Upstream.** Sent to Mike as a draft PR, [mikecann/threadbear#61](https://github.com/mikecann/threadbear/pull/61), on 12 Nov: everything here except the recipe skills, Outside agents' Print reads and the iPhone app. Publishing is backend API 77 there. The recipes need a Skills store upstream first, so they're a follow-up PR.
 
 ## Not planned
 
