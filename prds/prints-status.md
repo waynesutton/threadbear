@@ -13,7 +13,7 @@ A Print is a page a thread makes for you to keep. Ask for a chart, a dashboard, 
 | Projects | A thread pinned to one project files its Prints there. A Print can sit in several projects, or none |
 | In a reply | A card with a preview, title, kind, version and age. It follows the newest version and says "New version" |
 | Project page | Prints are listed with Open, Refresh, Edit with Agent, Edit Text, Download, Download as PDF, Versions, Projects, Publish and Delete |
-| Diagrams | Mermaid source drawn offline with the bundled Pele 1.13.0 into static SVG. Edit Text edits the source. Bad source keeps the old version |
+| Diagrams | Mermaid source drawn offline with the bundled Pele 1.13.0 into static SVG. Edit Text edits the source. Bad source keeps the old version. A wide one uses the whole window and scrolls sideways, never below 70% of its size |
 | Safety | No scripts by default. A live Print runs scripts only after you choose Run them, and again per version |
 | Delete | Soft delete. Restore within 7 days from Recently deleted |
 | Publishing | Opt in per Print. Backend API 73 stores one static `index.html` under a link. It opens on the phone, the website's `/p/<slug>` page and for anyone with the link. New versions follow. Unpublish or Delete takes it down |

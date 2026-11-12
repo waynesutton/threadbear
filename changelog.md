@@ -20,6 +20,11 @@ How Prints work today, what's missing and what's next: [Prints status](https://g
 - A Convex insights report: ask for one and make-print turns `npx convex insights` into a dashboard of write conflicts and read-limit warnings from the last 72 hours, or an all-clear report when there are none.
 - A Convex API map: "map my Convex API" turns `npx convex function-spec` into a dashboard of every function and HTTP route, public or internal, with missing validators first.
 
+### Fixed
+
+- Wide diagram Prints stay readable: past the page's width a diagram uses the whole window and scrolls sideways, never drawn below 70% of its size.
+- The built-in make-print's commands ran but did nothing once installed under Application Support. They work from any folder now.
+
 ### Changed
 
 - make-print and bundle-report ship with Threadbear as built-in skills, so every install can make Prints. The saved Print style moved to `~/.config/threadbear/print-style.json`, so a skill update keeps it.
