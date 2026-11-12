@@ -157,3 +157,29 @@ public enum PagePath {
         return (((folder as NSString).appendingPathComponent("v\(page.version)")) as NSString).appendingPathComponent("index.html")
     }
 }
+
+/// Prints as rows: in a thread's Highlights (the ones it made) and in the
+/// rail's Prints list (all of them), each saying which projects it's in.
+public enum PrintRows {
+    /// The Prints a thread made, newest first, deleted ones left out.
+    public static func made(by threadId: String, in pages: [Page]) -> [Page] {
+        all(pages).filter { $0.ownerThread == threadId }
+    }
+
+    /// Every Print, newest first, deleted ones left out.
+    public static func all(_ pages: [Page]) -> [Page] {
+        pages.filter { $0.deletedAt == nil }.sorted { $0.updatedAt > $1.updatedAt }
+    }
+
+    /// "Threadbear, Poddle", or "No project". A project the app doesn't
+    /// know (archived, or not loaded yet) is left out.
+    public static func projects(of page: Page, titles: [String: String]) -> String {
+        let names = page.projects.compactMap { titles[$0.id] }
+        return names.isEmpty ? "No project" : names.joined(separator: ", ")
+    }
+
+    /// "Chart · v3", for a row's right-hand side.
+    public static func kindAndVersion(_ page: Page) -> String {
+        "\(page.kindLabel) · v\(page.version)"
+    }
+}

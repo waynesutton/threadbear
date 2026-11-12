@@ -39,3 +39,9 @@
 - `app/Sources/Threadbear/Pages.swift` opens a card's Print in the side pane and moves the pane to new versions.
 - `app/Sources/ThreadbearCore/Protocol/Page.swift` has `PagePath`, which reads a Print file's id and version and finds the newer one.
 - `web/src/print-fence.ts` reads a reply's Print block; `web/src/print-card.tsx` draws its card from the published list.
+
+## Prints in Highlights and on the rail
+
+- `app/Sources/ThreadbearCore/Protocol/Page.swift` has `PrintRows`: a thread's Prints, every Print, and the projects line.
+- `app/Sources/Threadbear/Views/HighlightsView.swift` has the Prints section and `PrintRow`.
+- `app/Sources/Threadbear/Views/PanelsView.swift` has the rail's Prints button and `PrintsList`.

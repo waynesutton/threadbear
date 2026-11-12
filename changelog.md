@@ -10,6 +10,7 @@ How Prints work today and what's still missing: [prds/prints-status.md](prds/pri
 - Open on a reply's Print card opens it in the thread's side pane, which moves to each new version as it's saved.
 - Print cards in replies on the website: published ones open their page, the rest say they're kept on the Mac.
 - The guide covers keeping a Print fresh on a schedule.
+- A Prints section in a thread's Highlights, and a Prints button on the right-hand rail under Files that lists every Print with the projects it's in.
 
 ### Changed
 

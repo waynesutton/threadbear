@@ -972,6 +972,8 @@ Ask in plain words, in any thread:
 
 **In a reply**, a thread shows a print as a card: a picture of the top of it, then its title, kind, version and age, with Open, Refresh and a ⋯ menu. Click the picture or Open to open it in the side pane beside the thread. While it's open there, a new version replaces it in the pane as soon as it's saved. If you opened an older version on purpose, it stays put. A thread on another Mac opens it in a window of its own instead. On the website, the same reply shows a card too. A published print's card has its title and an Open button that goes to its page. One that isn't published says it's kept on your Mac, since its files never leave it. The iPhone app shows the block as text for now. The card always shows the print as it is now, so when a print gets a new version, the card in an earlier reply moves to it too, marked "New version", rather than a second card appearing. While a refresh is under way, the card says so.
 
+**In Highlights and on the rail.** A thread's Highlights list the Prints it made, under Prints, each with its kind, version and the projects it's in, or "No project". The Prints button on the right-hand rail, under Files, lists every Print you have, newest first, with the same details. It shows once there's at least one. Click a Print in either to open it beside the thread; right-click for Open in a Window and Refresh.
+
 **Every row under Prints on the project's page** opens its print in a window of its own when you click it. Its ⋯ menu, or a right-click, has:
 
 - **Refresh** sends the print to the thread that made it, to be made again the same way, and opens that thread so you can watch.

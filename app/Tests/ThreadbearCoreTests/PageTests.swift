@@ -81,6 +81,25 @@ final class PageTests: XCTestCase {
         XCTAssertEqual(old.keptVersions, [2, 1])
         XCTAssertFalse(old.editedByUser)
     }
+
+    func testPrintRowsForHighlightsAndTheRailList() throws {
+        let json = #"""
+        {"pages":[
+          {"id":"pg_old","title":"Old","ownerThread":"th1","version":1,"kind":"chart","projects":[{"id":"p_tb"}],"updatedAt":"2026-11-10T09:00:00Z"},
+          {"id":"pg_new","title":"New","ownerThread":"th1","version":3,"kind":"doc","projects":[{"id":"p_tb"},{"id":"p_pod"},{"id":"p_gone"}],"updatedAt":"2026-11-11T09:00:00Z"},
+          {"id":"pg_other","title":"Other","ownerThread":"th2","version":1,"projects":[],"updatedAt":"2026-11-11T08:00:00Z"},
+          {"id":"pg_deleted","title":"Deleted","ownerThread":"th1","version":2,"projects":[],"updatedAt":"2026-11-11T10:00:00Z","deletedAt":"2026-11-11T10:00:00Z"}
+        ]}
+        """#
+        let pages = try JSONDecoder().decode(PagesResult.self, from: Data(json.utf8)).pages
+        XCTAssertEqual(PrintRows.made(by: "th1", in: pages).map(\.id), ["pg_new", "pg_old"], "newest first, deleted left out")
+        XCTAssertEqual(PrintRows.all(pages).map(\.id), ["pg_new", "pg_other", "pg_old"])
+        let titles = ["p_tb": "Threadbear", "p_pod": "Poddle"]
+        let new = try XCTUnwrap(pages.first { $0.id == "pg_new" })
+        XCTAssertEqual(PrintRows.projects(of: new, titles: titles), "Threadbear, Poddle", "an unknown project is left out")
+        XCTAssertEqual(PrintRows.projects(of: try XCTUnwrap(pages.first { $0.id == "pg_other" }), titles: titles), "No project")
+        XCTAssertEqual(PrintRows.kindAndVersion(new), "Doc · v3")
+    }
 }
 
 final class PageFenceTests: XCTestCase {

@@ -45,3 +45,14 @@ Feature: Diagram Prints
     Then the Print opens in the thread's side pane
     When the thread saves version 2 of that Print
     Then the side pane shows version 2 without another click
+
+  @prints.list @manual @gpui-pending
+  Scenario: Prints show in Highlights and on the rail with their projects
+    Given a thread made a Print in the project "Demo Shop" and one in no project
+    When I open that thread
+    Then its Highlights list both under Prints, one saying "Demo Shop" and one "No project"
+    And the rail shows a Prints button under Files with a count of 2
+    When I click the Prints button
+    Then it lists every Print with its projects
+    When I click "Launch notes"
+    Then it opens beside the thread

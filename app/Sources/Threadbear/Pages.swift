@@ -9,6 +9,12 @@ import ThreadbearCore
 extension AppModel {
     var pagesOn: Bool { experiments.contains(Page.experiment) }
 
+    /// The rail's Prints button: Prints on, at least one Print, and a
+    /// thread of this runner's (another Mac's Prints aren't here).
+    var showsPrintsRail: Bool {
+        pagesOn && openProject == nil && paneThread?.isRemote != true && !PrintRows.all(pages).isEmpty
+    }
+
     /// The list after hello; `pages.updated` keeps it current from then on.
     func loadPages() {
         guard let client, pagesOn else {
