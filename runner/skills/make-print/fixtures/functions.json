@@ -1,0 +1,190 @@
+{
+  "url": "https://demo-otter-123.convex.cloud",
+  "functions": [
+    {
+      "args": {
+        "type": "object",
+        "value": {
+          "beforeSeq": {
+            "fieldType": {
+              "type": "number"
+            },
+            "optional": true
+          },
+          "limit": {
+            "fieldType": {
+              "type": "number"
+            },
+            "optional": true
+          },
+          "noImages": {
+            "fieldType": {
+              "type": "boolean"
+            },
+            "optional": true
+          },
+          "threadId": {
+            "fieldType": {
+              "type": "string"
+            },
+            "optional": false
+          },
+          "token": {
+            "fieldType": {
+              "type": "string"
+            },
+            "optional": false
+          },
+          "tools": {
+            "fieldType": {
+              "type": "boolean"
+            },
+            "optional": true
+          }
+        }
+      },
+      "functionType": "Query",
+      "identifier": "phone.js:messages",
+      "returns": {
+        "type": "object"
+      },
+      "visibility": {
+        "kind": "public"
+      }
+    },
+    {
+      "args": {
+        "type": "object",
+        "value": {
+          "key": {
+            "fieldType": {
+              "type": "string"
+            },
+            "optional": false
+          },
+          "runner": {
+            "fieldType": {
+              "type": "object",
+              "value": {
+                "draining": {
+                  "fieldType": {
+                    "type": "boolean"
+                  },
+                  "optional": false
+                },
+                "icon": {
+                  "fieldType": {
+                    "type": "string"
+                  },
+                  "optional": true
+                },
+                "name": {
+                  "fieldType": {
+                    "type": "string"
+                  },
+                  "optional": false
+                },
+                "release": {
+                  "fieldType": {
+                    "type": "string"
+                  },
+                  "optional": true
+                },
+                "rpcUrl": {
+                  "fieldType": {
+                    "type": "string"
+                  },
+                  "optional": true
+                },
+                "runnerId": {
+                  "fieldType": {
+                    "type": "string"
+                  },
+                  "optional": false
+                },
+                "startedAt": {
+                  "fieldType": {
+                    "type": "string"
+                  },
+                  "optional": false
+                },
+                "threadCount": {
+                  "fieldType": {
+                    "type": "number"
+                  },
+                  "optional": false
+                },
+                "version": {
+                  "fieldType": {
+                    "type": "string"
+                  },
+                  "optional": false
+                }
+              }
+            },
+            "optional": false
+          }
+        }
+      },
+      "functionType": "Mutation",
+      "identifier": "sync.js:heartbeat",
+      "returns": {
+        "type": "object"
+      },
+      "visibility": {
+        "kind": "public"
+      }
+    },
+    {
+      "args": {
+        "type": "object",
+        "value": {}
+      },
+      "functionType": "Query",
+      "identifier": "devices.js:targets",
+      "returns": {
+        "type": "array"
+      },
+      "visibility": {
+        "kind": "internal"
+      }
+    },
+    {
+      "args": {
+        "type": "object",
+        "value": {}
+      },
+      "functionType": "Query",
+      "identifier": "devices.js:targets",
+      "returns": {
+        "type": "array"
+      },
+      "visibility": {
+        "kind": "internal"
+      }
+    },
+    {
+      "functionType": "HttpAction",
+      "method": "GET",
+      "path": "/s/*"
+    },
+    {
+      "functionType": "HttpAction",
+      "method": "POST",
+      "path": "/relay/verify"
+    },
+    {
+      "functionType": "Mutation",
+      "identifier": "legacy.js:save",
+      "visibility": {
+        "kind": "public"
+      },
+      "args": {
+        "type": "any"
+      },
+      "returns": {
+        "type": "any"
+      }
+    }
+  ]
+}

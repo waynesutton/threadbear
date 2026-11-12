@@ -1,0 +1,2 @@
+{ "title": "Revenue by region", "data": "sales.csv",
+  "charts": [{ "type": "pie", "title": "Share of revenue", "by": "Region", "value": "Revenue", "unit": "$" }] }

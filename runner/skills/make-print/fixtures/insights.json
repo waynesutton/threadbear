@@ -1,0 +1,75 @@
+{
+  "deploymentName": "demo-otter-123",
+  "dashboardUrl": "https://dashboard.convex.dev/d/demo-otter-123?view=insights",
+  "insights": [
+    {
+      "kind": "occRetried",
+      "severity": "warning",
+      "functionId": "sync.js:setPresence",
+      "componentPath": null,
+      "occCalls": 2,
+      "occTableName": "runners",
+      "recentEvents": [
+        {
+          "timestamp": "2026-11-11T03:28:00.000Z",
+          "id": "evt-0",
+          "request_id": "req-0",
+          "occ_document_id": "doc-0",
+          "occ_write_source": "sync.js:heartbeat",
+          "occ_retry_count": 0,
+          "calls": 1
+        }
+      ]
+    },
+    {
+      "kind": "occRetried",
+      "severity": "warning",
+      "functionId": "sync.js:takeCommand",
+      "componentPath": null,
+      "occCalls": 1,
+      "occTableName": "threads",
+      "recentEvents": [
+        {
+          "timestamp": "2026-11-10T16:34:00.000Z",
+          "id": "evt-1",
+          "request_id": "req-1",
+          "occ_document_id": "doc-1",
+          "occ_write_source": "sync.js:upsertThreads",
+          "occ_retry_count": 0,
+          "calls": 1
+        }
+      ]
+    },
+    {
+      "kind": "occRetried",
+      "severity": "warning",
+      "functionId": "phone.js:update",
+      "componentPath": null,
+      "occCalls": 1,
+      "occTableName": "",
+      "recentEvents": [
+        {
+          "timestamp": "2026-11-10T18:05:00.000Z",
+          "id": "evt-2",
+          "request_id": "req-2",
+          "occ_write_source": "search_index_metadata_writer_write_text",
+          "occ_retry_count": 0,
+          "calls": 1,
+          "occ_document_id": "doc-2"
+        }
+      ]
+    },
+    {
+      "kind": "documentsReadThreshold",
+      "severity": "error",
+      "functionId": "messages.js:list",
+      "componentPath": "agent",
+      "recentEvents": [
+        {
+          "timestamp": "2026-11-11T05:00:00.000Z",
+          "calls": 4
+        }
+      ]
+    }
+  ]
+}

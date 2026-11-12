@@ -23,6 +23,8 @@ Diagram rendering is in `runner/src/page-diagram.ts`, using the pinned bundle an
 
 ## Taking it out
 
+The recipes are the built-in skills `runner/skills/make-print/` and `runner/skills/bundle-report/`; delete those folders too.
+
 For Only make Prints when I ask, also remove `printsWhenAsked` from `config.ts`, `settings.ts`, `cli.ts`, `main.ts`, `RunnerSettings.swift`, `RunnerSettingsModel.swift`, `Automation.swift` and its Settings section, and `asksForPrint` with its check in `create_print`.
 
 For diagrams, also remove `runner/src/page-diagram.ts`, `runner/test/unit/page-diagram.test.ts`, the copied `runner/skills/pele/pele.js` and its license, the Mermaid fields and save method in Pages and the app. The outside-agent read tools live with Outside agents, not the local Print store.

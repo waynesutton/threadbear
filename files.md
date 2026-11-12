@@ -49,3 +49,8 @@
 - `app/Sources/ThreadbearCore/Protocol/Page.swift` has `PrintRows`: a thread's Prints, every Print, and the projects line.
 - `app/Sources/Threadbear/Views/HighlightsView.swift` has the Prints section and `PrintRow`.
 - `app/Sources/Threadbear/Views/PanelsView.swift` has the rail's Prints button and `PrintsList`.
+
+## Print recipes as built-in skills
+
+- `runner/skills/make-print/` builds Prints: charts, dashboards, reports, docs, progress, the Convex insights report (`insights.mjs`) and the Convex API map (`apimap.mjs`).
+- `runner/skills/bundle-report/` builds the Convex bundle size Print.

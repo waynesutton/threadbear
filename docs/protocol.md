@@ -4431,7 +4431,7 @@ A path with a `SKILL.md` is one skill; otherwise every `SKILL.md` under it
 Nothing it fetches is run. A page that isn't GitHub is read for an
 `npx skills add owner/repo` line or a `github.com/owner/repo` link.
 
-**Built-in skills** live in `runner/skills/<name>/`. Adding one copies it
+**Built-in skills** live in `runner/skills/<name>/`: Pele, make-print and bundle-report (the Prints recipes; make-print keeps its saved style in `~/.config/threadbear/print-style.json`, outside its folder). Adding one copies it
 into the store and, if it has a `package-lock.json`, runs `npm ci
 --omit=dev --ignore-scripts` there. **Suggested** are the built-in ones plus
 a short list in `src/skills.ts` (Anatomy), each until it's added.

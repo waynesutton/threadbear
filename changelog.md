@@ -18,9 +18,11 @@ How Prints work today, what's missing and what's next: [Prints status](https://g
 - The guide covers keeping a Print fresh on a schedule.
 - A Prints section in a thread's Highlights, and a Prints button on the right-hand rail under Files that lists every Print with the projects it's in.
 - A Convex insights report: ask for one and make-print turns `npx convex insights` into a dashboard of write conflicts and read-limit warnings from the last 72 hours, or an all-clear report when there are none.
+- A Convex API map: "map my Convex API" turns `npx convex function-spec` into a dashboard of every function and HTTP route, public or internal, with missing validators first.
 
 ### Changed
 
+- make-print and bundle-report ship with Threadbear as built-in skills, so every install can make Prints. The saved Print style moved to `~/.config/threadbear/print-style.json`, so a skill update keeps it.
 - In Ask before edits, a thread asks once per Print for updates instead of every time (Claude threads).
 
 ## 2026-11-11

@@ -183,7 +183,14 @@ is given (`runner/src/skills.ts`). For each Codex login the runner puts a
 link to each skill in that login's `CODEX_HOME/skills/` folder, and only
 ever touches links of its own there. Adding the built-in Pele runs
 `npm ci --omit=dev --ignore-scripts` in its folder, which fetches the
-`pele` package from npm.
+`pele` package from npm. The built-in make-print and bundle-report need
+nothing installed. make-print saves the Print style you pick, once, in
+`~/.config/threadbear/print-style.json` (or `$XDG_CONFIG_HOME`, or the
+file `MAKE_PRINT_STYLE` names), outside the skill's folder so an update
+keeps it. Its Convex recipes run `npx convex insights`, `npx convex
+function-spec` and `npx @convex-dev/bundle-analyzer` in your app's folder
+only when you ask for one: they read the deployment's health, function
+list or bundle, never its data, using your own Convex login.
 The Terminal panel runs your login shell (`$SHELL -l`, else zsh) in the
 thread's folder, one per thread for as long as the app runs, without the
 thread's own THREADBEAR_ and CLAUDE variables; they all end when the

@@ -1,0 +1,239 @@
+{
+ "_note": "Sample built from the numbers in a bundle-analyzer screenshot (13 components, 210 modules). Only fields the page reads are filled in.",
+ "convexVersion": "1.47.0",
+ "totals": {
+  "modules": 210,
+  "codeBytes": 9930000.0,
+  "sourceMapBytes": 7430000.0,
+  "externalPackageBytes": 2860000.0,
+  "bytes": 20220000.0
+ },
+ "components": [
+  {
+   "component": "c0"
+  },
+  {
+   "component": "c1"
+  },
+  {
+   "component": "c2"
+  },
+  {
+   "component": "c3"
+  },
+  {
+   "component": "c4"
+  },
+  {
+   "component": "c5"
+  },
+  {
+   "component": "c6"
+  },
+  {
+   "component": "c7"
+  },
+  {
+   "component": "c8"
+  },
+  {
+   "component": "c9"
+  },
+  {
+   "component": "c10"
+  },
+  {
+   "component": "c11"
+  },
+  {
+   "component": "c12"
+  }
+ ],
+ "topPackages": [
+  {
+   "package": "convex@1.47.0",
+   "name": "convex",
+   "version": "1.47.0",
+   "origin": "convex",
+   "bytes": 2490000,
+   "codeBytes": 1490000,
+   "sourceMapBytes": 1010000,
+   "files": 697,
+   "byBuild": {},
+   "packageDirs": []
+  },
+  {
+   "package": "zod@4.6.6",
+   "name": "zod",
+   "version": "4.6.6",
+   "origin": "npm",
+   "bytes": 2140000,
+   "codeBytes": 1200000,
+   "sourceMapBytes": 945000,
+   "files": 191,
+   "byBuild": {},
+   "packageDirs": []
+  },
+  {
+   "package": "undici@7.30.1",
+   "name": "undici",
+   "version": "7.30.1",
+   "origin": "npm",
+   "bytes": 1330000,
+   "codeBytes": 769700,
+   "sourceMapBytes": 562100,
+   "files": 112,
+   "byBuild": {},
+   "packageDirs": []
+  },
+  {
+   "package": "@photon-ai/advanced-imessage-kit@1.0.0",
+   "name": "@photon-ai/advanced-imessage-kit",
+   "version": "1.0.0",
+   "origin": "npm",
+   "bytes": 746200,
+   "codeBytes": 411900,
+   "sourceMapBytes": 334300,
+   "files": 5,
+   "byBuild": {},
+   "packageDirs": []
+  },
+  {
+   "package": "@grpc/grpc-js@1.14.6",
+   "name": "@grpc/grpc-js",
+   "version": "1.14.6",
+   "origin": "npm",
+   "bytes": 671600,
+   "codeBytes": 400800,
+   "sourceMapBytes": 270800,
+   "files": 65,
+   "byBuild": {},
+   "packageDirs": []
+  },
+  {
+   "package": "iconv-lite@0.7.3",
+   "name": "iconv-lite",
+   "version": "0.7.3",
+   "origin": "npm",
+   "bytes": 628500,
+   "codeBytes": 526400,
+   "sourceMapBytes": 102100,
+   "files": 22,
+   "byBuild": {},
+   "packageDirs": []
+  },
+  {
+   "package": "iconv-lite@0.6.3",
+   "name": "iconv-lite",
+   "version": "0.6.3",
+   "origin": "npm",
+   "bytes": 625900,
+   "codeBytes": 525000,
+   "sourceMapBytes": 100900,
+   "files": 21,
+   "byBuild": {},
+   "packageDirs": []
+  },
+  {
+   "package": "your code",
+   "name": "your code",
+   "version": null,
+   "origin": "app",
+   "bytes": 572300,
+   "codeBytes": 307900,
+   "sourceMapBytes": 264400,
+   "files": 127,
+   "byBuild": {},
+   "packageDirs": []
+  },
+  {
+   "package": "ai@7.0.143",
+   "name": "ai",
+   "version": "7.0.143",
+   "origin": "npm",
+   "bytes": 570500,
+   "codeBytes": 310300,
+   "sourceMapBytes": 260200,
+   "files": 1,
+   "byBuild": {},
+   "packageDirs": []
+  },
+  {
+   "package": "@ai-sdk/openai@4.0.45",
+   "name": "@ai-sdk/openai",
+   "version": "4.0.45",
+   "origin": "npm",
+   "bytes": 494900,
+   "codeBytes": 297300,
+   "sourceMapBytes": 197500,
+   "files": 1,
+   "byBuild": {},
+   "packageDirs": []
+  }
+ ],
+ "heaviestModules": [],
+ "insights": [
+  {
+   "kind": "duplicate-package",
+   "level": "warn",
+   "title": "iconv-lite is bundled 2 times in app:node, adding some code",
+   "subject": "iconv-lite",
+   "buildIds": [
+    "app:node"
+   ]
+  },
+  {
+   "kind": "duplicate-package",
+   "level": "warn",
+   "title": "@opentelemetry/sdk-metrics is bundled 2 times in app:node, adding some code",
+   "subject": "@opentelemetry/sdk-metrics",
+   "buildIds": [
+    "app:node"
+   ]
+  },
+  {
+   "kind": "duplicate-package",
+   "level": "warn",
+   "title": "entities is bundled 3 times in app:node",
+   "subject": "entities"
+  },
+  {
+   "kind": "duplicate-package",
+   "level": "warn",
+   "title": "@opentelemetry/core is bundled 2 times in app:node, adding some code",
+   "subject": "@opentelemetry/core",
+   "buildIds": [
+    "app:node"
+   ]
+  },
+  {
+   "kind": "duplicate-package",
+   "level": "warn",
+   "title": "@opentelemetry/resources is bundled 2 times in app:node, adding some code",
+   "subject": "@opentelemetry/resources",
+   "buildIds": [
+    "app:node"
+   ]
+  },
+  {
+   "kind": "node-only-package",
+   "level": "info",
+   "title": "undici@7.30.1 adds 769.7 KB to \"use node\" bundles",
+   "subject": "undici",
+   "savedBytes": 769700
+  },
+  {
+   "kind": "node-only-package",
+   "level": "info",
+   "title": "zod@4.6.6 adds 598.4 KB to \"use node\" bundles",
+   "subject": "zod",
+   "savedBytes": 598400
+  },
+  {
+   "kind": "node-only-package",
+   "level": "info",
+   "title": "iconv-lite@0.7.3 adds 526.4 KB to \"use node\" bundles",
+   "subject": "iconv-lite"
+  }
+ ]
+}

@@ -965,6 +965,7 @@ Ask in plain words, in any thread:
 | "Draw this flow as a diagram print" | A **diagram** from Mermaid source, with text you can edit and an SVG you can download |
 | "Run bundle-analyzer summary" | A **bundle size** report for a Convex app |
 | "Make a Convex insights report" | A **dashboard** of the app's insights from the last 72 hours: write conflicts and functions near their read limits, by function, with each one's table and when it was last seen. Add "for prod" for production |
+| "Map my Convex API" | A **dashboard** of every function and HTTP route the app's deployment runs: public or internal, the arguments each takes, and any missing validators, listed first |
 | "Add a figure that explains it" or "make a share clip" | A larger extra: an illustrated figure, or a short video. Only when you ask |
 
 **Where a print goes.** A thread pinned to exactly one project puts its new prints there automatically, under **Prints** on the project's page. Say "keep it out of projects" for none, or "put it in Poddle" for another. A print can be in several projects without duplicating its files. All Prints are stored in `~/Library/Application Support/Threadbear/pages/<print-id>/v<version>/`, separate from your code folders. With no project, reopen its card in the thread or ask "show my prints with no project". Download saves a separate copy wherever you choose. Nothing about a print goes to your Convex backend unless you publish it (below).
@@ -1808,7 +1809,10 @@ A repo with several skills adds them all. Each is pinned to the commit it
 was imported at, so it never changes under you; Update to the Latest in
 its ... menu moves it on. Suggested lists ones worth having, such as Pele
 (Mermaid diagrams, which comes with Threadbear) and Anatomy (interactive
-drawings of how a machine works), with an Add button each.
+drawings of how a machine works), with an Add button each. Make-print and
+bundle-report come with Threadbear too: they're how a thread builds Prints
+(charts, dashboards, reports, progress, and the Convex bundle, insights and
+API map reports), so add them if you use Prints.
 
 To write one of your own, press New Skill at the top of the page: give
 it a name (its slash command: brand-voice becomes /brand-voice), say

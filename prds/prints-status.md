@@ -1,6 +1,6 @@
 # Where Prints stand
 
-Updated 2026-11-12, after the Convex insights report. On main at `b221756c`, pushed to GitHub. Prints stay the `pages` experiment, off by default and on for Wayne. Wayne decided on 11 Nov to keep it an experiment rather than make it standard. The full user-facing walkthrough is the Prints section of `docs/guide.md`. This page is the short version plus the gap list.
+Updated 2026-11-12, after the recipes moved into the repo. On main at `b221756c`, pushed to GitHub. Prints stay the `pages` experiment, off by default and on for Wayne. Wayne decided on 11 Nov to keep it an experiment rather than make it standard. The full user-facing walkthrough is the Prints section of `docs/guide.md`. This page is the short version plus the gap list.
 
 ## How Prints work
 
@@ -25,9 +25,10 @@ A Print is a page a thread makes for you to keep. Ask for a chart, a dashboard, 
 | In Highlights | A thread's Highlights list the Prints it made, under Prints, each with its kind, version and the projects it's in, or "No project". A click opens it beside the thread |
 | Prints on the rail | A Prints button on the right-hand rail, under Files, while Prints is on and at least one exists. It lists every Print, newest first, with its projects. A click opens it in the pane; Back returns to the list |
 | Convex insights | "Make a Convex insights report" runs `npx convex insights --details --json` in the app's folder and builds a dashboard: insights, calls affected, errors, functions, calls by function and by kind, and each insight's table and last time seen. No insights gives a short all-clear report. Read only, last 72 hours, cloud deployments only |
+| Convex API map | "Map my Convex API" runs `npx convex function-spec` and builds a dashboard of every function and HTTP route: public or internal, the arguments each takes, and missing validators, listed first. Reads metadata only |
 | Outside agents | A key with read-all access can `list_prints` and `read_print` published Prints, in bounded pages. Read only. Local Prints are never visible |
 
-The agent side is the `create_print`, `update_print`, `read_print`, `list_prints`, `publish_print` family of tools. The older `*_page` names still work. The make-print skill holds the chart, dashboard and report recipes, and the Convex insights report (`insights.mjs`). The bundle-report skill builds the Convex bundle size Print.
+The agent side is the `create_print`, `update_print`, `read_print`, `list_prints`, `publish_print` family of tools. The older `*_page` names still work. The recipes ship with Threadbear as built-in skills in `runner/skills/`: make-print (charts, dashboards, reports, docs, progress, the Convex insights report and the Convex API map) and bundle-report (the Convex bundle size Print). Add them from the Skills page. make-print keeps the saved style in `~/.config/threadbear/print-style.json`.
 
 ## What's missing
 
