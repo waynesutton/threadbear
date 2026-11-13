@@ -1,5 +1,5 @@
 // tb: a small command line client for testing and scripting the runner.
-import { BEAR_FLAGS, BEARS_HELP, bearsCommand, WEBHOOK_FLAGS, WEBHOOKS_HELP, webhooksCommand } from './cli-bears.ts';
+import { BEAR_FLAGS, BEARS_HELP, bearsCommand, TABLE_FLAGS, TABLES_HELP, tablesCommand, WEBHOOK_FLAGS, WEBHOOKS_HELP, webhooksCommand } from './cli-bears.ts';
 import { parseArgs } from 'node:util';
 import { startedByFlags } from './started-by-flags.ts';
 import fs from 'node:fs';
@@ -35,9 +35,16 @@ const OPTIONS = {
   does: { type: 'string' },
   personality: { type: 'string' },
   face: { type: 'string' },
+  notes: { type: 'string' },
   runner: { type: 'string' },
   bear: { type: 'string' },
   batch: { type: 'string' },
+  bears: { type: 'string' },
+  goal: { type: 'string' },
+  parent: { type: 'string' },
+  max: { type: 'string' },
+  add: { type: 'string' },
+  unseat: { type: 'string' },
   // tb move <id> --to <runner> --preview (moving a thread to another machine).
   preview: { type: 'boolean' },
   account: { type: 'string' },
@@ -150,6 +157,7 @@ const HELP = `tb: talk to the Threadbear runner
   tb projects parent <project> <parent|none>   makes a project a part of another, or its own again
 ${BEARS_HELP}
 ${WEBHOOKS_HELP}
+${TABLES_HELP}
   tb librarian [--json]           what the librarian is doing, its queue and what it did
   tb librarian run [<threadId>]   a look at a thread now; with none, at every recent thread it hasn't seen
   tb librarian pause|resume
@@ -228,6 +236,7 @@ const COMMAND_FLAGS: Record<string, string[]> = {
   projects: ['json', 'archived'],
   bears: BEAR_FLAGS,
   webhooks: WEBHOOK_FLAGS,
+  tables: TABLE_FLAGS,
   librarian: ['json'],
   settings: ['json'],
   models: ['json', 'remove', 'labels', 'field', 'system', 'cwd'],
@@ -808,6 +817,8 @@ async function run(client: RunnerClient, cmd: string, args: string[], f: Flags):
       return bearsCommand(client, args, f);
     case 'webhooks':
       return webhooksCommand(client, args, f);
+    case 'tables':
+      return tablesCommand(client, args, f);
     case 'librarian': {
       const [action, id] = args;
       let r: { librarian: LibrarianStatus };

@@ -721,6 +721,10 @@ export type BearsMethodsDeps = {
   cwdOf: (threadId: string) => string | undefined;
   // Revokes a bear's webhooks when it's archived or deleted (webhooks.ts).
   revokeHooks?: (bearFolder: string) => Promise<unknown>;
+  // Hands a question to a bear (mentions.ts).
+  mention?: (p: { fromThreadId?: string; bear: string; text: string }) => unknown;
+  // Takes a bear out of its tables when it's archived (tables.ts).
+  unseat?: (bearId: string) => unknown;
 };
 
 const OFF = 'Bears are off: turn them on in Settings > General > Experiments.';
@@ -776,13 +780,24 @@ export function bearsMethods(d: BearsMethodsDeps): Record<string, (p: Record<str
       on();
       const archived = p.archived !== false;
       const bear = await d.bears.archive(str(p, 'bear'), archived);
-      if (archived) await d.revokeHooks?.(bear.folder).catch(() => undefined);
+      if (archived) {
+        await d.revokeHooks?.(bear.folder).catch(() => undefined);
+        d.unseat?.(bear.id);
+      }
       return { bear };
     },
     'bears.setProjects': (p) => {
       on();
       const ids = (k: string) => (Array.isArray(p[k]) ? (p[k] as unknown[]).filter((x): x is string => typeof x === 'string') : undefined);
       return { bear: d.bears.setProjects(str(p, 'bear'), { add: ids('add'), remove: ids('remove') }) };
+    },
+    // From a thread's tb bears ask, fromThreadId is the caller itself,
+    // whatever it says.
+    'bears.mention': (p) => {
+      on();
+      if (!d.mention) throw fail('Mentions are not wired on this runner.', ErrorCode.other);
+      const from = typeof p._caller === 'string' ? p._caller : typeof p.fromThreadId === 'string' ? p.fromThreadId : undefined;
+      return d.mention({ bear: str(p, 'bear'), text: str(p, 'text'), ...(from ? { fromThreadId: from } : {}) });
     },
     'bears.delete': async (p) => {
       on();

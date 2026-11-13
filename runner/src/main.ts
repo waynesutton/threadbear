@@ -32,6 +32,8 @@ import { KeepAwake } from './keep-awake.ts';
 import { experimentOn } from './experiments.ts';
 import { AgentThreads, agentCommands, agentsMethods, EXPERIMENT as OUTSIDE_AGENTS } from './outside-agents.ts';
 import { Bears, bearsMethods, bearsRoot, shiftOutOfQuiet, EXPERIMENT as BEARS } from './bears.ts';
+import { Mentions } from './mentions.ts';
+import { Tables, tablesMethods, tablesRoot, EXPERIMENT as TABLES } from './tables.ts';
 import { HookRegistry, revokeHooksFor, webhookCommands, webhooksMethods, EXPERIMENT as WEBHOOKS } from './webhooks.ts';
 import { xSearchMethods } from './x-search.ts';
 import { MacScreen } from './mac-screen.ts';
@@ -488,6 +490,48 @@ async function main(): Promise<void> {
     }),
   });
   runner.bearDefaults = (cwd, unattended) => (bearsOn() ? bears.newThreadDefaults(cwd, unattended) : undefined);
+  // Tables (tables.ts) and mentions (mentions.ts), both riding on bears.
+  const tablesOn = () => bearsOn() && experimentOn(cfg.home, TABLES);
+  const tables = new Tables({ root: tablesRoot(bears.root), projects, bears });
+  const bearName = (id: string) => {
+    try {
+      return bears.get(id, { faces: false }).name;
+    } catch {
+      return id;
+    }
+  };
+  projects.describeBears = (ids) => ids.map((id) => `${bearName(id)} (${id})`).join(', ');
+  const mentions = new Mentions({
+    home: cfg.home,
+    bears,
+    tableOf: (cwd) => (tablesOn() ? tables.tableOf(cwd) : undefined),
+    host: {
+      has: (id) => runner.has(id),
+      get: (id) => {
+        const t = runner.get(id);
+        return { id: t.id, title: t.title, cwd: t.cwd, permissionMode: t.permissionMode, status: t.status, projects: t.projects };
+      },
+      create: (p) => runner.create(p),
+      send: (id, text) => runner.send(id, text, [], { origin: 'runner', queue: true }),
+      lastReply: (id) => {
+        const evs = runner.events(id, { limit: 2000 }).events as { type: string; text?: string }[];
+        let start = 0;
+        evs.forEach((e, i) => {
+          if (e.type === 'turn.started') start = i;
+        });
+        return evs.slice(start).filter((e) => e.type === 'assistant.text' && typeof e.text === 'string').map((e) => e.text).join('\n\n');
+      },
+    },
+  });
+  runner.mentionHook = (id, text) => (bearsOn() ? mentions.fromWayne(id, text) : undefined);
+  runner.onThreadActivity((a) => {
+    if (a.kind !== 'turn.end' || !bearsOn()) return;
+    try {
+      mentions.turnEnded(a.threadId);
+    } catch (e) {
+      log.warn("a bear's reply couldn't be handed back", { threadId: a.threadId, error: (e as Error).message });
+    }
+  });
   scheduler.holdFor = (rec) => (bearsOn() && rec.cwd && !rec.threadId ? bears.holdReason(rec.cwd) : undefined);
   scheduler.adjustAt = (p, at) => {
     if (!bearsOn()) return at;
@@ -500,6 +544,12 @@ async function main(): Promise<void> {
   // membership); the librarian needs both.
   projects.start(runner);
   const librarian = new Librarian({ host: runner, projects, models, clock: realClock, log, home: cfg.home, pocket: pocketControl });
+  // Bear notes (experiment bearNotes): the opted-in bears, never on a bear's
+  // own thread or with bears off.
+  librarian.bearNotes = (cwd) =>
+    bearsOn() && experimentOn(cfg.home, 'bearNotes') && !bears.forCwd(cwd)
+      ? bears.list({ faces: false }).flatMap((b) => (b.notes && b.notes !== 'off' && !b.away ? [{ id: b.id, name: b.name, ...(b.does ? { does: b.does } : {}), ...(b.personality ? { personality: b.personality } : {}), notes: b.notes }] : []))
+      : [];
   if (!copyOfReal) librarian.start();
   // The public profile page (public-profile.ts): sent to this runner's
   // Convex backend, and only from the main Mac (the backend takes it from
@@ -894,7 +944,7 @@ async function main(): Promise<void> {
       return { threadId: t.thread.id, started: true };
     }
   };
-  const methods = { ...profileMethods(profileJobs), ...profilePageMethods(publicProfile), ...restartMethods(restarter), ...scheduleMethods(scheduler), ...projectMethods(projects), ...pageMethods(pagesFor, askAboutPage, printPublisher), ...drainProjectMethods(projects), ...librarianMethods(librarian), ...connectorsMethods(connectors, { on: () => experimentOn(cfg.home, 'connectorsSetup'), start: (r) => startOwnThread(runner, r, undefined), open: openThread, local: () => experimentOn(cfg.home, 'localConnectors'), findLauncher: (l) => findLauncher(l) }), ...settingsMethods(settings), ...skillMethods(skills), ...instructionsMethods(instructions), ...modelMethods(models), ...devicesMethods(sync), ...agentsMethods(sync, () => experimentOn(cfg.home, OUTSIDE_AGENTS)), ...bearsMethods({ bears, on: bearsOn, cwdOf: (id) => (runner.has(id) ? runner.get(id).cwd : undefined), revokeHooks: (folder) => (webhooksOn() ? revokeHooksFor(sync, folder) : Promise.resolve(0)) }), ...webhooksMethods({ backend: sync, registry: hookRegistry, on: webhooksOn, runnerId: syncRunnerId, needApi: WEBHOOKS_API_VERSION, modeOf: (id) => (runner.has(id) ? runner.get(id).permissionMode : undefined), bearFolder: (b) => { if (!bearsOn()) return undefined; try { return bears.get(b, { faces: false }).folder; } catch { return undefined; } } }), ...xSearchMethods({ on: () => experimentOn(cfg.home, 'xSearch'), secretsDir: paths.secrets(cfg.home) }), ...usageStatsMethods({ tally, history: usageHistory, clock: realClock }) };
+  const methods = { ...profileMethods(profileJobs), ...profilePageMethods(publicProfile), ...restartMethods(restarter), ...scheduleMethods(scheduler), ...projectMethods(projects), ...pageMethods(pagesFor, askAboutPage, printPublisher), ...drainProjectMethods(projects), ...librarianMethods(librarian), ...connectorsMethods(connectors, { on: () => experimentOn(cfg.home, 'connectorsSetup'), start: (r) => startOwnThread(runner, r, undefined), open: openThread, local: () => experimentOn(cfg.home, 'localConnectors'), findLauncher: (l) => findLauncher(l) }), ...settingsMethods(settings), ...skillMethods(skills), ...instructionsMethods(instructions), ...modelMethods(models), ...devicesMethods(sync), ...agentsMethods(sync, () => experimentOn(cfg.home, OUTSIDE_AGENTS)), ...tablesMethods({ tables: () => tables, on: tablesOn }), ...bearsMethods({ bears, on: bearsOn, mention: (p) => mentions.ask(p), unseat: (id) => tables.unseatEverywhere(id), cwdOf: (id) => (runner.has(id) ? runner.get(id).cwd : undefined), revokeHooks: (folder) => (webhooksOn() ? revokeHooksFor(sync, folder) : Promise.resolve(0)) }), ...webhooksMethods({ backend: sync, registry: hookRegistry, on: webhooksOn, runnerId: syncRunnerId, needApi: WEBHOOKS_API_VERSION, modeOf: (id) => (runner.has(id) ? runner.get(id).permissionMode : undefined), bearFolder: (b) => { if (!bearsOn()) return undefined; try { return bears.get(b, { faces: false }).folder; } catch { return undefined; } } }), ...xSearchMethods({ on: () => experimentOn(cfg.home, 'xSearch'), secretsDir: paths.secrets(cfg.home) }), ...usageStatsMethods({ tally, history: usageHistory, clock: realClock }) };
   // runner.status carries the CLI statuses too (protocol, "runner.status").
   const restartStatus = methods['runner.status'];
   methods['runner.status'] = (p) => {

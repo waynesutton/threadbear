@@ -23,6 +23,7 @@ export const BEARS_HELP = `  tb bears [--archived] [--json]   the bears (experim
   tb bears show|routines <bear>   one bear, or its routines with their next run
   tb bears rename <bear> "Name"   the id and folder never change
   tb bears set <bear> [--does W] [--personality W] [--face PRESET] [--model M] [--effort L] [--icon S]
+                [--notes off|cheers|ideas|both]   bear notes (experiment bearNotes)
   tb bears access <bear> [--ask | --auto | --plan | --full] [--pool ID] [--runner NAME]
                                   what a bear may do; never from a bear's own thread
   tb bears momma <bear|none>      makes a bear the chief of staff that runs the others
@@ -34,7 +35,7 @@ export const BEARS_HELP = `  tb bears [--archived] [--json]   the bears (experim
   tb bears faces                  the face presets
   tb bears ask <bear> "text"      hands this thread's question to a bear; its reply comes back here`;
 
-export const BEAR_FLAGS = ['json', 'archived', 'does', 'personality', 'face', 'model', 'effort', 'icon', 'ask', 'auto', 'plan', 'full', 'pool', 'runner'];
+export const BEAR_FLAGS = ['json', 'archived', 'does', 'personality', 'face', 'model', 'effort', 'icon', 'notes', 'ask', 'auto', 'plan', 'full', 'pool', 'runner'];
 
 function line(b: Bear): string {
   const tags = [b.momma ? 'momma' : '', b.state.pinned !== undefined ? 'pinned' : '', b.away ? `away until ${b.state.awayUntil}` : '', b.archived ? 'archived' : ''].filter(Boolean);
@@ -66,7 +67,7 @@ export async function bearsCommand(client: RunnerClient, args: string[], f: Flag
   };
   const fields = () => {
     const out: Record<string, unknown> = {};
-    for (const k of ['does', 'personality', 'model', 'effort', 'icon'] as const) if (typeof f[k] === 'string') out[k] = f[k];
+    for (const k of ['does', 'personality', 'model', 'effort', 'icon', 'notes'] as const) if (typeof f[k] === 'string') out[k] = f[k];
     return out;
   };
   const face = async () => {
@@ -215,4 +216,41 @@ export async function webhooksCommand(client: RunnerClient, args: string[], f: F
     return 0;
   }
   throw new Error(`Unknown: tb webhooks ${action}. It's list, new or revoke.`);
+}
+
+export const TABLES_HELP = `  tb tables [--archived] [--json]  the tables of bears (experiment tables)
+  tb tables new "Title" --bears "A,B" [--goal WORDS] [--parent PROJECT] [--max N]
+                                  a table: a project with a host chat in Tables/<id>; with
+                                  --parent it's a part of that project
+  tb tables seat <table> [--add "A,B"] [--unseat "C"] [--max N]   who sits at it, and the reply cap`;
+
+export const TABLE_FLAGS = ['json', 'archived', 'bears', 'goal', 'parent', 'max', 'add', 'unseat'];
+
+type TableRow = { id: string; title: string; folders: string[]; parentId?: string; table?: { bears: string[]; maxTurns?: number } };
+
+export async function tablesCommand(client: RunnerClient, args: string[], f: Flags): Promise<number> {
+  const [action, a] = args;
+  const list = (v: unknown) => (typeof v === 'string' ? v.split(',').map((x) => x.trim()).filter(Boolean) : undefined);
+  const line = (t: TableRow) => `${t.id}  ${t.title}: ${(t.table?.bears ?? []).join(', ') || 'no bears'}${t.parentId ? ` (a part of ${t.parentId})` : ''}  ${t.folders[0] ?? ''}`;
+  if (!action || action === 'list') {
+    const r = await client.call<{ on: boolean; tables: TableRow[] }>('tables.list', { archived: Boolean(f.archived) });
+    if (!r.on) console.log('Tables are off. Turn on bears and tables in Settings > General > Experiments.');
+    else if (f.json) console.log(JSON.stringify(r.tables, null, 2));
+    else if (!r.tables.length) console.log('No tables yet.');
+    else for (const t of r.tables) console.log(line(t));
+    return 0;
+  }
+  if (action === 'new') {
+    if (!a) throw new Error('tb tables new "Title" --bears "A,B"');
+    const r = await client.call<{ table: TableRow }>('tables.create', { title: a, bears: list(f.bears) ?? [], ...(typeof f.goal === 'string' ? { goal: f.goal } : {}), ...(typeof f.parent === 'string' ? { parent: f.parent } : {}), ...(typeof f.max === 'string' ? { maxTurns: Number(f.max) } : {}) });
+    console.log(`${line(r.table)}\nIts chat: a new thread in ${r.table.folders[0]}`);
+    return 0;
+  }
+  if (action === 'seat') {
+    if (!a) throw new Error('tb tables seat <table> --add "A"');
+    const r = await client.call<{ table: TableRow }>('tables.seat', { table: a, ...(list(f.add) ? { add: list(f.add) } : {}), ...(list(f.unseat) ? { remove: list(f.unseat) } : {}), ...(typeof f.max === 'string' ? { maxTurns: Number(f.max) } : {}) });
+    console.log(line(r.table));
+    return 0;
+  }
+  throw new Error(`Unknown: tb tables ${action}. It's list, new or seat.`);
 }

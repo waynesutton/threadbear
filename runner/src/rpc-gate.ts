@@ -54,12 +54,13 @@ export const GATED_READS: ReadonlySet<string> = new Set([
   'bears.get',
   'bears.faces',
   'webhooks.list',
+  'tables.list',
 ]);
 
 // Bears (bears.ts) a thread below Full access may still change: its harmless
 // fields and Wayne's list order. What widens a bear (bears.setAccess) or
 // can't be undone in a click (archive, delete) needs the app.
-const BEAR_WRITES: ReadonlySet<string> = new Set(['bears.create', 'bears.update', 'bears.pin', 'bears.move', 'bears.hibernate', 'bears.setProjects']);
+const BEAR_WRITES: ReadonlySet<string> = new Set(['bears.create', 'bears.update', 'bears.pin', 'bears.move', 'bears.hibernate', 'bears.setProjects', 'bears.mention', 'tables.create', 'tables.seat']);
 
 type ThreadLike = { permissionMode?: PermissionMode; title: string; status?: string };
 
@@ -128,7 +129,7 @@ export class CallerGate {
   check(threadId: string, method: string, p: Params): Params {
     // Who's asking goes with a bear call, so a bear's own thread can't
     // raise itself even on Full access (bears.ts, setAccess).
-    if (method.startsWith('bears.')) p = { ...p, _caller: threadId };
+    if (method.startsWith('bears.') || method.startsWith('tables.')) p = { ...p, _caller: threadId };
     const caller = this.authority(threadId);
     if (caller.mode === 'full' && !caller.confined) return p;
     if (GATED_READS.has(method)) return p;

@@ -401,6 +401,10 @@ export type Project = {
   // The project it's a part of (docs/protocol.md, Projects, "Parts"). One
   // level: a part has no parts.
   parentId?: string;
+  // A table of bears (tables.ts, experiment tables): the bears at it and
+  // how many bear replies each of Wayne's messages allows. Never sent to
+  // the Convex mirror (sync.ts toProjectDoc), so phones see a project.
+  table?: { bears: string[]; maxTurns?: number };
   threadCount: number;
   lastActivityAt?: string;
 };
