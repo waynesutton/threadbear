@@ -1,10 +1,10 @@
-// Bears (bears.ts): the folder model, bears.json, Momma Bear, faces, quiet
+// Bears (bears.ts): the folder model, bears.json, Head Bear, faces, quiet
 // hours, and the defaults a bear's new thread starts with.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
-import { avatarPresets, Bears, bearsMethods, checkAvatar, DEFAULT_BEAR, lowerMode, MOMMA_TEXT, newBearId, renderFaces, shiftOutOfQuiet, type BearSchedules } from '../../src/bears.ts';
+import { avatarPresets, Bears, bearsMethods, checkAvatar, DEFAULT_BEAR, lowerMode, HEAD_TEXT, newBearId, renderFaces, shiftOutOfQuiet, type BearSchedules } from '../../src/bears.ts';
 import { CallerGate } from '../../src/rpc-gate.ts';
 import type { Schedule } from '../../src/protocol.ts';
 import { makeHarness, tmpDir } from '../helpers/fakes.ts';
@@ -87,7 +87,7 @@ test('rename keeps the id and folder; access fields are refused from bears.updat
   assert.throws(() => bears.update(b.id, { avatar: { version: 1 } }), /valid Open Bot Avatar/);
 });
 
-test("a bear's thread can't change what any bear may do, Momma's included", async () => {
+test("a bear's thread can't change what any bear may do, the head bear's included", async () => {
   const { bears } = setup();
   const a = await bears.create({ name: 'A', tidy: false });
   const b = await bears.create({ name: 'B', tidy: false });
@@ -146,7 +146,7 @@ test('away and archived hold its routines; archive pauses them and they stay pau
   assert.equal(schedules.rows[0].paused, true, 'routines stay paused until resumed');
 });
 
-test('pin and order: Momma first, then pinned in pin order, then manual order, then name', async () => {
+test('pin and order: the head bear first, then pinned in pin order, then manual order, then name', async () => {
   const { bears } = setup();
   const a = await bears.create({ name: 'Alpha', tidy: false });
   const b = await bears.create({ name: 'Bravo', tidy: false });
@@ -156,46 +156,46 @@ test('pin and order: Momma first, then pinned in pin order, then manual order, t
   assert.deepEqual(bears.list().map((x) => x.name), ['Charlie', 'Alpha', 'Bravo']);
   bears.pin(b.id, true);
   assert.deepEqual(bears.list().map((x) => x.name), ['Bravo', 'Charlie', 'Alpha']);
-  bears.setMomma(a.id);
+  bears.setHead(a.id);
   assert.deepEqual(bears.list().map((x) => x.name), ['Alpha', 'Bravo', 'Charlie']);
   bears.pin(b.id, false);
   assert.equal(bears.get(b.id).state.pinned, undefined);
 });
 
-test('Momma Bear: made once as the default, and the chief of staff block follows the job', async () => {
+test('Head Bear: made once as the default, and the chief of staff block follows the job', async () => {
   const { bears } = setup();
   await bears.ensureDefault();
-  const m = bears.momma();
+  const m = bears.headBear();
   assert.equal(m?.name, DEFAULT_BEAR.name);
   assert.ok(m?.avatar, 'a face');
   assert.ok(fs.readFileSync(path.join(m!.folder, 'CLAUDE.md'), 'utf8').includes('## Chief of staff'));
   const w = await bears.create({ name: 'Writer', tidy: false });
-  bears.setMomma(w.id);
+  bears.setHead(w.id);
   assert.ok(!fs.readFileSync(path.join(m!.folder, 'CLAUDE.md'), 'utf8').includes('## Chief of staff'), 'taken off the old one');
   const text = fs.readFileSync(path.join(w.folder, 'CLAUDE.md'), 'utf8');
   assert.equal(text.split('## Chief of staff').length, 2);
-  bears.setMomma(w.id);
+  bears.setHead(w.id);
   assert.equal(fs.readFileSync(path.join(w.folder, 'CLAUDE.md'), 'utf8').split('## Chief of staff').length, 2, 'not added twice');
-  assert.ok(MOMMA_TEXT.includes('tb bears ask'));
+  assert.ok(HEAD_TEXT.includes('tb bears ask'));
   await bears.delete(m!.id);
   await bears.ensureDefault();
   assert.equal(bears.list().filter((x) => x.name === DEFAULT_BEAR.name).length, 0, 'once only');
-  bears.setMomma(null);
-  assert.equal(bears.momma(), undefined);
+  bears.setHead(null);
+  assert.equal(bears.headBear(), undefined);
 });
 
 test('delete moves the folder to the runner trash, deletes routines and archives its threads', async () => {
   const { bears, home, schedules, archived, threads } = setup();
   const b = await bears.create({ name: 'R' });
   threads[0].cwd = b.folder;
-  bears.setMomma(b.id);
+  bears.setHead(b.id);
   const r = await bears.delete(b.id);
   assert.ok(r.trashed.startsWith(path.join(home, 'trash')));
   assert.ok(fs.existsSync(path.join(r.trashed, 'CLAUDE.md')));
   assert.ok(!fs.existsSync(b.folder));
   assert.equal(schedules.rows.length, 0);
   assert.deepEqual(archived, ['t1']);
-  assert.equal(bears.momma(), undefined);
+  assert.equal(bears.headBear(), undefined);
   assert.throws(() => bears.get(b.id), /No bear/);
 });
 
@@ -222,7 +222,7 @@ test('faces: every preset is a valid avatar and renders three moods; bad ones ar
   assert.equal(lowerMode('auto', 'full'), 'auto');
 });
 
-test('RPCs: off by default, Momma made on the first list, setMomma refused from a bear thread', async () => {
+test('RPCs: off by default, Head Bear made on the first list, setHead refused from a bear thread', async () => {
   const { bears } = setup();
   let on = false;
   const cwds: Record<string, string> = {};
@@ -230,12 +230,12 @@ test('RPCs: off by default, Momma made on the first list, setMomma refused from 
   assert.deepEqual(await m['bears.list']({}), { on: false, bears: [] });
   await assert.rejects(async () => m['bears.create']({ name: 'X' }), /Bears are off/);
   on = true;
-  const r = (await m['bears.list']({ faces: false })) as { bears: { name: string; folder: string; momma: boolean }[] };
-  assert.equal(r.bears[0].name, 'Momma Bear');
-  assert.equal(r.bears[0].momma, true);
+  const r = (await m['bears.list']({ faces: false })) as { bears: { name: string; folder: string; head: boolean }[] };
+  assert.equal(r.bears[0].name, 'Head Bear');
+  assert.equal(r.bears[0].head, true);
   cwds.t = r.bears[0].folder;
-  assert.throws(() => m['bears.setMomma']({ bear: null, _caller: 't' }), /can't pick the chief of staff/);
-  assert.throws(() => m['bears.setAccess']({ bear: 'Momma Bear', permissionMode: 'full', _caller: 't' }), /own thread/);
+  assert.throws(() => m['bears.setHead']({ bear: null, _caller: 't' }), /can't pick the chief of staff/);
+  assert.throws(() => m['bears.setAccess']({ bear: 'Head Bear', permissionMode: 'full', _caller: 't' }), /own thread/);
 });
 
 test('the RPC gate: a thread below Full access reads bears and edits harmless fields, never access', () => {

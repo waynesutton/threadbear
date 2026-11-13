@@ -8,7 +8,7 @@ Each item below lists the runner calls it needs. All of them exist today, so non
 
 A foldable **Bears** section under Starred, shown only while `hello.experiments` has `bears`.
 
-- One row per bear from `bears.list` (Momma first, then pinned, then Wayne's order): its face, name, and a detail line. The line shows the current thread's title while the bear works, "Away until Mon 9:00" while it hibernates, and its `does` line otherwise.
+- One row per bear from `bears.list` (the head bear first, then pinned, then Wayne's order): its face, name, and a detail line. The line shows the current thread's title while the bear works, "Away until Mon 9:00" while it hibernates, and its `does` line otherwise.
 - The face is one of `bears.list`'s SVG stills (`faces.idle`, `faces.thinking`, `faces.happy`), matched to the bear's newest thread: thinking while it runs, happy once it's done, idle otherwise. Draw them through the same SVG path the app uses for Pele diagrams. No live canvas per row.
 - Click opens the bear's newest chat, or a new-thread screen in its folder (`bears.list[].folder`) showing its name and face.
 - A **Tables** group under it from `tables.list`, each row naming its bears.
@@ -27,7 +27,7 @@ Right-click on a bear row:
 | Change face… | the face picker below, then `bears.update { avatar, color }` |
 | Add routine… | the schedule editor with `cwd` prefilled |
 | Add webhook… | the New webhook sheet with the bear picked |
-| Make chief of staff | `bears.setMomma` (starred when it's the one, per the menu rule) |
+| Make chief of staff | `bears.setHead` (starred when it's the one, per the menu rule) |
 | Pin / Unpin | `bears.pin` |
 | Away until… | `bears.hibernate { until }`, with Wake when it's away |
 | Archive / Unarchive | `bears.archive` |

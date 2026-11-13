@@ -10,7 +10,7 @@
 //   mode (Ask unless Wayne raised it) and the asking thread's;
 // - a thread never mentions its own bear; at most 3 bears a message;
 // - a bear's own thread can ask another bear only through a table they
-//   share, unless it's Momma Bear (the chief of staff);
+//   share, unless it's Head Bear (the chief of staff);
 // - at a table, each of Wayne's messages allows at most maxTurns bear
 //   replies; after that the host has to sum up (tables.ts);
 // - one job at a time per bear: a new ask while its mention thread is
@@ -46,7 +46,7 @@ type State = { jobs: Record<string, { bearId: string; bearName: string; waiters:
 export type MentionResult = { threadId?: string; bear: string; note?: string };
 
 // The bears a message names: `@bear:<id>`, or `@Name` for a bear's name
-// (any case, longest name first, so "@Mama Bear" beats "@Mama").
+// (any case, longest name first, so "@Head Bear" beats "@Head").
 export function findMentions(text: string, bears: Pick<BearInfo, 'id' | 'name'>[]): string[] {
   const out: string[] = [];
   const add = (id: string) => {
@@ -145,7 +145,7 @@ export class Mentions {
     if (asker?.id === bear.id) throw new Error(`That's ${bear.name}'s own thread: a bear doesn't mention itself.`);
     const table = from ? this.tableOf(from.cwd) : undefined;
     if (table && !table.bears.includes(bear.id)) throw new Error(`${bear.name} isn't at the table "${table.title}".`);
-    if (asker && !p.byWayne && !asker.momma) throw new Error(`${asker.name} can ask another bear only through a table they share, so Wayne sees it. Ask from the table's thread.`);
+    if (asker && !p.byWayne && !asker.head) throw new Error(`${asker.name} can ask another bear only through a table they share, so Wayne sees it. Ask from the table's thread.`);
     const s = this.read();
     if (table && from) {
       const used = s.rounds[from.id] ?? 0;

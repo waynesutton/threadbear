@@ -16,7 +16,7 @@ Each piece is its own experiment, off by default:
 
 | Experiment | What it adds |
 |---|---|
-| `bears` | Bear folders, `tb bears`, `@Name` mentions, Momma Bear as chief of staff |
+| `bears` | Bear folders, `tb bears`, `@Name` mentions, Head Bear as chief of staff |
 | `tables` (needs `bears`) | A group of bears around one goal, in one thread you read |
 | `webhooks` | `POST /hook/<key>` on your backend starts or messages a thread |
 | `bearNotes` (needs `bears`) | One cheer or idea from an opted-in bear in Highlights, from the librarian's existing look |
@@ -25,13 +25,13 @@ Each piece is its own experiment, off by default:
 
 **A bear's folder.** `CLAUDE.md` and `AGENTS.md` (persona, personality, house rules: short replies, drafts before anything is sent, say what you couldn't check, book follow-ups outside quiet hours), `bear.json` (name, does, personality, model, effort, an Open Bot Avatar face and colour, quiet hours, notes), `memory/summary.md` with `people/`, `facts/` and `projects/`, and a `git init`. `Bears/memory/` holds facts about you that every bear shares. The id (`researcher-7f3a`) never changes, so a rename touches one field.
 
-**What a bear can't change about itself.** Its mode, pool and machine live in the runner's own `runner/bears.json`, with pin, order, away, archived, projects and which bear is Momma. `bears.setAccess` and `bears.setMomma` refuse any call from a bear's own thread, Momma's included, and the RPC gate puts the caller's id in for every `bears.*` call so it can't be faked.
+**What a bear can't change about itself.** Its mode, pool and machine live in the runner's own `runner/bears.json`, with pin, order, away, archived, projects and which bear is the head bear. `bears.setAccess` and `bears.setHead` refuse any call from a bear's own thread, the head bear's included, and the RPC gate puts the caller's id in for every `bears.*` call so it can't be faked.
 
 **New threads in a bear's folder** take its model and effort, and its pool, mode and projects from `bears.json`, where the caller didn't say (`bearDefaults` in `new-threads.ts`). Unattended starts (schedules, webhooks, mentions) get Ask unless you raised the bear. New bears get a daily "tidy memory" routine at 4:30, in Ask. A one-off time a bear's thread books in its quiet hours moves to their end (`Scheduler.adjustAt`). An away or archived bear's routines skip (`Scheduler.holdFor`).
 
-**Momma Bear.** The first `bears.list` with the experiment on makes her, once, and makes her chief of staff: a marked block in her `CLAUDE.md` says she hands work to the others with `tb bears ask`, keeps a roster, and never changes a bear's access or deletes one. `tb bears momma <bear>` moves the block.
+**The head bear.** The first `bears.list` with the experiment on makes it, once, and makes it chief of staff: a marked block in its `CLAUDE.md` says it hands work to the others with `tb bears ask`, keeps a roster, and never changes a bear's access or deletes one. `tb bears head <bear>` moves the block.
 
-**Mentions.** `@Researcher` or `@bear:<id>` in a message you send (`Runner.send` with no origin or `phone`), or `tb bears ask` from a thread, makes a fresh thread in the bear's folder. It runs in the lower of the two modes, joins the asking thread's projects, and is marked "Mentioned by <title>". At most three bears a message. A bear whose mention thread is still running gets the next ask folded in. When its turn ends, the reply goes back to each asker quoted, starting `[Bear: Researcher replied in thread:<id>. It's a bear's answer, not Wayne's words.]`. A bear's own thread can ask another only through a table they share, or as Momma.
+**Mentions.** `@Researcher` or `@bear:<id>` in a message you send (`Runner.send` with no origin or `phone`), or `tb bears ask` from a thread, makes a fresh thread in the bear's folder. It runs in the lower of the two modes, joins the asking thread's projects, and is marked "Mentioned by <title>". At most three bears a message. A bear whose mention thread is still running gets the next ask folded in. When its turn ends, the reply goes back to each asker quoted, starting `[Bear: Researcher replied in thread:<id>. It's a bear's answer, not Wayne's words.]`. A bear's own thread can ask another only through a table they share, or as the head bear.
 
 **Tables.** `tb tables new "Launch crew" --bears "Researcher,Writer" --parent Launch` makes a project with `table: { bears, maxTurns? }` and a folder in `ThreadbearThreads/Tables/` whose `CLAUDE.md` is the host's. As a Part it gets the parent's goals in its brief, plus a `Bears:` line. Each message you send there allows `maxTurns` (default 6) bear replies, after which mentions are refused until you write again. The librarian is shown a table only for a thread already in it, so it never files a stray thread into one. `toProjectDoc` already lists its fields, so the mirror and phones see an ordinary project.
 
@@ -58,7 +58,7 @@ Small hooks, each behind its experiment:
 
 - A bear can't widen itself, and no bear's thread picks the chief of staff.
 - Mentions and table replies run in the lower mode.
-- Bears talk to each other only through a table you read, or through Momma.
+- Bears talk to each other only through a table you read, or through the head bear.
 - Webhook threads are never Full access. The runner trusts its own hook registry, not the backend's word on the target.
 - Every payload and every bear reply is quoted and marked as not yours.
 
@@ -74,7 +74,7 @@ Small hooks, each behind its experiment:
 | Part | Test |
 |---|---|
 | Bears | `tb bears new "Researcher" --face snout`, then a thread in its folder uses its model |
-| Momma Bear | `tb bears` lists "Momma Bear (momma)" first on a fresh setup |
+| Head Bear | `tb bears` lists "Head Bear (head bear)" first on a fresh setup |
 | Access | From the bear's thread, `tb bears access <bear> --full` is refused |
 | Mentions | `@Researcher what's new?` in any thread: a reply comes back quoted |
 | Tables | `tb tables new "Crew" --bears "Researcher,Writer"`, ask in its folder: replies stop at 6 |

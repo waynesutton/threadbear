@@ -10,14 +10,14 @@ type Bear = {
   model?: string;
   effort?: string;
   folder: string;
-  momma: boolean;
+  head: boolean;
   away: boolean;
   archived: boolean;
   state: { permissionMode?: string; poolId?: string; runner?: string; pinned?: number; awayUntil?: string; projects?: string[] };
   routines: { id: string; title: string; whenText: string; nextRunAt?: string; paused: boolean }[];
 };
 
-export const BEARS_HELP = `  tb bears [--archived] [--json]   the bears (experiment bears): Momma first, then pinned, then your order
+export const BEARS_HELP = `  tb bears [--archived] [--json]   the bears (experiment bears): the head bear first, then pinned, then your order
   tb bears new "Name" [--does WORDS] [--personality WORDS] [--face PRESET] [--model M] [--effort L]
                                   makes a bear: its folder, persona, memory and a daily memory tidy
   tb bears show|routines <bear>   one bear, or its routines with their next run
@@ -26,7 +26,7 @@ export const BEARS_HELP = `  tb bears [--archived] [--json]   the bears (experim
                 [--notes off|cheers|ideas|both]   bear notes (experiment bearNotes)
   tb bears access <bear> [--ask | --auto | --plan | --full] [--pool ID] [--runner NAME]
                                   what a bear may do; never from a bear's own thread
-  tb bears momma <bear|none>      makes a bear the chief of staff that runs the others
+  tb bears head <bear|none>       makes a bear the chief of staff that runs the others
   tb bears pin|unpin|archive|unarchive|delete <bear>
   tb bears move <bear> <index>    its place in your order, 0 first
   tb bears away <bear> <until|off> hibernates it: routines skip, mentions get the away line
@@ -38,7 +38,7 @@ export const BEARS_HELP = `  tb bears [--archived] [--json]   the bears (experim
 export const BEAR_FLAGS = ['json', 'archived', 'does', 'personality', 'face', 'model', 'effort', 'icon', 'notes', 'ask', 'auto', 'plan', 'full', 'pool', 'runner'];
 
 function line(b: Bear): string {
-  const tags = [b.momma ? 'momma' : '', b.state.pinned !== undefined ? 'pinned' : '', b.away ? `away until ${b.state.awayUntil}` : '', b.archived ? 'archived' : ''].filter(Boolean);
+  const tags = [b.head ? 'head bear' : '', b.state.pinned !== undefined ? 'pinned' : '', b.away ? `away until ${b.state.awayUntil}` : '', b.archived ? 'archived' : ''].filter(Boolean);
   return `${b.id}  ${b.name}${tags.length ? ` (${tags.join(', ')})` : ''}${b.does ? `: ${b.does}` : ''}`;
 }
 
@@ -117,10 +117,10 @@ export async function bearsCommand(client: RunnerClient, args: string[], f: Flag
       show(r.bear);
       return 0;
     }
-    case 'momma': {
-      const who = need(a, 'tb bears momma <bear|none>');
-      const r = await client.call<{ bears: Bear[] }>('bears.setMomma', { bear: who === 'none' ? null : who });
-      const m = r.bears.find((x) => x.momma);
+    case 'head': {
+      const who = need(a, 'tb bears head <bear|none>');
+      const r = await client.call<{ bears: Bear[] }>('bears.setHead', { bear: who === 'none' ? null : who });
+      const m = r.bears.find((x) => x.head);
       console.log(m ? `${m.name} is the chief of staff now.` : 'No bear is the chief of staff now.');
       return 0;
     }

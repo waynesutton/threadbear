@@ -1,6 +1,6 @@
 ---
 name: bears
-description: Make, change and run Threadbear bears, the named teammates with their own folder, persona, memory, face and routines (experiment bears), and tables of bears. Use when the user says "make a bear", "new bear", "rename Researcher", "give Writer glasses", "ask Researcher", "@Researcher", "Momma Bear", "chief of staff", "put Writer away until Monday", "add a routine for a bear", "import this team", or "make a table". Uses tb bears and tb tables; never hand-edit another bear's memory.
+description: Make, change and run Threadbear bears, the named teammates with their own folder, persona, memory, face and routines (experiment bears), and tables of bears. Use when the user says "make a bear", "new bear", "rename Researcher", "give Writer glasses", "ask Researcher", "@Researcher", "Head Bear", "chief of staff", "put Writer away until Monday", "add a routine for a bear", "import this team", or "make a table". Uses tb bears and tb tables; never hand-edit another bear's memory.
 license: MIT
 ---
 
@@ -22,25 +22,25 @@ What widens a bear (its mode, pool and machine) lives in the runner's own `bears
 Run `tb bears --help` for the full list. The usual ones:
 
 ```bash
-tb bears                                   # the list: Momma first, then pinned
+tb bears                                   # the list: the head bear first, then pinned
 tb bears new "Researcher" --does "Finds sources and checks facts" --personality "dry and calm" --face round
 tb bears rename researcher-7f3a "Scout"
 tb bears set scout --face tufted --model sonnet
 tb bears ask scout "What changed in Convex 1.49?"   # its reply comes back to this thread
 tb bears away scout 3d                     # routines skip, mentions get the away line
 tb bears archive scout                     # off the list, routines paused, webhooks revoked
-tb bears momma <bear>                      # Wayne only: the chief of staff
+tb bears head <bear>                      # Wayne only: the chief of staff
 ```
 
 Deleting a bear (`tb bears delete`) moves its folder to the runner's trash and deletes its routines. Ask Wayne first, every time.
 
-## Momma Bear
+## The head bear
 
-One bear can be the chief of staff (`tb bears momma <bear>`). The first time bears are listed, Momma Bear is made and given the job. Her `CLAUDE.md` has a marked "Chief of staff" block: she hands jobs to the others with `tb bears ask`, keeps a roster in `memory/facts/bears.md`, and never changes a bear's access or deletes one.
+One bear can be the chief of staff (`tb bears head <bear>`). The first time bears are listed, Head Bear is made and given the job. Its `CLAUDE.md` has a marked "Chief of staff" block: it hands jobs to the others with `tb bears ask`, keeps a roster in `memory/facts/bears.md`, and never changes a bear's access or deletes one.
 
 ## Mentions
 
-`@Name` or `@bear:<id>` in a message Wayne sends, or `tb bears ask` from a thread, gives the message to that bear, in a fresh thread in its folder. It runs in the lower of the two threads' modes. When its turn ends, its reply comes back to the thread that asked, quoted and marked with its name. At most 3 bears per message. A bear's own thread can only ask another bear through a table they share, or when it is Momma.
+`@Name` or `@bear:<id>` in a message Wayne sends, or `tb bears ask` from a thread, gives the message to that bear, in a fresh thread in its folder. It runs in the lower of the two threads' modes. When its turn ends, its reply comes back to the thread that asked, quoted and marked with its name. At most 3 bears per message. A bear's own thread can only ask another bear through a table they share, or when it is the head bear.
 
 ## Routines
 

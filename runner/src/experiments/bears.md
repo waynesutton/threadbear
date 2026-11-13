@@ -11,9 +11,9 @@ reminder: 0a6703f6
 
 A bear is a named teammate, like Researcher or Writer, kept as a folder in `ThreadbearThreads/Bears/<id>`. Its `CLAUDE.md` is its persona and house rules, `memory/` is what it remembers (with a shared `Bears/memory/` for facts about you), and `bear.json` holds its name, face, what it does, model and effort. A thread in that folder is that bear. Its id never changes, so renaming it keeps its memory, routines and old threads.
 
-The first time bears are listed, Momma Bear is made as the chief of staff: she can hand jobs to the other bears. `tb bears momma <bear>` gives the job to another one.
+The first time bears are listed, Head Bear is made as the chief of staff: it can hand jobs to the other bears. `tb bears head <bear>` gives the job to another one.
 
-Make and manage bears with `tb bears` (new, rename, set, pin, move, away, archive, delete, momma, ask) or the `bears.*` calls. New bears get a daily "tidy memory" routine. Routines and other unattended runs start in Ask unless you raise the bear with `tb bears access`, which a bear's own thread can't do. A follow-up a bear books in its quiet hours (19:30 to 08:30 by default) moves to the morning. A bear that's away or archived skips its routines.
+Make and manage bears with `tb bears` (new, rename, set, pin, move, away, archive, delete, head, ask) or the `bears.*` calls. New bears get a daily "tidy memory" routine. Routines and other unattended runs start in Ask unless you raise the bear with `tb bears access`, which a bear's own thread can't do. A follow-up a bear books in its quiet hours (19:30 to 08:30 by default) moves to the morning. A bear that's away or archived skips its routines.
 
 `@Name` or `@bear:<id>` in a message you send, or `tb bears ask` from a thread, hands the message to that bear, and its reply comes back to the thread that asked.
 

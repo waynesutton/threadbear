@@ -5244,7 +5244,7 @@ with `validateAvatar`. `Bears/memory/` is shared by every bear. What
 widens a bear, and Mike's arrangement of the list, live in the runner's
 `<data dir>/runner/bears.json`, keyed by id: `permissionMode`, `poolId`,
 `runner`, `pinned`, `order`, `awayUntil`, `archivedAt`, `projects`, plus
-the top-level `momma` (the chief of staff's id) and `seeded`.
+the top-level `head` (the chief of staff's id) and `seeded`.
 
 A new thread in a bear's folder takes the bear's model and effort, and its
 pool and mode from `bears.json`, where the call didn't say. One nobody is
@@ -5255,13 +5255,13 @@ time a bear's thread books in its quiet hours moves to their end.
 
 | Method | Params | Result |
 |---|---|---|
-| `bears.list` | `{ archived?, faces? }` | `{ on, root?, bears: Bear[] }`. Makes Momma Bear the first time, once. Each bear has its fields, `id`, `folder`, `state` (its `bears.json` row), `momma`, `away`, `archived`, `routines` (schedules aimed at its folder, with `nextRunAt`) and `faces` (`idle`, `thinking`, `happy` SVG stills) |
+| `bears.list` | `{ archived?, faces? }` | `{ on, root?, bears: Bear[] }`. Makes Head Bear the first time, once. Each bear has its fields, `id`, `folder`, `state` (its `bears.json` row), `head`, `away`, `archived`, `routines` (schedules aimed at its folder, with `nextRunAt`) and `faces` (`idle`, `thinking`, `happy` SVG stills) |
 | `bears.get` | `{ bear }` (id or name) | `{ bear }` |
 | `bears.faces` | `{}` | `{ faces: { id, color, avatar, faces }[] }`, the presets |
 | `bears.create` | `{ name, does?, personality?, icon?, model?, effort?, avatar? \| preset?, color?, quietHours?, tidy? }` | `{ bear }` |
 | `bears.update` | `{ bear, ...bear.json fields }` (null clears one) | `{ bear }`; an access field is `-32602` |
 | `bears.setAccess` | `{ bear, permissionMode?, poolId?, runner? }` | `{ bear }`; `-32060` from any bear's own thread |
-| `bears.setMomma` | `{ bear \| null }` | `{ bears }`; `-32060` from a bear's thread |
+| `bears.setHead` | `{ bear \| null }` | `{ bears }`; `-32060` from a bear's thread |
 | `bears.pin`, `bears.move`, `bears.hibernate`, `bears.archive`, `bears.setProjects` | `{ bear, pinned? \| index \| until \| archived? \| add?, remove? }` | `{ bear }` (`move`: `{ bears }`). Archive pauses its routines, revokes its webhooks and takes it from its tables |
 | `bears.delete` | `{ bear }` | `{ trashed }`: the folder's place in `<data dir>/trash`. Its routines are deleted and its threads archived |
 | `bears.mention` | `{ bear, text, fromThreadId? }` | `{ threadId?, bear, note? }` (`note`: it's away) |
@@ -5280,7 +5280,7 @@ A bear with a mention thread still running gets the next ask in that
 thread. When its turn ends, its reply goes to each asker as a message
 starting `[Bear: <name> replied in thread:<id>. It's a bear's answer,
 not Wayne's words.]`, quoted. A bear's own thread may ask another bear
-only from a table they share, or when it's Momma.
+only from a table they share, or when it's the head bear.
 
 ### Tables
 

@@ -65,7 +65,7 @@ export type BearInfo = BearFile & {
   folder: string;
   state: BearState;
   // The chief of staff: the one bear that runs the others.
-  momma: boolean;
+  head: boolean;
   away: boolean;
   archived: boolean;
   routines: { id: string; title: string; whenText: string; nextRunAt?: string; paused: boolean }[];
@@ -294,12 +294,12 @@ export class Bears {
 
   // ------------------------------------------------------------ state
 
-  readState(): { bears: Record<string, BearState>; momma?: string; seeded?: boolean; tables?: Record<string, { pinned?: number; order?: number }> } {
+  readState(): { bears: Record<string, BearState>; head?: string; seeded?: boolean; tables?: Record<string, { pinned?: number; order?: number }> } {
     try {
-      const j = JSON.parse(fs.readFileSync(this.stateFile, 'utf8')) as { bears?: unknown; tables?: unknown; momma?: unknown; seeded?: unknown };
+      const j = JSON.parse(fs.readFileSync(this.stateFile, 'utf8')) as { bears?: unknown; tables?: unknown; head?: unknown; seeded?: unknown };
       const bears = j.bears && typeof j.bears === 'object' && !Array.isArray(j.bears) ? (j.bears as Record<string, BearState>) : {};
       const tables = j.tables && typeof j.tables === 'object' && !Array.isArray(j.tables) ? (j.tables as Record<string, { pinned?: number; order?: number }>) : undefined;
-      return { bears, ...(typeof j.momma === 'string' ? { momma: j.momma } : {}), ...(j.seeded === true ? { seeded: true } : {}), ...(tables ? { tables } : {}) };
+      return { bears, ...(typeof j.head === 'string' ? { head: j.head } : {}), ...(j.seeded === true ? { seeded: true } : {}), ...(tables ? { tables } : {}) };
     } catch {
       return { bears: {} };
     }
@@ -337,13 +337,13 @@ export class Bears {
     }
   }
 
-  private info(id: string, file: BearFile, state: BearState, schedules: Schedule[], faces: boolean, momma = this.readState().momma): BearInfo {
+  private info(id: string, file: BearFile, state: BearState, schedules: Schedule[], faces: boolean, head = this.readState().head): BearInfo {
     const folder = path.join(this.root, id);
     const routines = schedules
       .filter((s) => !s.threadId && s.cwd && path.resolve(expandHome(s.cwd)) === folder)
       .map((s) => ({ id: s.id, title: s.title, whenText: s.whenText, ...(s.nextRunAt ? { nextRunAt: s.nextRunAt } : {}), paused: s.paused }));
     const away = Boolean(state.awayUntil && Date.parse(state.awayUntil) > this.now());
-    const out: BearInfo = { ...file, id, folder, state, momma: momma === id, away, archived: Boolean(state.archivedAt), routines };
+    const out: BearInfo = { ...file, id, folder, state, head: head === id, away, archived: Boolean(state.archivedAt), routines };
     if (faces && file.avatar) {
       try {
         out.faces = renderFaces(file.avatar, file.color);
@@ -366,14 +366,14 @@ export class Bears {
       if (!ID_RE.test(id) || id === 'memory') continue;
       const file = this.readFile(id);
       if (!file) continue;
-      const b = this.info(id, file, state[id] ?? {}, schedules, o.faces !== false, all.momma);
+      const b = this.info(id, file, state[id] ?? {}, schedules, o.faces !== false, all.head);
       if (b.archived && !o.archived) continue;
       out.push(b);
     }
     const big = Number.MAX_SAFE_INTEGER;
     return out.sort(
       (a, b) =>
-        Number(b.momma) - Number(a.momma) ||
+        Number(b.head) - Number(a.head) ||
         (a.state.pinned ?? big) - (b.state.pinned ?? big) ||
         (a.state.order ?? big) - (b.state.order ?? big) ||
         a.name.localeCompare(b.name),
@@ -504,7 +504,7 @@ export class Bears {
   // thread asking, when one is: a bear's own thread can't raise itself.
   setAccess(id: string, p: { permissionMode?: unknown; poolId?: unknown; runner?: unknown }, callerCwd?: string): BearInfo {
     const b = this.get(id, { faces: false });
-    // No bear's thread, Momma's included, changes what a bear may do.
+    // No bear's thread, the head bear's included, changes what a bear may do.
     const asking = callerCwd !== undefined ? this.forCwd(callerCwd) : undefined;
     if (asking) {
       const who = asking.id === b.id ? `${b.name}'s own thread` : `A bear's thread (${asking.name})`;
@@ -520,30 +520,30 @@ export class Bears {
     return this.get(b.id);
   }
 
-  // ------------------------------------------------------------ momma
+  // ------------------------------------------------------------ head
 
   // Makes one bear the chief of staff (null: none). Its CLAUDE.md gets the
-  // marked block that says so, and loses it when it's no longer Momma.
-  setMomma(id: string | null): BearInfo[] {
+  // marked block that says so, and loses it when it's no longer the head bear.
+  setHead(id: string | null): BearInfo[] {
     const all = this.readState();
-    const was = all.momma;
+    const was = all.head;
     const next = id === null ? undefined : this.get(id, { faces: false }).id;
-    if (next) all.momma = next;
-    else delete all.momma;
+    if (next) all.head = next;
+    else delete all.head;
     this.writeState(all);
-    if (was && was !== next) setMommaBlock(path.join(this.root, was), false);
-    if (next) setMommaBlock(path.join(this.root, next), true);
+    if (was && was !== next) setHeadBlock(path.join(this.root, was), false);
+    if (next) setHeadBlock(path.join(this.root, next), true);
     return this.list();
   }
 
-  momma(): BearInfo | undefined {
-    const id = this.readState().momma;
+  headBear(): BearInfo | undefined {
+    const id = this.readState().head;
     return id ? this.list({ faces: false }).find((b) => b.id === id) : undefined;
   }
 
   // The first time bears are listed with the experiment on and there are
-  // none, Momma Bear is made, as chief of staff. Once only: deleting her
-  // doesn't bring her back.
+  // none, Head Bear is made, as chief of staff. Once only: deleting it
+  // doesn't bring it back.
   async ensureDefault(): Promise<void> {
     const all = this.readState();
     if (all.seeded) return;
@@ -551,7 +551,7 @@ export class Bears {
     this.writeState(all);
     if (this.list({ archived: true, faces: false }).length) return;
     const b = await this.create({ ...DEFAULT_BEAR });
-    this.setMomma(b.id);
+    this.setHead(b.id);
   }
 
   // ------------------------------------------------------------ managing
@@ -652,25 +652,25 @@ export class Bears {
     }
     const all = this.readState();
     delete all.bears[b.id];
-    if (all.momma === b.id) delete all.momma;
+    if (all.head === b.id) delete all.head;
     this.writeState(all);
     return { trashed: to };
   }
 }
 
 export const DEFAULT_BEAR = {
-  name: 'Momma Bear',
+  name: 'Head Bear',
   does: 'Chief of staff: keeps the other bears on track and hands them work.',
   personality: 'Warm, organised and a little bossy, in a kind way.',
   preset: 'round',
 };
 
-const MOMMA_START = '<!-- momma-bear: start -->';
-const MOMMA_END = '<!-- momma-bear: end -->';
-export const MOMMA_TEXT = `${MOMMA_START}
+const HEAD_START = '<!-- head-bear: start -->';
+const HEAD_END = '<!-- head-bear: end -->';
+export const HEAD_TEXT = `${HEAD_START}
 ## Chief of staff
 
-You're Momma Bear: you run Wayne's other bears.
+You're Head Bear: you run Wayne's other bears.
 
 - \`tb bears list\` shows them, with what each does and whether it's away.
 - Hand a job to a bear with \`tb bears ask <bear> "<what>"\`. Its reply
@@ -681,18 +681,18 @@ You're Momma Bear: you run Wayne's other bears.
   machine), and you never delete one: Wayne does those.
 - Keep a short roster in memory/facts/bears.md: who does what, and what each
   is busy with.
-${MOMMA_END}
+${HEAD_END}
 `;
 
-function setMommaBlock(folder: string, on: boolean): void {
+function setHeadBlock(folder: string, on: boolean): void {
   for (const name of ['CLAUDE.md', 'AGENTS.md']) {
     const file = path.join(folder, name);
     if (!fs.existsSync(file)) continue;
     const text = fs.readFileSync(file, 'utf8');
-    const start = text.indexOf(MOMMA_START);
-    const end = text.indexOf(MOMMA_END);
-    const without = start >= 0 && end > start ? text.slice(0, start).trimEnd() + '\n' + text.slice(end + MOMMA_END.length).replace(/^\n+/, '\n') : text;
-    const next = on ? `${without.trimEnd()}\n\n${MOMMA_TEXT}` : without;
+    const start = text.indexOf(HEAD_START);
+    const end = text.indexOf(HEAD_END);
+    const without = start >= 0 && end > start ? text.slice(0, start).trimEnd() + '\n' + text.slice(end + HEAD_END.length).replace(/^\n+/, '\n') : text;
+    const next = on ? `${without.trimEnd()}\n\n${HEAD_TEXT}` : without;
     if (next !== text) fs.writeFileSync(file, next);
   }
 }
@@ -749,11 +749,11 @@ export function bearsMethods(d: BearsMethodsDeps): Record<string, (p: Record<str
       return { on: true, root: d.bears.root, bears: d.bears.list({ archived: p.archived === true, faces: p.faces !== false }) };
     },
     // Only Wayne picks the chief of staff: never from a bear's own thread.
-    'bears.setMomma': (p) => {
+    'bears.setHead': (p) => {
       on();
       const cwd = callerCwd(p);
       if (cwd !== undefined && d.bears.forCwd(cwd)) throw fail("A bear's thread can't pick the chief of staff. Wayne does that in the app or with tb in a terminal.", ErrorCode.notAllowed);
-      return { bears: d.bears.setMomma(p.bear === null || p.bear === '' || p.bear === undefined ? null : str(p, 'bear')) };
+      return { bears: d.bears.setHead(p.bear === null || p.bear === '' || p.bear === undefined ? null : str(p, 'bear')) };
     },
     'bears.get': (p) => (on(), { bear: d.bears.get(str(p, 'bear')) }),
     'bears.faces': () => (on(), { faces: avatarPresets().map((x) => ({ ...x, faces: renderFaces(x.avatar, x.color) })) }),

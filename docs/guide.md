@@ -2509,8 +2509,8 @@ is its persona and house rules (short replies, drafts before anything is
 sent, say what it couldn't check), `memory/` is what it remembers, and
 `Bears/memory/` holds facts about you that every bear shares.
 
-The first time bears are listed, Momma Bear is made as your chief of
-staff: she can hand work to the others. `tb bears momma <bear>` gives the
+The first time bears are listed, Head Bear is made as your chief of
+staff: it can hand work to the others. `tb bears head <bear>` gives the
 job to another one.
 
 Until the new desktop app draws them, bears live in `tb bears` (and the

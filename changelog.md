@@ -8,7 +8,7 @@ How Prints work today, what's missing and what's next: [Prints status](https://g
 
 ### Added
 
-- Bears, an experiment: named teammates like Researcher or Writer, each a folder with its own persona, memory, face and routines. Momma Bear is made first, as chief of staff for the rest. Manage them with `tb bears`.
+- Bears, an experiment: named teammates like Researcher or Writer, each a folder with its own persona, memory, face and routines. Head Bear is made first, as chief of staff for the rest. Manage them with `tb bears`.
 - `@Name` in a message, or `tb bears ask`, hands the message to a bear, and its reply comes back to the thread that asked. A bear never gets more access than the thread that asked it.
 - Tables, an experiment: a group of bears around one goal, talking in one thread you can read, with a cap of 6 bear replies per message.
 - Webhooks, an experiment: a secret URL on your own backend that starts a thread in a folder or bear (Ask or Auto, never Full access) or messages a thread. Bursts become one run, and repeats are dropped.

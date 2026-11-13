@@ -1,6 +1,6 @@
 // Mentions (mentions.ts): routing a message to a bear, the access cap, the
 // 3-bear limit, the away line, bear-to-bear only through a shared table or
-// from Momma, the table's turn cap, and the reply coming back.
+// from the head bear, the table's turn cap, and the reply coming back.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import path from 'node:path';
@@ -38,11 +38,11 @@ async function setup() {
 }
 
 test('findMentions: @Name in any case and @bear:<id>, not emails or longer words', async () => {
-  const bears = [{ id: 'researcher-1a2b', name: 'Researcher' }, { id: 'mom-1', name: 'Momma Bear' }, { id: 'mo-1', name: 'Mo' }];
+  const bears = [{ id: 'researcher-1a2b', name: 'Researcher' }, { id: 'mom-1', name: 'Head Bear' }, { id: 'mo-1', name: 'Mo' }];
   assert.deepEqual(findMentions('hey @researcher, look', bears), ['researcher-1a2b']);
   assert.deepEqual(findMentions('ask @bear:researcher-1a2b please', bears), ['researcher-1a2b']);
   assert.deepEqual(findMentions('mail me@researcher.com or @Researchers', bears), []);
-  assert.deepEqual(findMentions('(@Momma Bear) and @Mo', bears), ['mom-1', 'mo-1']);
+  assert.deepEqual(findMentions('(@Head Bear) and @Mo', bears), ['mom-1', 'mo-1']);
 });
 
 test("Wayne's mention starts the bear in its folder, in the lower mode, in the same projects", async () => {
@@ -86,12 +86,12 @@ test('an away bear gets the away line and no thread', async () => {
   assert.equal(s.made.length, 0);
 });
 
-test("a bear's own thread can't mention itself, or another bear outside a table, unless it's Momma", async () => {
+test("a bear's own thread can't mention itself, or another bear outside a table, unless it's the head bear", async () => {
   const s = await setup();
   s.threads.set('rt', { id: 'rt', title: 'R', cwd: s.r.folder, permissionMode: 'ask', status: 'idle' });
   assert.throws(() => s.m.ask({ fromThreadId: 'rt', bear: 'Researcher', text: 'hi' }), /doesn't mention itself/);
   assert.throws(() => s.m.ask({ fromThreadId: 'rt', bear: 'Writer', text: 'hi' }), /only through a table/);
-  s.bears.setMomma(s.r.id);
+  s.bears.setHead(s.r.id);
   assert.equal(s.m.ask({ fromThreadId: 'rt', bear: 'Writer', text: 'hi' }).bear, 'Writer');
 });
 

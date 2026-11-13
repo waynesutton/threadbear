@@ -316,7 +316,7 @@ notes what Voice did (which microphone, whether echo cancellation
 started, errors), never what was said, and is started afresh past 256 KB.
 
 With Bears on, `tb bears new` (and the first `bears.list`, which makes
-Momma Bear) makes `~/ThreadbearThreads/Bears/<id>/` with `CLAUDE.md`,
+Head Bear) makes `~/ThreadbearThreads/Bears/<id>/` with `CLAUDE.md`,
 `AGENTS.md`, `bear.json` and `memory/`, runs `git init` there, adds a
 shared `Bears/memory/summary.md`, and books a daily "tidy memory" schedule
 for 4:30. Deleting a bear moves its folder to the runner's `trash/`. With

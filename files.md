@@ -2,7 +2,7 @@
 
 ## Bears, tables and webhooks
 
-- `runner/src/bears.ts` bear folders, the runner's bears.json, faces, quiet hours, Momma Bear and the `bears.*` RPCs.
+- `runner/src/bears.ts` bear folders, the runner's bears.json, faces, quiet hours, Head Bear and the `bears.*` RPCs.
 - `runner/src/mentions.ts` routes `@Name` and `tb bears ask` to a bear and brings its reply back.
 - `runner/src/tables.ts` tables as marked projects, their host folder and the `tables.*` RPCs.
 - `runner/src/webhooks.ts` webhook runs on the runner, its hook registry and the `webhooks.*` RPCs.
