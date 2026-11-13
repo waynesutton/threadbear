@@ -37,6 +37,31 @@ final class BearPicker {
         return Array((starts + words).prefix(8))
     }
 
+    /// Whether the list takes this key: ↑↓, Return, Enter, Tab and Esc with
+    /// no modifier. With one (Shift-Return's new line, Shift-Tab's mode) the
+    /// key is the composer's, and the list goes.
+    static func takesKey(_ keyCode: UInt16, modifiers: NSEvent.ModifierFlags) -> Bool {
+        guard modifiers.intersection([.shift, .option, .control, .command]).isEmpty else { return false }
+        return [126, 125, 36, 76, 48, 53].contains(keyCode)
+    }
+
+    /// When the list may show: the message goes to this Mac's runner (its
+    /// bears are this runner's, and another runner hands a mention to its
+    /// own), the box has the cursor, and this @word wasn't put away with Esc.
+    struct Gate {
+        /// Where the @ of the word Esc put away is, until the cursor leaves it.
+        var dismissedAt: Int?
+
+        func mayOffer(tokenAt: Int, focused: Bool, bearsHere: Bool) -> Bool {
+            bearsHere && focused && dismissedAt != tokenAt
+        }
+
+        /// The cursor is on another @word, or none: Esc's no longer holds.
+        mutating func moved(toTokenAt location: Int?) {
+            if location != dismissedAt { dismissedAt = nil }
+        }
+    }
+
     func show(_ matches: [BearEntry], above caret: NSRect, parent: NSWindow?) {
         let kept = selected?.id
         model.matches = matches

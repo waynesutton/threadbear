@@ -124,7 +124,8 @@ struct ComposerView: View {
                 onEscape: { cancelEdit() },
                 onShiftTab: { app.cycleTurnMode(draftKey) },
                 onPaletteKey: { paletteKey($0, text: draft.wrappedValue.text) },
-                editable: !locked
+                editable: !locked,
+                bearsHere: thread.map { !$0.isRemote } ?? (app.newThreadRunnerId == nil)
             )
             .frame(height: height)
             .opacity(locked ? 0.5 : 1)
@@ -736,6 +737,9 @@ struct ComposerTextField: NSViewRepresentable {
     var onPaletteKey: (PaletteKey) -> Bool = { _ in false }
     /// False while what's in it is being sent (a new thread being made).
     var editable = true
+    /// The message goes to this Mac's runner, so the @ list's bears are
+    /// the ones that will get it.
+    var bearsHere = true
 
     // Computed, so they follow the zoom (`applyTypeScale` re-applies
     // them to a text view that's already up).
@@ -811,6 +815,7 @@ struct ComposerTextField: NSViewRepresentable {
         textView.onEscape = onEscape
         textView.onShiftTab = onShiftTab
         textView.onPaletteKey = onPaletteKey
+        textView.bearsHere = bearsHere
         textView.placeholder = placeholder
         handle?.textView = textView
         if textView.isEditable != editable { textView.isEditable = editable }
@@ -1004,6 +1009,10 @@ final class ComposerTextView: NSTextView {
 
     private lazy var bearPicker = BearPicker { [weak self] bear in self?.pickBear(bear) }
     private var bearsWatch: NSObjectProtocol?
+    private var bearGate = BearPicker.Gate()
+    /// False when what's typed goes to another runner, whose bears aren't
+    /// the ones this Mac's runner lists (ComposerView sets it).
+    var bearsHere = true
 
     /// The @words the cursor is at the end of, @ included: names can have
     /// spaces ("@Head Bear"), so up to 40 letters, digits, - and spaces
@@ -1028,7 +1037,11 @@ final class ComposerTextView: NSTextView {
 
     /// The @ list for what's typed now: shown, moved or put away.
     private func offerBears() {
-        guard isEditable, window != nil, let range = bearToken() else { bearPicker.hide(); return }
+        let token = bearToken()
+        bearGate.moved(toTokenAt: token?.location)
+        guard isEditable, window != nil, let range = token,
+              bearGate.mayOffer(tokenAt: range.location, focused: window?.firstResponder === self, bearsHere: bearsHere)
+        else { bearPicker.hide(); return }
         if bearsWatch == nil {
             bearsWatch = NotificationCenter.default.addObserver(forName: BearList.changed, object: nil, queue: .main) { [weak self] _ in
                 MainActor.assumeIsolated { self?.offerBears() }
@@ -1053,13 +1066,21 @@ final class ComposerTextView: NSTextView {
     /// ↑↓, Return, Tab and Esc go to the @ list while it's open.
     private func bearPickerKey(_ event: NSEvent) -> Bool {
         guard bearPicker.isShown else { return false }
+        guard BearPicker.takesKey(event.keyCode, modifiers: event.modifierFlags) else {
+            // Shift-Return, Shift-Tab and the like stay the composer's.
+            if event.modifierFlags.intersection([.shift, .option, .control, .command]).isEmpty == false { bearPicker.hide() }
+            return false
+        }
         switch event.keyCode {
         case 126: bearPicker.move(-1); return true // up
         case 125: bearPicker.move(1); return true // down
         case 36, 76, 48: // Return, Enter, Tab
             if let bear = bearPicker.selected { pickBear(bear) }
             return true
-        case 53: bearPicker.hide(); return true // Esc
+        case 53: // Esc: put away until the cursor leaves this @word
+            bearGate.dismissedAt = bearToken()?.location
+            bearPicker.hide()
+            return true
         default: return false
         }
     }
