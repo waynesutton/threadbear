@@ -31,6 +31,7 @@ import { FrozenClis } from './frozen-cli.ts';
 import { KeepAwake } from './keep-awake.ts';
 import { experimentOn } from './experiments.ts';
 import { AgentThreads, agentCommands, agentsMethods, EXPERIMENT as OUTSIDE_AGENTS } from './outside-agents.ts';
+import { Bears, bearsMethods, bearsRoot, shiftOutOfQuiet, EXPERIMENT as BEARS } from './bears.ts';
 import { xSearchMethods } from './x-search.ts';
 import { MacScreen } from './mac-screen.ts';
 import { Projects, drainProjectMethods, projectMethods } from './projects.ts';
@@ -468,6 +469,27 @@ async function main(): Promise<void> {
   if (!copyOfReal) scheduler.start();
   // The done card's loose ends list the check-ins booked for a thread.
   runner.schedulesFor = (id) => scheduler.list(id);
+  // Bears (bears.ts): each is a folder; nothing here does anything while
+  // the experiment is off, so today's threads and schedules run as before.
+  const bearsOn = () => experimentOn(cfg.home, BEARS);
+  const bears = new Bears({
+    root: bearsRoot(cfg.defaults.cwd),
+    home: cfg.home,
+    schedules: () => scheduler,
+    threads: () => ({
+      list: () => runner.list(['inbox', 'snoozed']).map((t) => ({ id: t.id, cwd: t.cwd, ...(t.archivedAt ? { archivedAt: t.archivedAt } : {}) })),
+      archive: (threadId) => void runner.update({ threadId, archived: true, archivedBy: 'threadbear' }),
+    }),
+  });
+  runner.bearDefaults = (cwd, unattended) => (bearsOn() ? bears.newThreadDefaults(cwd, unattended) : undefined);
+  scheduler.holdFor = (rec) => (bearsOn() && rec.cwd && !rec.threadId ? bears.holdReason(rec.cwd) : undefined);
+  scheduler.adjustAt = (p, at) => {
+    if (!bearsOn()) return at;
+    const by = p.createdBy && runner.has(p.createdBy) ? runner.get(p.createdBy).cwd : undefined;
+    const to = p.threadId && runner.has(p.threadId) ? runner.get(p.threadId).cwd : p.cwd;
+    const bear = (by ? bears.forCwd(by) : undefined) ?? (to ? bears.forCwd(to) : undefined);
+    return bear ? shiftOutOfQuiet(at, bear.quietHours) : at;
+  };
   // Projects need the threads loaded (their counts, and the thread side of
   // membership); the librarian needs both.
   projects.start(runner);
@@ -843,7 +865,7 @@ async function main(): Promise<void> {
       return { threadId: t.thread.id, started: true };
     }
   };
-  const methods = { ...profileMethods(profileJobs), ...profilePageMethods(publicProfile), ...restartMethods(restarter), ...scheduleMethods(scheduler), ...projectMethods(projects), ...pageMethods(pagesFor, askAboutPage, printPublisher), ...drainProjectMethods(projects), ...librarianMethods(librarian), ...connectorsMethods(connectors, { on: () => experimentOn(cfg.home, 'connectorsSetup'), start: (r) => startOwnThread(runner, r, undefined), open: openThread, local: () => experimentOn(cfg.home, 'localConnectors'), findLauncher: (l) => findLauncher(l) }), ...settingsMethods(settings), ...skillMethods(skills), ...instructionsMethods(instructions), ...modelMethods(models), ...devicesMethods(sync), ...agentsMethods(sync, () => experimentOn(cfg.home, OUTSIDE_AGENTS)), ...xSearchMethods({ on: () => experimentOn(cfg.home, 'xSearch'), secretsDir: paths.secrets(cfg.home) }), ...usageStatsMethods({ tally, history: usageHistory, clock: realClock }) };
+  const methods = { ...profileMethods(profileJobs), ...profilePageMethods(publicProfile), ...restartMethods(restarter), ...scheduleMethods(scheduler), ...projectMethods(projects), ...pageMethods(pagesFor, askAboutPage, printPublisher), ...drainProjectMethods(projects), ...librarianMethods(librarian), ...connectorsMethods(connectors, { on: () => experimentOn(cfg.home, 'connectorsSetup'), start: (r) => startOwnThread(runner, r, undefined), open: openThread, local: () => experimentOn(cfg.home, 'localConnectors'), findLauncher: (l) => findLauncher(l) }), ...settingsMethods(settings), ...skillMethods(skills), ...instructionsMethods(instructions), ...modelMethods(models), ...devicesMethods(sync), ...agentsMethods(sync, () => experimentOn(cfg.home, OUTSIDE_AGENTS)), ...bearsMethods({ bears, on: bearsOn, cwdOf: (id) => (runner.has(id) ? runner.get(id).cwd : undefined) }), ...xSearchMethods({ on: () => experimentOn(cfg.home, 'xSearch'), secretsDir: paths.secrets(cfg.home) }), ...usageStatsMethods({ tally, history: usageHistory, clock: realClock }) };
   // runner.status carries the CLI statuses too (protocol, "runner.status").
   const restartStatus = methods['runner.status'];
   methods['runner.status'] = (p) => {

@@ -4,6 +4,15 @@
 
 Status and gap list: prds/prints-status.md
 
+- [ ] Bears, tables and webhooks, runner side, behind experiments. prds/bears-and-webhooks.md
+  - [ ] Phase A: bears (folders, bears.json, RPCs, tb bears, skill, memory, quiet hours)
+  - [ ] Phase A2: avatars
+  - [ ] Phase D: managing bears
+  - [ ] Phase B: webhooks
+  - [ ] Phase C: mentions
+  - [ ] Phase E: tables
+  - [ ] Phase F: personality and bear notes
+  - [ ] Home patch, docs, PRDs for Mike and for the GPUI app
 - [ ] Prints: ask once per Print on Codex threads too.
 - [ ] Prints: optional HyperFrames share clip for any print. prds/threadbear-pages.md
 

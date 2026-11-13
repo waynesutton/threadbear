@@ -682,6 +682,9 @@ export class Runner {
   models?: Pick<Models, 'generate'>;
   skillNames?: () => string[];
   projects?: Projects;
+  // Bears (bears.ts): what a new thread in a bear's folder starts with.
+  // Unset while the experiment is off.
+  bearDefaults?: (cwd: string, unattended: boolean) => { model?: string; effort?: EffortLevel; poolId?: string; permissionMode?: PermissionMode; projectIds?: string[] } | undefined;
   standingInstructions?: () => string;
   activity = new Set<(a: ThreadActivity) => void>();
   patchCache: PatchCache = new Map();

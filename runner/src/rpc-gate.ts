@@ -50,7 +50,15 @@ export const GATED_READS: ReadonlySet<string> = new Set([
   'connectors.status',
   'usage.stats',
   'media.import',
+  'bears.list',
+  'bears.get',
+  'bears.faces',
 ]);
+
+// Bears (bears.ts) a thread below Full access may still change: its harmless
+// fields and Wayne's list order. What widens a bear (bears.setAccess) or
+// can't be undone in a click (archive, delete) needs the app.
+const BEAR_WRITES: ReadonlySet<string> = new Set(['bears.create', 'bears.update', 'bears.pin', 'bears.move', 'bears.hibernate', 'bears.setProjects']);
 
 type ThreadLike = { permissionMode?: PermissionMode; title: string; status?: string };
 
@@ -117,6 +125,9 @@ export class CallerGate {
   // Throws a refusal, or returns the params to run with (the caller's own
   // mode filled in, what only a client with the token may say taken out).
   check(threadId: string, method: string, p: Params): Params {
+    // Who's asking goes with a bear call, so a bear's own thread can't
+    // raise itself even on Full access (bears.ts, setAccess).
+    if (method.startsWith('bears.')) p = { ...p, _caller: threadId };
     const caller = this.authority(threadId);
     if (caller.mode === 'full' && !caller.confined) return p;
     if (GATED_READS.has(method)) return p;
@@ -170,6 +181,7 @@ export class CallerGate {
       case 'schedules.delete':
         return p;
       default:
+        if (BEAR_WRITES.has(method)) return p;
         throw needs(`calling ${method}`);
     }
   }
