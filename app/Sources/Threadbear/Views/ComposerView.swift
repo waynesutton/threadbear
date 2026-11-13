@@ -995,6 +995,75 @@ final class ComposerTextView: NSTextView {
         skillPicker.hide()
     }
 
+    // MARK: @bear completion
+    //
+    // Typing @ at the start of a word lists Wayne's bears (none while the
+    // bears experiment is off), narrowing as he types, in a small list over
+    // the cursor (BearPicker), the same way as the / list. Picking one
+    // writes "@Name ", which the runner hands to that bear when it's sent.
+
+    private lazy var bearPicker = BearPicker { [weak self] bear in self?.pickBear(bear) }
+    private var bearsWatch: NSObjectProtocol?
+
+    /// The @words the cursor is at the end of, @ included: names can have
+    /// spaces ("@Head Bear"), so up to 40 letters, digits, - and spaces
+    /// back to an @ at the start of a word.
+    private func bearToken() -> NSRange? {
+        let sel = selectedRange()
+        guard sel.length == 0, !hasMarkedText() else { return nil }
+        let ns = string as NSString
+        var start = sel.location
+        func isNameChar(_ c: unichar) -> Bool {
+            (c >= 97 && c <= 122) || (c >= 65 && c <= 90) || (c >= 48 && c <= 57) || c == 45 || c == 32 || c == 39
+        }
+        while start > 0, sel.location - start < 40, isNameChar(ns.character(at: start - 1)) { start -= 1 }
+        guard start > 0, ns.character(at: start - 1) == 64 else { return nil } // "@"
+        let at = start - 1
+        if at > 0 {
+            let before = ns.character(at: at - 1)
+            guard before == 32 || before == 10 || before == 9 || before == 40 else { return nil } // space, newline, tab, (
+        }
+        return NSRange(location: at, length: sel.location - at)
+    }
+
+    /// The @ list for what's typed now: shown, moved or put away.
+    private func offerBears() {
+        guard isEditable, window != nil, let range = bearToken() else { bearPicker.hide(); return }
+        if bearsWatch == nil {
+            bearsWatch = NotificationCenter.default.addObserver(forName: BearList.changed, object: nil, queue: .main) { [weak self] _ in
+                MainActor.assumeIsolated { self?.offerBears() }
+            }
+        }
+        BearList.refresh?()
+        let query = String((string as NSString).substring(with: range).dropFirst())
+        let matches = BearPicker.matches(query, in: BearList.bears)
+        // Nothing to offer, or the words already make a whole bear's name.
+        guard !matches.isEmpty, !(matches.count == 1 && matches[0].name.lowercased() == query.lowercased()) else { bearPicker.hide(); return }
+        var caret = firstRect(forCharacterRange: NSRange(location: range.location, length: 0), actualRange: nil)
+        if caret.height == 0 { caret.size.height = 16 }
+        bearPicker.show(matches, above: caret, parent: window)
+    }
+
+    private func pickBear(_ bear: BearEntry) {
+        guard let range = bearToken() else { bearPicker.hide(); return }
+        insertText("@\(bear.name) ", replacementRange: range)
+        bearPicker.hide()
+    }
+
+    /// ↑↓, Return, Tab and Esc go to the @ list while it's open.
+    private func bearPickerKey(_ event: NSEvent) -> Bool {
+        guard bearPicker.isShown else { return false }
+        switch event.keyCode {
+        case 126: bearPicker.move(-1); return true // up
+        case 125: bearPicker.move(1); return true // down
+        case 36, 76, 48: // Return, Enter, Tab
+            if let bear = bearPicker.selected { pickBear(bear) }
+            return true
+        case 53: bearPicker.hide(); return true // Esc
+        default: return false
+        }
+    }
+
     /// ↑↓, Return, Tab and Esc go to the list while it's open.
     private func skillPickerKey(_ event: NSEvent) -> Bool {
         guard skillPicker.isShown else { return false }
@@ -1013,10 +1082,12 @@ final class ComposerTextView: NSTextView {
     override func setSelectedRanges(_ ranges: [NSValue], affinity: NSSelectionAffinity, stillSelecting: Bool) {
         super.setSelectedRanges(ranges, affinity: affinity, stillSelecting: stillSelecting)
         if !stillSelecting, skillToken() == nil { skillPicker.hide() }
+        if !stillSelecting, bearToken() == nil { bearPicker.hide() }
     }
 
     override func resignFirstResponder() -> Bool {
         skillPicker.hide()
+        bearPicker.hide()
         return super.resignFirstResponder()
     }
 
@@ -1222,6 +1293,7 @@ final class ComposerTextView: NSTextView {
         // The slash palette (a message starting with /) first, then the
         // skill list for a /skill further on.
         if !hasMarkedText(), let key = Self.paletteKey(event), onPaletteKey?(key) == true { return }
+        if bearPickerKey(event) { return }
         if skillPickerKey(event) { return }
         let isReturn = event.keyCode == 36 || event.keyCode == 76
         if isReturn, !hasMarkedText() {
@@ -1523,6 +1595,7 @@ final class ComposerTextView: NSTextView {
         super.didChangeText()
         markSkills()
         offerSkills()
+        offerBears()
         if string.isEmpty != wasEmpty {
             wasEmpty = string.isEmpty
             needsDisplay = true

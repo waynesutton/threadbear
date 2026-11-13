@@ -17,6 +17,15 @@ Feature: Bear tiles in the sidebar
     Given the head bear has no icon of its own
     Then its threads' tiles show a crown on its fur colour
 
+  @bears.mention @manual @gpui-pending
+  Scenario: Pick a bear from the @ list
+    Given a bear called "Writer"
+    When I type "Hey @wr" in the message box
+    Then a list over the cursor offers "@Writer" with what it does
+    When I press Tab
+    Then the message reads "Hey @Writer "
+    And the list closes
+
   @bears.colour @manual @gpui-pending
   Scenario: Pick a bear's colour from its thread's menu
     Given a thread in Writer's folder

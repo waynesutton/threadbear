@@ -884,6 +884,7 @@ final class AppModel {
             self?.dockChanged(layout)
         }
         wireRemoteClients()
+        BearList.refresh = { [weak self] in self?.refreshBears() }
         clockTimer = Timer.scheduledTimer(withTimeInterval: 30, repeats: true) { [weak self] _ in
             MainActor.assumeIsolated {
                 guard let self else { return }

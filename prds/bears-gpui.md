@@ -56,7 +56,7 @@ A table's thread is an ordinary thread in its folder. Bear replies arrive as mes
 - When the runner refuses a mention past `maxTurns`, the host says so in its reply. Nothing extra to draw.
 - Runner change: none needed. A later protocol field (`origin: 'bear'` with the bear id on the user.message) would be cleaner than reading the prefix; add it to `docs/protocol.md` first if the GPUI port wants it.
 
-## The @ picker in the composer
+## The @ picker in the composer (shipped in the Swift app, 14 Nov: BearPicker.swift)
 
 Typing `@` opens a picker of bears (from `bears.list`) and recent threads, filtered as you type.
 

@@ -8,6 +8,7 @@ How Prints work today, what's missing and what's next: [Prints status](https://g
 
 ### Added
 
+- Typing @ in the message box lists your bears as you type; picking one writes its name, so the message goes to that bear too.
 - A bear's threads show its icon on its colour in the sidebar, and Bear Colour on a bear thread's right-click menu picks the colour.
 - Bears, an experiment: named teammates like Researcher or Writer, each a folder with its own persona, memory, face and routines. Head Bear is made first, as chief of staff for the rest. Manage them with `tb bears`.
 - `@Name` in a message, or `tb bears ask`, hands the message to a bear, and its reply comes back to the thread that asked. A bear never gets more access than the thread that asked it.

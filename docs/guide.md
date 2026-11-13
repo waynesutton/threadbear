@@ -2533,6 +2533,10 @@ pick Bear Colour to change the colour, or ask any thread to give a bear an
 icon (`tb bears set Writer --icon pencil --color "#3E8ED0"`, an SF Symbol
 name). The head bear shows a crown until you give it an icon of its own.
 
+Type `@` in the message box and a list of your bears comes up over the
+cursor, narrowing as you type: ↑↓ to move, Return or Tab to pick, Esc to
+close. Picking one writes its name for you.
+
 Write `@Researcher` in a message (or `@bear:<id>`), or run
 `tb bears ask Researcher "..."` from a thread, and the bear gets the
 message in a fresh thread in its folder, in the lower of its mode and
