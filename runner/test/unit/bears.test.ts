@@ -6,6 +6,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { avatarPresets, Bears, bearsMethods, checkAvatar, DEFAULT_BEAR, lowerMode, HEAD_TEXT, newBearId, renderFaces, shiftOutOfQuiet, type BearSchedules } from '../../src/bears.ts';
 import { CallerGate } from '../../src/rpc-gate.ts';
+import { autoNote } from '../../src/cli-bears.ts';
 import type { Schedule } from '../../src/protocol.ts';
 import { makeHarness, tmpDir } from '../helpers/fakes.ts';
 
@@ -269,4 +270,11 @@ test('a Runner summary carries the bear only when bearOf says so', async () => {
   assert.equal(t.bear, undefined);
   h.runner.bearOf = (cwd) => bears.tile(cwd);
   assert.equal(h.runner.list().find((x) => x.id === t.id)?.bear?.name, 'Writer');
+});
+
+test("tb bears access says Auto works like Ask on a Codex bear, and nothing otherwise", () => {
+  assert.match(autoNote({ name: 'Designer', model: 'gpt-6-astra', state: { permissionMode: 'auto' } }) ?? '', /Designer runs on Codex, where Auto works like Ask/);
+  assert.match(autoNote({ name: 'D', state: { permissionMode: 'auto', poolId: 'codex-pool' } }) ?? '', /Codex/);
+  assert.equal(autoNote({ name: 'Writer', model: 'sonnet', state: { permissionMode: 'auto' } }), undefined);
+  assert.equal(autoNote({ name: 'Designer', model: 'gpt-6-astra', state: { permissionMode: 'ask' } }), undefined);
 });

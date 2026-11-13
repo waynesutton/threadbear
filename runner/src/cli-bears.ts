@@ -43,6 +43,14 @@ function line(b: Bear): string {
   return `${b.id}  ${b.name}${tags.length ? ` (${tags.join(', ')})` : ''}${b.does ? `: ${b.does}` : ''}`;
 }
 
+// Auto is Claude Code's: a Codex thread set to Auto runs as Ask (13 Nov).
+// Said rather than refused, as it only ever means less access.
+export function autoNote(b: { name: string; model?: string; state: { permissionMode?: string; poolId?: string } }): string | undefined {
+  if (b.state.permissionMode !== 'auto') return undefined;
+  const codex = /^gpt-/i.test(b.model ?? '') || /codex/i.test(b.state.poolId ?? '');
+  return codex ? `Note: ${b.name} runs on Codex, where Auto works like Ask: its unattended runs still ask before tools that need a yes.` : undefined;
+}
+
 export function untilFrom(v: string, now = Date.now()): string | null {
   if (v === 'off' || v === 'none') return null;
   const m = v.match(/^(\d+)([hd])$/);
@@ -116,6 +124,8 @@ export async function bearsCommand(client: RunnerClient, args: string[], f: Flag
       const mode = f.full ? 'full' : f.auto ? 'auto' : f.plan ? 'plan' : f.ask ? 'ask' : undefined;
       const r = await client.call<{ bear: Bear }>('bears.setAccess', { bear: need(a, 'tb bears access <bear> --ask'), ...(mode ? { permissionMode: mode } : {}), ...(typeof f.pool === 'string' ? { poolId: f.pool } : {}), ...(typeof f.runner === 'string' ? { runner: f.runner } : {}) });
       show(r.bear);
+      const note = autoNote(r.bear);
+      if (note) console.log(note);
       return 0;
     }
     case 'head': {
