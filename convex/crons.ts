@@ -11,6 +11,8 @@ crons.interval('prune old files', { hours: 6 }, internal.sync.pruneFiles, {});
 crons.interval('prune old tool output', { minutes: 15 }, internal.sync.pruneBodies, {});
 // Outside agents' call log and bad-key rows past their time, and ended keys (mcp.ts).
 crons.interval('prune agent calls', { hours: 1 }, internal.mcp.prune, {});
+// Webhook calls and bad-key rows past their time, and ended hooks (webhooks.ts).
+crons.interval('prune webhook calls', { hours: 1 }, internal.webhooks.prune, {});
 // Moves nobody answered, or frozen too long (moves.ts), and old ended ones.
 crons.interval('expire moves', { minutes: 5 }, internal.moves.expireMoves, {});
 export default crons;

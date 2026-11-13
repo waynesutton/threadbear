@@ -14,6 +14,7 @@ import { MAX_RUNNER_UPLOAD_BYTES } from './sync';
 import { PHONE_UPLOADS } from './phone';
 import { sha256 } from './lib';
 import { handleMcp, MCP_BODY_MAX } from './mcpRpc';
+import { handleHook, HOOK_BODY_MAX } from './hookHttp';
 
 const http = httpRouter();
 
@@ -192,6 +193,48 @@ const mcp = httpAction(async (ctx, request) => {
 http.route({ path: '/mcp', method: 'POST', handler: mcp });
 http.route({ path: '/mcp', method: 'GET', handler: mcp });
 http.route({ path: '/mcp', method: 'DELETE', handler: mcp });
+
+// Webhooks (webhooks.ts, hookHttp.ts): POST /hook/<key> starts a thread or
+// messages one. Exact routes still win over this prefix. The body is read
+// no further than the cap, whatever Content-Length says.
+const hook = httpAction(async (ctx, request) => {
+  const headers = request.headers;
+  const tooBig = () => new Response(JSON.stringify({ error: 'too big' }), { status: 413, headers: { 'Content-Type': 'application/json' } });
+  const length = Number(headers.get('content-length') ?? 0);
+  if (request.method === 'POST' && (!Number.isFinite(length) || length > HOOK_BODY_MAX)) return tooBig();
+  let body = '';
+  if (request.method === 'POST' && request.body) {
+    const reader = request.body.getReader();
+    const chunks: Uint8Array[] = [];
+    let size = 0;
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      size += value.byteLength;
+      if (size > HOOK_BODY_MAX) {
+        await reader.cancel();
+        return tooBig();
+      }
+      chunks.push(value);
+    }
+    const all = new Uint8Array(size);
+    let at = 0;
+    for (const c of chunks) {
+      all.set(c, at);
+      at += c.byteLength;
+    }
+    body = new TextDecoder().decode(all);
+  }
+  // Convex's own view of the caller's address, never a header it can set.
+  const meta = await (ctx as { meta?: { getRequestMetadata?: () => Promise<{ ip: string | null }> } }).meta?.getRequestMetadata?.().catch(() => undefined);
+  const ip = meta?.ip ?? 'unknown';
+  const now = Date.now();
+  const out = await handleHook({ method: request.method, path: new URL(request.url).pathname, header: (n) => headers.get(n), body }, (a) =>
+    ctx.runMutation(internal.webhooks.deliver, { hash: a.hash, ip, now, body: a.body, contentType: a.contentType, ...(a.dedupe ? { dedupe: a.dedupe } : {}) }),
+  );
+  return new Response(out.body, { status: out.status, headers: out.headers });
+});
+http.route({ pathPrefix: '/hook/', method: 'POST', handler: hook });
 
 // The profile page (profile.ts) at /profile, and at the front page when
 // Mike has it shown there: index.html with the page's name, bio and picture

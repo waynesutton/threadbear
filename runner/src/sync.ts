@@ -12,6 +12,7 @@
 // THREADBEAR_SYNC=off turns it off whatever runner.json says, which
 // check.sh sets so no test runner ever writes to the real project.
 import { agentOf, type AgentFrom } from './outside-agents.ts';
+import { webhookOf, type HookFrom, type HookInfo, type HookTarget } from './webhooks.ts';
 import { moveInfoFrom, type MoveInfo, type MovePreview, type MoveRow, type MovesBackend } from './moves.ts';
 import { START_CARD } from './cross-runner.ts';
 import { asPushFailing, pushFailingText, type PushFailing } from './push-failing.ts';
@@ -134,7 +135,9 @@ export type SyncConfig = {
 // lower one means its backend hasn't been deployed since this runner was:
 // said in runner.status, tb status and the log rather than stopping, since
 // the runner only adds to what it sends while the number stays the same.
-export const BACKEND_API_VERSION = 77;
+export const BACKEND_API_VERSION = 78;
+// webhooks:* and the /hook/ route (this copy's, experiment webhooks).
+export const WEBHOOKS_API_VERSION = 78;
 // sync:publishPrint and sync:unpublishPrint (Prints can be published).
 // 73 in this copy before Mike's release took 73 to 76 (12 Nov 2026).
 export const PRINTS_API_VERSION = 77;
@@ -597,6 +600,9 @@ export type CommandHost = {
   // which checks it again. Absent, those commands are refused.
   agentCreate?: (from: AgentFrom, text: string) => { threadId: string };
   agentSend?: (from: AgentFrom, threadId: string, text: string) => unknown;
+  // A webhook's run (convex/webhooks.ts): webhooks.ts, which checks it
+  // again. Absent, those commands are refused.
+  webhookRun?: (from: HookFrom, kind: string, threadId: string | undefined, args: Record<string, unknown>) => { threadId?: string } | undefined;
   // The thread's buttons (buttons.list), wherever the thread is now: a
   // press checks a Run against them first.
   listButtons?: (threadId: string) => unknown;
@@ -1784,6 +1790,33 @@ export class ConvexSync {
     this.mustBeOn();
     const r = await this.backend('mutation', 'mcp:revokeAgentKey', { key: this.deps.key, ...(id ? { id } : {}) });
     return typeof r === 'number' ? r : 0;
+  }
+
+  // Webhooks (convex/webhooks.ts). The secret goes back to the caller once
+  // and nowhere else: never logged, kept or synced.
+  async issueWebhook(args: { name: string; runnerId: string; target: HookTarget; batchSeconds?: number; days?: number }): Promise<{ hook: HookInfo; secret: string }> {
+    this.mustBeOn();
+    const r = (await this.backend('mutation', 'webhooks:issueWebhook', { key: this.deps.key, ...args })) as { hook?: HookInfo; secret?: unknown } | null;
+    if (!r?.hook || typeof r.secret !== 'string') throw new Error('The backend gave no webhook back.');
+    return { hook: r.hook, secret: r.secret };
+  }
+
+  async listWebhooks(): Promise<HookInfo[]> {
+    this.mustBeOn();
+    const r = await this.backend('query', 'webhooks:listWebhooks', { key: this.deps.key });
+    return Array.isArray(r) ? (r as HookInfo[]) : [];
+  }
+
+  /** How many were revoked: one hook by id, or every hook with none. */
+  async revokeWebhooks(id?: string): Promise<number> {
+    this.mustBeOn();
+    const r = await this.backend('mutation', 'webhooks:revokeWebhook', { key: this.deps.key, ...(id ? { id } : {}) });
+    return typeof r === 'number' ? r : 0;
+  }
+
+  /** The backend's API version, once a heartbeat has said. */
+  apiVersion(): number | undefined {
+    return this.backendApiVersion;
   }
 
   // The public profile page (public-profile.ts, convex/profile.ts): the whole
@@ -4185,6 +4218,13 @@ export class ConvexSync {
     };
     // From an outside agent: only a start or a message, and only through
     // outside-agents.ts, never as one of Mike's.
+    // From a webhook: only through webhooks.ts, as untrusted data.
+    const hook = webhookOf(a);
+    if (hook) {
+      if (!host.webhookRun) throw new Error("This Mac doesn't take webhook runs.");
+      const r = host.webhookRun(hook, c.kind, threadId, a);
+      return r?.threadId ? { threadId: r.threadId } : undefined;
+    }
     const agent = agentOf(a);
     if (agent) {
       if (c.kind === 'create' && host.agentCreate) return host.agentCreate(agent, commandText(a));

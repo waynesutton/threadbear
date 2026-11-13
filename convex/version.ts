@@ -359,4 +359,8 @@
 //    gives the phone and the website the published ones. A runner
 //    publishes only from 77; nothing about a print is stored before it's
 //    published.
-export const API_VERSION = 77;
+// 78: webhooks (this copy's, 13 Nov 2026, experiment webhooks). POST
+//    /hook/<key> takes a delivery (webhooks:deliver, capped, limited,
+//    deduped, batched); webhooks:issueWebhook, listWebhooks and
+//    revokeWebhook take the owner key. A runner offers webhooks only from 78.
+export const API_VERSION = 78;

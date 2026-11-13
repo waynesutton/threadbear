@@ -173,3 +173,46 @@ export async function bearsCommand(client: RunnerClient, args: string[], f: Flag
       throw new Error(`Unknown: tb bears ${action}. tb bears --help lists them.`);
   }
 }
+
+export const WEBHOOKS_HELP = `  tb webhooks [--json]            the webhooks (experiment webhooks): name, target, last used
+  tb webhooks new "Name" (--bear B | --cwd DIR | --thread ID) [--auto] [--batch SECS]
+                                  a secret URL that starts a thread (in Ask, or Auto) or messages
+                                  one. The URL is shown once: keep it like a password
+  tb webhooks revoke <id|all>     ends a webhook (or every one) on its next call`;
+
+export const WEBHOOK_FLAGS = ['json', 'bear', 'cwd', 'thread', 'auto', 'ask', 'batch'];
+
+type Hook = { id: string; name: string; target: { kind: 'thread'; threadId: string } | { kind: 'folder'; cwd: string; permissionMode: string }; batchSeconds: number; lastUsedAt?: number };
+
+export async function webhooksCommand(client: RunnerClient, args: string[], f: Flags): Promise<number> {
+  const [action, a] = args;
+  if (!action || action === 'list') {
+    const r = await client.call<{ on: boolean; reason?: string; hooks: Hook[] }>('webhooks.list', {});
+    if (!r.on) console.log('Webhooks are off. Turn them on in Settings > General > Experiments.');
+    else if (r.reason) console.log(r.reason);
+    else if (f.json) console.log(JSON.stringify(r.hooks, null, 2));
+    else if (!r.hooks.length) console.log('No webhooks yet.');
+    else for (const h of r.hooks) console.log(`${h.id}  ${h.name}  ${h.target.kind === 'thread' ? `thread ${h.target.threadId.slice(0, 8)}` : `${h.target.cwd} (${h.target.permissionMode})`}${h.lastUsedAt ? `, last used ${new Date(h.lastUsedAt).toISOString()}` : ', never used'}`);
+    return 0;
+  }
+  if (action === 'new') {
+    if (!a) throw new Error('tb webhooks new "Name" (--bear B | --cwd DIR | --thread ID)');
+    const r = await client.call<{ hook: Hook; url: string }>('webhooks.create', {
+      name: a,
+      ...(typeof f.bear === 'string' ? { bear: f.bear } : {}),
+      ...(typeof f.cwd === 'string' ? { cwd: f.cwd } : {}),
+      ...(typeof f.thread === 'string' ? { threadId: f.thread } : {}),
+      permissionMode: f.auto ? 'auto' : 'ask',
+      ...(typeof f.batch === 'string' ? { batchSeconds: Number(f.batch) } : {}),
+    });
+    console.log(`Made ${r.hook.name} (${r.hook.id}). Its URL, shown this once:\n${r.url}\nPOST JSON to it. Anyone with the URL can start runs: revoke it if it leaks.`);
+    return 0;
+  }
+  if (action === 'revoke') {
+    if (!a) throw new Error('tb webhooks revoke <id|all>');
+    const r = await client.call<{ revoked: number }>('webhooks.revoke', a === 'all' ? {} : { id: a });
+    console.log(`Revoked ${r.revoked}.`);
+    return 0;
+  }
+  throw new Error(`Unknown: tb webhooks ${action}. It's list, new or revoke.`);
+}

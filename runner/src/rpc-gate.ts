@@ -53,6 +53,7 @@ export const GATED_READS: ReadonlySet<string> = new Set([
   'bears.list',
   'bears.get',
   'bears.faces',
+  'webhooks.list',
 ]);
 
 // Bears (bears.ts) a thread below Full access may still change: its harmless

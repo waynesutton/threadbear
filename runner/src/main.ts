@@ -32,6 +32,7 @@ import { KeepAwake } from './keep-awake.ts';
 import { experimentOn } from './experiments.ts';
 import { AgentThreads, agentCommands, agentsMethods, EXPERIMENT as OUTSIDE_AGENTS } from './outside-agents.ts';
 import { Bears, bearsMethods, bearsRoot, shiftOutOfQuiet, EXPERIMENT as BEARS } from './bears.ts';
+import { revokeHooksFor, webhookCommands, webhooksMethods, EXPERIMENT as WEBHOOKS } from './webhooks.ts';
 import { xSearchMethods } from './x-search.ts';
 import { MacScreen } from './mac-screen.ts';
 import { Projects, drainProjectMethods, projectMethods } from './projects.ts';
@@ -72,7 +73,7 @@ import { PublicProfile, profilePageMethods } from './public-profile.ts';
 import { spawn as spawnProcess } from 'node:child_process';
 import net from 'node:net';
 import { InstructionsStore, instructionsMethods } from './instructions.ts';
-import { ConvexSync, defaultRunnerName, ensureRunnerId, readSyncKey } from './sync.ts';
+import { ConvexSync, defaultRunnerName, ensureRunnerId, readSyncKey, WEBHOOKS_API_VERSION } from './sync.ts';
 import { pushFailingText } from './push-failing.ts';
 import { Scrubber } from './scrub.ts';
 import { useScrubForCuts } from './safe-cut.ts';
@@ -387,12 +388,17 @@ async function main(): Promise<void> {
   runner.holdWaits = true;
   // Turning outside agents off ends their keys too, not just the panel
   // (outside-agents.ts). `sync` is made further down.
-  let syncForAgents: { revokeAgentKeys(): Promise<number>; offReason(): string | undefined } | undefined;
+  let syncForAgents: { revokeAgentKeys(): Promise<number>; revokeWebhooks(): Promise<number>; offReason(): string | undefined } | undefined;
   const settings = new SettingsService({
     config: cfg,
     publish: (n) => runner.publish(n),
     poolIds: () => runner.listPools().pools.map((p) => p.id),
     onExperimentOff: (id) => {
+      // Turning webhooks off ends every hook, not just the list.
+      if (id === WEBHOOKS && syncForAgents && !syncForAgents.offReason()) {
+        syncForAgents.revokeWebhooks().then((n) => log.info('webhooks off: revoked every hook', { n }), (e) => log.warn("webhooks off, but the hooks couldn't be revoked", { error: (e as Error).message }));
+        return;
+      }
       if (id !== OUTSIDE_AGENTS || !syncForAgents || syncForAgents.offReason()) return;
       syncForAgents.revokeAgentKeys().then((n) => log.info('outside agents off: revoked their keys', { n }), (e) => log.warn("outside agents off, but their keys couldn't be revoked", { error: (e as Error).message }));
     },
@@ -611,6 +617,25 @@ async function main(): Promise<void> {
     if (scheduler.list(id).some((sc) => sc.threadId === id && !sc.finishedAt && sc.check)) leftBehind.push("its schedules' shell checks");
     return { ...info, leftBehind };
   };
+  // Webhook runs (webhooks.ts): a bear that's away holds its deliveries,
+  // run once it's back (checked each minute).
+  const webhooksOn = () => experimentOn(cfg.home, WEBHOOKS);
+  const hooks = webhookCommands({
+    on: webhooksOn,
+    home: cfg.home,
+    create: (p) => runner.create(p),
+    send: (threadId, text) => runner.send(threadId, text, [], { origin: 'runner', queue: true }),
+    modeOf: (threadId) => (runner.has(threadId) ? runner.get(threadId).permissionMode : undefined),
+    held: (cwd) => (bearsOn() ? bears.holdReason(cwd) : undefined),
+  });
+  setInterval(() => {
+    try {
+      const n = hooks.replayHeld();
+      if (n) log.info('webhook deliveries a bear held have run', { n });
+    } catch (e) {
+      log.warn("held webhook deliveries couldn't run", { error: (e as Error).message });
+    }
+  }, 60_000).unref();
   const sync = new ConvexSync({
     config: { ...cfg.sync, runnerId: syncRunnerId, icon: runnerIcon },
     key: syncKey,
@@ -649,6 +674,8 @@ async function main(): Promise<void> {
         send: (threadId, text) => runner.send(threadId, text, [], { origin: 'runner', queue: true }),
         modeOf: (threadId) => (runner.has(threadId) ? runner.get(threadId).permissionMode : undefined),
       }),
+      // Webhook runs, checked again here (webhooks.ts).
+      webhookRun: hooks.webhookRun,
       // A schedule's own runner gets its command, so the scheduler here is its.
       schedule: ({ scheduleId, action }) => (action === 'run' ? scheduler.runNow(scheduleId) : scheduler.update({ scheduleId, paused: action === 'pause' })),
       // The Mac's Move sheet asking, through the relay (threads.movePreview).
@@ -865,7 +892,7 @@ async function main(): Promise<void> {
       return { threadId: t.thread.id, started: true };
     }
   };
-  const methods = { ...profileMethods(profileJobs), ...profilePageMethods(publicProfile), ...restartMethods(restarter), ...scheduleMethods(scheduler), ...projectMethods(projects), ...pageMethods(pagesFor, askAboutPage, printPublisher), ...drainProjectMethods(projects), ...librarianMethods(librarian), ...connectorsMethods(connectors, { on: () => experimentOn(cfg.home, 'connectorsSetup'), start: (r) => startOwnThread(runner, r, undefined), open: openThread, local: () => experimentOn(cfg.home, 'localConnectors'), findLauncher: (l) => findLauncher(l) }), ...settingsMethods(settings), ...skillMethods(skills), ...instructionsMethods(instructions), ...modelMethods(models), ...devicesMethods(sync), ...agentsMethods(sync, () => experimentOn(cfg.home, OUTSIDE_AGENTS)), ...bearsMethods({ bears, on: bearsOn, cwdOf: (id) => (runner.has(id) ? runner.get(id).cwd : undefined) }), ...xSearchMethods({ on: () => experimentOn(cfg.home, 'xSearch'), secretsDir: paths.secrets(cfg.home) }), ...usageStatsMethods({ tally, history: usageHistory, clock: realClock }) };
+  const methods = { ...profileMethods(profileJobs), ...profilePageMethods(publicProfile), ...restartMethods(restarter), ...scheduleMethods(scheduler), ...projectMethods(projects), ...pageMethods(pagesFor, askAboutPage, printPublisher), ...drainProjectMethods(projects), ...librarianMethods(librarian), ...connectorsMethods(connectors, { on: () => experimentOn(cfg.home, 'connectorsSetup'), start: (r) => startOwnThread(runner, r, undefined), open: openThread, local: () => experimentOn(cfg.home, 'localConnectors'), findLauncher: (l) => findLauncher(l) }), ...settingsMethods(settings), ...skillMethods(skills), ...instructionsMethods(instructions), ...modelMethods(models), ...devicesMethods(sync), ...agentsMethods(sync, () => experimentOn(cfg.home, OUTSIDE_AGENTS)), ...bearsMethods({ bears, on: bearsOn, cwdOf: (id) => (runner.has(id) ? runner.get(id).cwd : undefined), revokeHooks: (folder) => (webhooksOn() ? revokeHooksFor(sync, folder) : Promise.resolve(0)) }), ...webhooksMethods({ backend: sync, on: webhooksOn, runnerId: syncRunnerId, needApi: WEBHOOKS_API_VERSION, modeOf: (id) => (runner.has(id) ? runner.get(id).permissionMode : undefined), bearFolder: (b) => { if (!bearsOn()) return undefined; try { return bears.get(b, { faces: false }).folder; } catch { return undefined; } } }), ...xSearchMethods({ on: () => experimentOn(cfg.home, 'xSearch'), secretsDir: paths.secrets(cfg.home) }), ...usageStatsMethods({ tally, history: usageHistory, clock: realClock }) };
   // runner.status carries the CLI statuses too (protocol, "runner.status").
   const restartStatus = methods['runner.status'];
   methods['runner.status'] = (p) => {
