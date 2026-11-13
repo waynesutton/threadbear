@@ -408,6 +408,14 @@ export class Bears {
     return file ? this.info(id, file, this.readState().bears[id] ?? {}, [], false) : undefined;
   }
 
+  // What a thread in a bear's folder shows in the sidebar: the bear's
+  // name, icon and colour (ThreadSummary.bear).
+  tile(cwd: string): { id: string; name: string; icon?: string; color?: string; head?: boolean } | undefined {
+    const b = this.forCwd(cwd);
+    if (!b) return undefined;
+    return { id: b.id, name: b.name, ...(b.icon ? { icon: b.icon } : {}), ...(b.color ? { color: b.color } : {}), ...(b.head ? { head: true } : {}) };
+  }
+
   // What a new thread in a bear's folder starts with, where the caller
   // didn't say (Runner.makeThread). Unattended runs (a routine, a webhook,
   // a mention) start in Ask unless Wayne raised the bear himself.
@@ -725,6 +733,9 @@ export type BearsMethodsDeps = {
   mention?: (p: { fromThreadId?: string; bear: string; text: string }) => unknown;
   // Takes a bear out of its tables when it's archived (tables.ts).
   unseat?: (bearId: string) => unknown;
+  // Sends the threads in bears' folders again, so their sidebar tiles
+  // follow a new name, icon, colour or head bear.
+  touch?: () => void;
 };
 
 const OFF = 'Bears are off: turn them on in Settings > General > Experiments.';
@@ -753,7 +764,9 @@ export function bearsMethods(d: BearsMethodsDeps): Record<string, (p: Record<str
       on();
       const cwd = callerCwd(p);
       if (cwd !== undefined && d.bears.forCwd(cwd)) throw fail("A bear's thread can't pick the chief of staff. Wayne does that in the app or with tb in a terminal.", ErrorCode.notAllowed);
-      return { bears: d.bears.setHead(p.bear === null || p.bear === '' || p.bear === undefined ? null : str(p, 'bear')) };
+      const bears = d.bears.setHead(p.bear === null || p.bear === '' || p.bear === undefined ? null : str(p, 'bear'));
+      d.touch?.();
+      return { bears };
     },
     'bears.get': (p) => (on(), { bear: d.bears.get(str(p, 'bear')) }),
     'bears.faces': () => (on(), { faces: avatarPresets().map((x) => ({ ...x, faces: renderFaces(x.avatar, x.color) })) }),
@@ -766,7 +779,9 @@ export function bearsMethods(d: BearsMethodsDeps): Record<string, (p: Record<str
       on();
       const { bear, _caller, ...fields } = p;
       void _caller;
-      return { bear: d.bears.update(str({ bear }, 'bear'), fields) };
+      const updated = d.bears.update(str({ bear }, 'bear'), fields);
+      d.touch?.();
+      return { bear: updated };
     },
     'bears.setAccess': (p) => (on(), { bear: d.bears.setAccess(str(p, 'bear'), p, callerCwd(p)) }),
     'bears.pin': (p) => (on(), { bear: d.bears.pin(str(p, 'bear'), p.pinned !== false) }),

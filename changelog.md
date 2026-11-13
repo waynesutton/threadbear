@@ -8,6 +8,7 @@ How Prints work today, what's missing and what's next: [Prints status](https://g
 
 ### Added
 
+- A bear's threads show its icon on its colour in the sidebar, and Bear Colour on a bear thread's right-click menu picks the colour.
 - Bears, an experiment: named teammates like Researcher or Writer, each a folder with its own persona, memory, face and routines. Head Bear is made first, as chief of staff for the rest. Manage them with `tb bears`.
 - `@Name` in a message, or `tb bears ask`, hands the message to a bear, and its reply comes back to the thread that asked. A bear never gets more access than the thread that asked it.
 - Tables, an experiment: a group of bears around one goal, talking in one thread you can read, with a cap of 6 bear replies per message.

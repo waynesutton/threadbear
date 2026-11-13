@@ -2527,6 +2527,12 @@ Bears & Tables panel, if you have the home patch):
   webhooks, mentions) go past Ask. Only you can do that: a bear's own
   thread can't.
 
+A bear's threads show its icon on its colour in the sidebar, where other
+threads show a folder or their project. Right-click one of its threads and
+pick Bear Colour to change the colour, or ask any thread to give a bear an
+icon (`tb bears set Writer --icon pencil --color "#3E8ED0"`, an SF Symbol
+name). The head bear shows a crown until you give it an icon of its own.
+
 Write `@Researcher` in a message (or `@bear:<id>`), or run
 `tb bears ask Researcher "..."` from a thread, and the bear gets the
 message in a fresh thread in its folder, in the lower of its mode and

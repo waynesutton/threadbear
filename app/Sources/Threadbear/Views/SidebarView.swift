@@ -751,7 +751,7 @@ struct ThreadRowView: View {
         // projects here), and the Mac's name in the tooltips.
         let place = app.runnerPlace(of: thread)
         HStack(alignment: .center, spacing: zoomed(10)) {
-            ProjectTiles(projects: ProjectMark.shown(thread, under: heading), runnerIcon: thread.isRemote ? app.runnerIcon(of: thread) : nil)
+            ProjectTiles(projects: ProjectMark.shown(thread, under: heading), runnerIcon: thread.isRemote ? app.runnerIcon(of: thread) : nil, bear: thread.bear)
                 .tip(place.map { "\($0), in \(thread.cwd.abbreviatingHome)" } ?? ProjectMark.help(thread))
                 .overlay(alignment: .leading) {
                     if look.done {
@@ -1074,6 +1074,58 @@ struct ThreadRowView: View {
     }
 }
 
+/// A bear's colour, for its tile in the sidebar: a few that sit well on
+/// both looks, and the bear's own fur.
+struct BearColorMenu: View {
+    @Environment(AppModel.self) private var app
+    let threadId: String
+    let bear: ThreadBear
+
+    static let colors: [(name: String, hex: String?)] = [
+        ("Fur", nil), ("Honey", "#E0A33A"), ("Berry", "#C2414B"), ("Rose", "#D9668C"),
+        ("Plum", "#8A5CC2"), ("Sky", "#3E8ED0"), ("Moss", "#5E9B4F"), ("Slate", "#6B7280"),
+    ]
+
+    var body: some View {
+        Menu("Bear Colour", systemImage: "paintpalette") {
+            ForEach(Self.colors, id: \.name) { item in
+                let current = (bear.color?.lowercased() ?? nil) == item.hex?.lowercased()
+                Button(item.name, systemImage: current ? "checkmark" : "circle.fill") {
+                    app.setBearColor(threadId: threadId, bear: bear, color: item.hex)
+                }
+                .tip(item.hex == nil ? "\(bear.name)'s own fur colour" : "Colour \(bear.name)'s tile \(item.name.lowercased())")
+            }
+        }
+        .tip("The colour of \(bear.name)'s tile in the sidebar")
+        .disabled(app.isBusy("bearColor/\(bear.id)"))
+    }
+}
+
+/// A bear's tile: its SF Symbol (a crown for the head bear when it has
+/// none) in white on its colour, the bear's own fur when it has none.
+struct BearTile: View {
+    let bear: ThreadBear
+    let size: CGFloat
+
+    static let fur = Color(red: 0.84, green: 0.58, blue: 0.33)
+
+    static func color(_ bear: ThreadBear) -> Color {
+        guard let (r, g, b) = bear.rgb else { return fur }
+        return Color(red: r, green: g, blue: b)
+    }
+
+    var body: some View {
+        let fallback = bear.head == true ? "crown.fill" : "pawprint.fill"
+        let symbol = bear.icon.flatMap { ProjectIconImages.symbolExists($0) ? $0 : nil } ?? fallback
+        Image(systemName: symbol)
+            .font(.system(size: zoomed(14), weight: .semibold))
+            .foregroundStyle(.white)
+            .frame(width: size, height: size)
+            .background(Self.color(bear), in: RoundedRectangle(cornerRadius: zoomed(7), style: .continuous))
+            .tip("\(bear.name)\(bear.head == true ? ", the head bear" : "")")
+    }
+}
+
 /// A row's project as a tile two lines tall: the first project it joined,
 /// with an edge of a second tile showing behind it when it's in more than
 /// one. A quiet folder when it's in none. The front tile is the project's
@@ -1083,6 +1135,9 @@ private struct ProjectTiles: View {
     let projects: [ThreadProject]
     /// Another runner's thread: that Mac's symbol in place of the folder.
     var runnerIcon: String? = nil
+    /// A bear's thread (protocol "Bears"): its icon on its colour, in place
+    /// of the folder or a project's tile.
+    var bear: ThreadBear? = nil
 
     var body: some View {
         let size = zoomed(30)
@@ -1109,7 +1164,9 @@ private struct ProjectTiles: View {
                     .offset(x: zoomed(4), y: -zoomed(4))
             }
             let icon = projects.first.flatMap { app.project($0.id)?.icon }
-            if let path = icon?.image?.path, let image = ProjectIconImages.image(at: path) {
+            if let bear {
+                BearTile(bear: bear, size: size)
+            } else if let path = icon?.image?.path, let image = ProjectIconImages.image(at: path) {
                 Image(nsImage: image)
                     .resizable()
                     .interpolation(.high)
@@ -1327,6 +1384,9 @@ struct ThreadMenu: View {
         }
         if app.canMoveThreads {
             ThreadMoveMenu(thread: thread)
+        }
+        if let bear = thread.bear, !thread.isRemote {
+            BearColorMenu(threadId: thread.id, bear: bear)
         }
     }
 }

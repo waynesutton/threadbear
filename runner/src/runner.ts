@@ -684,6 +684,9 @@ export class Runner {
   projects?: Projects;
   // Bears (bears.ts): what a new thread in a bear's folder starts with.
   // Unset while the experiment is off.
+  // The bear whose folder this is (bears.ts), for the sidebar's tile.
+  // Unset while bears are off.
+  bearOf?: (cwd: string) => { id: string; name: string; icon?: string; color?: string; head?: boolean } | undefined;
   // Mentions (mentions.ts): a message Wayne sent that names a bear. Answers
   // a line added for the agent, or undefined. Unset while bears are off.
   mentionHook?: (threadId: string, text: string) => string | undefined;
@@ -3595,6 +3598,8 @@ export class Runner {
     // Only for the card it was checked for: a new turn's card waits for its own.
     if (rec.looseEnds && this.looseEndsCard(st) === rec.looseEnds.seq) s.looseEnds = { seq: rec.looseEnds.seq, ends: rec.looseEnds.ends.map((e) => ({ ...e })), at: rec.looseEnds.at };
     if (rt.moving) s.moving = { ...rt.moving };
+    const bear = this.bearOf?.(rec.cwd);
+    if (bear) s.bear = bear;
     return s;
   }
 

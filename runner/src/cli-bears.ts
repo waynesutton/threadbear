@@ -23,7 +23,8 @@ export const BEARS_HELP = `  tb bears [--archived] [--json]   the bears (experim
   tb bears show|routines <bear>   one bear, or its routines with their next run
   tb bears rename <bear> "Name"   the id and folder never change
   tb bears set <bear> [--does W] [--personality W] [--face PRESET] [--model M] [--effort L] [--icon S]
-                [--notes off|cheers|ideas|both]   bear notes (experiment bearNotes)
+                [--notes off|cheers|ideas|both] [--color #rrggbb]
+                                  --icon is an SF Symbol and --color its tile's colour in the sidebar
   tb bears access <bear> [--ask | --auto | --plan | --full] [--pool ID] [--runner NAME]
                                   what a bear may do; never from a bear's own thread
   tb bears head <bear|none>       makes a bear the chief of staff that runs the others
@@ -35,7 +36,7 @@ export const BEARS_HELP = `  tb bears [--archived] [--json]   the bears (experim
   tb bears faces                  the face presets
   tb bears ask <bear> "text"      hands this thread's question to a bear; its reply comes back here`;
 
-export const BEAR_FLAGS = ['json', 'archived', 'does', 'personality', 'face', 'model', 'effort', 'icon', 'notes', 'ask', 'auto', 'plan', 'full', 'pool', 'runner'];
+export const BEAR_FLAGS = ['json', 'archived', 'does', 'personality', 'face', 'model', 'effort', 'icon', 'notes', 'color', 'ask', 'auto', 'plan', 'full', 'pool', 'runner'];
 
 function line(b: Bear): string {
   const tags = [b.head ? 'head bear' : '', b.state.pinned !== undefined ? 'pinned' : '', b.away ? `away until ${b.state.awayUntil}` : '', b.archived ? 'archived' : ''].filter(Boolean);
@@ -67,7 +68,7 @@ export async function bearsCommand(client: RunnerClient, args: string[], f: Flag
   };
   const fields = () => {
     const out: Record<string, unknown> = {};
-    for (const k of ['does', 'personality', 'model', 'effort', 'icon', 'notes'] as const) if (typeof f[k] === 'string') out[k] = f[k];
+    for (const k of ['does', 'personality', 'model', 'effort', 'icon', 'notes', 'color'] as const) if (typeof f[k] === 'string') out[k] = f[k];
     return out;
   };
   const face = async () => {

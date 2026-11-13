@@ -15,6 +15,10 @@ A foldable **Bears** section under Starred, shown only while `hello.experiments`
 - Drag to sort calls `bears.move`. Pin calls `bears.pin`.
 - Runner calls: `bears.list`, `bears.move`, `bears.pin`, `tables.list`. No runner change.
 
+## Bear tiles in the sidebar (shipped in the Swift app, 14 Nov)
+
+A thread's summary carries `bear` (id, name, icon, color, head) while bears are on. The Swift sidebar draws the bear's SF Symbol in white on its colour in place of the folder or project tile, and a bear thread's right-click menu has Bear Colour (eight swatches, `bears.update { color }`). Port both to the GPUI sidebar. No runner change.
+
 ## Menus for every bear action
 
 Right-click on a bear row:

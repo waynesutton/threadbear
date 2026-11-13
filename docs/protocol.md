@@ -5266,6 +5266,13 @@ time a bear's thread books in its quiet hours moves to their end.
 | `bears.delete` | `{ bear }` | `{ trashed }`: the folder's place in `<data dir>/trash`. Its routines are deleted and its threads archived |
 | `bears.mention` | `{ bear, text, fromThreadId? }` | `{ threadId?, bear, note? }` (`note`: it's away) |
 
+While bears are on, a thread in a bear's folder has `bear: { id, name,
+icon?, color?, head? }` on its summary, for the sidebar's tile: the bear's
+SF Symbol (a crown for the head bear when it has none) in white on its
+colour. `bears.update` and `bears.setHead` send those threads' summaries
+again, so the tile follows. The Mac app's Bear Colour menu on a bear's
+thread row calls `bears.update { bear, color }`.
+
 A thread's connection (A thread's own key) may call the reads and
 `create`, `update`, `pin`, `move`, `hibernate`, `setProjects` and
 `mention` below Full access; the gate adds its id as `_caller`.

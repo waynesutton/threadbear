@@ -36,6 +36,7 @@ const OPTIONS = {
   personality: { type: 'string' },
   face: { type: 'string' },
   notes: { type: 'string' },
+  color: { type: 'string' },
   runner: { type: 'string' },
   bear: { type: 'string' },
   batch: { type: 'string' },

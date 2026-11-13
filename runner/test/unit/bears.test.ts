@@ -249,3 +249,24 @@ test('the RPC gate: a thread below Full access reads bears and edits harmless fi
   const full = new CallerGate({ runner: { has: () => true, get: () => ({ permissionMode: 'full', title: 'T' }), accessOf: () => 'full', confinedOf: () => false } });
   assert.equal(full.check('t2', 'bears.setAccess', { bear: 'x', _caller: 'spoofed' })._caller, 't2', "the caller can't name someone else");
 });
+
+test("a thread's sidebar tile: the bear's name, icon and colour, and whether it's the head bear", async () => {
+  const { bears } = setup();
+  const b = await bears.create({ name: 'Writer', icon: 'pencil', color: '#3E8ED0', tidy: false });
+  assert.deepEqual(bears.tile(path.join(b.folder, 'drafts')), { id: b.id, name: 'Writer', icon: 'pencil', color: '#3E8ED0' });
+  bears.setHead(b.id);
+  assert.equal(bears.tile(b.folder)?.head, true);
+  assert.equal(bears.tile('/elsewhere'), undefined);
+  bears.update(b.id, { color: null });
+  assert.equal(bears.tile(b.folder)?.color, undefined);
+});
+
+test('a Runner summary carries the bear only when bearOf says so', async () => {
+  const h = makeHarness();
+  const { bears } = setup();
+  const b = await bears.create({ name: 'Writer', tidy: false });
+  const t = h.runner.create({ text: 'hi', cwd: b.folder }).thread;
+  assert.equal(t.bear, undefined);
+  h.runner.bearOf = (cwd) => bears.tile(cwd);
+  assert.equal(h.runner.list().find((x) => x.id === t.id)?.bear?.name, 'Writer');
+});

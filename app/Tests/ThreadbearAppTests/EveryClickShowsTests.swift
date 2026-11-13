@@ -34,6 +34,7 @@ final class EveryClickShowsTests: XCTestCase {
         "updateProfilePage", "removeProfilePage",
         // Pages (Pages.swift): each in whileBusy, the row spins.
         "refreshPage", "editPageWithAgent", "savePageDoc", "savePageDiagram", "togglePageItem", "movePageCard", "restorePageVersion", "deletePage", "restorePage", "exportPage", "setPageProjects", "publishPage", "unpublishPage",
+        "setBearColor",
     ]
 
     /// Functions that show their click some other way, and how.
