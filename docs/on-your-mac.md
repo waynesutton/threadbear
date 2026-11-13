@@ -225,6 +225,15 @@ With Outside agents on (`outsideAgents`), the runner keeps which agent key
 started which thread in `runner/agent-threads.json` (0600) in the data
 folder.
 
+With Bears on (`bears`), the runner keeps `runner/bears.json` (0600): each
+bear's access (mode, pool, machine), pin, order, away time, archive time
+and projects, and which bear is the chief of staff. Mentions keep
+`runner/mentions.json` (0600), which bear threads owe a reply to which
+threads. With Webhooks on (`webhooks`), `runner/webhooks.json` (0600)
+lists the hooks this runner made and their targets (never their keys), and
+`runner/webhook-held.json` holds deliveries for a bear that's away; a
+one-minute timer runs them once it's back.
+
 Voice mode is an experiment, off by default: while it's off (`voiceMode`
 in `runner.json`'s `experiments`) there's no button, nothing below happens
 and macOS never asks for the microphone. On, the first time you use it
@@ -305,6 +314,15 @@ memory for that folder in `~/.claude/projects/`, as it does for any folder.
 `~/Library/Logs/Threadbear/voice.log`
 notes what Voice did (which microphone, whether echo cancellation
 started, errors), never what was said, and is started afresh past 256 KB.
+
+With Bears on, `tb bears new` (and the first `bears.list`, which makes
+Momma Bear) makes `~/ThreadbearThreads/Bears/<id>/` with `CLAUDE.md`,
+`AGENTS.md`, `bear.json` and `memory/`, runs `git init` there, adds a
+shared `Bears/memory/summary.md`, and books a daily "tidy memory" schedule
+for 4:30. Deleting a bear moves its folder to the runner's `trash/`. With
+Tables on, `tb tables new` makes `~/ThreadbearThreads/Tables/<id>/` with
+the host's `CLAUDE.md`. Faces are drawn by the `open-bot-avatar` package
+(0.2.1, MIT, no dependencies), installed with the runner's packages.
 
 ### Profiles (a Work setup beside your Personal one)
 
@@ -609,6 +627,7 @@ shared. Notifications say which profile they're from.
 | Cursor (api2.cursor.sh) | theirs | Only with the `acpAgents` experiment on and a thread on Cursor: the same, on your own login |
 | Mike's push relay | Mike's | Only when a paired iPhone or Android phone gets a notification (an Android phone's goes on to Google's Firebase Cloud Messaging, from the relay). It's sent from your Convex deployment, not the Mac. The text is encrypted for the phone; the relay sees the device token and thread id (`convex/push.ts`, `docs/push-relay.md`). The first time, your deployment registers with it, giving its own address; the relay keeps that address and checks it by posting a one-time code back to your deployment's `/relay/verify` (`convex/http.ts`). |
 | A Connectors gateway | whoever runs it | Only if one is set in `runner.json` or `~/.claude.json`. Its `/health` every few minutes (and once more at the end of a turn where a call to one of its services failed, to see if it needs signing in), and for a project with a Notion page, a Notion read or two every 5 minutes for its task board (`runner/src/notion-tasks.ts`), signed with the header the `headersHelper` command in that `connectors` entry prints, which it runs for each read |
+| Your backend's `/hook/<key>`, from webhooks | Convex, and whatever you give a webhook URL to | Only with the Webhooks experiment on and a hook made with `tb webhooks new`. A POST there starts an Ask (or Auto) thread in the folder or bear it's aimed at, or messages its one thread. Keys are stored as hashes and revoked with `tb webhooks revoke`, and all of them when the experiment is turned off |
 | Your backend's `/mcp`, from outside agents | Convex, and the agents you give a key (Grok Bot runs at xAI) | Only with the Outside agents experiment on and a key made in the Connectors panel. An agent with a key can list and read threads (only ones it started, unless you allow all), and with a write key start Ask-mode threads and message those. What it reads goes to that agent's company. Keys are stored as hashes, expire, and are revoked from the panel |
 | GitHub | the skill's author | Only when you import or update a skill: the repo's commit and files, read without signing in. Nothing of yours is sent. |
 | GitHub, Hugging Face | Kyutai's | Only with the `voiceMode` experiment on, the first time Voice is used: the pocket-tts download, then its model and voices. Nothing of yours is sent. |

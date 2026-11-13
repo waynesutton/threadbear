@@ -1060,6 +1060,19 @@ You can also ask a thread for any of these: "refresh the sales dashboard", "go b
 
 Prints are static: pictures, charts and text, with no scripts, so they open straight away and can't reach the internet. A thread can make a "live" print with scripts when you ask for one. Its scripts run only after you choose Run them, and again for each new version.
 
+### Tables
+
+An experiment (Tables, which needs Bears). A table is a group of bears
+around one goal, with you at the head. It's a project marked as a table:
+its goals are the table's goal and its notes are its decisions.
+`tb tables new "Launch crew" --bears "Researcher,Writer" --parent Launch`
+makes one inside the Launch project, with a folder of its own in
+`~/ThreadbearThreads/Tables`. A thread there is the table chat: its host
+passes work to the bears, and their replies come back into it, so you
+read every exchange. Each message you send allows at most 6 bear replies
+(`tb tables seat <table> --max 4` changes it). The librarian keeps a
+table's state but never files a thread into one.
+
 ## The librarian
 <!-- slug: librarian -->
 
@@ -1324,6 +1337,20 @@ Mac arrives asking before tools run, even if it had Full access or Auto
 there. Agents can do the same with `move_thread` and a `runner`, and
 `tb move <thread> --to <machine>` (`--preview` to see where it would go).
 Moves are started from your first Mac and need Threadbear's backend.
+
+### Webhooks
+
+An experiment (Webhooks). `tb webhooks new "GitHub" --bear Researcher`
+makes a secret URL on your backend, shown once. A POST to it starts a
+thread in that bear's folder (or `--cwd` a folder, or `--thread` messages
+one thread on Ask or Auto), marked with a bolt and the webhook's name.
+Its threads run in Ask, or Auto with `--auto`, never Full access, and the
+payload arrives quoted as data, not your words. Deliveries 10 seconds
+apart become one run, a repeat `Idempotency-Key` or `X-GitHub-Delivery`
+is dropped, and each hook takes 30 calls a minute and 50 a day. Keep the
+URL like a password: `tb webhooks revoke <id>` ends it, and turning the
+experiment off ends them all. It needs your backend's public
+`.convex.site` address, so a local backend can't take webhooks.
 
 ## Accounts, pools and Usage
 <!-- slug: accounts -->
@@ -2471,6 +2498,44 @@ the bear, Show the Bear's Folder): change them and it changes. It thinks
 while its chat is working. To hide it, turn off Show the bear in the
 sidebar in Settings (⌘,) > General; its chats, memory and Voice keep
 working.
+
+### Bears
+
+An experiment (Settings > General > Experiments, Bears). Bears are named
+teammates, like Researcher or Writer, each with a persona, a memory, a
+face and its own routines. A bear is a folder in
+`~/ThreadbearThreads/Bears`: a thread there is that bear. Its `CLAUDE.md`
+is its persona and house rules (short replies, drafts before anything is
+sent, say what it couldn't check), `memory/` is what it remembers, and
+`Bears/memory/` holds facts about you that every bear shares.
+
+The first time bears are listed, Momma Bear is made as your chief of
+staff: she can hand work to the others. `tb bears momma <bear>` gives the
+job to another one.
+
+Until the new desktop app draws them, bears live in `tb bears` (and the
+Bears & Tables panel, if you have the home patch):
+
+- `tb bears new "Researcher" --does "Finds sources" --personality "dry and calm" --face round`
+  makes one, with a daily "tidy memory" routine at 4:30.
+- `tb bears rename`, `set`, `pin`, `move`, `archive`, `delete`. Renaming
+  keeps its memory, routines and old threads. Deleting moves its folder
+  to the runner's trash.
+- `tb bears away <bear> 3d` hibernates it: its routines skip, webhooks
+  hold their deliveries, and a mention gets "away until".
+- `tb bears access <bear> --auto` lets its unattended runs (routines,
+  webhooks, mentions) go past Ask. Only you can do that: a bear's own
+  thread can't.
+
+Write `@Researcher` in a message (or `@bear:<id>`), or run
+`tb bears ask Researcher "..."` from a thread, and the bear gets the
+message in a fresh thread in its folder, in the lower of its mode and
+that thread's. Its reply comes back to the thread that asked. At most
+three bears a message.
+
+With Bear notes on too, a bear you opt in (`tb bears set <bear> --notes both`)
+can leave one short cheer or idea under the librarian's line in
+Highlights, only when it's earned.
 
 ### Where Settings opens
 

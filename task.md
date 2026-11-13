@@ -4,23 +4,20 @@
 
 Status and gap list: prds/prints-status.md
 
-- [ ] Bears, tables and webhooks, runner side, behind experiments. prds/bears-and-webhooks.md
-  - [ ] Phase A: bears (folders, bears.json, RPCs, tb bears, skill, memory, quiet hours)
-  - [ ] Phase A2: avatars
-  - [ ] Phase D: managing bears
-  - [ ] Phase B: webhooks
-  - [ ] Phase C: mentions
-  - [ ] Phase E: tables
-  - [ ] Phase F: personality and bear notes
-  - [ ] Home patch, docs, PRDs for Mike and for the GPUI app
 - [ ] Prints: ask once per Print on Codex threads too.
 - [ ] Prints: optional HyperFrames share clip for any print. prds/threadbear-pages.md
 
 ## In Progress
 
-Nothing.
+- [ ] Bears, tables and webhooks, runner side, behind experiments. prds/bears-and-webhooks.md. Pending: full check.sh, release build, live webhook test, PRDs for Mike and the GPUI app.
 
 ## Completed
+
+- [x] 2026-11-13 08:53 UTC Mentions, tables and bear notes (experiments bears, tables, bearNotes): `@Name` and `tb bears ask` hand a message to a bear in the lower mode and bring its reply back; tables are projects with a `table` marker, a host folder and a reply cap; the librarian never files a thread into a table; opted-in bears leave one cheer or idea in Highlights. prds/bears-and-webhooks.md. runner/src/mentions.ts, tables.ts, librarian.ts, projects.ts, runner.ts, cli-bears.ts. Verified: mentions 8, tables 6, bear-notes 4, projects 61 and guard tests pass; typecheck clean.
+
+- [x] 2026-11-13 08:45 UTC Webhooks (experiment webhooks, backend API 78): POST /hook/<key> starts an Ask or Auto thread in a folder or bear, or messages a thread, with hashed keys, a 64 KB cap, limits, dedupe, batching and scrubbing. Security check run: no confirmed findings; repeats now count against limits and the runner keeps its own hook registry. prds/bears-and-webhooks.md. convex/webhooks.ts, hookHttp.ts, http.ts, schema.ts; runner/src/webhooks.ts, sync.ts. Verified: webhooks 9 and webhooks-backend 13 tests; ./check.sh --quick passed in tb land (f570e343).
+
+- [x] 2026-11-13 08:45 UTC Bears (experiment bears): bear folders with persona, memory, git, faces from open-bot-avatar 0.2.1, a daily memory tidy, quiet hours, access fields in the runner's bears.json, Momma Bear as default chief of staff (Wayne asked mid-build), and tb bears for every management action. prds/bears-and-webhooks.md. runner/src/bears.ts, cli-bears.ts, rpc-gate.ts, schedules.ts, new-threads.ts, skills/bears/. Verified: bears 14 tests; ./check.sh --quick passed in tb land (af708f3f).
 
 - [x] 2026-11-12 05:15 UTC Cap the updater's npm unit suite at four workers to reduce contention from Git subprocesses. runner/package.json. Verified: actual npm test script with eight fixture files never exceeded four workers; runner typecheck, 26 probe and deploy-step tests, and 3,091 active unit tests with four workers and no retries. The broader check.sh change was withdrawn after unrelated app and iPhone gates hit time limits. prds/runner-update-probe-tests.md
 

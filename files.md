@@ -1,5 +1,20 @@
 # Files
 
+## Bears, tables and webhooks
+
+- `runner/src/bears.ts` bear folders, the runner's bears.json, faces, quiet hours, Momma Bear and the `bears.*` RPCs.
+- `runner/src/mentions.ts` routes `@Name` and `tb bears ask` to a bear and brings its reply back.
+- `runner/src/tables.ts` tables as marked projects, their host folder and the `tables.*` RPCs.
+- `runner/src/webhooks.ts` webhook runs on the runner, its hook registry and the `webhooks.*` RPCs.
+- `runner/src/cli-bears.ts` `tb bears`, `tb tables` and `tb webhooks`.
+- `runner/skills/bears/SKILL.md` how agents make, run and give faces to bears, routines and team templates.
+- `runner/skills/bears/avatars/*.json` six bear-shaped Open Bot Avatar presets.
+- `runner/src/experiments/{bears,webhooks,tables,bearNotes}.md` the four experiments.
+- `convex/webhooks.ts` webhook keys, delivery limits, dedupe, batching and pruning.
+- `convex/hookHttp.ts` the `/hook/<key>` route's status decisions.
+- `runner/test/unit/{bears,mentions,tables,bear-notes,webhooks,webhooks-backend}.test.ts` their tests.
+- `prds/bears-and-webhooks.md` the plan as built.
+
 ## Runner checks
 
 - `runner/test/unit/net-probe.test.ts` checks proxy deadlines and response-size limits with controlled time, plus real TCP and TLS connections.

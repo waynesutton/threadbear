@@ -830,6 +830,19 @@ agents"). To probe it, use a dev deployment and a key from a dev runner:
 tba_..." -H 'Content-Type: application/json' -d
 '{"jsonrpc":"2.0","id":1,"method":"tools/list"}'`.
 
+## Webhooks (13 Nov 2026, an experiment, API 78)
+
+`convex/webhooks.ts` and the `/hook/` route (`convex/hookHttp.ts`). Three
+tables: `webhooks` (only the key's SHA-256, its name, runner, target,
+`batchSeconds`, and when it was made, ends, was revoked or last used),
+`webhookCalls` (one row a delivery, for the limits, dedupe and the batch;
+its payload only while it waits) and `webhookFails` (bad keys by address).
+`issueWebhook`, `listWebhooks` and `revokeWebhook` take the owner key.
+`deliver` checks the key, limits and dedupe, scrubs the body and either
+queues the run or books `flush` with `ctx.scheduler.runAfter` for the end
+of the batch. `prune` runs hourly. Limits are counted by hand, as
+`mcp.ts` does. docs/protocol.md, "Webhooks", has the statuses.
+
 ## The Pocket (API 19)
 
 The phone's deck of cards for when Mike's out (`pocketCards`, the `pocket`
