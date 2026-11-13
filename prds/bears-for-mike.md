@@ -1,6 +1,6 @@
 # Bears, tables and webhooks: a draft for Mike
 
-A draft from Wayne's fork, for Wayne to send if he wants to. It's written from the code that shipped on 13 Nov 2026 (commits `af708f3f`, `58f387f0`, `f570e343`, `ab27df4b`, `a2a9baa1`), not from the plan.
+A draft from Wayne's fork, for Wayne to send if he wants to. It's written from the code that shipped on 13 Nov 2026 (commits `af708f3f`, `58f387f0`, `f570e343`, `ab27df4b`, `a2a9baa1`), then brought up to date with `d68c4850`, `f69b7232`, `debffacf` and `57934753` later that day. It's written from the code, not the plan.
 
 ## Why
 
@@ -43,6 +43,19 @@ On the runner, a command with `args.webhook` goes only to `webhooks.ts`. It need
 
 **Faces.** `open-bot-avatar` 0.2.1 (MIT, no dependencies, no DOM) validates each face and renders SVG stills for idle, thinking and happy, cached by hash. Six bear-shaped presets ship in `runner/skills/bears/avatars/`.
 
+## What changed since the first draft (13 Nov, later that day)
+
+- **Head bear, not Momma.** Wayne didn't like the name. The chief of staff is the head bear: `tb bears head <bear|none>`, `bears.setHead`, `head` in `bears.json` and on each bear, and a marked "Chief of staff" block in its `CLAUDE.md` (`d68c4850`).
+- **Bear tiles in the Swift sidebar** (`f69b7232`). Wayne asked for this as an exception to the Swift freeze. A thread's summary carries `bear: { id, name, icon?, color?, head? }` while bears are on (`Runner.bearOf`, `Bears.tile`), and the sidebar draws the bear's SF Symbol in white on its colour where the folder or project tile was. A bear thread's right-click menu has Bear Colour (eight swatches, `bears.update { color }`, behind `whileBusy`), and `tb bears set --color` does the same.
+- **An @ picker in the Swift composer** (`debffacf`, fixed in `57934753` after a Codex review). Typing `@` lists the bears from `bears.list` over the cursor, like the / list (`BearPicker.swift`, a child panel that never takes the keyboard). It lists bears only for a message going to this Mac's runner, leaves modified keys (Shift-Return, Shift-Tab) to the composer, and stays shut after Esc or losing the cursor even if a slow refresh lands.
+- **Codex bears, observed** (13 Nov, a Designer bear on `gpt-6-astra`). Codex's built-in `image_gen` makes real 1024 by 1024 PNGs. It writes them to `~/.codex/generated_images` with no approval card, even in Ask; copying one into the folder asked as usual. Auto is Claude Code's, so a Codex bear set to Auto still asks, and `tb bears access` now says so (the smaller, safer change than refusing).
+- **Also observed:** store skills reach bear threads (the Designer opened with the dev skill's greeting); the built-in bears skill only shows under Suggested until it's added; memory tidy routines run in Ask, so a tidy that edits a file waits for a yes each morning; a mention's reply came back to the asking thread live, twice (`tb bears ask Designer`); and the home patch reads the runner's files, as live patch functions can't run `tb`.
+
+## Known issues
+
+- **A Codex bear's `pin` in Ask showed no card.** In thread 8ca2306a the runner raised approval 7d16026c for `mcp__threadbear__pin` at 21:06:19 UTC (an `approval.requested` event), Wayne saw no card, and it expired when the turn ended at 21:11:34. The app doesn't hide cards for Threadbear's own tools (`CardText.runnerReason` labels them), so the cause is still open.
+- **Ask on unattended runs.** Routines, webhooks and mentions start in Ask by design, which makes the daily tidy ask every morning. Raising a Claude bear to Auto fixes it; a Codex bear can't.
+
 ## What it asks of Mike's code
 
 Small hooks, each behind its experiment:
@@ -53,6 +66,7 @@ Small hooks, each behind its experiment:
 - `Runner.bearDefaults` and `Runner.mentionHook`, and `Scheduler.holdFor` and `adjustAt`.
 - `bears.*`, `tables.*` and `webhooks.*` in the RPC gate.
 - The `webhookOf` check before `agentOf` in `ConvexSync.apply`.
+- `ThreadSummary.bear` (`Runner.bearOf`) on the runner, and in the Swift app `ThreadBear` and `BearEntry` (`ThreadbearCore/Protocol/Bears.swift`), `BearTile` and `BearColorMenu` in `SidebarView.swift`, `BearPicker.swift`, and the composer's @ hooks in `ComposerView.swift`.
 
 ## Safety rules, in one place
 
@@ -65,7 +79,7 @@ Small hooks, each behind its experiment:
 ## What's left out
 
 - MCP tools for bears and webhooks. Agents use `tb bears` and `tb webhooks` through the bears skill, and the RPC gate holds the line. A `create_webhook` tool with a confirm card is the next step if agents need it.
-- All app UI. The SwiftUI app is frozen; `prds/bears-gpui.md` is the GPUI plan, and Wayne's home patch covers the gap.
+- Most app UI. The SwiftUI app is frozen apart from the bear tiles and the @ picker above; `prds/bears-gpui.md` is the GPUI plan, and Wayne's home patch covers the rest.
 - Group channels, per-bear sandboxes, provider HMAC signatures, AI Gateway, `@convex-dev/rate-limiter`.
 - An idea in the done card's "Or carry on" list. It needs a protocol field, since that list comes from the turn's own event.
 
@@ -80,6 +94,8 @@ Small hooks, each behind its experiment:
 | Tables | `tb tables new "Crew" --bears "Researcher,Writer"`, ask in its folder: replies stop at 6 |
 | Webhooks | `curl -X POST <url> -d '{"hello":1}'` returns 202 and a bolt thread in Ask |
 | Bear notes | `tb bears set Researcher --notes both`, finish a thread that ships: a cheer in Highlights |
+| Bear tiles | `tb bears set Writer --icon pencil --color "#3E8ED0"`: its threads show a white pencil on blue |
+| @ picker | Type `@wr` in a message box: Writer comes up; Tab writes `@Writer ` |
 
 ## Live test on Wayne's backend (13 Nov 2026)
 
@@ -98,4 +114,4 @@ The first try showed a revoke cancelling a run no runner had taken yet, which is
 
 ## Tests
 
-`bears` 14, `webhooks` 9, `webhooks-backend` 13, `mentions` 8, `tables` 6, `bear-notes` 4, plus the guard tests (experiments, context budget, parity, runner access). `./check.sh --quick` passed on each land.
+Runner: `bears` 17, `webhooks` 9, `webhooks-backend` 13, `mentions` 8, `tables` 6, `bear-notes` 4, plus the guard tests (experiments, context budget, parity, runner access, scenarios). Swift: `BearPickerTests` 5, with `EveryClickShowsTests` and `TipsTests`, and `swift build -c release`. `./check.sh --quick` passed on each land. The full `./check.sh` is booked for a quiet night (schedule eb83f133).

@@ -13,6 +13,16 @@ Nothing.
 
 ## Completed
 
+- [x] 2026-11-13 21:40 UTC Bears docs sync after the head bear, sidebar tiles and @ picker: guide, protocol, SECURITY, the bears skill and both PRDs say what shipped since 79ab733c and what was observed with a Codex Designer bear (image_gen saves without a card, Auto is Claude only, an unexplained missing pin card). `tb bears access` now says Auto works like Ask on a Codex bear. runner/src/cli-bears.ts, docs, prds. Verified: bears 17 tests, typecheck.
+
+- [x] 2026-11-13 18:44 UTC @ bear picker review fixes: no list for a message going to another runner, modified keys stay the composer's, Esc and lost focus keep it shut. app/Sources/Threadbear/Views/BearPicker.swift, ComposerView.swift. Verified: BearPickerTests 5, EveryClickShowsTests, TipsTests; quick check on land (57934753).
+
+- [x] 2026-11-13 18:24 UTC @ bear picker in the Swift composer, from bears.list. BearPicker.swift, ComposerView.swift, AppModel+Bears.swift. Verified: BearPickerTests, EveryClickShowsTests, TipsTests; seen in a debug app against a dev runner (Hey @wr, Tab, Hey @Writer); Wayne confirmed it on his app (debffacf).
+
+- [x] 2026-11-13 17:45 UTC Bear icons and colours in the Swift sidebar: ThreadSummary.bear from the runner, BearTile, and Bear Colour on a bear thread's menu; tb bears set --color. Verified: bears tests, scenarios, sync, Swift tests; Wayne confirmed the crown tile (f69b7232).
+
+- [x] 2026-11-13 17:11 UTC Rename the chief of staff from Momma to head bear everywhere, with tb bears head; Wayne's bear moved to head-bear-d2f8 and his table to Head table. Verified: bears, mentions and tables tests; a case-insensitive grep finds none of the old name (d68c4850).
+
 - [x] 2026-11-13 09:20 UTC Bears build wrap-up: live webhook test on the deployed backend (202, quoted Ask thread with the bolt, repeat 200, unknown 404, over 64 KB 413, Origin 403, revoked 404; hooks revoked and webhooks off after), Head Bear made on Wayne's runner with bears, tables and bear notes on for him, home patch ~/.threadbear/patches/bears.ts, prds/bears-for-mike.md and prds/bears-gpui.md. Verified: swift build -c release in app/ passed; ./check.sh --quick passed on every land. Skipped: the full ./check.sh, as load stayed between 10 and 21 from other threads all night.
 
 - [x] 2026-11-13 08:53 UTC Mentions, tables and bear notes (experiments bears, tables, bearNotes): `@Name` and `tb bears ask` hand a message to a bear in the lower mode and bring its reply back; tables are projects with a `table` marker, a host folder and a reply cap; the librarian never files a thread into a table; opted-in bears leave one cheer or idea in Highlights. prds/bears-and-webhooks.md. runner/src/mentions.ts, tables.ts, librarian.ts, projects.ts, runner.ts, cli-bears.ts. Verified: mentions 8, tables 6, bear-notes 4, projects 61 and guard tests pass; typecheck clean.

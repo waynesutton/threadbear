@@ -6,7 +6,12 @@
 - `runner/src/mentions.ts` routes `@Name` and `tb bears ask` to a bear and brings its reply back.
 - `runner/src/tables.ts` tables as marked projects, their host folder and the `tables.*` RPCs.
 - `runner/src/webhooks.ts` webhook runs on the runner, its hook registry and the `webhooks.*` RPCs.
-- `runner/src/cli-bears.ts` `tb bears`, `tb tables` and `tb webhooks`.
+- `runner/src/cli-bears.ts` `tb bears`, `tb tables` and `tb webhooks`, and the note that Auto works like Ask on a Codex bear.
+- `app/Sources/ThreadbearCore/Protocol/Bears.swift` a thread's bear for its sidebar tile, the @ list's bears, and the colour and list calls.
+- `app/Sources/Threadbear/AppModel+Bears.swift` Bear Colour and the @ list's cached bears.
+- `app/Sources/Threadbear/Views/BearPicker.swift` the composer's @ list of bears.
+- `app/Tests/ThreadbearAppTests/BearPickerTests.swift` what the @ list offers and when it stays shut.
+- `features/bears.feature` the bear tile, Bear Colour and @ list, checked by hand.
 - `runner/skills/bears/SKILL.md` how agents make, run and give faces to bears, routines and team templates.
 - `runner/skills/bears/avatars/*.json` six bear-shaped Open Bot Avatar presets.
 - `runner/src/experiments/{bears,webhooks,tables,bearNotes}.md` the four experiments.

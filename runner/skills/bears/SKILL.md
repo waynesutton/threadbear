@@ -34,6 +34,10 @@ tb bears head <bear>                      # Wayne only: the chief of staff
 
 Deleting a bear (`tb bears delete`) moves its folder to the runner's trash and deletes its routines. Ask Wayne first, every time.
 
+## Codex bears
+
+A bear whose model is a Codex one (`--model gpt-6-astra`) runs on Codex. Auto is Claude only: `tb bears access --auto` on a Codex bear still asks before tools. Codex can make real PNGs with its built-in `image_gen` tool; it writes them into `~/.codex/generated_images` without asking, so copy the one you keep into the bear's folder (that asks) and say where it is.
+
 ## The head bear
 
 One bear can be the chief of staff (`tb bears head <bear>`). The first time bears are listed, Head Bear is made and given the job. Its `CLAUDE.md` has a marked "Chief of staff" block: it hands jobs to the others with `tb bears ask`, keeps a roster in `memory/facts/bears.md`, and never changes a bear's access or deletes one.

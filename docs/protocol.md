@@ -5271,7 +5271,21 @@ icon?, color?, head? }` on its summary, for the sidebar's tile: the bear's
 SF Symbol (a crown for the head bear when it has none) in white on its
 colour. `bears.update` and `bears.setHead` send those threads' summaries
 again, so the tile follows. The Mac app's Bear Colour menu on a bear's
-thread row calls `bears.update { bear, color }`.
+thread row calls `bears.update { bear, color }`. Its composer's @ list
+calls `bears.list { faces: false }` on this Mac's own connection, at most
+every 20 seconds, and offers the unarchived bears (head bear first) only
+for a message going to this Mac's runner: another runner resolves a
+mention against its own bears. Picking one writes `@<name> `; nothing new
+goes on the wire.
+
+**Codex bears** (observed 13 Nov 2026). `permissionMode: "auto"` is
+Claude Code's; a Codex thread set to it runs as Ask, so `tb bears access
+--auto` on a Codex bear says so rather than refusing. Codex's built-in
+`image_gen` writes into `~/.codex/generated_images` with no approval
+request, in any mode (SECURITY.md). Known issue: in thread 8ca2306a, a
+Codex bear in Ask called `pin`; the runner put up approval 7d16026c
+(`approval.requested`, 21:06:19 UTC), but no card was seen in the Mac app,
+and it expired when the turn ended five minutes later. Not yet explained.
 
 A thread's connection (A thread's own key) may call the reads and
 `create`, `update`, `pin`, `move`, `hibernate`, `setProjects` and

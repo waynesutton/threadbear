@@ -1,6 +1,6 @@
 # Bears, tables and webhooks in the GPUI app
 
-The runner side shipped on Wayne's fork on 13 Nov 2026, behind the `bears`, `webhooks`, `tables` and `bearNotes` experiments (`prds/bears-for-mike.md`). The SwiftUI app is frozen, so every piece of UI waits for the GPUI app in `desktop/`. Until then, Wayne's home patch `~/.threadbear/patches/bears.ts` gives a Bears & Tables list panel and three chips.
+The runner side shipped on Wayne's fork on 13 Nov 2026, behind the `bears`, `webhooks`, `tables` and `bearNotes` experiments (`prds/bears-for-mike.md`). The SwiftUI app is frozen, so every piece of UI waits for the GPUI app in `desktop/`. Until then, Wayne's home patch `~/.threadbear/patches/bears.ts` gives a Bears & Tables list panel and three chips. Two pieces now exist in the SwiftUI app as well (Wayne's exception to the freeze, 13 Nov): the bear tiles and Bear Colour menu in the sidebar, and the @ picker in the composer. Port those two from the Swift code and `features/bears.feature` rather than designing them again.
 
 Each item below lists the runner calls it needs. All of them exist today, so none of this needs a runner change unless it says so.
 
@@ -15,7 +15,7 @@ A foldable **Bears** section under Starred, shown only while `hello.experiments`
 - Drag to sort calls `bears.move`. Pin calls `bears.pin`.
 - Runner calls: `bears.list`, `bears.move`, `bears.pin`, `tables.list`. No runner change.
 
-## Bear tiles in the sidebar (shipped in the Swift app, 14 Nov)
+## Bear tiles in the sidebar (in the Swift app, `f69b7232`: port it)
 
 A thread's summary carries `bear` (id, name, icon, color, head) while bears are on. The Swift sidebar draws the bear's SF Symbol in white on its colour in place of the folder or project tile, and a bear thread's right-click menu has Bear Colour (eight swatches, `bears.update { color }`). Port both to the GPUI sidebar. No runner change.
 
@@ -56,7 +56,7 @@ A table's thread is an ordinary thread in its folder. Bear replies arrive as mes
 - When the runner refuses a mention past `maxTurns`, the host says so in its reply. Nothing extra to draw.
 - Runner change: none needed. A later protocol field (`origin: 'bear'` with the bear id on the user.message) would be cleaner than reading the prefix; add it to `docs/protocol.md` first if the GPUI port wants it.
 
-## The @ picker in the composer (shipped in the Swift app, 14 Nov: BearPicker.swift)
+## The @ picker in the composer (in the Swift app, `debffacf` and `57934753`: port it)
 
 Typing `@` opens a picker of bears (from `bears.list`) and recent threads, filtered as you type.
 
@@ -64,6 +64,7 @@ Typing `@` opens a picker of bears (from `bears.list`) and recent threads, filte
 - Picking a thread inserts the same thread chip that pasting a thread id makes today.
 - Follow the SkillPicker pattern: a child panel that is never key, never `NSTextView.complete`.
 - No runner change.
+- Keep the Swift app's three rules from its review: list bears only when the message goes to this Mac's runner, leave modified keys (Shift-Return, Shift-Tab) to the composer, and stay shut after Esc or losing focus even when a slow `bears.list` lands (`BearPicker.Gate`).
 
 ## Webhooks on the Scheduled page
 
@@ -79,6 +80,16 @@ A **Webhooks** section on the Scheduled page (⌘2), while `webhooks` is on.
 The librarian's cheers and ideas already show as text in its Highlights line ("- Researcher: Nice, tests pass and it's pushed."). Draw that line with the bear's face.
 
 - An idea in the done card's "Or carry on" list needs a runner change: today the list comes from the turn's own `turn.completed` event, which is written before the librarian looks. Add `needs.next` from the librarian (a `bearNext` field on the thread summary) to `docs/protocol.md` first, then both sides.
+
+## Pictures from Codex bears
+
+A Codex bear (a Designer on `gpt-6-astra`, 13 Nov) makes real PNGs with Codex's built-in `image_gen` and saves them in its folder. Show them well:
+
+- A picture a bear's reply names or pins draws inline in the transcript at a readable size, with Open and Show in Finder, and the same when the reply comes back into the asking thread or a table chat.
+- A bear's tile or row can show its newest picture as a thumbnail while it's working on images.
+- Say on the card or the row that Codex wrote the picture to `~/.codex/generated_images` without asking, as SECURITY.md says, so Ask isn't taken for a gate it isn't.
+- The open known issue: a Codex bear's `pin` in Ask raised an approval (7d16026c, thread 8ca2306a) that showed no card in the Swift app. Check the GPUI app draws approvals for `mcp__threadbear__*` tools on Codex threads.
+- Runner change: none for drawing. A picture's path is already in the reply and in `pin`.
 
 ## Checks before landing
 

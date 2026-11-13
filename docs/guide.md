@@ -2513,11 +2513,18 @@ The first time bears are listed, Head Bear is made as your chief of
 staff: it can hand work to the others. `tb bears head <bear>` gives the
 job to another one.
 
+Add the bears skill once (Settings > Skills, where it waits under
+Suggested): it teaches every thread, bears included, the `tb bears`
+commands, faces and routines. Store skills you've added reach bear threads
+like any other thread.
+
 Until the new desktop app draws them, bears live in `tb bears` (and the
 Bears & Tables panel, if you have the home patch):
 
 - `tb bears new "Researcher" --does "Finds sources" --personality "dry and calm" --face round`
-  makes one, with a daily "tidy memory" routine at 4:30.
+  makes one, with a daily "tidy memory" routine at 4:30. The routine runs
+  in Ask like every unattended run, so a tidy that changes a file waits
+  for your yes each morning until you raise the bear with `tb bears access`.
 - `tb bears rename`, `set`, `pin`, `move`, `archive`, `delete`. Renaming
   keeps its memory, routines and old threads. Deleting moves its folder
   to the runner's trash.
@@ -2525,7 +2532,13 @@ Bears & Tables panel, if you have the home patch):
   hold their deliveries, and a mention gets "away until".
 - `tb bears access <bear> --auto` lets its unattended runs (routines,
   webhooks, mentions) go past Ask. Only you can do that: a bear's own
-  thread can't.
+  thread can't. Auto is Claude only: a bear on Codex (`--model gpt-...`)
+  set to Auto still asks, and `tb bears access` says so.
+
+A bear on Codex can make pictures: Codex's own `image_gen` tool makes real
+PNGs (a Designer bear on `gpt-6-astra` made 1024 by 1024 ones on 13 Nov).
+That tool writes its picture into `~/.codex/generated_images` without
+asking, even in Ask; copying it into the bear's folder asks as usual.
 
 A bear's threads show its icon on its colour in the sidebar, where other
 threads show a folder or their project. Right-click one of its threads and
@@ -2535,13 +2548,15 @@ name). The head bear shows a crown until you give it an icon of its own.
 
 Type `@` in the message box and a list of your bears comes up over the
 cursor, narrowing as you type: ↑↓ to move, Return or Tab to pick, Esc to
-close. Picking one writes its name for you.
+close. Picking one writes its name for you. It only lists your bears for
+a thread on this Mac: a thread on another machine hands a mention to that
+machine's own bears.
 
 Write `@Researcher` in a message (or `@bear:<id>`), or run
 `tb bears ask Researcher "..."` from a thread, and the bear gets the
 message in a fresh thread in its folder, in the lower of its mode and
-that thread's. Its reply comes back to the thread that asked. At most
-three bears a message.
+that thread's. Its reply comes back to the thread that asked, as a new
+message there, while you watch. At most three bears a message.
 
 With Bear notes on too, a bear you opt in (`tb bears set <bear> --notes both`)
 can leave one short cheer or idea under the librarian's line in
