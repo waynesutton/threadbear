@@ -1844,6 +1844,8 @@ enum Automation {
                     if outcome == .busy || outcome == .occupied { ShellBlockIcons.copy(command) }
                 }
             }
+            // {"rename": "server"} names the showing tab ("" for the shell's own).
+            if let name = c["rename"] as? String { Terminals.shared.existing(for: target)?.name = name.isEmpty ? nil : name }
             if let session = Terminals.shared.existing(for: target) {
                 if c["select"] as? String == "all" { session.view.selectAll(nil) }
                 // What SwiftTerm's Copy and Paste do, on this instance's own
@@ -1857,8 +1859,6 @@ enum Automation {
                     if lines < 0 { session.view.scrollUp(lines: -lines) } else { session.view.scrollDown(lines: lines) }
                 }
             }
-            // {"rename": "server"} names the showing tab ("" for the shell's own).
-            if let name = c["rename"] as? String { Terminals.shared.existing(for: target)?.name = name.isEmpty ? nil : name }
             if let ms = c["wait"] as? Int { try? await Task.sleep(for: .milliseconds(ms)) }
             let focused = (NSApp.mainWindow?.firstResponder as? NSView).map { String(describing: type(of: $0)) } ?? "none"
             let tabs = Terminals.shared.tabs(for: target).map(\.tabTitle).joined(separator: " | ")

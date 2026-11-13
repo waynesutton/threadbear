@@ -270,14 +270,14 @@ export function buildThreadbearTools(
     // The runAsks experiment: end_turn's asks[].run is only offered while
     // it's on.
     runAsks?: () => boolean;
-    // The looseEnds experiment: end_turn's open is only offered while it's on.
-    looseEnds?: () => boolean;
     // The xSearch experiment (x-search.ts): x_search is only handed out
     // while it's on; the runner's secrets folder, where its key is kept.
     xSearch?: () => { secretsDir: string; fetch?: typeof fetch } | undefined;
     // The pages experiment (pages.ts): the page tools are only handed out
     // while it's on.
     pages?: () => Pages | undefined;
+    // The looseEnds experiment: end_turn's open is only offered while it's on.
+    looseEnds?: () => boolean;
     // Publishing a print to the user's Convex backend (pages.ts).
     printPublisher?: () => PagePublisher | undefined;
     // Settings' Only make Prints when I ask (printsWhenAsked): create_print
@@ -300,6 +300,18 @@ export function buildThreadbearTools(
   const all = async (): Promise<ThreadSummary[]> => control.list(['inbox', 'snoozed', 'archived']);
   const sleep = opts.sleep ?? ((ms: number) => new Promise<void>((r) => setTimeout(r, ms)));
 
+  // Every thread here, for matching a short id: one try. In a handover the
+  // list comes partly from the other runner, and a plain list leaves its
+  // threads out when it can't be asked. A turn kept on a draining runner
+  // sent to df5c7153 half a minute into a handover, before the new runner's
+  // link answered, and was told "No thread" for a thread that was there
+  // (12 Nov). So this one fails instead, and doesn't wait on a link that
+  // never answers (RunnerClient.call has no time limit of its own).
+  const listForIds = async (): Promise<ThreadSummary[]> => {
+    if (!control.listEverywhere) return all();
+    return inTime(control.listEverywhere(['inbox', 'snoozed', 'archived']), ID_LIST_TIMEOUT_MS, "the other runner didn't answer");
+  };
+
   // The text of this thread's latest user.message, a few pages back at most.
   const latestUserText = async (): Promise<string> => {
     let before: number | undefined;
@@ -314,18 +326,6 @@ export function buildThreadbearTools(
       before = page.firstSeq;
     }
     return '';
-  };
-
-  // Every thread here, for matching a short id: one try. In a handover the
-  // list comes partly from the other runner, and a plain list leaves its
-  // threads out when it can't be asked. A turn kept on a draining runner
-  // sent to df5c7153 half a minute into a handover, before the new runner's
-  // link answered, and was told "No thread" for a thread that was there
-  // (12 Nov). So this one fails instead, and doesn't wait on a link that
-  // never answers (RunnerClient.call has no time limit of its own).
-  const listForIds = async (): Promise<ThreadSummary[]> => {
-    if (!control.listEverywhere) return all();
-    return inTime(control.listEverywhere(['inbox', 'snoozed', 'archived']), ID_LIST_TIMEOUT_MS, "the other runner didn't answer");
   };
 
   // The current turn's events, oldest first: back a page at a time until

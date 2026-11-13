@@ -136,6 +136,7 @@ export type SyncConfig = {
 // the runner only adds to what it sends while the number stays the same.
 export const BACKEND_API_VERSION = 77;
 // sync:publishPrint and sync:unpublishPrint (Prints can be published).
+// 73 in this copy before Mike's release took 73 to 76 (12 Nov 2026).
 export const PRINTS_API_VERSION = 77;
 // From this one sync:sharedThreads lists a runner's rows shared by link, which
 // it checks against its own threads on every start and every

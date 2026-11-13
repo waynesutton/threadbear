@@ -107,7 +107,10 @@ test('a paced stream of big rows keeps older within its byte cap', () => {
   assert.equal(h.older[h.older.length - 1]!.seq, h.live!.messages[0]!.seq - 1);
   // What went can be loaded again.
   assert.equal(nextBefore(h), h.older[0]!.seq);
-  assert.ok(ms < 100, `took ${ms} ms of CPU`);
+  // A budget, not a benchmark: about 20 ms alone, and past 100 ms while
+  // ./check.sh runs the other suites beside it (Wayne's Mac, 10 Nov). The
+  // old way took seconds.
+  assert.ok(ms < 300, `took ${ms} ms of CPU`);
 });
 
 test('a long stream of small rows keeps older within its row cap', () => {

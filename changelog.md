@@ -58,7 +58,7 @@ Landed on main at `b221756c` and pushed to GitHub. Prints are still the `pages` 
 - A Print card in replies that follows the newest version.
 - Prints on the project page, with Refresh, Edit with Agent, Edit Text for docs, Download, Versions, Projects and Delete with a 7-day restore.
 - Download as PDF for the newest and each kept version.
-- Publish a Print to your own Convex backend (API 73), opening it on the phone, the website's `/p/<slug>` page and for anyone with the link. Unpublish takes it down.
+- Publish a Print to your own Convex backend (API 77), opening it on the phone, the website's `/p/<slug>` page and for anyone with the link. Unpublish takes it down.
 - The make-print and bundle-report skills.
 
 ### Changed
