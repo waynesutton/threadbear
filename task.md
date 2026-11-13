@@ -9,9 +9,11 @@ Status and gap list: prds/prints-status.md
 
 ## In Progress
 
-- [ ] Bears, tables and webhooks, runner side, behind experiments. prds/bears-and-webhooks.md. Pending: full check.sh, release build, live webhook test, PRDs for Mike and the GPUI app.
+Nothing.
 
 ## Completed
+
+- [x] 2026-11-13 09:20 UTC Bears build wrap-up: live webhook test on the deployed backend (202, quoted Ask thread with the bolt, repeat 200, unknown 404, over 64 KB 413, Origin 403, revoked 404; hooks revoked and webhooks off after), Momma Bear made on Wayne's runner with bears, tables and bear notes on for him, home patch ~/.threadbear/patches/bears.ts, prds/bears-for-mike.md and prds/bears-gpui.md. Verified: swift build -c release in app/ passed; ./check.sh --quick passed on every land. Skipped: the full ./check.sh, as load stayed between 10 and 21 from other threads all night.
 
 - [x] 2026-11-13 08:53 UTC Mentions, tables and bear notes (experiments bears, tables, bearNotes): `@Name` and `tb bears ask` hand a message to a bear in the lower mode and bring its reply back; tables are projects with a `table` marker, a host folder and a reply cap; the librarian never files a thread into a table; opted-in bears leave one cheer or idea in Highlights. prds/bears-and-webhooks.md. runner/src/mentions.ts, tables.ts, librarian.ts, projects.ts, runner.ts, cli-bears.ts. Verified: mentions 8, tables 6, bear-notes 4, projects 61 and guard tests pass; typecheck clean.
 
