@@ -6995,6 +6995,9 @@ anyone's); "any runner" is any good key. Anything not sorted is owner only.
 | `issueAgentKey` | owner only | an outside agent's key (convex/mcp.ts) starts threads on the main Mac |
 | `listAgentKeys` | owner only | the keys outside agents hold |
 | `revokeAgentKey` | owner only | ending them is the owner's |
+| `issueWebhook` | owner only | a webhook's URL (convex/webhooks.ts) starts threads on a runner |
+| `listWebhooks` | owner only | the webhooks and their targets |
+| `revokeWebhook` | owner only | ending them is the owner's |
 | `issueToken` | owner only | a phone token reads everything and queues commands for every runner |
 | `listTokens` | owner only | |
 | `revokeToken` | owner only | |

@@ -116,6 +116,15 @@ test('limits: 30 a minute per hook, then 429 with Retry-After', async () => {
   assert.equal(r.headers['Retry-After'], '60');
 });
 
+test('repeats count against the limits too, so they are not free to send', async () => {
+  const s = await setup();
+  const { secret } = await s.issue();
+  for (let i = 0; i < 30; i++) await s.post(s.pathOf(secret), '{}', { headers: { 'Idempotency-Key': 'same' }, now: NOW + i });
+  assert.equal((await s.post(s.pathOf(secret), '{}', { headers: { 'Idempotency-Key': 'same' }, now: NOW + 40 })).status, 429);
+  assert.equal(s.commands().length, 1);
+  assert.ok(s.rows('webhookCalls').every((c) => c.payload === undefined));
+});
+
 test('limits: 50 a day per hook', async () => {
   const s = await setup();
   const { secret } = await s.issue();

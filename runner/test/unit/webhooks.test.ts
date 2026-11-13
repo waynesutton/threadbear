@@ -2,7 +2,7 @@
 // the mode cap on thread targets, holding for an away bear, and the RPCs.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { hookText, PAYLOAD_MAX, webhookCommands, webhookOf, webhooksMethods, WEBHOOK_ICON, type WebhooksBackend } from '../../src/webhooks.ts';
+import { HookRegistry, hookText, PAYLOAD_MAX, webhookCommands, webhookOf, webhooksMethods, WEBHOOK_ICON, type WebhooksBackend } from '../../src/webhooks.ts';
 import type { PermissionMode } from '../../src/protocol.ts';
 import { tmpDir } from '../helpers/fakes.ts';
 
@@ -13,15 +13,21 @@ function setup(o: { on?: boolean; modes?: Record<string, PermissionMode>; held?:
   const sent: { threadId: string; text: string }[] = [];
   let on = o.on ?? true;
   let held = o.held;
+  const home = tmpDir();
+  const registry = new HookRegistry(home);
+  registry.add('h1', { kind: 'folder', cwd: '/x', permissionMode: 'auto' });
+  registry.add('hb', { kind: 'folder', cwd: '/bear', permissionMode: 'ask' });
+  for (const t of ['ask', 'auto', 'full', 'gone']) registry.add(`t-${t}`, { kind: 'thread', threadId: t });
   const c = webhookCommands({
     on: () => on,
-    home: tmpDir(),
+    home,
+    registry,
     create: (p) => (made.push(p), { thread: { id: `new-${made.length}` } as never }),
     send: (threadId, text) => void sent.push({ threadId, text }),
     modeOf: (id) => o.modes?.[id],
     held: () => held,
   });
-  return { c, made, sent, setOn: (x: boolean) => (on = x), setHeld: (x?: string) => (held = x) };
+  return { c, made, sent, registry, setOn: (x: boolean) => (on = x), setHeld: (x?: string) => (held = x) };
 }
 
 test('the text says it is data from an outside service, then quotes every payload', () => {
@@ -63,16 +69,28 @@ test('the experiment is checked again on every delivery', () => {
 
 test('a thread run goes only to a thread here that is no more open than Auto', () => {
   const s = setup({ modes: { ask: 'ask', auto: 'auto', full: 'full' } });
-  s.c.webhookRun(FROM, 'send', 'ask', { payloads: [{ body: 'one' }] });
-  s.c.webhookRun(FROM, 'send', 'auto', { payloads: [{ body: 'two' }] });
+  const as = (t: string) => ({ hookId: `t-${t}`, name: 'GitHub' });
+  s.c.webhookRun(as('ask'), 'send', 'ask', { payloads: [{ body: 'one' }] });
+  s.c.webhookRun(as('auto'), 'send', 'auto', { payloads: [{ body: 'two' }] });
   assert.equal(s.sent.length, 2);
-  assert.throws(() => s.c.webhookRun(FROM, 'send', 'full', { payloads: [] }), /doesn't take webhook deliveries/);
-  assert.throws(() => s.c.webhookRun(FROM, 'send', 'gone', { payloads: [] }), /doesn't take webhook deliveries/);
+  assert.throws(() => s.c.webhookRun(as('full'), 'send', 'full', { payloads: [] }), /doesn't take webhook deliveries/);
+  assert.throws(() => s.c.webhookRun(as('gone'), 'send', 'gone', { payloads: [] }), /doesn't take webhook deliveries/);
+});
+
+test("a run is refused unless this runner made that hook for that target", () => {
+  const s = setup({ modes: { ask: 'ask' } });
+  assert.throws(() => s.c.webhookRun({ hookId: 'nobody', name: 'X' }, 'create', undefined, { cwd: '/x', payloads: [] }), /isn't one this Mac made/);
+  assert.throws(() => s.c.webhookRun(FROM, 'create', undefined, { cwd: '/elsewhere', payloads: [] }), /isn't one this Mac made/);
+  assert.throws(() => s.c.webhookRun(FROM, 'send', 'ask', { payloads: [] }), /isn't one this Mac made/);
+  assert.throws(() => s.c.webhookRun({ hookId: 't-ask', name: 'X' }, 'send', 'auto', { payloads: [] }), /isn't one this Mac made/);
+  s.c.webhookRun({ hookId: 'hb', name: 'X' }, 'create', undefined, { cwd: '/bear', permissionMode: 'auto', payloads: [] });
+  assert.equal(s.made[0].permissionMode, 'ask', "the recorded mode wins when it's lower");
+  assert.equal(s.made.length, 1);
 });
 
 test("an away bear holds its deliveries until it's back", () => {
   const s = setup({ held: 'R is away until Mon.' });
-  assert.deepEqual(s.c.webhookRun(FROM, 'create', undefined, { cwd: '/bear', payloads: [{ body: '1' }] }), { held: 'R is away until Mon.' });
+  assert.deepEqual(s.c.webhookRun({ hookId: 'hb', name: 'R hook' }, 'create', undefined, { cwd: '/bear', payloads: [{ body: '1' }] }), { held: 'R is away until Mon.' });
   assert.equal(s.made.length, 0);
   assert.equal(s.c.replayHeld(), 0);
   s.setHeld(undefined);
@@ -97,7 +115,8 @@ function backend(over: Partial<WebhooksBackend> = {}): WebhooksBackend & { issue
 
 test('webhooks.create: Ask or Auto only, a bear or folder or a thread no higher than Auto', async () => {
   const b = backend();
-  const m = webhooksMethods({ backend: b, on: () => true, runnerId: 'm5', needApi: 78, modeOf: (id) => (id === 'full' ? 'full' : id === 'ask' ? 'ask' : undefined), bearFolder: (x) => (x === 'R' ? '/Bears/r-1' : undefined) });
+  const registry = new HookRegistry(tmpDir());
+  const m = webhooksMethods({ backend: b, registry, on: () => true, runnerId: 'm5', needApi: 78, modeOf: (id) => (id === 'full' ? 'full' : id === 'ask' ? 'ask' : undefined), bearFolder: (x) => (x === 'R' ? '/Bears/r-1' : undefined) });
   const r = (await m['webhooks.create']({ name: 'GH', bear: 'R' })) as { url: string };
   assert.equal(r.url, 'https://x.convex.site/hook/tbh_s');
   assert.deepEqual((b.issued[0] as { target: unknown }).target, { kind: 'folder', cwd: '/Bears/r-1', permissionMode: 'ask' });
@@ -107,14 +126,17 @@ test('webhooks.create: Ask or Auto only, a bear or folder or a thread no higher 
   await assert.rejects(async () => m['webhooks.create']({ name: 'GH', bear: 'Z' }), /No bear called Z/);
   await m['webhooks.create']({ name: 'GH', threadId: 'ask' });
   assert.deepEqual((b.issued[1] as { target: unknown }).target, { kind: 'thread', threadId: 'ask' });
+  assert.deepEqual(registry.get('h1'), { kind: 'thread', threadId: 'ask' }, 'recorded by id');
+  await m['webhooks.revoke']({ id: 'h1' });
+  assert.equal(registry.get('h1'), undefined);
 });
 
 test('webhooks.create needs the experiment, a backend, a public site and API 78', async () => {
-  const off = webhooksMethods({ backend: backend(), on: () => false, runnerId: 'm5', needApi: 78, modeOf: () => undefined });
+  const off = webhooksMethods({ registry: new HookRegistry(tmpDir()), backend: backend(), on: () => false, runnerId: 'm5', needApi: 78, modeOf: () => undefined });
   assert.deepEqual(await off['webhooks.list']({}), { on: false, hooks: [] });
   await assert.rejects(async () => off['webhooks.create']({ name: 'x', cwd: '/x' }), /Webhooks are off/);
-  const local = webhooksMethods({ backend: backend({ site: () => undefined }), on: () => true, runnerId: 'm5', needApi: 78, modeOf: () => undefined });
+  const local = webhooksMethods({ registry: new HookRegistry(tmpDir()), backend: backend({ site: () => undefined }), on: () => true, runnerId: 'm5', needApi: 78, modeOf: () => undefined });
   await assert.rejects(async () => local['webhooks.create']({ name: 'x', cwd: '/x' }), /public site address/);
-  const old = webhooksMethods({ backend: backend({ apiVersion: () => 77 }), on: () => true, runnerId: 'm5', needApi: 78, modeOf: () => undefined });
+  const old = webhooksMethods({ registry: new HookRegistry(tmpDir()), backend: backend({ apiVersion: () => 77 }), on: () => true, runnerId: 'm5', needApi: 78, modeOf: () => undefined });
   await assert.rejects(async () => old['webhooks.create']({ name: 'x', cwd: '/x' }), /API 77/);
 });

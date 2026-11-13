@@ -169,17 +169,22 @@ export const deliver = internalMutation({
       await ctx.db.insert('webhookFails', { ip: ipKey, at: now });
       return { ok: false as const, why: 'unknown' as const };
     }
-    const key = dedupe?.trim().slice(0, 200) || undefined;
-    if (key) {
-      const seen = await ctx.db.query('webhookCalls').withIndex('by_hook_dedupe', (q) => q.eq('hookId', row._id).eq('dedupe', key)).order('desc').first();
-      if (seen && seen.at > now - DAY) return { ok: true as const, duplicate: true };
-    }
+    // Limits first, so a repeat can't be sent over and over for free.
     const minute = await ctx.db.query('webhookCalls').withIndex('by_hook_at', (q) => q.eq('hookId', row._id).gte('at', now - MINUTE)).take(HOOK_PER_MINUTE);
     if (minute.length >= HOOK_PER_MINUTE) return { ok: false as const, why: 'limited' as const, retryAfter: 60 };
     const day = await ctx.db.query('webhookCalls').withIndex('by_hook_at', (q) => q.eq('hookId', row._id).gte('at', now - DAY)).take(HOOK_PER_DAY);
     if (day.length >= HOOK_PER_DAY) return { ok: false as const, why: 'limited' as const, retryAfter: 3600 };
     const all = await ctx.db.query('webhookCalls').withIndex('by_at', (q) => q.gte('at', now - MINUTE)).take(HOOKS_GLOBAL_PER_MINUTE);
     if (all.length >= HOOKS_GLOBAL_PER_MINUTE) return { ok: false as const, why: 'limited' as const, retryAfter: 60 };
+    const key = dedupe?.trim().slice(0, 200) || undefined;
+    if (key) {
+      const seen = await ctx.db.query('webhookCalls').withIndex('by_hook_dedupe', (q) => q.eq('hookId', row._id).eq('dedupe', key)).order('desc').first();
+      if (seen && seen.at > now - DAY) {
+        // Counted, with no words kept, and dropped.
+        await ctx.db.insert('webhookCalls', { hookId: row._id, at: now, state: 'dropped' });
+        return { ok: true as const, duplicate: true };
+      }
+    }
     await ctx.db.insert('webhookCalls', {
       hookId: row._id,
       at: now,
