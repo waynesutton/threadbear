@@ -1,6 +1,6 @@
 # Bears, tables and webhooks in the GPUI app
 
-The runner side shipped on Wayne's fork on 13 Nov 2026, behind the `bears`, `webhooks`, `tables` and `bearNotes` experiments (`prds/bears-for-mike.md`). The SwiftUI app is frozen, so every piece of UI waits for the GPUI app in `desktop/`. Until then, Wayne's home patch `~/.threadbear/patches/bears.ts` gives a Bears & Tables list panel and three chips. Two pieces now exist in the SwiftUI app as well (Wayne's exception to the freeze, 13 Nov): the bear tiles and Bear Colour menu in the sidebar, and the @ picker in the composer. Port those two from the Swift code and `features/bears.feature` rather than designing them again.
+The runner side shipped on Wayne's fork on 13 Nov 2026, behind the `bears`, `webhooks`, `tables` and `bearNotes` experiments (`prds/bears-for-mike.md`). The SwiftUI app is frozen, so every piece of UI waits for the GPUI app in `desktop/`. Until then, Wayne's home patch `~/.threadbear/patches/bears.ts` gives a Bears & Tables list panel and three chips. Three pieces now exist in the SwiftUI app as well (Wayne's exception to the freeze, 13 and 14 Nov): the bear tiles and Bear Colour menu in the sidebar, the @ picker in the composer, and a table's bears on its project page. Port those three from the Swift code and `features/bears.feature` (rows `bears.tile`, `bears.colour`, `bears.mention` and `bears.tablepage` in `gpui-port/features.md`) rather than designing them again.
 
 Each item below lists the runner calls it needs. All of them exist today, so none of this needs a runner change unless it says so.
 
@@ -11,7 +11,7 @@ A foldable **Bears** section under Starred, shown only while `hello.experiments`
 - One row per bear from `bears.list` (the head bear first, then pinned, then Wayne's order): its face, name, and a detail line. The line shows the current thread's title while the bear works, "Away until Mon 9:00" while it hibernates, and its `does` line otherwise.
 - The face is one of `bears.list`'s SVG stills (`faces.idle`, `faces.thinking`, `faces.happy`), matched to the bear's newest thread: thinking while it runs, happy once it's done, idle otherwise. Draw them through the same SVG path the app uses for Pele diagrams. No live canvas per row.
 - Click opens the bear's newest chat, or a new-thread screen in its folder (`bears.list[].folder`) showing its name and face.
-- A **Tables** group under it from `tables.list`, each row naming its bears.
+- A **Tables** group under it from `tables.list`, each row naming its bears (`table.bears`) and showing the project's icon (new tables get the `person.3` symbol).
 - Drag to sort calls `bears.move`. Pin calls `bears.pin`.
 - Runner calls: `bears.list`, `bears.move`, `bears.pin`, `tables.list`. No runner change.
 
@@ -48,9 +48,14 @@ Every item uses `whileBusy` and gets a tooltip. No runner change.
 - **New table**: title, goal, a multi-pick of bears, and an optional parent project, then `tables.create { title, goal, bears, parent }`.
 - No runner change.
 
-## A table's bears on its project page (in the Swift app: port it)
+## A table's bears on its project page (in the Swift app, `38c291b6`: port it)
 
-`Project.table` is decoded in the Swift app (`ProjectTable`), and the project page has a Bears at this table section: each seated bear's tile, name and what it does, from `bears.list`. Port it to the GPUI project page. No runner change.
+`Project.table` is decoded in the Swift app (`ProjectTable`), and the project page has a Bears at this table section: each seated bear's tile, name and what it does, from `bears.list`. Port it to the GPUI project page.
+
+- Seating happens on the runner: a bear's thread put in a table's project (the thread's Projects menu, an agent's `join_project`) seats that bear (`Projects.onJoined`, `Tables.seatFromThread`). Taking the thread out doesn't unseat it. So the GPUI Projects menu needs nothing new; the section just follows `project.table`.
+- `tables.create` sets the project icon to `person.3`, so tables look like tables in every project list and menu. Draw the project icon as usual.
+- An Add bear… button on the section could call `tables.seat { add }`, and a row's menu Remove from table `tables.seat { remove }`, both behind a busy key. Not in the Swift app yet.
+- No runner change.
 
 ## The table chat
 
