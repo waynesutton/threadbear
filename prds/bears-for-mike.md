@@ -53,7 +53,6 @@ On the runner, a command with `args.webhook` goes only to `webhooks.ts`. It need
 
 ## Known issues
 
-- **A Codex bear's `pin` in Ask showed no card.** In thread 8ca2306a the runner raised approval 7d16026c for `mcp__threadbear__pin` at 21:06:19 UTC (an `approval.requested` event), Wayne saw no card, and it expired when the turn ended at 21:11:34. The app doesn't hide cards for Threadbear's own tools (`CardText.runnerReason` labels them), so the cause is still open.
 - **Ask on unattended runs.** Routines, webhooks and mentions start in Ask by design, which makes the daily tidy ask every morning. Raising a Claude bear to Auto fixes it; a Codex bear can't.
 
 ## What it asks of Mike's code

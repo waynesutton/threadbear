@@ -13,7 +13,7 @@ Nothing.
 
 ## Completed
 
-- [x] 2026-11-13 21:40 UTC Bears docs sync after the head bear, sidebar tiles and @ picker: guide, protocol, SECURITY, the bears skill and both PRDs say what shipped since 79ab733c and what was observed with a Codex Designer bear (image_gen saves without a card, Auto is Claude only, an unexplained missing pin card). `tb bears access` now says Auto works like Ask on a Codex bear. runner/src/cli-bears.ts, docs, prds. Verified: bears 17 tests, typecheck.
+- [x] 2026-11-13 21:40 UTC Bears docs sync after the head bear, sidebar tiles and @ picker: guide, protocol, SECURITY, the bears skill and both PRDs say what shipped since 79ab733c and what was observed with a Codex Designer bear (image_gen saves without a card, Auto is Claude only, a pin card that looked missing; corrected later the same day: the card showed and Wayne answered it after the turn ended, so it isn't a bug). `tb bears access` now says Auto works like Ask on a Codex bear. runner/src/cli-bears.ts, docs, prds. Verified: bears 17 tests, typecheck.
 
 - [x] 2026-11-13 18:44 UTC @ bear picker review fixes: no list for a message going to another runner, modified keys stay the composer's, Esc and lost focus keep it shut. app/Sources/Threadbear/Views/BearPicker.swift, ComposerView.swift. Verified: BearPickerTests 5, EveryClickShowsTests, TipsTests; quick check on land (57934753).
 

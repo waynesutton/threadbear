@@ -5282,10 +5282,7 @@ goes on the wire.
 Claude Code's; a Codex thread set to it runs as Ask, so `tb bears access
 --auto` on a Codex bear says so rather than refusing. Codex's built-in
 `image_gen` writes into `~/.codex/generated_images` with no approval
-request, in any mode (SECURITY.md). Known issue: in thread 8ca2306a, a
-Codex bear in Ask called `pin`; the runner put up approval 7d16026c
-(`approval.requested`, 21:06:19 UTC), but no card was seen in the Mac app,
-and it expired when the turn ended five minutes later. Not yet explained.
+request, in any mode (SECURITY.md).
 
 A thread's connection (A thread's own key) may call the reads and
 `create`, `update`, `pin`, `move`, `hibernate`, `setProjects` and

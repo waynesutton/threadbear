@@ -88,7 +88,6 @@ A Codex bear (a Designer on `gpt-6-astra`, 13 Nov) makes real PNGs with Codex's 
 - A picture a bear's reply names or pins draws inline in the transcript at a readable size, with Open and Show in Finder, and the same when the reply comes back into the asking thread or a table chat.
 - A bear's tile or row can show its newest picture as a thumbnail while it's working on images.
 - Say on the card or the row that Codex wrote the picture to `~/.codex/generated_images` without asking, as SECURITY.md says, so Ask isn't taken for a gate it isn't.
-- The open known issue: a Codex bear's `pin` in Ask raised an approval (7d16026c, thread 8ca2306a) that showed no card in the Swift app. Check the GPUI app draws approvals for `mcp__threadbear__*` tools on Codex threads.
 - Runner change: none for drawing. A picture's path is already in the reply and in `pin`.
 
 ## Checks before landing
