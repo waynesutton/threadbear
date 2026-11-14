@@ -108,9 +108,9 @@ the keyboard shortcut.
 
 | # | Commit | What it does | Status |
 |---|---|---|---|
-| 41 | f6921eaa | Heading sizes, task boxes, Return continues lists | to do |
+| 41 | f6921eaa | Heading sizes, task boxes, Return continues lists | done |
 | 42 | ffaaf7b4 | ⌘1 leaves Notes; the notes list folds away | done |
-| 40 | aba5a97e | Note headings in text colour | to do |
+| 40 | aba5a97e | Note headings in text colour | done |
 | 13 | dbf82191 | Notes save (no file protection) | done |
 | 27 | 7ebe4e66 | Notes save (no file protection) | done |
 | 90 | f1510297 | One Settings… (already); Notes never asks for the Mac password | done |

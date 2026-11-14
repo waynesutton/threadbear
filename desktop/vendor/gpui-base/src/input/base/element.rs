@@ -2514,6 +2514,7 @@ impl<M: InputModeKind> TextElement<M> {
 
         for (vi, &buffer_line) in last_layout.visible_buffer_lines.iter().enumerate() {
             let line_text: String = display_text.slice_line(buffer_line).into();
+            let font_size = font_size * if state.soft_wrap { 1. } else { state.extras.line_font_scale(buffer_line) };
             let line_item = state
                 .display_map
                 .line(buffer_line)

@@ -12874,6 +12874,28 @@ impl InputBaseState<crate::input::EditorMode> {
         state
     }
 
+    /// Per-buffer-line font sizes for an unwrapped editor. Rows keep the
+    /// editor's common line height; callers leave enough room for the largest
+    /// font. Wrapped editors keep their normal font so wrapping stays exact.
+    pub fn set_line_font_scales(&mut self, mut scales: std::collections::BTreeMap<usize, f32>, cx: &mut Context<Self>) {
+        scales.retain(|_, scale| scale.is_finite() && *scale >= 0.5 && *scale <= 2.);
+        if self.soft_wrap { scales.clear(); }
+        if self.extras.line_font_scales != scales {
+            self.extras.line_font_scales = scales;
+            self.longest_line_width.set(None);
+            cx.notify();
+        }
+    }
+
+    /// Font sizes of the lines actually shaped in the last frame, for UI specs.
+    #[cfg(feature = "test-support")]
+    pub fn visible_line_font_sizes(&self) -> Vec<(usize, f32)> {
+        let Some(layout) = &self.last_layout else { return vec![] };
+        layout.visible_buffer_lines.iter().zip(layout.lines.iter()).filter_map(|(row,line)| {
+            line.wrapped_lines.first().and_then(|l|l.font_size()).map(|size|(*row,f32::from(size)))
+        }).collect()
+    }
+
     /// Set the language to highlight, e.g. `"rust"`.
     ///
     /// See [`Self::set_highlighter`] to change it after construction.

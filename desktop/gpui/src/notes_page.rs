@@ -5,7 +5,7 @@ use crate::tips::Tip as _;
 use gpui_kit::base::TestSupportExt as _;
 use gpui_kit::component::{h_flex, v_flex, ActiveTheme as _, Sizable as _};
 use gpui_kit::component::menu::{ContextMenuExt as _, PopupMenuItem};
-use gpui_kit::component::input::{Editor, EditorState, Input, InputState, InputEvent};
+use gpui_kit::component::input::{Editor, EditorState, Input, InputState, InputEvent, TextDecorationCollection};
 use gpui_kit::prelude::*;
 use gpui_kit::*;
 use threadbear_core::notes::Store;
@@ -15,7 +15,8 @@ pub(crate) struct NotesPage {
     pub open: bool,
     pub store: Store,
     selected: Option<String>,
-    editor: Option<Entity<EditorState>>,
+    pub(crate) editor: Option<Entity<EditorState>>,
+    pub(crate) decorations: Option<TextDecorationCollection>,
     title: Option<Entity<InputState>>,
     subscriptions: Vec<Subscription>,
     error: Option<String>,
@@ -23,12 +24,14 @@ pub(crate) struct NotesPage {
 }
 impl NotesPage {
     pub fn new() -> Self {
-        Self { open: false, store: Store::in_home(&threadbear_client::config::RunnerConfig::from_env().home), selected: None, editor: None, title: None, subscriptions: vec![], error: None, saved: true }
+        Self { open: false, store: Store::in_home(&threadbear_client::config::RunnerConfig::from_env().home), selected: None, editor: None, decorations: None, title: None, subscriptions: vec![], error: None, saved: true }
     }
+    #[cfg(feature="automation")]
     pub fn dump(&self, folded: bool, cx: &App) -> Value {
         json!({"open":self.open,"folded":folded,"saved":self.saved,"error":self.error,
             "title":self.title.as_ref().map(|t|t.read(cx).value().to_string()),
             "body":self.editor.as_ref().map(|e|e.read(cx).value().to_string()),
+            "renderedFontSizes":self.editor.as_ref().map(|e|e.read(cx).visible_line_font_sizes()),
             "count":self.store.notes.len()})
     }
 }
@@ -53,8 +56,9 @@ impl Threadbear {
     fn select_note(&mut self, id: String, window: &mut Window, cx: &mut Context<Self>) {
         let Some(note) = self.notes.store.get(&id).cloned() else { return };
         self.notes.subscriptions.clear();
+        self.notes.decorations = None;
         let editor = cx.new(|cx| {
-            let mut s = EditorState::new(window, cx).soft_wrap(true).line_number(true).folding(false).indent_guides(false).language("markdown");
+            let mut s = EditorState::new(window, cx).soft_wrap(false).line_number(true).folding(false).indent_guides(false).language("plaintext");
             s.set_value(note.body, window, cx);
             s
         });
@@ -117,6 +121,7 @@ impl Threadbear {
         }).detach();
     }
     pub(crate) fn render_notes(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> AnyElement {
+        self.refresh_note_format(cx);
         let secondary = style::secondary_text(cx);
         let folded = self.settings.saved.notes_list_collapsed == Some(true);
         let control = |id: &'static str, symbol: &'static str, tip: &'static str| div().id(id).test_support().role(Role::Button).aria_label(tip).p(px(7.)).rounded(px(5.)).hover(|s|s.bg(style::sidebar_hover(cx))).tip(tip).child(icons::symbol(symbol).with_size(px(15.)));
@@ -148,7 +153,12 @@ impl Threadbear {
             (Some(editor),Some(title)) => v_flex().flex_1().min_w_0().h_full()
                 .child(h_flex().p(px(12.)).gap(px(10.)).child(div().id("note-title").flex_1().tip("Rename note").child(Input::new(title).appearance(false).bordered(false)))
                     .child(control("notes-delete","trash","Delete note").on_click(cx.listener(|this,_,w,cx|this.delete_note(w,cx)))))
-                .child(div().flex_1().min_h_0().child(Editor::new(editor).h_full().appearance(false).bordered(false).font_family(cx.theme().mono_font_family.clone())))
+                .child(div().id("note-editor").relative().flex_1().min_h_0()
+                    .capture_action({ let editor=editor.clone(); cx.listener(move |_, action: &gpui_kit::component::input::Enter, window, cx| {
+                        if !action.secondary && !action.shift && crate::notes_editor::return_in_note(&editor,window,cx) {cx.stop_propagation();}
+                    }) })
+                    .child(Editor::new(editor).h_full().appearance(false).bordered(false).text_size(px(13.)).line_height(px(26.)).font_family(cx.theme().mono_font_family.clone()))
+                    .child(crate::notes_editor::task_clicks(editor.clone())))
                 .into_any_element(),
             _ => v_flex().flex_1().h_full().items_center().justify_center().gap(px(12.)).child("Your private notes")
                 .child(div().text_color(secondary).child("Create a note for ideas, lists and things to remember."))

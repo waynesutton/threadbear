@@ -552,3 +552,4 @@ Size is `none` throughout: the planning docs don't size these, and work the app 
 | ID | Feature | What it does | GPUI route | Route | Size | Swift |
 |---|---|---|---|---|---|---|
 | `notes.edit` | Private notes | Encrypted local notes, naming, autosave and folding list | Shared Swift files with a native editor | build | M | `NotesStore`, `NotesPage`, `NoteEditor` |
+| `notes.markdown` | Notes Markdown editing | Sized headings, task clicks with undo and list continuation | Native editor shaping and normal undoable edits | build | M | `NoteEditor`, `NoteEditing` |

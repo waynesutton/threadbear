@@ -245,6 +245,8 @@ impl RenderOnce for Editor {
 
 /// What a code editor exposes to the renderer. See [`crate::input::InputExtras`].
 impl crate::input::InputExtras for super::EditorExtras {
+    fn line_font_scale(&self, row: usize) -> f32 { self.line_font_scales.get(&row).copied().unwrap_or(1.) }
+
     fn decoration_layers(&self) -> Vec<&[super::TextDecoration]> {
         self.decorations.iter().collect()
     }

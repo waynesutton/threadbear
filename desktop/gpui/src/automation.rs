@@ -407,7 +407,7 @@ fn step(app: &Entity<Threadbear>, cmd: &Value, window: &mut Window, cx: &mut App
             }
             Ok(json!(format!("ok {}", serde_json::to_string(&menus).unwrap_or_default())))
         }
-        "notes" => app.update(cx, |t, cx| t.notes_command(cmd, window, cx)),
+        "notes" => crate::notes_editor::automation(app, cmd, window, cx),
         "status" => Ok(json!("ok")),
         // Finish setting up (setup_panel.rs), as the Swift command.
         "setup" => Ok(json!(app.update(cx, |t, cx| t.setup_command(cmd, cx)))),
