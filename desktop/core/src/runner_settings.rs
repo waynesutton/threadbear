@@ -74,6 +74,9 @@ pub struct RunnerSettings {
     /// Full sync (runner.json's sync.full), as it'll be from the runner's next
     /// start. None from a runner from before it, and Settings then hides it.
     pub full_sync: Option<bool>,
+    /// Prints only when asked (docs/protocol.md, "Prints", "Only when
+    /// asked"). None from a runner from before it, and Settings then hides it.
+    pub prints_when_asked: Option<bool>,
     pub bring_in: BringIn,
     pub bring_in_supported: bool,
     /// The pool whose Claude logins answer small jobs (titles, the
@@ -102,6 +105,7 @@ impl RunnerSettings {
             lab_review_supported: v.get("labReview").is_some_and(Value::is_boolean),
             keep_awake: v["keepAwake"].as_bool(),
             full_sync: v["fullSync"].as_bool(),
+            prints_when_asked: v["printsWhenAsked"].as_bool(),
             bring_in_supported: bring_in.is_some(),
             bring_in: bring_in.unwrap_or(BringIn::STANDARD),
             pool: models["pool"].as_str().filter(|p| !p.is_empty()).map(str::to_owned),
@@ -118,7 +122,22 @@ impl RunnerSettings {
                 .collect(),
         }
     }
+
+    /// Whether an experiment is on, as Settings lists them.
+    pub fn experiment_on(&self, id: &str) -> bool {
+        self.experiments.iter().any(|e| e.id == id && e.on)
+    }
+
+    /// The "Only make Prints when I ask" switch's state, while it's shown:
+    /// only with Prints on, as with it off there are none to hold back
+    /// (the Swift SettingsView's Prints section, Wayne, 11 Nov).
+    pub fn prints_switch(&self) -> Option<bool> {
+        self.prints_when_asked.filter(|_| self.experiment_on(PAGES_EXPERIMENT))
+    }
 }
+
+/// The Prints experiment's id (`Page.experiment`).
+pub const PAGES_EXPERIMENT: &str = "pages";
 
 /// An experiment's paragraph as plain text for its ⓘ: the guide writes it in
 /// Markdown, so code marks and doubled spaces go (`experimentAbout`).
@@ -181,6 +200,16 @@ mod tests {
         assert!(old.full_sync.is_none(), "an older runner shows no Full sync switch");
         let none = RunnerSettings::decode(&json!({ "models": { "pool": null } }));
         assert!(none.pool_supported && none.pool.is_none(), "null is None, and the runner has the setting");
+    }
+
+    #[test]
+    fn the_prints_switch_shows_only_with_prints_on() {
+        let on = RunnerSettings::decode(&json!({ "printsWhenAsked": false, "experiments": [{ "id": "pages", "on": true }] }));
+        assert_eq!(on.prints_switch(), Some(false));
+        let off = RunnerSettings::decode(&json!({ "printsWhenAsked": true, "experiments": [{ "id": "pages", "on": false }] }));
+        assert_eq!(off.prints_switch(), None, "with Prints off there are none to hold back");
+        let old = RunnerSettings::decode(&json!({ "experiments": [{ "id": "pages", "on": true }] }));
+        assert_eq!(old.prints_switch(), None, "a runner from before the setting shows no switch");
     }
 
     #[test]

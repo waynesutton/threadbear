@@ -3,8 +3,10 @@ Feature: Diagram Prints
   I want to edit their source and keep the previous versions
   So the diagram stays useful after the reply that made it
 
-  # The demo-runner driver does not seed local Prints yet. These flows
-  # are checked with an isolated dev runner until that driver supports them.
+  # The mock runner seeds two Prints made by "Export last quarter's invoices
+  # as CSV" (app/Tools/mock-runner/server.mjs, addDemoPrints): the chart
+  # "Invoice totals by month", whose card that thread's reply shows, and the
+  # diagram "How the export runs". The @manual flows need a dev runner still.
   @prints.diagram @manual @gpui-pending
   Scenario: Edit a diagram's source and keep the preceding version
     Given a diagram Print called "Task flow" contains Mermaid source
@@ -27,6 +29,21 @@ Feature: Diagram Prints
     When I reopen its card in that thread
     Then I can open the diagram and edit its source
     And assigning it to a project lists the same Print there
+
+  # The Swift dump doesn't say what the switch reads (AppDump.swift, frozen).
+  @prints.whenasked @swift-pending
+  Scenario: Settings has Only make Prints when I ask while Prints is on
+    Given the app is connected to a runner with the demo threads
+    When I open Settings on "general"
+    Then Settings says threads make Prints without asking first
+    When I press "Have threads ask before making a Print you didn't ask for" in Settings
+    Then Settings says threads make Prints only when I ask
+
+  @prints.whenasked @swift-pending @pages-off
+  Scenario: With Prints off there is no Prints switch in Settings
+    Given the app is connected to a runner with the demo threads
+    When I open Settings on "general"
+    Then Settings has no Prints switch
 
   @prints.whenasked @manual @gpui-pending
   Scenario: Only make Prints when I ask holds back a Print nobody asked for

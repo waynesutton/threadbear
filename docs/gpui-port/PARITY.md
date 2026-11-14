@@ -4862,7 +4862,7 @@ Fixes from Codex's review of the slice before:
 
 ## Fork additions awaiting a shared spec run
 
-`prints.whenasked` has one manual scenario in `features/prints.feature`: the Settings switch, and the approval card the runner puts up before an unasked Print. The runner's side is covered by `runner/test/unit/pages.test.ts`.
+`prints.whenasked`: the GPUI Settings > General has a Prints section with "Only make Prints when I ask" (a `MacSwitch`, tip "Have threads ask before making a Print you didn't ask for") while the `pages` experiment is on and the runner sends `printsWhenAsked`, writing it through `settings.update` as the Swift SettingsView does (`settings_window.rs`, `RunnerSettings::prints_switch` in `desktop/core/src/runner_settings.rs`). Two new scenarios in `features/prints.feature` cover the switch, and with `@pages-off` its absence; both `@swift-pending`, as the frozen Swift dump doesn't say what the switch reads. The approval card stays the one manual scenario (it needs a real runner). Verification: `TB_APP=gpui cucumber-js` on Wayne's Mac (14 Nov), both scenarios passed against the mock runner, which now has the Prints store (`app/Tools/mock-runner/server.mjs`).
 `prints.todo` has one manual scenario in `features/prints.feature`: ticking a todo list and moving a board's card. The runner side is `page-list.test.ts` and `pages.test.ts`; the app's link parsing is `PageTests`.
 
 `prints.list` has one manual scenario in `features/prints.feature`: Prints in Highlights and the rail's Prints list, with their projects. `PrintRows` is covered by `PageTests`.

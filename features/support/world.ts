@@ -135,6 +135,9 @@ Before(async function (this: ThreadbearWorld, { pickle }) {
   // Parts of a project: Photo sync as a part of Threadbear.
   if (pickle.tags.some((t) => t.name === '@project-parts')) process.env.TB_MOCK_PARTS = '1';
   else delete process.env.TB_MOCK_PARTS;
+  // Prints' experiment off: the mock seeds none and its hello leaves it out.
+  if (pickle.tags.some((t) => t.name === '@pages-off')) process.env.TB_MOCK_PAGES_OFF = '1';
+  else delete process.env.TB_MOCK_PAGES_OFF;
   // A stand-in BrowserBear, its folder handed to the app. Without the tag the
   // app has none: a scripted app never reaches the real one.
   if (pickle.tags.some((t) => t.name === '@browserbear')) {
