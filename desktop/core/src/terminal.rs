@@ -791,6 +791,27 @@ pub fn local_file_url(link: &str, hostname: &str) -> Option<String> {
     (!host.is_empty() && host.eq_ignore_ascii_case(hostname)).then(|| format!("file://{}", &rest[host.len()..]))
 }
 
+/// What a terminal's tab says (`tabTitle`): the name given it, else the
+/// shell's own title, else "Terminal 2" by its number.
+pub fn tab_title(name: Option<&str>, title: &str, number: usize) -> String {
+    if let Some(name) = name {
+        return name.to_owned();
+    }
+    let own = title.trim();
+    if own.is_empty() {
+        format!("Terminal {number}")
+    } else {
+        own.to_owned()
+    }
+}
+
+/// A name typed for a tab: trimmed, 60 characters at most; empty goes back
+/// to the shell's own.
+pub fn tab_name(typed: &str) -> Option<String> {
+    let name = typed.trim();
+    (!name.is_empty()).then(|| name.chars().take(60).collect())
+}
+
 /// The printed address/path under a terminal cell. OSC 8 links use their
 /// explicit URI instead; this is for ordinary build output and shell text.
 pub fn link_word(chars: &[char], at: usize) -> Option<String> {
@@ -1280,6 +1301,11 @@ mod tests {
         let chars: Vec<char> = "see https://example.com/a, ok".chars().collect();
         assert_eq!(link_span(&chars, 6), Some((4, 25)), "the trailing comma isn't the link's");
         assert!(underlines(&Link::Url("https://example.com".into())));
+        assert_eq!(tab_title(None, "  ", 2), "Terminal 2");
+        assert_eq!(tab_title(None, "vim notes.md", 2), "vim notes.md");
+        assert_eq!(tab_title(Some("server"), "zsh", 1), "server");
+        assert_eq!(tab_name("  "), None);
+        assert_eq!(tab_name(&"x".repeat(80)).map(|n| n.len()), Some(60));
         assert!(!underlines(&Link::File("/tmp/a".into())));
         assert!(!underlines(&Link::Url("mailto:a@b.c".into())));
         assert_eq!(word("see (https://example.com/a(b)).", 12).as_deref(), Some("https://example.com/a(b)"));

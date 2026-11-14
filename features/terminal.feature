@@ -26,6 +26,22 @@ Feature: The Terminal
     When I follow the Terminal link "https://example.com/terminal"
     Then "https://example.com/terminal" was opened through the app
 
+  # Several shells per thread as tabs, with + and ✕, a name of your own, and
+  # exit closing one of several (Wayne, 8 Nov). The Swift driver's terminal
+  # command answers in its own shape.
+  @terminal.panel @windows-pending @swift-pending
+  Scenario: The + opens another terminal as a tab, which can be renamed, and exit closes it
+    Given the thread "Rename the Settings tabs" works in a folder of its own
+    When I open the thread "Rename the Settings tabs"
+    And I press ⌘J
+    Then the Terminal has 1 tab
+    When I open another terminal
+    Then the Terminal has 2 tabs, the second showing
+    When I name the showing terminal "server"
+    Then the Terminal's tabs end with "server"
+    When I type "exit" and press Return in the Terminal
+    Then the Terminal has 1 tab
+
   # Pointing at a web address underlines it, with a pointing hand and a tip
   # (Wayne, 8 Nov). The Swift driver's hover answers differently.
   @terminal.panel @windows-pending @swift-pending

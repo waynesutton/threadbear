@@ -20,6 +20,8 @@
 use crate::app::Threadbear;
 use crate::style::{self, px};
 use crate::terminal_element::TerminalElement;
+use crate::tips::Tip as _;
+use gpui_kit::component::menu::ContextMenuExt as _;
 use alacritty_terminal::event::{Event as TermEvent, EventListener, WindowSize};
 use alacritty_terminal::event_loop::{EventLoop, EventLoopSender, Msg};
 use alacritty_terminal::grid::{Dimensions, Scroll};
@@ -89,7 +91,7 @@ fn terminals(cx: &App) -> Option<Entity<Terminals>> {
 /// prompt (core's `holds_a_restart`). Asked once a second (app_update.rs).
 pub(crate) fn holds_a_restart(cx: &App) -> bool {
     let Some(terminals) = terminals(cx) else { return false };
-    terminals.read(cx).sessions.values().any(|s| {
+    terminals.read(cx).tabs.values().flatten().any(|s| {
         let s = s.read(cx);
         rules::holds_a_restart(s.running(), s.shell_alone_in_front(), &s.line)
     })
@@ -195,7 +197,7 @@ pub(crate) fn thread_deleted(id: &str, cx: &mut App) {
 /// thread is archived there goes too (`stopAll(except:)`, `stopArchived`).
 pub(crate) fn list_loaded(threads: &HashMap<String, std::sync::Arc<threadbear_core::inbox::ThreadSummary>>, cx: &mut App) {
     let Some(terminals) = terminals(cx) else { return };
-    let keys: Vec<TerminalKey> = terminals.read(cx).sessions.keys().cloned().collect();
+    let keys: Vec<TerminalKey> = terminals.read(cx).tabs.keys().cloned().collect();
     let keeping: HashSet<&str> = threads.keys().map(String::as_str).collect();
     let mut going = rules::gone(&keys, &keeping);
     going.extend(rules::archived(&keys, threads));
@@ -275,7 +277,12 @@ pub(crate) fn put_in_terminal(app: &mut Threadbear, block: ShellBlock, block_thr
 /// the open thread's.
 pub(crate) struct Terminals {
     pub(crate) app: WeakEntity<Threadbear>,
+    /// Each key's showing shell: one of its tabs.
     sessions: HashMap<TerminalKey, Entity<Session>>,
+    /// Every shell each key has, in tab order (the + adds one).
+    tabs: HashMap<TerminalKey, Vec<Entity<Session>>>,
+    /// The tab being renamed, with its field.
+    renaming: Option<(Entity<Session>, Entity<gpui_kit::component::input::InputState>)>,
     /// The open thread's shell, as of the app's last change.
     pub(crate) target: Target,
     /// What the target was worked out from (the open thread, its folder, and
@@ -310,13 +317,13 @@ impl Terminals {
             {
                 // Those still being ended after their thread went too: the
                 // thread that would finish them goes with the app.
-                let mut shells: Vec<(i32, Born)> = this.sessions.values().filter_map(|s| s.read(cx).process()).collect();
+                let mut shells: Vec<(i32, Born)> = this.tabs.values().flatten().filter_map(|s| s.read(cx).process()).collect();
                 shells.extend(ENDING.lock().unwrap_or_else(|e| e.into_inner()).iter().copied());
                 end_shells_now(&shells);
             }
             #[cfg(not(unix))]
             {
-                let closing: Vec<_> = this.sessions.values().map(|s| s.update(cx, |s, _| { s.shut_down(); s.shared.clone() })).collect();
+                let closing: Vec<_> = this.tabs.values().flatten().map(|s| s.update(cx, |s, _| { s.shut_down(); s.shared.clone() })).collect();
                 // GPUI gives returned quit futures only 200ms. Like the Unix
                 // branch, finish closing here before returning that future.
                 let deadline = Instant::now() + Duration::from_secs(5);
@@ -327,7 +334,7 @@ impl Terminals {
             async {}
         });
         let home = crate::files::home_dir();
-        Terminals { app: app.downgrade(), sessions: HashMap::new(), target: Target { key: TerminalKey::Home, cwd: home, note: None }, seen: None, putting: HashSet::new(), last_size: None, _subs: vec![watching, quitting] }
+        Terminals { app: app.downgrade(), sessions: HashMap::new(), tabs: HashMap::new(), renaming: None, target: Target { key: TerminalKey::Home, cwd: home, note: None }, seen: None, putting: HashSet::new(), last_size: None, _subs: vec![watching, quitting] }
     }
 
     fn set_target(&mut self, target: Target, cx: &mut Context<Self>) {
@@ -342,12 +349,100 @@ impl Terminals {
         if let Some(session) = self.sessions.get(&target.key) {
             return session.clone();
         }
+        self.add(target, cx)
+    }
+
+    /// Another shell for the target, in a tab of its own, showing: the tabs'
+    /// +, and the first one `open` starts.
+    fn add(&mut self, target: &Target, cx: &mut Context<Self>) -> Entity<Session> {
         let size = self.last_size.unwrap_or_default();
+        // The lowest number no open tab has, as Terminal.app's windows do.
+        let taken: HashSet<usize> = self.tabs.get(&target.key).into_iter().flatten().map(|s| s.read(cx).number).collect();
+        let number = (1..).find(|n| !taken.contains(n)).unwrap_or(1);
         // Its own view: what it prints redraws it, not the panel round it.
-        let session = cx.new(|cx| Session::start(target.clone(), size, cx));
+        let session = cx.new(|cx| {
+            let mut s = Session::start(target.clone(), size, cx);
+            s.number = number;
+            s
+        });
+        self.tabs.entry(target.key.clone()).or_default().push(session.clone());
         self.sessions.insert(target.key.clone(), session.clone());
         cx.notify();
         session
+    }
+
+    /// Shows one of the key's tabs.
+    fn select(&mut self, key: &TerminalKey, session: &Entity<Session>, window: &mut Window, cx: &mut Context<Self>) {
+        if !self.tabs.get(key).is_some_and(|l| l.contains(session)) {
+            return;
+        }
+        self.sessions.insert(key.clone(), session.clone());
+        self.focus(session, window, cx);
+        cx.notify();
+    }
+
+    /// Closes one tab and ends its shell; the tab beside it shows.
+    fn close_tab(&mut self, key: &TerminalKey, session: &Entity<Session>, cx: &mut Context<Self>) {
+        let Some(list) = self.tabs.get_mut(key) else { return };
+        let Some(at) = list.iter().position(|s| s == session) else { return };
+        list.remove(at);
+        session.update(cx, |s, _| s.shut_down());
+        if self.renaming.as_ref().is_some_and(|(s, _)| s == session) {
+            self.renaming = None;
+        }
+        if list.is_empty() {
+            self.tabs.remove(key);
+            self.sessions.remove(key);
+            self.putting.remove(key);
+        } else if self.sessions.get(key) == Some(session) {
+            let next = list[at.min(list.len() - 1)].clone();
+            self.sessions.insert(key.clone(), next);
+        }
+        cx.notify();
+    }
+
+    /// `exit` in one of several: its tab goes, as Terminal.app's do. The
+    /// last one stays, saying it has exited, with New Shell.
+    fn tab_exited(&mut self, key: &TerminalKey, session: &Entity<Session>, cx: &mut Context<Self>) {
+        if self.tabs.get(key).is_some_and(|l| l.len() > 1) {
+            self.close_tab(key, session, cx);
+        }
+    }
+
+    /// The tab's name field, over its title (double-click or Rename…).
+    fn start_renaming(&mut self, session: &Entity<Session>, window: &mut Window, cx: &mut Context<Self>) {
+        let title = session.read(cx).tab_title();
+        let field = cx.new(|cx| gpui_kit::component::input::InputState::new(window, cx).placeholder("Name").default_value(title));
+        let tab = session.clone();
+        cx.subscribe_in(&field, window, move |this: &mut Self, field, ev: &gpui_kit::component::input::InputEvent, window, cx| match ev {
+            gpui_kit::component::input::InputEvent::PressEnter { .. } | gpui_kit::component::input::InputEvent::Blur => {
+                let typed = field.read(cx).value().to_string();
+                this.finish_renaming(&tab, Some(typed), window, cx);
+            }
+            _ => {}
+        })
+        .detach();
+        field.update(cx, |f, cx| {
+            f.focus(window, cx);
+            crate::web_panels::keyboard_to_app(window);
+            f.select_all(window, cx);
+        });
+        self.renaming = Some((session.clone(), field));
+        cx.notify();
+    }
+
+    /// Return or leaving the field keeps the name (empty: the shell's own);
+    /// Escape (`None`) leaves it as it was.
+    fn finish_renaming(&mut self, session: &Entity<Session>, typed: Option<String>, window: &mut Window, cx: &mut Context<Self>) {
+        if !self.renaming.as_ref().is_some_and(|(s, _)| s == session) {
+            return;
+        }
+        self.renaming = None;
+        if let Some(typed) = typed {
+            session.update(cx, |s, _| s.name = rules::tab_name(&typed));
+        }
+        self.focus(session, window, cx);
+        cx.notify();
     }
 
     fn focus(&self, session: &Entity<Session>, window: &mut Window, cx: &mut App) {
@@ -359,20 +454,46 @@ impl Terminals {
     /// Ends a thread's shell (it was archived or deleted). Never the shared
     /// home shell, whatever a thread is called: its key is its own.
     fn stop(&mut self, key: &TerminalKey, cx: &mut Context<Self>) {
-        if let Some(session) = self.sessions.remove(key) {
-            session.update(cx, |s, _| s.shut_down());
+        self.sessions.remove(key);
+        if let Some(list) = self.tabs.remove(key) {
+            for session in list {
+                session.update(cx, |s, _| s.shut_down());
+            }
             self.putting.remove(key);
             cx.notify();
         }
     }
 
+    /// The showing tab's shell, ended and taken out of its place, for a new
+    /// one to go in the same place (New Shell, a command for an exited one).
+    fn replace_showing(&mut self, key: &TerminalKey, target: &Target, cx: &mut Context<Self>) -> Option<Entity<Session>> {
+        let old = self.sessions.remove(key)?;
+        let number = old.read(cx).number;
+        let name = old.read(cx).name.clone();
+        old.update(cx, |s, _| s.shut_down());
+        let size = self.last_size.unwrap_or_default();
+        let session = cx.new(|cx| {
+            let mut s = Session::start(target.clone(), size, cx);
+            s.number = number;
+            s.name = name;
+            s
+        });
+        let list = self.tabs.entry(key.clone()).or_default();
+        match list.iter().position(|s| *s == old) {
+            Some(at) => list[at] = session.clone(),
+            None => list.push(session.clone()),
+        }
+        self.sessions.insert(key.clone(), session.clone());
+        cx.notify();
+        Some(session)
+    }
+
     /// A new shell in place of one that has exited (New Shell).
     fn restart(&mut self, key: &TerminalKey, window: &mut Window, cx: &mut Context<Self>) {
-        let Some(old) = self.sessions.remove(key) else { return };
-        let target = old.read(cx).target.clone();
-        old.update(cx, |s, _| s.shut_down());
-        let session = self.open(&target, cx);
-        self.focus(&session, window, cx);
+        let Some(target) = self.sessions.get(key).map(|s| s.read(cx).target.clone()) else { return };
+        if let Some(session) = self.replace_showing(key, &target, cx) {
+            self.focus(&session, window, cx);
+        }
     }
 
     /// Types `block` at the target's prompt, starting a shell if it needs one,
@@ -383,9 +504,7 @@ impl Terminals {
             return Task::ready(None);
         }
         if self.sessions.get(&target.key).is_some_and(|s| s.read(cx).exited) {
-            if let Some(old) = self.sessions.remove(&target.key) {
-                old.update(cx, |s, _| s.shut_down());
-            }
+            self.replace_showing(&target.key, &target, cx);
         }
         let session = self.open(&target, cx);
         self.focus(&session, window, cx);
@@ -437,6 +556,9 @@ impl Render for Terminals {
                 note, gpui_kit::Role::GenericContainer,
             ));
         }
+        if session.is_some() {
+            panel = panel.child(self.render_tabs(&target, &folder, cx));
+        }
         let body = match session {
             Some(session) => div().flex_1().min_h_0().w_full().child(session).into_any_element(),
             // No shell for this thread yet: one starts on a click here or ⌘J,
@@ -475,6 +597,145 @@ impl Render for Terminals {
             }
         };
         panel.child(body)
+    }
+}
+
+impl Terminals {
+    /// `TerminalTabStrip`: a tab per shell, ✕ to close one (while there are
+    /// several), + for another.
+    fn render_tabs(&mut self, target: &Target, folder: &str, cx: &mut Context<Self>) -> AnyElement {
+        let list = self.tabs.get(&target.key).cloned().unwrap_or_default();
+        let showing = self.sessions.get(&target.key).cloned();
+        let closable = list.len() > 1;
+        let (fg, secondary) = (style::label_text(cx), style::secondary_text(cx));
+        let (fill, hover) = (style::primary_opacity(cx, 0.1), style::primary_opacity(cx, 0.05));
+        let mut row = h_flex().id("terminal-tabs").flex_1().min_w_0().gap(px(2.)).px(px(6.)).overflow_x_scroll();
+        for (i, tab) in list.iter().enumerate() {
+            let selected = Some(tab) == showing.as_ref();
+            let (title, exited) = {
+                let s = tab.read(cx);
+                (s.tab_title(), s.exited)
+            };
+            let key = target.key.clone();
+            let renaming = self.renaming.as_ref().filter(|(s, _)| s == tab).map(|(_, f)| f.clone());
+            let label: AnyElement = match renaming {
+                Some(field) => div()
+                    .id("terminal-tab-name")
+                    .w(px(120.))
+                    .capture_key_down(cx.listener({
+                        let tab = tab.clone();
+                        move |this, ev: &KeyDownEvent, window, cx| {
+                            if ev.keystroke.key == "escape" {
+                                this.finish_renaming(&tab, None, window, cx);
+                                cx.stop_propagation();
+                            }
+                        }
+                    }))
+                    .tip("Press Return to keep the name, Escape to leave it. Empty goes back to the shell's own")
+                    .child(gpui_kit::component::input::Input::new(&field).appearance(false).small().pl(px(0.)).text_size(px(11.5)))
+                    .into_any_element(),
+                None => div().max_w(px(140.)).truncate().text_size(px(11.5)).when(selected, |s| s.font_weight(FontWeight::MEDIUM)).text_color(if selected { fg } else { secondary }).child(title.clone()).into_any_element(),
+            };
+            let group = SharedString::from(format!("terminal-tab-{i}"));
+            let mut el = h_flex()
+                .id(SharedString::from(format!("terminal-tab-{i}")))
+                .group(group.clone())
+                .test_support()
+                .role(Role::Tab)
+                .aria_label(SharedString::from(title.clone()))
+                .aria_selected(selected)
+                .flex_none()
+                .h(px(22.))
+                .pl(px(8.))
+                .pr(px(if closable { 4. } else { 8. }))
+                .gap(px(4.))
+                .items_center()
+                .rounded(px(5.))
+                .when(selected, |s| s.bg(fill))
+                .when(!selected, |s| s.hover(move |s| s.bg(hover)))
+                .cursor_pointer()
+                .tip(if exited { "This shell has ended".to_owned() } else { format!("Switch to {title}. Double-click to rename it") })
+                .child(label);
+            if closable {
+                let (key, tab2) = (key.clone(), tab.clone());
+                el = el.child(
+                    div()
+                        .id(SharedString::from(format!("terminal-tab-close-{i}")))
+                        .test_support()
+                        .role(Role::Button)
+                        .aria_label(SharedString::from(format!("Close {title}")))
+                        .size(px(14.))
+                        .flex()
+                        .items_center()
+                        .justify_center()
+                        .text_color(secondary)
+                        .when(!selected, |s| s.invisible().group_hover(group.clone(), |s| s.visible()))
+                        .tip("Close this terminal and end its shell")
+                        .on_click(cx.listener(move |this, _: &ClickEvent, _, cx| {
+                            cx.stop_propagation();
+                            this.close_tab(&key, &tab2, cx);
+                        }))
+                        .child(crate::icons::symbol("xmark").with_size(px(9.))),
+                );
+            }
+            let (pick_key, pick) = (target.key.clone(), tab.clone());
+            el = el.on_click(cx.listener(move |this, ev: &ClickEvent, window, cx| {
+                // Picked at once; a second click names it.
+                this.select(&pick_key, &pick, window, cx);
+                if ev.click_count() >= 2 {
+                    this.start_renaming(&pick, window, cx);
+                }
+            }));
+            let (menu_key, menu_tab, named) = (target.key.clone(), tab.clone(), tab.read(cx).name.is_some());
+            let terminals = cx.entity().downgrade();
+            let el = el.context_menu(move |menu, _, _| {
+                use gpui_kit::component::menu::PopupMenuItem;
+                let (t1, t2, t3) = (terminals.clone(), terminals.clone(), terminals.clone());
+                let (s1, s2, s3) = (menu_tab.clone(), menu_tab.clone(), menu_tab.clone());
+                let key = menu_key.clone();
+                let mut menu = menu.item(PopupMenuItem::new("Rename…").icon(crate::icons::symbol("pencil")).on_click(move |_, window, cx| {
+                    t1.update(cx, |t, cx| t.start_renaming(&s1, window, cx)).ok();
+                }));
+                if named {
+                    menu = menu.item(PopupMenuItem::new("Use the Shell's Name").icon(crate::icons::symbol("arrow.uturn.backward")).on_click(move |_, _, cx| {
+                        s2.update(cx, |s, cx| {
+                            s.name = None;
+                            cx.notify();
+                        });
+                        t2.update(cx, |_, cx| cx.notify()).ok();
+                    }));
+                }
+                if closable {
+                    menu = menu.separator().item(PopupMenuItem::new("Close Terminal").icon(crate::icons::symbol("xmark")).on_click(move |_, _, cx| {
+                        t3.update(cx, |t, cx| t.close_tab(&key, &s3, cx)).ok();
+                    }));
+                }
+                menu
+            });
+            row = row.child(el);
+        }
+        let add_target = target.clone();
+        let plus = crate::highlights::tipped(
+            div()
+                .id("terminal-tab-add")
+                .flex_none()
+                .size(px(22.))
+                .mr(px(6.))
+                .flex()
+                .items_center()
+                .justify_center()
+                .rounded(px(5.))
+                .cursor_pointer()
+                .hover(move |s| s.bg(hover))
+                .text_color(secondary)
+                .child(crate::icons::symbol("plus").with_size(px(12.))),
+            format!("Open another terminal in {folder}"),
+        )
+        .on_click(cx.listener(move |this, _: &ClickEvent, window, cx| {
+            let session = this.add(&add_target, cx);
+            this.focus(&session, window, cx);
+        }));
+        h_flex().id("terminal-tab-strip").flex_none().w_full().h(px(30.)).items_center().child(row).child(plus).into_any_element()
     }
 }
 
@@ -625,6 +886,10 @@ pub(crate) struct Session {
     pub(crate) focus: FocusHandle,
     pub(crate) size: GridSize,
     pub(crate) drawn_at: Option<DrawnAt>,
+    /// Its tab's number among the key's tabs ("Terminal 2"), and a name
+    /// given it over the shell's own (double-click or Rename…).
+    pub(crate) number: usize,
+    pub(crate) name: Option<String>,
     /// The web address under the pointer, underlined, with the cells it
     /// covers on screen (`showHover`).
     pub(crate) hover: Option<Hover>,
@@ -709,6 +974,8 @@ impl Session {
             focus: cx.focus_handle(),
             size,
             drawn_at: None,
+            number: 1,
+            name: None,
             hover: None,
             focused: false,
             marked: String::new(),
@@ -776,6 +1043,13 @@ impl Session {
             Note::Wakeup => self.shared.dirty.store(false, Ordering::Release),
             Note::Exited => {
                 self.exited = true;
+                // One of several tabs: it goes (`onExit`).
+                let (me, key) = (cx.entity(), self.target.key.clone());
+                cx.defer(move |cx| {
+                    if let Some(terminals) = terminals(cx) {
+                        terminals.update(cx, |t, cx| t.tab_exited(&key, &me, cx));
+                    }
+                });
                 #[cfg(unix)]
                 {
                     self.pty = None;
@@ -1406,6 +1680,12 @@ impl Session {
 
     // ---- For the automation ----
 
+    /// What its tab says: the name given it, the shell's title, or
+    /// "Terminal 2".
+    pub(crate) fn tab_title(&self) -> String {
+        rules::tab_title(self.name.as_deref(), &self.title, self.number)
+    }
+
     fn summary(&self) -> String {
         format!("{} {} in {}", self.target.key, if self.exited { "exited" } else { "running" }, self.target.cwd)
     }
@@ -1601,7 +1881,7 @@ pub(crate) fn dump(app: &Threadbear, cx: &App) -> Value {
     let t = terminals.read(cx);
     let target = target_of(app);
     let session = t.sessions.get(&target.key).map(|s| s.read(cx));
-    let mut shells: Vec<String> = t.sessions.values().map(|s| s.read(cx).summary()).collect();
+    let mut shells: Vec<String> = t.tabs.values().flatten().map(|s| s.read(cx).summary()).collect();
     shells.sort();
     json!({
         "shown": app.dock.read(cx).controller.is_showing(crate::shell::TERMINAL),
@@ -1617,6 +1897,9 @@ pub(crate) fn dump(app: &Threadbear, cx: &App) -> Value {
         "hovering": session.and_then(|s| s.hover.as_ref().map(|h| h.url.clone())),
         "lines": session.map(|s| s.screen_text_lines()),
         "shells": shells,
+        // The open thread's tabs as they read, and which shows.
+        "tabs": t.tabs.get(&target.key).map(|l| l.iter().map(|s| s.read(cx).tab_title()).collect::<Vec<_>>()).unwrap_or_default(),
+        "tab": t.tabs.get(&target.key).and_then(|l| t.sessions.get(&target.key).and_then(|s| l.iter().position(|x| x == s))),
     })
 }
 
@@ -1814,6 +2097,29 @@ pub(crate) fn automation(app: &Entity<Threadbear>, cmd: &Value, window: &mut Win
         if let Some(key) = cmd["press"].as_str() {
             window.press(key, cx);
         }
+    }
+    // The tabs (the Swift `new`, `rename`): `new` adds one, `select` and
+    // `close` take a tab's place from 0, `rename` names the showing one
+    // ("" for the shell's own).
+    if cmd["new"].as_bool() == Some(true) {
+        let session = terminals.update(cx, |t, cx| t.add(&target, cx));
+        terminals.update(cx, |t, cx| t.focus(&session, window, cx));
+    }
+    if let Some(at) = cmd["select"].as_u64() {
+        let tab = terminals.read(cx).tabs.get(&target.key).and_then(|l| l.get(at as usize)).cloned().ok_or("no such tab")?;
+        terminals.update(cx, |t, cx| t.select(&target.key, &tab, window, cx));
+    }
+    if let Some(at) = cmd["close"].as_u64() {
+        let tab = terminals.read(cx).tabs.get(&target.key).and_then(|l| l.get(at as usize)).cloned().ok_or("no such tab")?;
+        terminals.update(cx, |t, cx| t.close_tab(&target.key, &tab, cx));
+    }
+    if let Some(name) = cmd["rename"].as_str() {
+        let tab = terminals.read(cx).sessions.get(&target.key).cloned().ok_or("no shell")?;
+        tab.update(cx, |s, cx| {
+            s.name = rules::tab_name(name);
+            cx.notify();
+        });
+        terminals.update(cx, |_, cx| cx.notify());
     }
     // What a shell block's play icon does, the copy when the shell's busy
     // included (shell_blocks.rs).

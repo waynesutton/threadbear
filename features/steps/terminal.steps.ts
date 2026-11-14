@@ -57,6 +57,29 @@ When('I press ⌘J', async function (this: ThreadbearWorld) {
   await this.app.do({ cmd: 'menu-key', key: 'j', modifiers: ['cmd'] });
 });
 
+type Tabs = { tabs?: string[]; tab?: number | null };
+const tabs = (d: Dump) => (d.terminal as Tabs | undefined);
+
+Then('the Terminal has {int} tab(s)', async function (this: ThreadbearWorld, count: number) {
+  await this.until(`${count} Terminal tabs`, (d) => tabs(d)?.tabs?.length === count);
+});
+
+Then('the Terminal has {int} tabs, the second showing', async function (this: ThreadbearWorld, count: number) {
+  await this.until(`${count} Terminal tabs, the second showing`, (d) => tabs(d)?.tabs?.length === count && tabs(d)?.tab === 1);
+});
+
+When('I open another terminal', async function (this: ThreadbearWorld) {
+  await this.app.do({ cmd: 'terminal', new: true });
+});
+
+When('I name the showing terminal {string}', async function (this: ThreadbearWorld, name: string) {
+  await this.app.do({ cmd: 'terminal', rename: name });
+});
+
+Then('the Terminal\'s tabs end with {string}', async function (this: ThreadbearWorld, name: string) {
+  await this.until(`the last tab called ${name}`, (d) => tabs(d)?.tabs?.at(-1) === name);
+});
+
 When('I point at {string} in the Terminal', async function (this: ThreadbearWorld, words: string) {
   await this.app.do({ cmd: 'terminal', hover: words });
 });
