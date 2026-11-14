@@ -48,8 +48,14 @@
 
 ## Bears, tables and webhooks
 
-- `runner/src/bears.ts` bear folders, the runner's bears.json, faces, quiet hours, Head Bear and the `bears.*` RPCs.
-- `runner/src/mentions.ts` routes `@Name` and `tb bears ask` to a bear and brings its reply back.
+- `runner/src/bears.ts` bear folders, access state, shared worker lookup, managed memory rules, tidy refresh and the `bears.*` RPCs.
+- `runner/src/mentions.ts` routes mentions into shared bear workers and matches replies to each asking turn.
+- `runner/src/runner/late-answers.ts` resumes expired tool answers once using the persisted event log and existing permission checks.
+- `runner/src/runner/quiet-inbox.ts` checks unfinished work before archiving helpers or explicitly empty unattended bear runs.
+- `runner/src/experiments/lateAnswers.md` the off-by-default late-answer experiment and check-in.
+- `runner/test/unit/late-answers.test.ts` expiry, replay prevention, restart, remote visibility and pending-card isolation.
+- `runner/test/unit/bears-always-on.test.ts` integrated routine, webhook and mention routing with replies matched to queued turns.
+- `prds/bears-always-on.md` the five runner improvements, safeguards and verification status.
 - `runner/src/tables.ts` tables as marked projects, their host folder and the `tables.*` RPCs.
 - `runner/src/webhooks.ts` webhook runs on the runner, its hook registry and the `webhooks.*` RPCs.
 - `runner/src/cli-bears.ts` `tb bears`, `tb tables` and `tb webhooks`, and the note that Auto works like Ask on a Codex bear.

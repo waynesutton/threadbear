@@ -10,6 +10,7 @@ Status and gap list: prds/prints-status.md
 ## In Progress
 
 - [ ] Land verified Settings review fixes when the Mac is quiet, then verify the installed update.
+- [ ] Build five always-on bear improvements and document the GPUI follow-through. prds/bears-always-on.md. Verification pending.
 
 ## Completed
 

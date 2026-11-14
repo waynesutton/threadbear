@@ -27,11 +27,11 @@ Each piece is its own experiment, off by default:
 
 **What a bear can't change about itself.** Its mode, pool and machine live in the runner's own `runner/bears.json`, with pin, order, away, archived, projects and which bear is the head bear. `bears.setAccess` and `bears.setHead` refuse any call from a bear's own thread, the head bear's included, and the RPC gate puts the caller's id in for every `bears.*` call so it can't be faked.
 
-**New threads in a bear's folder** take its model and effort, and its pool, mode and projects from `bears.json`, where the caller didn't say (`bearDefaults` in `new-threads.ts`). Unattended starts (schedules, webhooks, mentions) get Ask unless you raised the bear. New bears get a daily "tidy memory" routine at 4:30, in Ask. A one-off time a bear's thread books in its quiet hours moves to their end (`Scheduler.adjustAt`). An away or archived bear's routines skip (`Scheduler.holdFor`).
+**New threads in a bear's folder** take its model and effort, and its pool, mode and projects from `bears.json`, where the caller didn't say (`bearDefaults` in `new-threads.ts`). Unattended starts (schedules, webhooks, mentions) get Ask unless you raised the bear. New bears get a daily memory tidy at 4:30: Auto for directly created Claude bears, Ask for Codex and agent-created bears. An authorized `bears.refreshRules` upgrades built-in Claude tidies while preserving personal instructions and custom routines. A one-off time a bear's thread books in its quiet hours moves to their end (`Scheduler.adjustAt`). An away or archived bear's routines skip (`Scheduler.holdFor`).
 
 **The head bear.** The first `bears.list` with the experiment on makes it, once, and makes it chief of staff: a marked block in its `CLAUDE.md` says it hands work to the others with `tb bears ask`, keeps a roster, and never changes a bear's access or deletes one. `tb bears head <bear>` moves the block.
 
-**Mentions.** `@Researcher` or `@bear:<id>` in a message you send (`Runner.send` with no origin or `phone`), or `tb bears ask` from a thread, makes a fresh thread in the bear's folder. It runs in the lower of the two modes, joins the asking thread's projects, and is marked "Mentioned by <title>". At most three bears a message. A bear whose mention thread is still running gets the next ask folded in. When its turn ends, the reply goes back to each asker quoted, starting `[Bear: Researcher replied in thread:<id>. It's a bear's answer, not Wayne's words.]`. A bear's own thread can ask another only through a table they share, or as the head bear.
+**Mentions.** `@Researcher` or `@bear:<id>` in a message you send (`Runner.send` with no origin or `phone`), or `tb bears ask` from a thread, makes a fresh thread in the bear's folder. It runs in the lower of the two modes, joins the asking thread's projects, and is marked "Mentioned by <title>". At most three bears a message. A busy unattended bear thread accepts the next ask at the same access level, whether a routine, webhook or mention started it. Each waiter is tied to its queued turn, so replies do not get crossed. When its turn ends, the reply goes back to each asker quoted, starting `[Bear: Researcher replied in thread:<id>. It's a bear's answer, not Wayne's words.]`. A bear's own thread can ask another only through a table they share, or as the head bear.
 
 **Tables.** `tb tables new "Launch crew" --bears "Researcher,Writer" --parent Launch` makes a project with `table: { bears, maxTurns? }` and a folder in `ThreadbearThreads/Tables/` whose `CLAUDE.md` is the host's. As a Part it gets the parent's goals in its brief, plus a `Bears:` line. Each message you send there allows `maxTurns` (default 6) bear replies, after which mentions are refused until you write again. The librarian is shown a table only for a thread already in it, so it never files a stray thread into one. `toProjectDoc` already lists its fields, so the mirror and phones see an ordinary project.
 
@@ -54,7 +54,8 @@ On the runner, a command with `args.webhook` goes only to `webhooks.ts`. It need
 
 ## Known issues
 
-- **Ask on unattended runs.** Routines, webhooks and mentions start in Ask by design, which makes the daily tidy ask every morning. Raising a Claude bear to Auto fixes it; a Codex bear can't.
+- **Codex tidies still ask.** Auto applies only to Claude. Built-in Claude tidies can use Auto without widening the bear's other work; Codex keeps Ask.
+- **Late answers UI.** The off-by-default `lateAnswers` experiment handles delayed tool-card answers for 24 hours. A deliberate late-answer button remains GPUI work; the frozen Swift app is unchanged.
 
 ## What it asks of Mike's code
 
@@ -114,4 +115,8 @@ The first try showed a revoke cancelling a run no runner had taken yet, which is
 
 ## Tests
 
-Runner: `bears` 17, `webhooks` 9, `webhooks-backend` 13, `mentions` 8, `tables` 6, `bear-notes` 4, plus the guard tests (experiments, context budget, parity, runner access, scenarios). Swift: `BearPickerTests` 5, with `EveryClickShowsTests` and `TipsTests`, and `swift build -c release`. `./check.sh --quick` passed on each land. The full `./check.sh` is booked for a quiet night (schedule eb83f133).
+Runner: `bears` 17, `webhooks` 9, `webhooks-backend` 13, `mentions` 8, `tables` 6, `bear-notes` 4, plus the guard tests (experiments, context budget, parity, runner access, scenarios). Swift: `BearPickerTests` 5, with `EveryClickShowsTests` and `TipsTests`, and `swift build -c release`. `./check.sh --quick` passed on each land. The full check subsequently passed on 14 Nov after the date-dependent webhook test was fixed (f4f27c14); the one-off schedule was deleted. Those results predate the always-on changes below.
+
+## Always-on improvements (14 Nov 2026)
+
+Implemented on this fork; current verification and landing status: `prds/bears-always-on.md`. Routines, folder webhooks and mentions share a worker without crossing access boundaries. Slow recurring jobs skip their next tick; mention replies match the asking turn. Managed memory rules track prior reports and unfinished tasks. Empty unattended runs explicitly opt into quiet completion, which preserves earlier reports and unfinished work. Late answers reuse the persisted request and queue a one-time decision without replaying a tool or granting more access. This revision is not yet added to the upstream PR. GPUI presentation is listed in `prds/bears-gpui.md`.
