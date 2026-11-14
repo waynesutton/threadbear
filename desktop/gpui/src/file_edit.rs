@@ -36,6 +36,9 @@ pub(crate) fn bind_keys(cx: &mut App) {
 /// The file's text in an editor of its own, and the document it came from.
 pub(crate) struct FileEdit {
     pub(crate) session: EditSession,
+    /// Edit files like an editor, as it was when the file opened: typing
+    /// waits for ⌘S, Save or leaving the file, and a status bar shows.
+    pub(crate) editor_mode: bool,
     pub(crate) editor: Entity<EditorState>,
     /// The save a moment after the last keystroke.
     save_soon: Option<Task<()>>,
@@ -49,7 +52,7 @@ pub(crate) struct FileEdit {
 impl FileEdit {
     /// Reads `path` here and puts its text in a new editor: coloured as code
     /// when it's code (`language`), with line numbers down its side.
-    pub(crate) fn open(thread_id: &str, path: &str, language: Option<&'static str>, window: &mut Window, cx: &mut Context<SidePane>) -> Self {
+    pub(crate) fn open(thread_id: &str, path: &str, language: Option<&'static str>, editor_mode: bool, window: &mut Window, cx: &mut Context<SidePane>) -> Self {
         let session = EditSession::open(path, true);
         let text = session.view_text(session.document.saved());
         let editor = cx.new(|cx| {
@@ -92,7 +95,7 @@ impl FileEdit {
             watch.set(&HashSet::from([folder]));
             Some(watch)
         });
-        FileEdit { session, editor, save_soon: None, check_soon: None, _watch: watch, _typing: typing }
+        FileEdit { session, editor_mode, editor, save_soon: None, check_soon: None, _watch: watch, _typing: typing }
     }
 }
 
@@ -108,6 +111,11 @@ impl SidePane {
             return;
         }
         edit.session.typed();
+        // Like an editor: nothing's written until ⌘S, Save or leaving it.
+        if edit.editor_mode {
+            cx.notify();
+            return;
+        }
         let id = thread_id.to_owned();
         edit.save_soon = Some(cx.spawn(async move |this, cx| {
             cx.background_executor().timer(Duration::from_millis(SAVE_DELAY_MS)).await;
@@ -235,7 +243,46 @@ impl SidePane {
             .font_family(cx.theme().mono_font_family.clone());
         // The text starts where the Swift app's does, past its 44 point
         // gutter of line numbers.
-        v_flex().size_full().children(bar).children(find).child(div().flex_1().min_h_0().pl(px(14.)).child(editor)).into_any_element()
+        let status = (edit.editor_mode && edit.session.takes_typing()).then(|| self.editor_status_bar(thread_id, edit, cx));
+        v_flex().size_full().children(bar).children(find).child(div().flex_1().min_h_0().pl(px(14.)).child(editor)).children(status).into_any_element()
+    }
+
+    /// `EditorStatusBar`: where the cursor is, whether what's typed is in
+    /// the file yet, and Save (⌘S).
+    fn editor_status_bar(&self, thread_id: &str, edit: &FileEdit, cx: &mut Context<Self>) -> AnyElement {
+        let p = palette(cx);
+        let place = edit.editor.read(cx).cursor_position();
+        let edited = edit.session.drafted();
+        let id = thread_id.to_owned();
+        let side = cx.entity().downgrade();
+        let save = PushButton::new("editor-save", words::SAVE, words::SAVE_TIP).disabled(!edited || edit.session.conflict.is_some()).render(cx, move |_, window, cx| {
+            side.update(cx, |this, cx| {
+                this.save_edit(&id, Some(window), cx);
+            })
+            .ok();
+        });
+        h_flex()
+            .id("editor-status")
+            .flex_none()
+            .w_full()
+            .px(px(12.))
+            .py(px(5.))
+            .gap(px(10.))
+            .items_center()
+            .border_t_1()
+            .border_color(p.hairline)
+            .text_size(px(style::size::LABEL))
+            .child(div().text_color(p.secondary).child(format!("Line {}, Column {}", place.line + 1, place.character + 1)))
+            .child(div().flex_1())
+            .when(edited, |s| s.child(div().size(px(6.)).rounded_full().bg(style::accent(cx))).child(div().text_color(p.secondary).child("Edited")))
+            .when(!edited, |s| s.child(div().text_color(p.faint).child("Saved")))
+            .child(save)
+            .into_any_element()
+    }
+
+    /// Edit files like an editor, as Settings has it now.
+    pub(crate) fn edits_like_an_editor(&self, cx: &App) -> bool {
+        self.app.upgrade().is_some_and(|app| app.read(cx).settings.edits_like_an_editor())
     }
 
     /// `ConflictBar`: the file changed on disk while the editor holds unsaved

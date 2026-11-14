@@ -717,7 +717,13 @@ impl SidePane {
                 row = row.child(self.markdown_menu(preview.editing, p, cx));
             } else {
                 let (editing, id) = (preview.editing, thread.id.clone());
-                let (symbol, tip) = if editing { ("checkmark", words::DONE_TIP) } else { ("pencil", words::EDIT_TIP) };
+                let like_an_editor = self.edits_like_an_editor(cx);
+                let (symbol, tip) = match (editing, like_an_editor) {
+                    (true, true) => ("eye", words::EDITOR_DONE_TIP),
+                    (true, false) => ("checkmark", words::DONE_TIP),
+                    (false, true) => ("pencil", words::EDITOR_EDIT_TIP),
+                    (false, false) => ("pencil", words::EDIT_TIP),
+                };
                 row = row.child(self.header_button("hl-edit", symbol, tip.to_owned(), p, cx, move |this, cx| this.request_editing(&id, !editing, cx)));
             }
         }
@@ -826,7 +832,8 @@ impl SidePane {
         }
         let path = open.path.clone();
         let language = core::code_language(&path).filter(|_| open.size < HIGHLIGHT_LIMIT as i64);
-        let edit = FileEdit::open(&thread.id, &path, language, window, cx);
+        let editor_mode = self.edits_like_an_editor(cx);
+        let edit = FileEdit::open(&thread.id, &path, language, editor_mode, window, cx);
         if let Some(open) = self.files.open.get_mut(&thread.id) {
             open.edit = Some(edit);
         }
@@ -1091,6 +1098,10 @@ impl SidePane {
                 if let Some(edit) = open.edit.as_ref().filter(|_| preview.editing) {
                     pane.insert("previewKind".into(), json!(if core::is_markdown(path) || core::code_language(path).is_none() { "text" } else { "code" }));
                     pane.insert("previewText".into(), json!(edit.editor.read(cx).value().chars().take(4000).collect::<String>()));
+                    if edit.editor_mode && edit.session.takes_typing() {
+                        let place = edit.editor.read(cx).cursor_position();
+                        pane.insert("previewStatus".into(), json!(words::status(place.line, place.character, edit.session.drafted())));
+                    }
                     let note = if edit.session.conflict.is_some() { Some(threadbear_core::text_file::words::CONFLICT.to_owned()) } else { edit.session.note.clone() };
                     if let Some(note) = note {
                         pane.insert("previewNote".into(), json!(note));
@@ -1173,6 +1184,18 @@ impl SidePane {
 /// file end.
 #[cfg(feature = "automation")]
 pub(crate) fn preview_command(side: &Entity<SidePane>, thread: &ThreadSummary, cmd: &Value, window: &mut Window, cx: &mut App) -> Result<Value, String> {
+    // Settings' Edit files like an editor, set first (the Swift `editor`).
+    if let Some(on) = cmd["editor"].as_bool() {
+        if let Some(app) = side.read(cx).app.upgrade() {
+            app.update(cx, |app, cx| {
+                app.settings.saved.files_edit_like_an_editor = Some(on);
+                app.save_settings_soon(cx);
+            });
+        }
+        if cmd.as_object().is_some_and(|o| o.keys().all(|k| k == "cmd" || k == "editor" || k == "autosave")) {
+            return Ok(json!(format!("ok editor {on}")));
+        }
+    }
     if cmd["play"].as_bool() == Some(true) {
         // The film's play button, for a picture of it playing.
         let pane = side.read(cx);

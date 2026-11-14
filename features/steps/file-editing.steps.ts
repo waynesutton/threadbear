@@ -36,6 +36,20 @@ When('I type {string} at the end of the pane\'s file, without waiting', async fu
   await this.app.do({ cmd: 'preview', insert: text, wait: false });
 });
 
+When('I turn on Edit files like an editor', async function (this: ThreadbearWorld) {
+  await this.app.do({ cmd: 'preview', editor: true });
+});
+
+const status = (d: Parameters<typeof pane>[0]) => (pane(d) as { previewStatus?: string | null } | null | undefined)?.previewStatus;
+
+Then('the pane\'s status bar says {string}', async function (this: ThreadbearWorld, words: string) {
+  await this.until(`the status bar saying "${words}"`, (d) => status(d) === words);
+});
+
+Then('the pane\'s status bar ends {string}', async function (this: ThreadbearWorld, words: string) {
+  await this.until(`the status bar ending "${words}"`, (d) => status(d)?.endsWith(words));
+});
+
 When('I save the pane\'s file', async function (this: ThreadbearWorld) {
   await this.app.do({ cmd: 'preview', save: true });
 });

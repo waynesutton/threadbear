@@ -210,6 +210,17 @@ pub mod words {
     pub const KEEP_MINE_TIP: &str = "Save what's here over the file.";
     pub const EDIT_TIP: &str = "Edit the file here. It's saved as you type.";
     pub const DONE_TIP: &str = "Done. What you typed is saved.";
+    /// Edit files like an editor's own: typing waits for ⌘S.
+    pub const EDITOR_EDIT_TIP: &str = "Edit the file here. ⌘S saves.";
+    pub const EDITOR_DONE_TIP: &str = "Stop editing and read it. What you typed is saved.";
+    pub const SAVE: &str = "Save";
+    pub const SAVE_TIP: &str = "Write what's typed into the file (⌘S)";
+
+    /// The editor's status bar (`EditorStatusBar`): where the cursor is, from
+    /// its 0-based line and column, and whether what's typed is in the file.
+    pub fn status(line: u32, column: u32, edited: bool) -> String {
+        format!("Line {}, Column {} · {}", line + 1, column + 1, if edited { "Edited" } else { "Saved" })
+    }
     /// Put at the end of a cut-off file's text.
     pub const CUT_TAIL: &str = "\n\n… the rest is cut off here. Open it in its app to see it all.";
 
@@ -500,6 +511,15 @@ impl MarkdownView {
     /// once Markdown was the last pick. Anything else opens to read.
     pub fn opens_raw(path: &str, last_pick: MarkdownView) -> bool {
         is_markdown(path) && last_pick == MarkdownView::Markdown
+    }
+}
+
+#[cfg(test)]
+mod status_tests {
+    #[test]
+    fn the_status_bar_counts_from_one() {
+        assert_eq!(super::words::status(0, 0, false), "Line 1, Column 1 · Saved");
+        assert_eq!(super::words::status(4, 11, true), "Line 5, Column 12 · Edited");
     }
 }
 

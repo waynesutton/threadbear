@@ -520,7 +520,7 @@ impl SettingsWindow {
 
     fn render_general(&mut self, settings: Option<&RunnerSettings>, window: &mut Window, cx: &mut Context<Self>) -> Vec<AnyElement> {
         // This Mac's own, so they're here while the runner's away too.
-        let mut sections = vec![self.appearance_section(cx), self.panels_section(cx), self.slash_section(cx), self.quitting_section(cx), self.notifications_section(cx)];
+        let mut sections = vec![self.appearance_section(cx), self.panels_section(cx), self.slash_section(cx), self.files_section(cx), self.quitting_section(cx), self.notifications_section(cx)];
         // The web runtime is this Mac's too (web_runtime.rs), last, so it
         // moves nothing the Swift app's General has.
         let web_runtime = section("settings-web-runtime", "Web runtime", crate::web_runtime::SETTINGS_ABOUT, "check whether it's installed and working, or why a diagram or panel isn't showing.", vec![row("Web runtime", crate::web_runtime::settings_control(cx), cx)], cx);
@@ -718,6 +718,28 @@ impl SettingsWindow {
             "Typing / in the message box opens the slash palette. Return puts the picked command in the box, and the next Return sends it; turn on Return sends a command right away to skip that step. The Run button always sends.",
             "change what the slash palette does when you press Return.",
             vec![row("Return sends a command right away", switch, cx)],
+            cx,
+        )
+    }
+
+    /// `FileEditorMode`: text files open ready to type in, saved on ⌘S.
+    fn files_section(&mut self, cx: &mut Context<Self>) -> AnyElement {
+        let on = self.app.upgrade().is_some_and(|a| a.read(cx).settings.edits_like_an_editor());
+        let switch = self.switch("settings-files-editor", on, "Open text files ready to type in, with line numbers, and save with ⌘S", cx, |this, on, cx| {
+            this.app
+                .update(cx, |app, cx| {
+                    app.settings.saved.files_edit_like_an_editor = Some(on);
+                    app.save_settings_soon(cx);
+                    cx.notify();
+                })
+                .ok();
+        });
+        section(
+            "settings-files",
+            "Files",
+            "Edit files like an editor opens a text file in the side pane ready to type in, with line numbers and a bar showing the line, the column and whether what you typed is saved. It's written when you save (⌘S or Save) or leave the file, rather than as you type.",
+            "change how files open in the side pane.",
+            vec![row("Edit files like an editor", switch, cx)],
             cx,
         )
     }

@@ -120,6 +120,12 @@ pub struct Saved {
     /// picked command in the box and the next Return sends it, so a new
     /// thread's box doesn't start a thread by surprise (Wayne, 11 Nov).
     pub slash_return_runs: Option<bool>,
+    /// `filesEditLikeAnEditor` (FileEditorMode): Settings > General > Files'
+    /// Edit files like an editor. A text file opens in the pane ready to
+    /// type in, with a status bar, and what's typed waits for ⌘S, Save or
+    /// leaving the file. None is off.
+    #[serde(rename = "filesEditLikeAnEditor")]
+    pub files_edit_like_an_editor: Option<bool>,
 }
 
 /// The settings file: where it is and what's in it. Reading is at launch only;
@@ -209,6 +215,10 @@ impl Settings {
 
     pub fn slash_return_runs(&self) -> bool {
         self.saved.slash_return_runs.unwrap_or(false)
+    }
+
+    pub fn edits_like_an_editor(&self) -> bool {
+        self.saved.files_edit_like_an_editor.unwrap_or(false)
     }
 
     pub fn asks_before_quitting(&self) -> bool {

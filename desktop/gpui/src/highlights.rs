@@ -674,7 +674,11 @@ impl SidePane {
         // runner's machine (`MarkdownView.opensRaw`).
         let here = self.thread(cx).is_some_and(|t| t.id == thread_id && !t.is_remote());
         if let Some(path) = preview.file_path() {
-            preview.editing = here && threadbear_core::text_file::MarkdownView::opens_raw(path, self.files.prefs.markdown_view);
+            // Edit files like an editor: a text file opens ready to type in
+            // (a page is drawn, never typed in). Whether it's text is the
+            // pane's to find once it's read: anything else shows as it would.
+            let page = matches!(core::extension(path).as_str(), "html" | "htm");
+            preview.editing = here && ((self.edits_like_an_editor(cx) && !page) || threadbear_core::text_file::MarkdownView::opens_raw(path, self.files.prefs.markdown_view));
         }
         self.chosen.entry(thread_id.to_owned()).or_insert_with(|| preview.from.clone());
         self.previews.insert(thread_id.to_owned(), preview);

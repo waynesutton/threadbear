@@ -19,6 +19,22 @@ Feature: Working on a file in the side pane
     Then the pane's file can be edited
     And the pane shows a "text" page with the words "Fixed in 4b7d0a8."
 
+  # Edit files like an editor (Wayne, 6 Nov): the file opens ready to type
+  # in, and what's typed waits for ⌘S. The Swift app's dump has no status
+  # bar line.
+  @file.editor @swift-pending
+  Scenario: Like an editor, a file opens ready to type, and what's typed waits for a save
+    When I open the thread "Rebuild the three landing pages"
+    And I turn on Edit files like an editor
+    And I open "src/hero.ts" in the thread's folder in the pane
+    Then the pane's file is being edited
+    And the pane's status bar says "Line 1, Column 1 · Saved"
+    When I type "// later" at the end of the pane's file, without waiting
+    Then the pane's status bar ends "Edited"
+    When I save the pane's file
+    Then the pane's status bar ends "Saved"
+    And the file "src/hero.ts" on disk ends with "// later"
+
   @file.editor @file.markdown
   Scenario: ⌘S saves at once, in a Markdown file's own text
     When I open the thread "Rebuild the three landing pages"

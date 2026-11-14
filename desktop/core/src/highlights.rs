@@ -355,7 +355,7 @@ pub enum Viewer {
     Picture,
 }
 
-fn extension(path: &str) -> String {
+pub fn extension(path: &str) -> String {
     match last_component(path).rsplit_once('.') {
         Some((stem, ext)) if !stem.is_empty() => ext.to_lowercase(),
         _ => String::new(),
