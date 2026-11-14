@@ -15,7 +15,7 @@
 // local web page shows sealed in the web runtime, its scripts off until Run
 // them (`file.htmlpreview`, `file.runthem`: web_panels.rs `local_page`).
 use crate::file_edit::{FileEdit, SaveFile};
-use crate::file_find::{FindBar, FindNext, FindPrevious};
+use crate::file_find::{FindBar, FindNext, FindPrevious, FindReplace};
 use crate::file_watch::FolderWatch;
 use crate::files_store::FilePrefs;
 use crate::highlights::{palette, Palette, PanePreview, SidePane, Target, FILES};
@@ -115,6 +115,9 @@ pub(crate) struct FilesState {
     /// What was last looked for, which the next ⌘F starts with, as AppKit's
     /// find pasteboard has it.
     pub(crate) last_query: String,
+    /// The search box over each folder shown, by its view's key
+    /// (folder_search_view.rs).
+    pub(crate) searches: HashMap<String, crate::folder_search_view::SearchBox>,
     /// The file's own focus, so ⌘F reaches the pane with nothing in it picked.
     pub(crate) focus: Option<FocusHandle>,
     /// The window the pane draws in, for putting a file's text in its editor
@@ -127,7 +130,7 @@ pub(crate) struct FilesState {
 
 impl Default for FilesState {
     fn default() -> Self {
-        FilesState { open: HashMap::new(), known_folders: HashSet::new(), reading_style: None, prefs: crate::files_store::load(), last_query: String::new(), focus: None, window: None, leave_answer: None }
+        FilesState { open: HashMap::new(), known_folders: HashSet::new(), reading_style: None, prefs: crate::files_store::load(), last_query: String::new(), searches: HashMap::new(), focus: None, window: None, leave_answer: None }
     }
 }
 
@@ -502,6 +505,16 @@ impl SidePane {
         self.read_file(&thread, path, opened, cx);
     }
 
+    /// A file put aside under another section changed: read again when it's
+    /// back (`unpark_preview`).
+    pub(crate) fn parked_file_changed(&mut self, thread_id: &str, path: &str) {
+        for (_, file) in self.parked.get_mut(thread_id).into_iter().flat_map(|m| m.values_mut()) {
+            if let Some(file) = file.as_mut().filter(|f| f.path == path) {
+                file.changed_away = true;
+            }
+        }
+    }
+
     /// Asks the runner for the file's bytes.
     fn read_file(&mut self, thread: &ThreadSummary, path: String, opened: u64, cx: &mut Context<Self>) {
         let keep_previous = self.files.open.get(&thread.id).is_some_and(|f| f.path == path);
@@ -643,11 +656,14 @@ impl SidePane {
         let file = std::path::Path::new(path).file_name().map(|n| n.to_owned());
         let folder = std::path::Path::new(path).parent()?.to_string_lossy().into_owned();
         let id = thread_id.to_owned();
+        let whole = path.to_owned();
         let mut watch = FolderWatch::new(cx, move |this: &mut SidePane, _, paths, cx| {
             if !paths.iter().any(|p| p.file_name() == file.as_deref()) {
                 return;
             }
-            let Some(open) = this.files.open.get_mut(&id).filter(|o| o.edit.is_none()) else { return };
+            // Put aside under another section: read when it's back.
+            this.parked_file_changed(&id, &whole);
+            let Some(open) = this.files.open.get_mut(&id).filter(|o| o.edit.is_none() && o.path == whole) else { return };
             // One read after the burst: a newer change puts the read off.
             let later = id.clone();
             open._reread = Some(cx.spawn(async move |this, cx| {
@@ -731,6 +747,14 @@ impl SidePane {
                 row = row.child(self.header_button("hl-edit", symbol, tip.to_owned(), p, cx, move |this, cx| this.request_editing(&id, !editing, cx)));
             }
         }
+        // Find in a text file: the find bar over it, with Replace while it's
+        // being edited.
+        let finds = preview.file_path().is_some() && self.files.open.get(&thread.id).is_some_and(|o| matches!(o.body, FileBody::Markdown { .. } | FileBody::Text { .. }) || o.edit.is_some());
+        if finds {
+            let id = thread.id.clone();
+            let tip = if preview.editing { "Find and replace in this file (\u{2318}F)" } else { "Find in this file (\u{2318}F)" };
+            row = row.child(self.header_button("hl-find", "magnifyingglass", tip.to_owned(), p, cx, move |this, cx| this.request_find(&id, cx)));
+        }
         if let Some(path) = preview.file_path().filter(|_| !thread.is_remote()).map(str::to_owned) {
             let reveal_path = path.clone();
             row = row.child(self.header_button("hl-reveal", "folder", REVEAL_TITLE.to_owned(), p, cx, move |_, cx| reveal(&reveal_path.clone(), crate::open_gate::Origin::ThisMac, cx)));
@@ -768,6 +792,15 @@ impl SidePane {
         crate::files_store::save(&self.files.prefs);
         let Some(thread) = self.thread(cx) else { return };
         self.set_preview_editing(&thread, view == MarkdownView::Markdown, window, cx);
+    }
+
+    /// The bar's magnifier: the find bar, once there's a window to hand.
+    fn request_find(&mut self, thread_id: &str, cx: &mut Context<Self>) {
+        let Some(handle) = self.files.window else { return };
+        let (side, id) = (cx.entity().downgrade(), thread_id.to_owned());
+        cx.defer(move |cx| {
+            let _ = handle.update(cx, |_, window, cx| side.update(cx, |this, cx| this.open_find(&id, window, cx)));
+        });
     }
 
     /// The pencil or Done, from the bar, where there's no window to hand:
@@ -878,6 +911,14 @@ impl SidePane {
             self.ensure_edit(thread, window, cx);
         }
         self.files.window = Some(window.window_handle());
+        // Opened from a folder's search: at its line, with its words found.
+        if let Some(hit) = self.previews.get(&thread.id).and_then(|p| p.hit.clone()) {
+            if self.find_hit(&thread.id, hit.line, &hit.query, window, cx) {
+                if let Some(preview) = self.previews.get_mut(&thread.id) {
+                    preview.hit = None;
+                }
+            }
+        }
         let focus = self.files.focus.get_or_insert_with(|| cx.focus_handle()).clone();
         let Some(open) = self.files.open.get(&thread.id).filter(|f| f.path == path) else {
             return div().size_full().into_any_element();
@@ -1021,8 +1062,10 @@ impl SidePane {
     /// ⌘S to save what's typed now rather than after the pause.
     fn file_keys(&self, el: Stateful<Div>, thread_id: &str, cx: &mut Context<Self>) -> Stateful<Div> {
         let (find, next, previous, save) = (thread_id.to_owned(), thread_id.to_owned(), thread_id.to_owned(), thread_id.to_owned());
+        let replace = thread_id.to_owned();
         el.key_context(crate::file_find::CONTEXT)
             .on_action(cx.listener(move |this, _: &gpui_kit::component::input::Search, window, cx| this.open_find(&find, window, cx)))
+            .on_action(cx.listener(move |this, _: &FindReplace, window, cx| this.open_find_replace(&replace, window, cx)))
             .on_action(cx.listener(move |this, _: &FindNext, window, cx| this.find_again(&next, false, window, cx)))
             .on_action(cx.listener(move |this, _: &FindPrevious, window, cx| this.find_again(&previous, true, window, cx)))
             .on_action(cx.listener(move |this, _: &SaveFile, window, cx| {
@@ -1274,7 +1317,7 @@ pub(crate) fn preview_command(side: &Entity<SidePane>, thread: &ThreadSummary, c
         let shown = side.read(cx).previews.get(&id).map_or_else(|| "no preview".to_owned(), |p| format!("showing {}", p.title));
         return Ok(json!(format!("ok {shown}")));
     }
-    if ["find", "findNext", "findPrevious", "findDone"].iter().any(|k| !cmd[*k].is_null()) {
+    if ["find", "findNext", "findPrevious", "findDone", "replace", "replaceAll"].iter().any(|k| !cmd[*k].is_null()) {
         let id = thread.id.clone();
         let showing = side.read(cx).files.open.get(&id).is_some_and(|o| matches!(o.body, FileBody::Markdown { .. } | FileBody::Text { .. }) || o.edit.is_some());
         if !showing {
@@ -1283,6 +1326,15 @@ pub(crate) fn preview_command(side: &Entity<SidePane>, thread: &ThreadSummary, c
         side.update(cx, |pane, cx| {
             if let Some(query) = cmd["find"].as_str() {
                 pane.find_typed(&id, query, window, cx);
+            }
+            if let Some(with) = cmd["replaceWith"].as_str() {
+                pane.replace_typed(&id, with, window, cx);
+            }
+            if cmd["replace"].as_bool() == Some(true) {
+                pane.replace_matches(&id, false, window, cx);
+            }
+            if cmd["replaceAll"].as_bool() == Some(true) {
+                pane.replace_matches(&id, true, window, cx);
             }
             if cmd["findNext"].as_bool() == Some(true) {
                 pane.find_again(&id, false, window, cx);

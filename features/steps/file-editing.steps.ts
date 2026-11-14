@@ -101,3 +101,23 @@ When('I press Back in the pane, answering {string}', async function (this: Threa
   await this.app.do({ cmd: 'preview', leaveAnswer: name });
   await this.app.do({ cmd: 'preview', back: true });
 });
+
+// Find and replace, while the file's being edited (⌥⌘F): the bar's Replace
+// row with its own words, then Replace and All.
+When('I find {string} in the pane\'s file, to replace with {string}', async function (this: ThreadbearWorld, words: string, replacement: string) {
+  await this.until('the file being edited', (d) => editing(d) && pane(d)?.previewText);
+  await this.app.do({ cmd: 'preview', find: words, replaceWith: replacement });
+});
+
+When('I replace the match in the pane\'s file', async function (this: ThreadbearWorld) {
+  await this.app.do({ cmd: 'preview', replace: true });
+});
+
+When('I replace every match in the pane\'s file', async function (this: ThreadbearWorld) {
+  await this.app.do({ cmd: 'preview', replaceAll: true });
+});
+
+Then('the file {string} on disk has the words {string}', async function (this: ThreadbearWorld, relative: string, words: string) {
+  const file = path.join(await threadFolder(this), relative);
+  await this.until(`${relative} on disk to have "${words}"`, () => fs.readFileSync(file, 'utf8').includes(words));
+});

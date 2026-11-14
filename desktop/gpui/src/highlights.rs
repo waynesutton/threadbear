@@ -75,11 +75,22 @@ pub(crate) struct PanePreview {
     pub memory: FolderMemory,
     /// A text file with its own text up, raw (the Markdown menu's Markdown).
     pub editing: bool,
+    /// Opened from a folder's search: the line to go to and the words to
+    /// find there, once the file's in (`PanePreview.hit`).
+    pub hit: Option<SearchHit>,
+}
+
+/// A line a folder's search found (folder_search_view.rs).
+#[derive(Clone, Debug, PartialEq)]
+pub(crate) struct SearchHit {
+    /// From 1.
+    pub line: usize,
+    pub query: String,
 }
 
 impl PanePreview {
     pub(crate) fn new(target: Target, title: String, from: String) -> Self {
-        PanePreview { target, title, from, opened: 0, back: vec![], memory: Default::default(), editing: false }
+        PanePreview { target, title, from, opened: 0, back: vec![], memory: Default::default(), editing: false, hit: None }
     }
 
     pub(crate) fn file_path(&self) -> Option<&str> {
@@ -247,6 +258,11 @@ pub(crate) struct SidePane {
     /// The chosen section per thread (`panelChoice`).
     pub(crate) chosen: HashMap<String, String>,
     pub(crate) previews: HashMap<String, PanePreview>,
+    /// Files left open under other sections, per thread then section, with
+    /// what was read of them (and any typing): a file opened from Files stays
+    /// open while Highlights is looked at, and is there again, where it was
+    /// left, when Files comes back (`parkedPreviews`, Wayne's 3708b1c7).
+    pub(crate) parked: HashMap<String, HashMap<String, (PanePreview, Option<crate::files::OpenFile>)>>,
     /// Each thread's section and open file as last left, saved across
     /// launches (pane_store.rs): a file comes back the first time its
     /// thread shows after a restart.
@@ -297,6 +313,7 @@ impl SidePane {
             collapsed: crate::highlights_store::load_collapsed(),
             chosen: HashMap::new(),
             previews: HashMap::new(),
+            parked: HashMap::new(),
             places: crate::pane_store::load(),
             restored: HashSet::new(),
             flags: HashMap::new(),
@@ -535,13 +552,44 @@ impl SidePane {
                 return;
             }
             self.leave_edit(thread_id, cx);
-            self.previews.remove(thread_id);
+            self.park_preview(thread_id);
         }
+        // One put aside for this section comes back.
+        self.unpark_preview(thread_id, id, cx);
         self.chosen.insert(thread_id.to_owned(), id.to_owned());
         self.remember(thread_id);
         self.menu = None;
         self.section_shown(id, thread_id, cx);
         cx.notify();
+    }
+
+    /// The thread's preview put aside for its section, with its file as read
+    /// and worked on, rather than closed (`bringPreview`).
+    fn park_preview(&mut self, thread_id: &str) {
+        let Some(preview) = self.previews.remove(thread_id) else { return };
+        let file = self.files.open.remove(thread_id).filter(|f| preview.file_path() == Some(f.path.as_str()));
+        self.parked.entry(thread_id.to_owned()).or_default().insert(preview.from.clone(), (preview, file));
+    }
+
+    /// The preview put aside for `section`, back over it as it was left: a
+    /// file being worked on is checked against the disk, and one read here
+    /// is read again if it changed meanwhile.
+    fn unpark_preview(&mut self, thread_id: &str, section: &str, cx: &mut Context<Self>) {
+        if self.previews.contains_key(thread_id) {
+            return;
+        }
+        let Some((preview, file)) = self.parked.get_mut(thread_id).and_then(|m| m.remove(section)) else { return };
+        let editing = file.as_ref().is_some_and(|f| f.edit.is_some());
+        if let Some(file) = file {
+            self.files.open.insert(thread_id.to_owned(), file);
+        }
+        self.previews.insert(thread_id.to_owned(), preview);
+        if editing {
+            self.check_edit(thread_id, cx);
+        }
+        if let Some(thread) = self.thread(cx).filter(|t| t.id == thread_id) {
+            self.begin_preview(&thread, cx);
+        }
     }
 
     /// Saves where `thread_id`'s pane is, if that changed (pane_store.rs).
@@ -693,6 +741,13 @@ impl SidePane {
             preview.editing = here && raw;
         }
         self.chosen.entry(thread_id.to_owned()).or_insert_with(|| preview.from.clone());
+        // One open over another section is put aside, not lost.
+        if self.previews.get(thread_id).is_some_and(|current| current.from != preview.from) {
+            self.park_preview(thread_id);
+        }
+        if let Some(parked) = self.parked.get_mut(thread_id) {
+            parked.remove(&preview.from);
+        }
         self.previews.insert(thread_id.to_owned(), preview);
         self.remember(thread_id);
         self.menu = None;
@@ -1907,6 +1962,9 @@ impl SidePane {
         pane.insert("section".into(), json!(section));
         if let Some(folder) = self.folder_summary(thread, cx) {
             pane.insert("folder".into(), json!(folder));
+        }
+        if let Some(search) = self.current_folder_key(thread).and_then(|key| self.search_dump(&key)) {
+            pane.insert("folderSearch".into(), search);
         }
         // An explanation, as the Swift dump has it.
         if self.explaining(&thread.id) {

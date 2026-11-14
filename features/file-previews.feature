@@ -29,6 +29,19 @@ Feature: Files opened in the side pane
     And I open the thread "Rebuild the three landing pages"
     Then the pane shows Highlights
 
+  @file.host
+  Scenario: A file open over Files stays open while another section is looked at
+    Given the thread's folder is showing in the pane for "Rebuild the three landing pages"
+    When I double-click the folder row "logs"
+    And I double-click the folder row "docs-build.txt"
+    Then the pane is showing the file "logs/docs-build.txt"
+    When I switch the pane to "Highlights"
+    Then the pane shows Highlights
+    When I switch the pane to "Files"
+    Then the pane is showing the file "logs/docs-build.txt"
+    When I press Back in the pane
+    Then the pane is browsing the folder "logs"
+
   @file.markdown
   Scenario: A Markdown file is drawn as a page
     When I open the thread "Rebuild the three landing pages"

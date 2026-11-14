@@ -106,3 +106,15 @@ Feature: Working on a file in the side pane
     Then the pane shows a "text" page with the words "Could not resolve image"
     When "logs/docs-build.txt" in the thread's folder is rewritten as "Build passed in 9.8s."
     Then the pane shows a "text" page with the words "Build passed in 9.8s."
+
+  @file.find
+  Scenario: While a file is being edited, the find bar replaces one match or every one
+    When I open the thread "Rebuild the three landing pages"
+    And I open "src/hero.ts" in the thread's folder in the pane
+    And I find "hero" in the pane's file, to replace with "banner"
+    Then the find bar says "hero: 1 of 2"
+    When I replace the match in the pane's file
+    Then the find bar says "hero: 1 of 1"
+    When I replace every match in the pane's file
+    Then the find bar says "hero: not found"
+    And the file "src/hero.ts" on disk has the words "export function banner("

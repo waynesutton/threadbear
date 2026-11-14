@@ -510,17 +510,27 @@ impl SidePane {
         }
         let focus = self.folders.focus.get_or_insert_with(|| cx.focus_handle()).clone();
         let key = view_key(&thread.id, path);
+        // This Mac's folder has a search box over it (folder_search_view.rs).
+        let local = !thread.is_remote() && self.folders.views.get(&key).is_some_and(|v| v.away.is_none());
+        if local {
+            self.ensure_search_box(&key, path, window, cx);
+        }
+        let searching = local && self.searching_folder(&key);
         let Some(view) = self.folders.views.get(&key) else { return div().into_any_element() };
         let (note, mode, sort) = (view.note(), view.mode, view.sort);
         let crumb_list = crumbs(path, &self.folder_home(view.away.is_some(), path));
         let path_bar = self.path_bar(&key, &crumb_list, thread, preview, p, window, cx).into_any_element();
         let body = match (&note, mode) {
             (Some(note), _) => div().flex_1().min_h_0().child(crate::files::pane_note(note, p)).into_any_element(),
+            (None, _) if searching => self.render_search_results(&key, thread, preview, cx),
             (None, FolderMode::List) => self.render_list(&key, thread, preview, p, cx),
             (None, FolderMode::Icons) => self.render_grid(&key, thread, preview, p, cx),
         };
         let mut column = v_flex().size_full();
-        if mode == FolderMode::List {
+        if local {
+            column = column.children(self.render_search_field(&key, p, cx));
+        }
+        if mode == FolderMode::List && !searching {
             column = column.child(self.folder_header(&key, sort, p, cx));
         }
         // The path bar under the rows, as the Finder's is.
@@ -532,6 +542,10 @@ impl SidePane {
             .track_focus(&focus)
             .key_context(CONTEXT)
             .on_key_down(cx.listener(move |this, ev: &KeyDownEvent, window, cx| {
+                // Typing in the search box is the box's, not the list's.
+                if this.files.searches.get(&keys_key).is_some_and(|s| s.input.read(cx).focus_handle(cx).is_focused(window)) {
+                    return;
+                }
                 if this.folder_key(&keys_key, ev, &keys_thread, &keys_preview, window, cx) {
                     cx.stop_propagation();
                 }
@@ -1077,6 +1091,19 @@ impl SidePane {
         self.show_preview(next, &thread.id, cx);
     }
 
+    /// A line a folder's search found: its file, with Back to the folder and
+    /// its results, opened at the line with the words found there.
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn open_search_hit(&mut self, key: &str, path: &str, line: usize, query: &str, thread: &ThreadSummary, preview: &PanePreview, cx: &mut Context<Self>) {
+        let memory = self.folders.views.get(key).map(|v| v.memory()).unwrap_or_default();
+        let name = core_folders_name(path).to_owned();
+        self.leave_folder(key, path.to_owned(), name, false, memory, thread, preview, cx);
+        if let Some(opened) = self.previews.get_mut(&thread.id).filter(|p| p.file_path() == Some(path)) {
+            opened.hit = Some(crate::highlights::SearchHit { line, query: query.to_owned() });
+        }
+        cx.notify();
+    }
+
     /// A folder in the path bar, or its "…" menu: there, with Back to here,
     /// and the folder below it on the way here picked, as the Finder does.
     fn go_to_crumb(&mut self, key: &str, path: String, selecting: Option<String>, thread: &ThreadSummary, preview: &PanePreview, cx: &mut Context<Self>) {
@@ -1341,6 +1368,18 @@ pub(crate) fn folder_command(side: &Entity<SidePane>, thread: &ThreadSummary, cm
     let key = pane.current_folder_key(thread).ok_or("no folder is showing in the pane")?;
     let preview = pane.folder_preview(thread);
     let find = |pane: &SidePane, name: &str| pane.folders.views.get(&key).and_then(|v| v.rows().into_iter().find(|e| e.name == name));
+    if let Some(words) = cmd["search"].as_str() {
+        // The words in the folder's search box, and the folder read for them.
+        if !side.read(cx).files.searches.contains_key(&key) {
+            return Err("this folder has no search box".into());
+        }
+        side.update(cx, |pane, cx| pane.search_typed(&key, words, window, cx));
+        return Ok(json!(format!("ok searching for {words:?}")));
+    }
+    if let Some(named) = cmd["openHit"].as_str() {
+        side.update(cx, |pane, cx| pane.open_hit_named(&key, named, thread, &preview, cx))?;
+        return Ok(json!(format!("ok opened {named}")));
+    }
     if let Some(mode) = cmd["mode"].as_str() {
         let mode = FolderMode::from_name(mode).ok_or("mode is list or icons")?;
         side.update(cx, |pane, cx| pane.set_folder_mode(mode, cx));

@@ -179,3 +179,11 @@ When('I press Run them over the page in the pane', async function (this: Threadb
   await this.until('the bar asking to run its scripts', (d) => pane(d)?.previewNote === 'This page has scripts');
   await this.app.do({ cmd: 'preview', runScripts: true });
 });
+
+// A section of the pane, as its button in the right-hand rail picks it.
+When('I switch the pane to {string}', async function (this: ThreadbearWorld, title: string) {
+  const id = { Highlights: 'threadbear.highlights', Files: 'threadbear.files', Patches: 'threadbear.patches' }[title];
+  if (!id) throw new Error(`no section called ${title}`);
+  await this.app.do({ cmd: 'panel', id });
+  await this.until(`the pane on ${title}`, (d) => pane(d)?.section === id);
+});

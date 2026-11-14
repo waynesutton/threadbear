@@ -27,7 +27,7 @@ app does it), **nothing** (nothing to rebuild), **skip** (Wayne said no).
 | 92 | 0a003c67 | Files open ready to type, autosave switch, unsaved dot, Save prompt | done |
 | 93 | 41275129 | Line numbers and ⌘S, opened ready to type | done |
 | 98 | d28e38f4 | A saved plan opens in the side pane, with a link under the reply | done |
-| 43 | 3708b1c7 | Side pane find and replace, and search in folders | to do |
+| 43 | 3708b1c7 | Side pane find and replace, and search in folders | done |
 | 79 | 55498864 | Settings > Keyboard list full height | to do |
 
 The approval and slash palette batch passed 33 UI scenarios and 24 core checks.

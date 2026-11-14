@@ -336,6 +336,7 @@ It comes from reading code, not from running anything, so "(unverified)" means n
 | `folder.pathbar` | Path bar | Breadcrumbs, ... menu | Drawn, with a gpui-kit menu. | build | S | `FolderBrowser` (`FolderPathBar`) |
 | `folder.keys` | Finder keys | Space Quick Look, ⌘↑, ⌘⇧., back | Key handling, with Space opening `file.quicklook`'s viewer. | build | S | `FolderBrowser` |
 | `folder.menu` | Folder menu | Open, Reveal, Copy paths, view, Sort, hidden | gpui-kit menu, with Open and Reveal going through the open gate. | kit | S | `FolderBrowser` |
+| `folder.search` | Search in a folder | A box over a folder on this Mac finds lines inside its files, skipping dependencies, build output, big files and anything that isn't text; a line opens the file there with its words found, and Back comes back to the results | `threadbear_core::folder_search` off the main thread, drawn list. | build | M | `FolderSearchView`, `FolderSearch` |
 | `folder.remote` | Remote folders | Other Macs' folders, no thumbnails | Port the listing logic. | build | M | `RemoteFiles`, `FolderListing` |
 | `folder.filespanel` | Files panel | Thread's folder from the rail | Reuses the folder list. | build | S | `PanelsView` |
 

@@ -44,6 +44,7 @@ mod far_rows;
 mod file_drag;
 mod file_edit;
 mod file_find;
+mod folder_search_view;
 mod file_watch;
 mod files;
 mod files_store;
