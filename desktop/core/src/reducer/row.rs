@@ -148,6 +148,9 @@ pub struct UserMessage {
     pub review: Option<ReviewAnswer>,
     /// The seq of the message this one replaced, when Mike edited one.
     pub edit_of: Option<i64>,
+    /// Sent in Ask mode (Shift-Tab): "ask", or an older app's "plan", which
+    /// the runner takes as Ask. The bubble says so.
+    pub mode: Option<String>,
     /// Mike can edit it and carry on from there. Set by the reducer.
     pub editable: bool,
     /// Sent from this app and not shown by the runner yet.

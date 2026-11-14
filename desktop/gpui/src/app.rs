@@ -1629,6 +1629,8 @@ impl Threadbear {
                 out["runner"] = json!(away.name);
             }
             out["chip"] = json!(crate::composer_chips::model_chip_text(&data));
+            // Shift-Tab's Ask mode, while it's on for this box.
+            out["turnMode"] = json!(composer.ask_mode(cx).then_some("ask"));
             // The seq of the message being edited, as the Swift dump has it.
             out["editing"] = json!(composer.editing.as_ref().map(|e| e.seq));
             out["chipBadge"] = json!(crate::composer_chips::model_chip_badge_text(&data));

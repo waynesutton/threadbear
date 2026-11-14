@@ -120,6 +120,11 @@ impl Composer {
     }
 
     pub(crate) fn set_permission(&mut self, mode: &'static str, cx: &mut App) {
+        // Going into Plan first, from Shift-Tab or this menu alike, notes the
+        // access to put back when Shift-Tab steps on (turn_modes.rs).
+        if let Some(from) = self.chip_data(cx).settings().map(|s| s.permission_mode.clone()) {
+            crate::turn_modes::permission_changing(&self.mode_key(), &from, mode);
+        }
         self.change_thread(move |t| t.permission_mode = mode.to_owned(), json!({ "permissionMode": mode }), cx);
     }
 
@@ -318,6 +323,8 @@ impl Composer {
             }
             row = row.child(self.render_model_chip(&data, window, cx)).child(chip_divider(cx));
             row = row.child(self.render_permission_chip(settings.permission_mode.clone(), &composer, cx));
+            // Ask mode, only while it's on (Shift-Tab).
+            row = row.children(self.render_turn_mode_chip(cx));
         }
         row = row.child(div().flex_1());
         if let Some(meter) = data.summary.as_ref().and_then(|t| ContextMeter::new(t.context_tokens, t.context_window)) {

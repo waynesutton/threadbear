@@ -802,7 +802,7 @@ impl TranscriptModel {
         let seq = event.seq;
         let turn_id = event.turn_id.clone();
         match &event.payload {
-            EventPayload::UserMessage { text, images, origin, answers, edit_of, review } => {
+            EventPayload::UserMessage { text, images, origin, answers, edit_of, review, mode } => {
                 // Mike's reply answers the open card, so it goes, picked or not.
                 if origin.as_deref() != Some("runner") {
                     self.close_open_asks();
@@ -814,6 +814,7 @@ impl TranscriptModel {
                     answers: answers.clone(),
                     edit_of: *edit_of,
                     review: review.clone(),
+                    mode: mode.clone(),
                     ..UserMessage::default()
                 };
                 // Only one that started its own turn can be cut back to; one

@@ -265,6 +265,20 @@ impl ThreadPane {
         if !message.images.is_empty() {
             col = col.child(self.user_images(&message.images, ix, message.text.is_empty() && message.origin.as_deref() == Some("phone"), cx));
         }
+        // Sent in Ask mode: said small over the bubble.
+        if threadbear_core::turn_modes::sent_in_ask(message.mode.as_deref()) {
+            let accent = style::accent(cx);
+            col = col.child(
+                h_flex()
+                    .gap(px(4.))
+                    .pb(px(3.))
+                    .items_center()
+                    .text_size(px(size::SMALL))
+                    .text_color(accent)
+                    .child(crate::icons::symbol("questionmark.circle").with_size(px(size::SMALL)).text_color(accent))
+                    .child("Ask mode"),
+            );
+        }
         let show_text = !message.text.is_empty() || message.images.is_empty();
         if show_text {
             let mut line = h_flex().w_full().justify_end().items_end().gap(px(6.));

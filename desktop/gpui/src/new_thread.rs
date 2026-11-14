@@ -131,6 +131,10 @@ impl Threadbear {
         if let Some(runner) = &runner {
             params["runnerId"] = json!(runner);
         }
+        // From the modes' own record: a send runs inside the box's update.
+        if crate::turn_modes::asking("new") {
+            params["mode"] = json!("ask");
+        }
         let project = self.new_thread.picks.project.clone().filter(|p| self.sidebar.projects.iter().any(|known| &known.id == p));
         if let Some(project) = &project {
             params["projectIds"] = json!([project]);
@@ -170,6 +174,8 @@ impl Threadbear {
             cx.notify();
             return;
         };
+        // The new-thread box's Ask mode stays with the thread it made.
+        crate::turn_modes::moved_to(&thread.id);
         // Only what was sent goes; the box was locked meanwhile.
         if let Some(composer) = self.new_thread.composer.clone() {
             composer.update(cx, |c, cx| c.clear_sent_draft(&stored, window, cx));

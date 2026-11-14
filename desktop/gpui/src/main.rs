@@ -121,6 +121,7 @@ mod thread_map;
 mod tips;
 mod thread_panels;
 mod tour;
+mod turn_modes;
 mod setup_panel;
 mod unsent;
 mod updates_panel;

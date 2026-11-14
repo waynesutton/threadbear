@@ -14,7 +14,7 @@ use crate::composer_chips::ModelPickerView;
 use crate::style;
 use crate::thread::ThreadPane;
 use gpui_kit::assets::IconName;
-use gpui_kit::component::input::{Copy, Cut, Enter, Escape, IndentInline, InlineToken, InlineTokenContext, InlineTokenHoverEvent, InputEvent, InputState, MoveDown, MoveLeft, MoveRight, MoveUp, Textarea, TextareaState};
+use gpui_kit::component::input::{Copy, Cut, Enter, Escape, IndentInline, InlineToken, InlineTokenContext, InlineTokenHoverEvent, InputEvent, InputState, MoveDown, MoveLeft, MoveRight, MoveUp, OutdentInline, Textarea, TextareaState};
 use gpui_kit::component::spinner::Spinner;
 use gpui_kit::component::{h_flex, v_flex, ActiveTheme as _, Icon, Sizable as _};
 use gpui_kit::prelude::*;
@@ -1489,6 +1489,13 @@ impl Composer {
             }))
             .capture_action(cx.listener(|this, _: &MoveRight, window, cx| {
                 if !this.palette_search_focused(window, cx) && this.palette_key(PaletteKey::Right, window, cx) {
+                    cx.stop_propagation();
+                }
+            }))
+            // Shift-Tab steps Plan first, Ask, off (turn_modes.rs); with the
+            // modes off in Settings, the box has it as before.
+            .capture_action(cx.listener(|this, _: &OutdentInline, _, cx| {
+                if this.cycle_turn_mode(cx) {
                     cx.stop_propagation();
                 }
             }))

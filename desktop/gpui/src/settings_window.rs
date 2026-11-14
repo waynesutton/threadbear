@@ -520,7 +520,7 @@ impl SettingsWindow {
 
     fn render_general(&mut self, settings: Option<&RunnerSettings>, window: &mut Window, cx: &mut Context<Self>) -> Vec<AnyElement> {
         // This Mac's own, so they're here while the runner's away too.
-        let mut sections = vec![self.appearance_section(cx), self.panels_section(cx), self.slash_section(cx), self.files_section(cx), self.quitting_section(cx), self.notifications_section(cx)];
+        let mut sections = vec![self.appearance_section(cx), self.panels_section(cx), self.slash_section(cx), self.turn_modes_section(cx), self.files_section(cx), self.quitting_section(cx), self.notifications_section(cx)];
         // The web runtime is this Mac's too (web_runtime.rs), last, so it
         // moves nothing the Swift app's General has.
         let web_runtime = section("settings-web-runtime", "Web runtime", crate::web_runtime::SETTINGS_ABOUT, "check whether it's installed and working, or why a diagram or panel isn't showing.", vec![row("Web runtime", crate::web_runtime::settings_control(cx), cx)], cx);
@@ -718,6 +718,31 @@ impl SettingsWindow {
             "Typing / in the message box opens the slash palette. Return puts the picked command in the box, and the next Return sends it; turn on Return sends a command right away to skip that step. The Run button always sends.",
             "change what the slash palette does when you press Return.",
             vec![row("Return sends a command right away", switch, cx)],
+            cx,
+        )
+    }
+
+    /// `TurnModes`: whether Shift-Tab steps through Plan first and Ask.
+    fn turn_modes_section(&mut self, cx: &mut Context<Self>) -> AnyElement {
+        let on = self.app.upgrade().is_none_or(|a| a.read(cx).settings.turn_modes_enabled());
+        let switch = self.switch("settings-turn-modes", on, "Shift-Tab in the message box steps through Plan first and Ask", cx, |this, on, cx| {
+            this.app
+                .update(cx, |app, cx| {
+                    app.settings.saved.turn_modes_enabled = Some(on);
+                    app.save_settings_soon(cx);
+                    if !on {
+                        crate::turn_modes::clear_all();
+                    }
+                    cx.notify();
+                })
+                .ok();
+        });
+        section(
+            "settings-turn-modes",
+            "Shift-Tab modes",
+            "Shift-Tab in the message box steps through Plan first (the agent reads and plans, changes nothing, and puts its plan to you on a card to approve or send back; the plan is also saved in the thread's plans/ folder and opens beside the thread), Ask (nothing changes; it just answers), then off, back to the access the thread had. Turning this off takes Shift-Tab back to what it did before; Plan first stays in the access menu.",
+            "explain or change what Plan first and Ask do.",
+            vec![row("Use Shift-Tab for Plan first and Ask", switch, cx)],
             cx,
         )
     }

@@ -620,7 +620,8 @@ fn step(app: &Entity<Threadbear>, cmd: &Value, window: &mut Window, cx: &mut App
             Ok(json!("ok"))
         }
         "tab" => {
-            window.press("tab", cx);
+            // `"shift": true` is Shift-Tab: Plan first, Ask, off (turn_modes.rs).
+            window.press(if cmd["shift"].as_bool() == Some(true) { "shift-tab" } else { "tab" }, cx);
             Ok(json!("ok"))
         }
         "escape" => {

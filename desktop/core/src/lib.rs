@@ -70,6 +70,7 @@ pub mod thread_link;
 pub mod pinned_panels;
 pub mod thread_panels;
 pub mod transcript;
+pub mod turn_modes;
 pub mod updates;
 pub mod usage;
 pub mod wait_for;

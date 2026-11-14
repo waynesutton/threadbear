@@ -132,6 +132,9 @@ pub struct Saved {
     /// file. Off, it waits for ⌘S or Save, and leaving it asks. None is on.
     #[serde(rename = "filesSaveAutomatically")]
     pub files_save_automatically: Option<bool>,
+    /// `turnModesEnabled` (TurnModes): Shift-Tab steps the box through Plan
+    /// first and Ask. None is on.
+    pub turn_modes_enabled: Option<bool>,
 }
 
 /// The settings file: where it is and what's in it. Reading is at launch only;
@@ -225,6 +228,10 @@ impl Settings {
 
     pub fn edits_like_an_editor(&self) -> bool {
         self.saved.files_edit_like_an_editor.unwrap_or(true)
+    }
+
+    pub fn turn_modes_enabled(&self) -> bool {
+        self.saved.turn_modes_enabled.unwrap_or(true)
     }
 
     pub fn saves_files_automatically(&self) -> bool {

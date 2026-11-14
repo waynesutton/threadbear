@@ -486,7 +486,7 @@ fn row_debug_events() -> Vec<Event> {
 #[test]
 fn testOriginIsReadAndCarriedToTheRow() {
     let e = event(1, "user.message", json!({"text": "Check your change.", "images": [], "origin": "runner"}));
-    assert_eq!(e.payload, EventPayload::UserMessage { text: "Check your change.".into(), images: vec![], origin: Some("runner".into()), answers: vec![], edit_of: None, review: None });
+    assert_eq!(e.payload, EventPayload::UserMessage { text: "Check your change.".into(), images: vec![], origin: Some("runner".into()), answers: vec![], edit_of: None, review: None, mode: None });
     let model = from_events(vec![e, user(2, "Thanks")]);
     let (RowContent::User(runner), RowContent::User(mike)) = (&model.items()[0].content, &model.items()[1].content) else { panic!("users") };
     assert!(runner.is_from_runner());

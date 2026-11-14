@@ -1435,7 +1435,7 @@ pub enum EventPayload {
     /// resume after a restart); `edit_of` is the seq of the message this one
     /// replaced; `review` is Mike's answer to a review, when the runner sent
     /// it for one.
-    UserMessage { text: String, images: Vec<ImageRef>, origin: Option<String>, answers: Vec<AskAnswer>, edit_of: Option<i64>, review: Option<ReviewAnswer> },
+    UserMessage { text: String, images: Vec<ImageRef>, origin: Option<String>, answers: Vec<AskAnswer>, edit_of: Option<i64>, review: Option<ReviewAnswer>, mode: Option<String> },
     /// `summary`: the turn's summary, written by the runner from end_turn.
     /// `gives_way`: on a summary, with bullet replies off. `final_reply`:
     /// One reply's reply, the agent's message after end_turn.
@@ -1536,6 +1536,8 @@ struct TextFields {
     origin: Option<String>,
     answers: Vec<AskAnswer>,
     edit_of: Option<i64>,
+    /// "ask" (or an older app's "plan"): sent in a Shift-Tab mode.
+    mode: Option<String>,
     review_id: Option<String>,
     review_response: Option<ReviewDraft>,
     summary: bool,
@@ -1554,6 +1556,7 @@ impl TextFields {
             origin: string(c, "origin"),
             answers: lossy(c, "answers", AskAnswer::decode),
             edit_of: lenient_int(c, "editOf"),
+            mode: string(c, "mode"),
             review_id: string(c, "reviewId"),
             review_response: c.get("reviewResponse").and_then(ReviewDraft::decode),
             summary: boolean(c, "summary").unwrap_or(false),
@@ -1571,7 +1574,7 @@ fn decode_payload(type_: &str, c: &Object) -> Result<EventPayload, ()> {
         "user.message" => {
             let f = TextFields::decode(c);
             let review = ReviewAnswer::parse(&f.text, f.review_id.as_deref(), f.review_response.as_ref());
-            EventPayload::UserMessage { text: f.text, images: f.images, origin: f.origin, answers: f.answers, edit_of: f.edit_of, review }
+            EventPayload::UserMessage { text: f.text, images: f.images, origin: f.origin, answers: f.answers, edit_of: f.edit_of, review, mode: f.mode }
         }
         "assistant.text" => {
             let f = TextFields::decode(c);
