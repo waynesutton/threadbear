@@ -101,3 +101,20 @@ test('the librarian is never shown a table for a thread not already at it', asyn
   assert.ok(!prompt.includes('Secret crew'));
   void plain;
 });
+
+test("a bear's thread put in a table seats the bear; a table gets the table icon", async () => {
+  const s = await setup();
+  const d = await s.bears.create({ name: 'Designer', tidy: false });
+  const t = s.tables.create({ title: 'Crew', bears: ['Researcher'] });
+  const { thread } = s.h.runner.create({ text: 'hi', cwd: d.folder });
+  s.projects.onJoined = (_id, cwd, joined) => void s.tables.seatFromThread(cwd, joined);
+  s.projects.changeMembership(thread.id, { add: [t.id], by: 'mike' });
+  assert.deepEqual(s.projects.get(t.id).project.table?.bears, [s.r.id, d.id]);
+  s.projects.changeMembership(thread.id, { remove: [t.id], by: 'mike' });
+  assert.deepEqual(s.projects.get(t.id).project.table?.bears, [s.r.id, d.id], 'leaving keeps the seat');
+  const other = s.h.runner.create({ text: 'hi', cwd: tmpDir() }).thread;
+  s.projects.changeMembership(other.id, { add: [t.id], by: 'mike' });
+  assert.equal(s.projects.get(t.id).project.table?.bears.length, 2, 'not a bear: nobody new is seated');
+  await new Promise((r) => setTimeout(r, 50));
+  assert.equal(s.projects.get(t.id).project.icon?.symbol, 'person.3');
+});

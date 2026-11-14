@@ -98,9 +98,6 @@ It comes from reading code, not from running anything, so "(unverified)" means n
 | `sidebar.newthread` | New thread button | Compose icon, lit while drafting | Drawn button with `Tooltip`. | build | S | `SidebarView` |
 | `sidebar.row` | Thread row | Project tile, title, project line; bold if unread or needs you | Custom row in a virtual list. | build | M | `SidebarView`, `SidebarRow` |
 | `sidebar.row.marks` | Row left marks | Blue dot, tick | Drawn. The Swift app's dot pop and tick drawing on were passed over by Mike on 13 Nov. | build | S | `SidebarView` |
-| `bears.tile` | Bear tiles | A bear's threads show its icon on its colour where the folder tile would be; the head bear shows a crown until it has an icon | Draw the tile from the bear fields the runner sends with each thread (experiment bears). | runner | S | `SidebarView`, `BearList` |
-| `bears.colour` | Bear Colour menu | A bear thread's row menu picks the bear's colour, with the banner saying it's changing | A menu item on the row calling `bears.update`, shown while it lands. | runner | S | `SidebarView` (`BearColorMenu`) |
-| `bears.mention` | @ bear picker | Typing @ in the message box lists bears with what each does; Tab or Return fills the name | A popover over the composer's cursor reading `bears.list`. | build | M | `ComposerView`, `BearPicker` |
 | `sidebar.row.origin` | Origin mark | Tool, clock, pawprint or books before the project, hover says why | Icon with `Tooltip`. | build | S | `SidebarView` |
 | `sidebar.row.status` | Row right status | Working plus timer, Failed, Waiting for connection, Stopped, Waiting for room, Woke up, sub-agent spinner, time | Drawn, with the shared spinner and a ticking timer. | build | M | `SidebarView` |
 | `sidebar.row.lasthover` | Last-message hover | Hover the project line for what you last said | `Tooltip`. | kit | S | `SidebarView` |
@@ -493,6 +490,10 @@ Size is `none` throughout: the planning docs don't size these, and work the app 
 | `planned.exp.acpagents` | ACP agents (`acpAgents`) | OpenCode and Cursor threads | Drive every provider choice from `ProviderInfo` rather than hardcoding two, and don't copy the web's `modelLabel`. | build | none | none |
 | `planned.exp.cardreviewer` | Card reviewer (`cardReviewer`) | Opus pre-reviews Auto cards | No new UI: a transcript note says "Allowed by the reviewer". | build | none | none |
 | `planned.exp.fastmode` | Fast mode (`fastMode`) | Standard or Fast per Claude thread, `/fast` | The Speed row in `composer.modelpicker` and a chip suffix. | build | none | none |
+| `bears.tile` | Bear tiles (`bears`) | A bear's threads show its icon on its colour where a folder would be; a crown for the head bear | Draw `ThreadSummary.bear` in the sidebar row's tile (Swift: `BearTile`). | build | none | `BearTile` |
+| `bears.colour` | Bear Colour (`bears`) | Pick a bear's tile colour from its thread's menu | A Bear Colour submenu on a bear thread's row calling `bears.update { color }`, behind a busy key. | build | none | `BearColorMenu` |
+| `bears.mention` | @ bear picker (`bears`) | Typing @ lists bears from `bears.list`; picking one writes `@Name` | A list over the cursor like the / list, only for messages going to this runner, leaving modified keys to the composer. | build | none | `BearPicker` |
+| `bears.tablepage` | A table's bears (`tables`) | The table's project page lists the bears at it | A section on the project page from `Project.table` and `bears.list`. | build | none | `TableBearsSection` |
 
 ## Route counts
 

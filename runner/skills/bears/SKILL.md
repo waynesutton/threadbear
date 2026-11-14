@@ -95,4 +95,4 @@ To import one: `tb bears new` for each bear, then `schedule_message` with `new_t
 
 ## Tables
 
-A table is a group of bears around one goal, with a host thread Wayne reads (experiment tables). `tb tables --help` has the commands. At a table, pass work with `tb bears ask <bear> "..."` from the table's thread. Each Wayne message allows at most `maxTurns` bear replies (default 6); after that, stop and sum up.
+A table is a group of bears around one goal, with a host thread Wayne reads (experiment tables). `tb tables --help` has the commands. At a table, pass work with `tb bears ask <bear> "..."` from the table's thread. To seat a bear, put one of its threads in the table's project, or run `tb tables seat <table> --add <bear>`. The table's project page, and the page of any project it's a Part of, list the bears at it. Each Wayne message allows at most `maxTurns` bear replies (default 6); after that, stop and sum up.

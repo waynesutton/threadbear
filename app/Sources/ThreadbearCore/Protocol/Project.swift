@@ -106,6 +106,9 @@ public struct Project: Sendable, Hashable, Decodable, Identifiable {
     /// The project it's a part of (docs/protocol.md, Projects, "Parts"),
     /// nil for a project of its own and from a runner before parts.
     public var parentId: String?
+    /// A table of bears (docs/protocol.md, "Tables"): who sits at it. Nil
+    /// for any other project, and from a runner without tables.
+    public var table: ProjectTable?
 
     public init(
         id: String, title: String, folders: [String] = [], goals: String = "", state: String = "", notes: String = "",
@@ -157,11 +160,12 @@ public struct Project: Sendable, Hashable, Decodable, Identifiable {
         notion = string(.notion).flatMap { $0.isEmpty ? nil : $0 }
         tasks = (try? c.decodeIfPresent(ProjectTasks.self, forKey: .tasks)).flatMap { $0 }
         parentId = string(.parentId).flatMap { $0.isEmpty ? nil : $0 }
+        table = (try? c.decodeIfPresent(ProjectTable.self, forKey: .table)).flatMap { $0 }
     }
 
     enum CodingKeys: String, CodingKey {
         case id, title, folders, goals, state, notes, links, createdBy, createdByThread, createdAt, updatedAt, stateUpdatedAt
-        case archived, icon, threadCount, lastActivityAt, notion, tasks, parentId
+        case archived, icon, threadCount, lastActivityAt, notion, tasks, parentId, table
     }
 }
 

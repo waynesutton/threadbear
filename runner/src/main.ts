@@ -521,6 +521,9 @@ async function main(): Promise<void> {
     }
   };
   projects.describeBears = (ids) => ids.map((id) => `${bearName(id)} (${id})`).join(', ');
+  projects.onJoined = (_threadId, cwd, joined) => {
+    if (tablesOn()) tables.seatFromThread(cwd, joined);
+  };
   const mentions = new Mentions({
     home: cfg.home,
     bears,
