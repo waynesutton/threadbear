@@ -375,6 +375,8 @@ fn card(id: &str, thread: &str, fenced: &str, window: &mut Window, cx: &mut App)
             .h(px(PREVIEW_HEIGHT))
             .overflow_hidden()
             .cursor_pointer()
+            .role(Role::Button)
+            .aria_label(PREVIEW_TIP)
             .child(body)
             .when(refreshing, |d| {
                 d.child(div().absolute().inset_0().flex().items_center().justify_center().text_size(px(size::DETAIL)).font_weight(FontWeight::MEDIUM).text_color(label).child("Refreshing in its thread…"))
