@@ -520,7 +520,7 @@ impl SettingsWindow {
 
     fn render_general(&mut self, settings: Option<&RunnerSettings>, window: &mut Window, cx: &mut Context<Self>) -> Vec<AnyElement> {
         // This Mac's own, so they're here while the runner's away too.
-        let mut sections = vec![self.appearance_section(cx), self.panels_section(cx), self.quitting_section(cx), self.notifications_section(cx)];
+        let mut sections = vec![self.appearance_section(cx), self.panels_section(cx), self.files_section(cx), self.quitting_section(cx), self.notifications_section(cx)];
         // The web runtime is this Mac's too (web_runtime.rs), last, so it
         // moves nothing the Swift app's General has.
         let web_runtime = section("settings-web-runtime", "Web runtime", crate::web_runtime::SETTINGS_ABOUT, "check whether it's installed and working, or why a diagram or panel isn't showing.", vec![row("Web runtime", crate::web_runtime::settings_control(cx), cx)], cx);
@@ -681,6 +681,41 @@ impl SettingsWindow {
             "To move a panel, drag its title or tab. With this on, pressing and holding anywhere on a panel picks it up too. A panel with its title hidden can always be moved that way, as it has nothing else to drag it by.",
             "change it for you.",
             vec![row("Move panels by their background", switch, cx)],
+            cx,
+        )
+    }
+
+    /// Files (Wayne's 41275129 and 0a003c67): how a text file opens in the
+    /// side pane, and when what's typed in it is written. This Mac's own.
+    fn files_section(&mut self, cx: &mut Context<Self>) -> AnyElement {
+        let (editor, autosave) = self.app.upgrade().map_or((true, true), |a| {
+            let s = &a.read(cx).settings;
+            (s.edits_files_like_an_editor(), s.saves_files_automatically())
+        });
+        let editor_switch = self.switch("settings-files-editor", editor, "Open text files ready to type in, with line numbers and a line and column bar", cx, |this, on, cx| {
+            this.app
+                .update(cx, |app, cx| {
+                    app.settings.saved.files_edit_like_an_editor = Some(on);
+                    app.save_settings_soon(cx);
+                    cx.notify();
+                })
+                .ok();
+        });
+        let autosave_switch = self.switch("settings-files-autosave", autosave, "Write what you type a second after you stop. Off, ⌘S saves and leaving a file with changes asks first", cx, |this, on, cx| {
+            this.app
+                .update(cx, |app, cx| {
+                    app.settings.saved.files_save_automatically = Some(on);
+                    app.save_settings_soon(cx);
+                    cx.notify();
+                })
+                .ok();
+        });
+        section(
+            "settings-files",
+            "Files",
+            "Edit files like an editor opens a text file in the side pane ready to type in, with line numbers and a bar under it showing the line and column. Save files automatically writes what you type a second after you stop, and ⌘S saves at once; with it off, nothing is written until you save, and leaving a file with changes asks whether to save them.",
+            "change either for you.",
+            vec![row("Edit files like an editor", editor_switch, cx), row("Save files automatically", autosave_switch, cx)],
             cx,
         )
     }

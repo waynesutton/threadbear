@@ -115,6 +115,14 @@ pub struct Saved {
     /// 13 Nov). A panel with its title hidden moves from its background
     /// either way. The GPUI app's own.
     pub panel_background_drag: Option<bool>,
+    /// `filesEditLikeAnEditor` (FileEditorMode, Wayne's 41275129 and
+    /// 0a003c67): a text file opens in the side pane ready to type in, with a
+    /// line and column bar under it. None is on.
+    pub files_edit_like_an_editor: Option<bool>,
+    /// `filesSaveAutomatically` (FileAutosave): what's typed is written a
+    /// second after it stops; off, only ⌘S or Save, and leaving a file with
+    /// changes asks first. None is on.
+    pub files_save_automatically: Option<bool>,
 }
 
 /// The settings file: where it is and what's in it. Reading is at launch only;
@@ -204,6 +212,14 @@ impl Settings {
 
     pub fn asks_before_quitting(&self) -> bool {
         self.saved.ask_before_quitting.unwrap_or(true)
+    }
+
+    pub fn edits_files_like_an_editor(&self) -> bool {
+        self.saved.files_edit_like_an_editor.unwrap_or(true)
+    }
+
+    pub fn saves_files_automatically(&self) -> bool {
+        self.saved.files_save_automatically.unwrap_or(true)
     }
 }
 

@@ -18,17 +18,24 @@ pub(crate) struct PushButton {
     tip: SharedString,
     busy: bool,
     small: bool,
+    disabled: bool,
 }
 
 impl PushButton {
     /// `tip` is its tooltip, and the name the specs click it by.
     pub(crate) fn new(id: impl Into<ElementId>, label: impl Into<SharedString>, tip: impl Into<SharedString>) -> Self {
-        PushButton { id: id.into(), label: label.into(), tip: tip.into(), busy: false, small: false }
+        PushButton { id: id.into(), label: label.into(), tip: tip.into(), busy: false, small: false, disabled: false }
     }
 
     /// Spinning, and not taking clicks, while what it started is under way.
     pub(crate) fn busy(mut self, busy: bool) -> Self {
         self.busy = busy;
+        self
+    }
+
+    /// Greyed, and not taking clicks: there's nothing for it to do now.
+    pub(crate) fn disabled(mut self, disabled: bool) -> Self {
+        self.disabled = disabled;
         self
     }
 
@@ -62,7 +69,12 @@ impl PushButton {
         // way, and twice that while it's pressed.
         let ink = if dark { 1. } else { 0. };
         let filled = base.bg(hsla(0., 0., ink, 0.08)).active(move |s| s.bg(hsla(0., 0., ink, 0.16)));
-        let button = filled.when(busy, |s| s.opacity(0.6).child(Spinner::new().color(label).with_size(px(11.)))).when(!busy, |s| s.on_click(on_click)).child(self.label);
+        let disabled = self.disabled;
+        let button = filled
+            .when(busy, |s| s.opacity(0.6).child(Spinner::new().color(label).with_size(px(11.))))
+            .when(disabled && !busy, |s| s.opacity(0.4))
+            .when(!busy && !disabled, |s| s.on_click(on_click))
+            .child(self.label);
         crate::highlights::tipped(button, self.tip).into_any_element()
     }
 }

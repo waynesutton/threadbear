@@ -530,6 +530,10 @@ impl SidePane {
     /// Shows a section (`choosePanel`), closing a preview over another one.
     pub(crate) fn choose_section(&mut self, thread_id: &str, id: &str, cx: &mut Context<Self>) {
         if self.previews.get(thread_id).is_some_and(|p| p.from != id) {
+            let (again_thread, again_id) = (thread_id.to_owned(), id.to_owned());
+            if !self.may_leave_file(thread_id, move |this, cx| this.choose_section(&again_thread, &again_id, cx), cx) {
+                return;
+            }
             self.leave_edit(thread_id, cx);
             self.previews.remove(thread_id);
         }
@@ -665,16 +669,28 @@ impl SidePane {
     }
 
     pub(crate) fn show_preview(&mut self, mut preview: PanePreview, thread_id: &str, cx: &mut Context<Self>) {
+        // Another file, or none: one with changes not saved is saved first,
+        // or asked about while autosave is off (`mayLeaveFile`).
+        let same_file = preview.file_path().is_some() && self.previews.get(thread_id).and_then(|p| p.file_path()) == preview.file_path();
+        if !same_file {
+            let (again, again_id) = (preview.clone(), thread_id.to_owned());
+            if !self.may_leave_file(thread_id, move |this, cx| this.show_preview(again, &again_id, cx), cx) {
+                return;
+            }
+        }
         // It takes an explanation's place, as a preview of its own would.
         self.stop_explaining(thread_id);
         // A file being worked on is saved before anything takes its place.
         self.leave_edit(thread_id, cx);
         preview.opened = self.previews.get(thread_id).map_or(0, |p| p.opened) + 1;
         // A Markdown file opens as its bar's menu last left it, on this
-        // runner's machine (`MarkdownView.opensRaw`).
+        // runner's machine (`MarkdownView.opensRaw`); any other text file
+        // ready to type in, while Edit files like an editor is on.
         let here = self.thread(cx).is_some_and(|t| t.id == thread_id && !t.is_remote());
+        let editor_mode = self.file_modes(cx).0;
         if let Some(path) = preview.file_path() {
-            preview.editing = here && threadbear_core::text_file::MarkdownView::opens_raw(path, self.files.prefs.markdown_view);
+            let raw = if core::is_markdown(path) { threadbear_core::text_file::MarkdownView::opens_raw(path, self.files.prefs.markdown_view) } else { editor_mode && crate::files::opens_ready_to_type(path) };
+            preview.editing = here && raw;
         }
         self.chosen.entry(thread_id.to_owned()).or_insert_with(|| preview.from.clone());
         self.previews.insert(thread_id.to_owned(), preview);
@@ -689,6 +705,10 @@ impl SidePane {
     /// Back: through the folders and files Mike came through in the browser,
     /// then out to the section (`previewBack`).
     pub(crate) fn preview_back(&mut self, thread_id: &str, cx: &mut Context<Self>) {
+        let again = thread_id.to_owned();
+        if !self.may_leave_file(thread_id, move |this, cx| this.preview_back(&again, cx), cx) {
+            return;
+        }
         let Some(current) = self.previews.get(thread_id).cloned() else { return };
         self.leave_edit(thread_id, cx);
         match current.back.split_last() {
@@ -710,6 +730,10 @@ impl SidePane {
     }
 
     pub(crate) fn close_preview(&mut self, thread_id: &str, cx: &mut Context<Self>) {
+        let again = thread_id.to_owned();
+        if !self.may_leave_file(thread_id, move |this, cx| this.close_preview(&again, cx), cx) {
+            return;
+        }
         self.leave_edit(thread_id, cx);
         self.previews.remove(thread_id);
         self.remember(thread_id);
@@ -1632,7 +1656,9 @@ impl SidePane {
             let thread_id = thread.id.clone();
             let back_to = preview.back.last().map_or_else(|| self.section_title(thread, &preview.from), |b| b.title.clone());
             row = row.child(self.header_button("hl-back", "chevron.left", format!("Back to {back_to}"), p, cx, move |this, cx| this.preview_back(&thread_id.clone(), cx)));
-            row = row.child(div().flex_1().min_w_0().truncate().text_size(px(style::size::LABEL)).font_semibold().child(preview.title.clone()));
+            // A dot while it has typing that isn't in the file yet (WindowDock's title).
+            let title = if preview.file_path().is_some() && self.file_unsaved(&thread.id) { format!("\u{25cf} {}", preview.title) } else { preview.title.clone() };
+            row = row.child(div().flex_1().min_w_0().truncate().text_size(px(style::size::LABEL)).font_semibold().child(title));
             row = row.child(self.preview_buttons(preview, thread, p, cx));
         } else {
             row = row.child(div().flex_1().min_w_0().truncate().text_size(px(style::size::LABEL)).font_semibold().child(self.section_title(thread, section)));

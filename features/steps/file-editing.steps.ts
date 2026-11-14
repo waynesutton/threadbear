@@ -17,9 +17,11 @@ Then('the pane\'s file can be edited', async function (this: ThreadbearWorld) {
   await this.until('the bar to offer the pencil', (d) => pane(d)?.previewMode === 'reading');
 });
 
+// A file opens ready to type in unless Edit files like an editor is off:
+// then the pencil.
 When('I start editing the pane\'s file', async function (this: ThreadbearWorld) {
-  await this.until('the bar to offer the pencil', (d) => pane(d)?.previewMode === 'reading');
-  await this.app.do({ cmd: 'preview', edit: true });
+  const d = await this.until('the bar to offer the pencil, or the file being edited', (d) => (pane(d)?.previewMode === 'reading' || editing(d)) && d);
+  if (pane(d)?.previewMode === 'reading') await this.app.do({ cmd: 'preview', edit: true });
 });
 
 Then('the pane\'s file is being edited', async function (this: ThreadbearWorld) {
@@ -67,4 +69,35 @@ When('I take the file\'s side in the pane', async function (this: ThreadbearWorl
 
 Then('the pane\'s file reads {string}', async function (this: ThreadbearWorld, words: string) {
   await this.until(`the editor to read "${words}"`, (d) => pane(d)?.previewText?.trim() === words);
+});
+
+// The bar under the text (`EditorStatusBar`): where the cursor is, and
+// whether what's typed is in the file yet. Both parts are matched.
+Then('the pane\'s status bar says {string}', async function (this: ThreadbearWorld, words: string) {
+  await this.until(`the status bar to say "${words}"`, (d) => pane(d)?.previewStatus?.includes(words));
+});
+
+Then('the pane\'s file is marked unsaved', async function (this: ThreadbearWorld) {
+  await this.until('the dot by the file\'s name', (d) => pane(d)?.previewUnsaved === true);
+});
+
+Then('the pane\'s file isn\'t marked unsaved', async function (this: ThreadbearWorld) {
+  await this.until('no dot by the file\'s name', (d) => pane(d)?.previewUnsaved === false);
+});
+
+// A moment longer than autosave would take, then still as it was.
+Then('the file {string} on disk still ends with {string}', async function (this: ThreadbearWorld, relative: string, words: string) {
+  const file = path.join(await threadFolder(this), relative);
+  await new Promise((r) => setTimeout(r, 1800));
+  const text = fs.readFileSync(file, 'utf8').trimEnd();
+  if (!text.endsWith(words)) throw new Error(`${relative} ends ${JSON.stringify(text.slice(-40))}`);
+});
+
+// Save, Don't Save or Cancel, given before Back, as a scripted app can't
+// click an alert (the Swift app's `scriptedAnswer`).
+When('I press Back in the pane, answering {string}', async function (this: ThreadbearWorld, answer: string) {
+  const name = { 'Save': 'save', 'Don\'t Save': 'discard', 'Cancel': 'cancel' }[answer];
+  if (!name) throw new Error(`answer must be Save, Don't Save or Cancel, not ${answer}`);
+  await this.app.do({ cmd: 'preview', leaveAnswer: name });
+  await this.app.do({ cmd: 'preview', back: true });
 });

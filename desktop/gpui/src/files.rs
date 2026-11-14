@@ -120,11 +120,14 @@ pub(crate) struct FilesState {
     /// The window the pane draws in, for putting a file's text in its editor
     /// after a save or a check that came later.
     pub(crate) window: Option<AnyWindowHandle>,
+    /// A script's answer to Save, Don't Save or Cancel, for the next time
+    /// leaving a file asks (`EditedFiles.scriptedAnswer`).
+    pub(crate) leave_answer: Option<crate::file_edit::LeaveAnswer>,
 }
 
 impl Default for FilesState {
     fn default() -> Self {
-        FilesState { open: HashMap::new(), known_folders: HashSet::new(), reading_style: None, prefs: crate::files_store::load(), last_query: String::new(), focus: None, window: None }
+        FilesState { open: HashMap::new(), known_folders: HashSet::new(), reading_style: None, prefs: crate::files_store::load(), last_query: String::new(), focus: None, window: None, leave_answer: None }
     }
 }
 
@@ -717,7 +720,14 @@ impl SidePane {
                 row = row.child(self.markdown_menu(preview.editing, p, cx));
             } else {
                 let (editing, id) = (preview.editing, thread.id.clone());
-                let (symbol, tip) = if editing { ("checkmark", words::DONE_TIP) } else { ("pencil", words::EDIT_TIP) };
+                // Edit files like an editor reads with the eye, and ⌘S saves.
+                let editor_mode = self.file_modes(cx).0;
+                let (symbol, tip) = match (editing, editor_mode) {
+                    (true, true) => ("eye", "Stop editing and read it. What you typed is saved."),
+                    (true, false) => ("checkmark", words::DONE_TIP),
+                    (false, true) => ("pencil", "Edit the file here. ⌘S saves."),
+                    (false, false) => ("pencil", words::EDIT_TIP),
+                };
                 row = row.child(self.header_button("hl-edit", symbol, tip.to_owned(), p, cx, move |this, cx| this.request_editing(&id, !editing, cx)));
             }
         }
@@ -826,7 +836,8 @@ impl SidePane {
         }
         let path = open.path.clone();
         let language = core::code_language(&path).filter(|_| open.size < HIGHLIGHT_LIMIT as i64);
-        let edit = FileEdit::open(&thread.id, &path, language, window, cx);
+        let editor_mode = self.file_modes(cx).0;
+        let edit = FileEdit::open(&thread.id, &path, language, editor_mode, window, cx);
         if let Some(open) = self.files.open.get_mut(&thread.id) {
             open.edit = Some(edit);
         }
@@ -1089,6 +1100,12 @@ impl SidePane {
                     pane.insert("previewMode".into(), json!(mode));
                 }
                 if let Some(edit) = open.edit.as_ref().filter(|_| preview.editing) {
+                    // The bar under the text, and the dot by the file's name.
+                    if edit.editor_mode && edit.session.takes_typing() {
+                        let (line, column) = edit.cursor(cx);
+                        pane.insert("previewStatus".into(), json!(format!("Line {line}, Column {column} \u{b7} {}", edit.state_words(self.file_modes(cx).1))));
+                    }
+                    pane.insert("previewUnsaved".into(), json!(edit.dirty));
                     pane.insert("previewKind".into(), json!(if core::is_markdown(path) || core::code_language(path).is_none() { "text" } else { "code" }));
                     pane.insert("previewText".into(), json!(edit.editor.read(cx).value().chars().take(4000).collect::<String>()));
                     let note = if edit.session.conflict.is_some() { Some(threadbear_core::text_file::words::CONFLICT.to_owned()) } else { edit.session.note.clone() };
@@ -1200,6 +1217,12 @@ pub(crate) fn preview_command(side: &Entity<SidePane>, thread: &ThreadSummary, c
         let format = side.update(cx, |pane, cx| pane.copy_open_picture(cx)).ok_or("no picture is showing")?;
         return Ok(json!(format!("ok copied {format}")));
     }
+    if let Some(name) = cmd["leaveAnswer"].as_str() {
+        // Save, Don't Save or Cancel, for the next time leaving a file asks.
+        let answer = crate::file_edit::LeaveAnswer::from_name(name).ok_or("leaveAnswer is save, discard or cancel")?;
+        side.update(cx, |pane, _| pane.files.leave_answer = Some(answer));
+        return Ok(json!(format!("ok will answer {name}")));
+    }
     let id = thread.id.clone();
     // How the editor and the file on disk end, as the Swift app answers.
     let ends = |side: &Entity<SidePane>, cx: &App| -> String {
@@ -1297,6 +1320,14 @@ pub(crate) fn preview_command(side: &Entity<SidePane>, thread: &ThreadSummary, c
     }
     let shown = side.read(cx).previews.get(&thread.id).map_or_else(|| "no preview".to_owned(), |p| format!("showing {}", p.title));
     Ok(json!(format!("ok {shown}")))
+}
+
+/// Whether a file opens ready to type in with Edit files like an editor on:
+/// text the pane shows as text, not Markdown (its own menu says) or a page
+/// (`TextFileView.shows`, `PreviewRules.viewer != .web`). One that turns out
+/// too big or cut off is only read: its bar has no pencil either.
+pub(crate) fn opens_ready_to_type(path: &str) -> bool {
+    core::viewer_for_path(path) == Viewer::Text && !core::is_markdown(path) && media_kind(path).is_none()
 }
 
 /// The Files panel has no preview stored: its section shows the thread's folder.

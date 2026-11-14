@@ -44,7 +44,8 @@ When('I open {string} in the thread\'s folder in the pane', async function (this
 });
 
 Then('the pane is showing the file {string}', async function (this: ThreadbearWorld, relative: string) {
-  await this.until(`the preview line to name ${relative}`, (d) => previewLine(d)?.startsWith('file ') && previewLine(d)?.endsWith(relative));
+  // A file open to type in says so after its path.
+  await this.until(`the preview line to name ${relative}`, (d) => previewLine(d)?.startsWith('file ') && previewLine(d)?.replace(/ \(editing\)$/, '').endsWith(relative));
 });
 
 When('I press Back in the pane', async function (this: ThreadbearWorld) {
