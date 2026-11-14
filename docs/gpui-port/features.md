@@ -98,6 +98,9 @@ It comes from reading code, not from running anything, so "(unverified)" means n
 | `sidebar.newthread` | New thread button | Compose icon, lit while drafting | Drawn button with `Tooltip`. | build | S | `SidebarView` |
 | `sidebar.row` | Thread row | Project tile, title, project line; bold if unread or needs you | Custom row in a virtual list. | build | M | `SidebarView`, `SidebarRow` |
 | `sidebar.row.marks` | Row left marks | Blue dot, tick | Drawn. The Swift app's dot pop and tick drawing on were passed over by Mike on 13 Nov. | build | S | `SidebarView` |
+| `bears.tile` | Bear tiles | A bear's threads show its icon on its colour where the folder tile would be; the head bear shows a crown until it has an icon | Draw the tile from the bear fields the runner sends with each thread (experiment bears). | runner | S | `SidebarView`, `BearList` |
+| `bears.colour` | Bear Colour menu | A bear thread's row menu picks the bear's colour, with the banner saying it's changing | A menu item on the row calling `bears.update`, shown while it lands. | runner | S | `SidebarView` (`BearColorMenu`) |
+| `bears.mention` | @ bear picker | Typing @ in the message box lists bears with what each does; Tab or Return fills the name | A popover over the composer's cursor reading `bears.list`. | build | M | `ComposerView`, `BearPicker` |
 | `sidebar.row.origin` | Origin mark | Tool, clock, pawprint or books before the project, hover says why | Icon with `Tooltip`. | build | S | `SidebarView` |
 | `sidebar.row.status` | Row right status | Working plus timer, Failed, Waiting for connection, Stopped, Waiting for room, Woke up, sub-agent spinner, time | Drawn, with the shared spinner and a ticking timer. | build | M | `SidebarView` |
 | `sidebar.row.lasthover` | Last-message hover | Hover the project line for what you last said | `Tooltip`. | kit | S | `SidebarView` |

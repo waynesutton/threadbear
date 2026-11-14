@@ -21,5 +21,11 @@
   "getting-help": "lifebuoy",
   "finish-setting-up": "compass",
   "instructions": "push-pin",
-  "open-anything": "lightning"
+  "open-anything": "lightning",
+  "files-and-terminal": "terminal-window",
+  "git": "git-fork",
+  "prints": "book-open",
+  "profiles": "user-circle",
+  "skills": "code",
+  "notes": "copy"
 }

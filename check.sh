@@ -299,7 +299,10 @@ runner_unit_tests() {
   local name="runner unit tests" dir="$ROOT/runner"
   local log="$LOGS/runner-unit-tests.log" list="$LOGS/runner-unit-tests.failed"
   local start=$SECONDS
-  local run=(node --import=./test/helpers/clean-env.ts --test --test-timeout=300000 --test-force-exit --test-reporter=spec)
+  # The same run as package.json's test script, which a runner update uses
+  # (update.test.ts holds them to it): four files at a time leaves room for
+  # threads and the tests' own git subprocesses on a busy Mac.
+  local run=(node --import=./test/helpers/clean-env.ts --test --test-concurrency=4 --test-timeout=300000 --test-force-exit --test-reporter=spec)
   if (cd "$dir" && "${run[@]}" --test-reporter-destination=stdout \
       --test-reporter=./test/helpers/failed-files-reporter.mjs --test-reporter-destination="$list" \
       "test/unit/**/*.test.ts") >"$log" 2>&1; then

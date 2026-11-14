@@ -1089,7 +1089,7 @@ struct BearColorMenu: View {
     ]
 
     var body: some View {
-        Menu("Bear Colour", systemImage: "paintpalette") {
+        IconMenu("Bear Colour", systemImage: "paintpalette") {
             ForEach(Self.colors, id: \.name) { item in
                 let current = (bear.color?.lowercased() ?? nil) == item.hex?.lowercased()
                 Button(item.name, systemImage: current ? "checkmark" : "circle.fill") {
