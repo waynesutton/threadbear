@@ -152,6 +152,15 @@ Feature: The slash command palette
     Then the composer says "/code-review "
     And the palette is closed
 
+  # The X at the right of the palette's search field (Wayne, 11 Nov).
+  @composer.slash.keys
+  Scenario: The X closes the palette, as Escape does
+    When I type "/mod" in the composer
+    Then the palette is open on "All"
+    When I press "Close the palette"
+    Then the palette is closed
+    And the composer says "/mod"
+
   @composer.slash.keys
   Scenario: Escape closes it until the words change
     When I type "/mod" in the composer

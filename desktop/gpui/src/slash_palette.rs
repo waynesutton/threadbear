@@ -435,6 +435,30 @@ impl Composer {
                     .tip("Narrows every category by name and description. Arrows move, Return picks, Esc closes")
                     .child(Input::new(&self.palette_search).appearance(false).small().cleanable(true).pl(px(0.))),
             )
+            // Closes the palette, as Esc does (Wayne, 11 Nov).
+            .child(
+                div()
+                    .id("slash-close")
+                    .flex_none()
+                    .size(px(18.))
+                    .flex()
+                    .items_center()
+                    .justify_center()
+                    .rounded(px(4.))
+                    .cursor_pointer()
+                    .text_color(muted)
+                    .hover(|s| s.text_color(cx.theme().foreground))
+                    .test_support()
+                    .role(Role::Button)
+                    .aria_label("Close the palette")
+                    .tip("Close the palette (Esc)")
+                    .on_click(cx.listener(|this, _: &ClickEvent, window, cx| {
+                        this.palette_key(PaletteKey::Escape, window, cx);
+                        this.focus(window, cx);
+                        crate::web_panels::keyboard_to_app(window);
+                    }))
+                    .child(crate::icons::symbol("xmark").with_size(px(11.))),
+            )
             .into_any_element()
     }
 
