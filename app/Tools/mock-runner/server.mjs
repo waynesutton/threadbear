@@ -27,6 +27,10 @@ import { SAMPLE_THREADS } from '../../../runner/src/samples.ts';
 import { fileURLToPath } from 'node:url';
 import { reviewDraft, reviewReply, sameDraft } from '../../../runner/src/reviews.ts';
 import { authProof, isNonce, newNonce } from '../../../runner/src/rpc-auth.ts';
+// Docs, todo lists and boards drawn as the runner draws them, so a click in
+// a list changes the same lines the real one does.
+import { renderDoc } from '../../../runner/src/page-doc.ts';
+import { moveCard, renderBoard, renderTodo, toggleItem } from '../../../runner/src/page-list.ts';
 
 // What a waiting (untrusted) demo patch gives once it's trusted, by file.
 const waitingPatchGives = new Map();
@@ -422,6 +426,8 @@ let connectors = {
   ],
 };
 addDemoProjects();
+// A doc, a todo list and a board in the Threadbear project, for its page.
+addDemoPrintLists();
 // The experiments the mock's hello says are on: Open Anything (⌘K) unless
 // TB_MOCK_OPEN_ANYTHING_OFF, for the spec that it's gone while off, and
 // Decisions on the Projects page with TB_MOCK_DECISIONS.
@@ -1697,9 +1703,15 @@ async function dispatch(client, method, p) {
       return { page: savePageVersion(x, diagramPage(x.page.title, p.mermaid), { mermaid: p.mermaid }, 'user') };
     }
     case 'pages.toggleItem':
-    case 'pages.moveCard':
-      knownPage(p.pageId);
-      throw rpcError(-32602, `${p.pageId} isn't a todo list or a board`);
+    case 'pages.moveCard': {
+      const x = knownPage(p.pageId);
+      const kind = method === 'pages.toggleItem' ? 'todo' : 'board';
+      if (x.page.kind !== kind) throw rpcError(-32602, `${p.pageId} isn't a ${kind === 'todo' ? 'todo list' : 'board'}`);
+      if (p.version !== x.page.version) throw rpcError(-32602, `${x.page.title} changed since version ${p.version}. It's on version ${x.page.version} now.`);
+      const before = x.sources.get(x.page.version)?.markdown ?? '';
+      const markdown = kind === 'todo' ? toggleItem(before, p.item) : moveCard(before, p.card, p.to);
+      return { page: savePageVersion(x, listPage(x.page, markdown, x.page.version + 1), { markdown }, 'user') };
+    }
     case 'pages.restoreVersion': {
       const x = knownPage(p.pageId);
       if (!x.versions.includes(p.version)) throw rpcError(-32602, `${p.pageId} no longer keeps version ${p.version}`);
@@ -4410,4 +4422,41 @@ for (const signal of ['SIGINT', 'SIGTERM']) {
     wss.close();
     process.exit(0);
   });
+}
+
+/** A doc Print's page, drawn as the runner draws one. */
+function docPage(title, markdown) {
+  return renderDoc(title, markdown, 'doc');
+}
+
+/** A todo list or board's page at `version`, whose links name that version. */
+function listPage(page, markdown, version) {
+  const meta = `${page.kind === 'todo' ? 'Todo list' : 'Board'} · v${version}`;
+  return page.kind === 'todo' ? renderTodo(page.title, markdown, meta, version) : renderBoard(page.title, markdown, meta, version);
+}
+
+// A doc, a todo list and a board the invoice export thread made, in the
+// Threadbear project, so its page lists Prints and a click in a list saves a
+// version (features/prints.feature).
+function addDemoPrintLists() {
+  if (!pagesOn()) return;
+  const tb = projects.find((pr) => pr.title === 'Threadbear');
+  const owner = threads.has('demo_invoice_export') ? 'demo_invoice_export' : '';
+  const made = (minutesAgo) => new Date(Date.now() - minutesAgo * 60_000).toISOString();
+  const inTb = tb ? [{ id: tb.id, by: 'agent' }] : [];
+  const notes = '# Launch notes\n\nThe 1.4 release, going out Thursday.\n\n## What ships\n\n- Prints on the project page\n- Faster thread switching\n';
+  const doc = addMockPage({ id: 'pg_launch_notes', title: 'Launch notes', summary: 'What ships in the 1.4 release and what to tell people.', kind: 'doc', ownerThread: owner, projects: inTb, createdAt: made(400), updatedAt: made(50) }, docPage('Launch notes', notes), { markdown: notes });
+  // Three versions, so Versions has older ones.
+  for (let n = 2; n <= 3; n++) {
+    doc.versions.push(n);
+    doc.sources.set(n, { markdown: notes });
+    writePageFile(doc.page.id, n, docPage('Launch notes', notes));
+  }
+  doc.page.version = 3;
+  const todo = '# Before\n\n- [x] Freeze the branch\n- [ ] Write the tests\n- [ ] Update the guide\n\n# On the day\n\n- [ ] Post the changelog\n';
+  const list = { id: 'pg_launch_checklist', title: 'Launch checklist', summary: 'What has to happen before Thursday.', kind: 'todo', ownerThread: owner, projects: inTb, createdAt: made(300), updatedAt: made(120) };
+  addMockPage(list, listPage(list, todo, 1), { markdown: todo });
+  const cards = '# To review\n\n- Prints menu icons\n- Settings switch\n\n# Ready\n\n- Side pane follows versions\n';
+  const board = { id: 'pg_pr_board', title: 'PR board', summary: 'Open pull requests by where they are.', kind: 'board', ownerThread: owner, projects: inTb, createdAt: made(500), updatedAt: made(300) };
+  addMockPage(board, listPage(board, cards, 1), { markdown: cards });
 }

@@ -181,6 +181,13 @@ pub fn try_symbol(name: &str) -> Option<Icon> {
         "gauge.with.dots.needle.33percent" | "gauge.with.dots.needle.100percent" => IconName::Gauge,
         "arrow.down.circle" => IconName::CircleArrowDown,
         "checklist" => IconName::ListChecks,
+        // Prints' kinds and their menus (prints.rs, `Page.symbol`).
+        "chart.bar" => IconName::ChartColumn,
+        "rectangle.3.group" => IconName::LayoutDashboard,
+        "doc.text.magnifyingglass" => IconName::FileSearch,
+        "point.3.connected.trianglepath.dotted" => IconName::Workflow,
+        "rectangle.split.3x1" => IconName::SquareKanban,
+        "macwindow" => IconName::AppWindow,
         "powerplug" => IconName::Plug,
         // The Runners, Updates and Connectors panels'.
         "line.3.horizontal" => IconName::Menu,

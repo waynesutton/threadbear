@@ -214,6 +214,35 @@ impl Offscreen {
     pub fn stopped(&self) -> bool {
         self.shared.gone.load(Ordering::Acquire)
     }
+
+    /// The page as a PDF at `path`: US Letter (CEF's default paper), its
+    /// backgrounds printed. Chromium's own printToPDF works only headless;
+    /// this is CEF's, which writes the file itself.
+    pub fn print_pdf(&self, path: &str) -> Reply<()> {
+        let (tx, rx) = oneshot::channel();
+        let Some(host) = self.browser.host() else {
+            let _ = tx.send(Err("the page has no host".into()));
+            return rx;
+        };
+        let settings = PdfPrintSettings { print_background: 1, ..Default::default() };
+        let mut done = PdfDone::new(Arc::new(Mutex::new(Some(tx))));
+        host.print_to_pdf(Some(&CefString::from(path)), Some(&settings), Some(&mut done));
+        rx
+    }
+}
+
+wrap_pdf_print_callback! {
+    struct PdfDone {
+        tx: Arc<Mutex<Option<oneshot::Sender<Result<(), String>>>>>,
+    }
+
+    impl PdfPrintCallback {
+        fn on_pdf_print_finished(&self, _path: Option<&CefString>, ok: c_int) {
+            if let Some(tx) = self.tx.lock().ok().and_then(|mut t| t.take()) {
+                let _ = tx.send(if ok == 1 { Ok(()) } else { Err("Chromium couldn't write the PDF".into()) });
+            }
+        }
+    }
 }
 
 impl Drop for Offscreen {

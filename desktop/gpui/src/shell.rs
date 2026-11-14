@@ -23,6 +23,7 @@ pub(crate) const THREADS: &str = "threadbear.threads";
 pub(crate) const MAIN: &str = "threadbear.thread";
 pub(crate) const HIGHLIGHTS: &str = "threadbear.highlights";
 pub(crate) const FILES: &str = "threadbear.files";
+pub(crate) const PRINTS: &str = crate::highlights::PRINTS;
 pub(crate) const PATCHES: &str = "threadbear.patches";
 pub(crate) const BROWSER: &str = crate::agent_browser::BROWSER;
 pub(crate) const USAGE: &str = "threadbear.usage";
@@ -262,6 +263,7 @@ fn panel_symbol(panel: &str) -> Option<&'static str> {
         TERMINAL => "terminal",
         HIGHLIGHTS => "pin",
         FILES => "folder",
+        PRINTS => "doc.richtext",
         BROWSER => "globe",
         PATCHES => "square.dashed",
         // A thread in a panel of its own, as the main panel's.
@@ -453,6 +455,7 @@ impl Threadbear {
             TERMINAL => "Terminal".into(),
             HIGHLIGHTS => "Highlights".into(),
             FILES => "Files".into(),
+            PRINTS => "Prints".into(),
             BROWSER => "Browser".into(),
             PATCHES => "Patches".into(),
             _ => self.pane_thread().and_then(|t| t.panels.iter().flatten().find(|p| p["id"].as_str() == Some(panel)).and_then(|p| p["title"].as_str()).map(String::from)).unwrap_or_else(|| panel.to_string()),
@@ -514,6 +517,7 @@ impl Threadbear {
         let Some(thread) = self.pane_thread() else { return !project_page };
         match panel {
             HIGHLIGHTS | FILES => !project_page,
+            PRINTS => self.shows_prints_rail(&thread),
             // While BrowserBear is on this Mac, as the rail's button.
             BROWSER => !project_page && self.browser_rail(&thread.id, cx).is_some(),
             PATCHES => thread.patches.as_ref().is_some_and(|p| !p.is_empty()),
@@ -1607,7 +1611,7 @@ impl Threadbear {
     /// Whether a panel is one of the side pane's sections: Highlights, Files,
     /// Patches or one of the thread's patch panels (highlights.rs).
     fn is_side_section(&self, panel: &str) -> bool {
-        matches!(panel, HIGHLIGHTS | FILES | PATCHES | BROWSER) || self.pane_thread().is_some_and(|t| t.panels.iter().flatten().any(|p| p["id"].as_str() == Some(panel)))
+        matches!(panel, HIGHLIGHTS | FILES | PATCHES | BROWSER | PRINTS) || self.pane_thread().is_some_and(|t| t.panels.iter().flatten().any(|p| p["id"].as_str() == Some(panel)))
     }
 
     /// One section of the side pane, drawn by a view of its own so two side

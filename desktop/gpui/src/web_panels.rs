@@ -103,6 +103,8 @@ pub(crate) struct WebPanels {
     left: Vec<String>,
     /// Whether something could be over the pages in the last frame.
     covered: bool,
+    /// The app, for a click in a todo list or board Print (prints.rs).
+    app: Option<WeakEntity<Threadbear>>,
 }
 
 struct Shared(Entity<WebPanels>);
@@ -110,7 +112,7 @@ impl Global for Shared {}
 
 pub(crate) fn init(cx: &mut App) {
     let selections = load_selections();
-    let entity = cx.new(|_| WebPanels { pages: Vec::new(), failed: HashMap::new(), making: HashSet::new(), convex: HashMap::new(), selections, renewing: HashSet::new(), client: None, left: Vec::new(), covered: false });
+    let entity = cx.new(|_| WebPanels { pages: Vec::new(), failed: HashMap::new(), making: HashSet::new(), convex: HashMap::new(), selections, renewing: HashSet::new(), client: None, left: Vec::new(), covered: false, app: None });
     cx.set_global(Shared(entity.clone()));
     // The app draws the panels, so it's told when a page, a Convex panel or
     // the runtime changes.
@@ -123,7 +125,11 @@ pub(crate) fn init(cx: &mut App) {
     .detach();
     cx.observe_new(move |app: &mut Threadbear, _: Option<&mut Window>, cx: &mut Context<Threadbear>| {
         let client = app.client.clone();
-        entity.update(cx, |p, _| p.client = Some(client));
+        let weak = cx.entity().downgrade();
+        entity.update(cx, |p, _| {
+            p.client = Some(client);
+            p.app = Some(weak);
+        });
         cx.observe(&entity, |_, _, cx| cx.notify()).detach();
         if let Some(runtime) = web_runtime::runtime(cx) {
             cx.observe(&runtime, |_, _, cx| cx.notify()).detach();
@@ -387,6 +393,14 @@ impl WebPanels {
                 crate::open_gate::open_web(&url, cx);
             }
             PanelEvent::Changed => {}
+            // A todo list's box or a board's arrow: the file the preview
+            // shows is the last part of its key (`preview:<n>:<scripts>:<file>`).
+            PanelEvent::Print(url) => {
+                let file = key.strip_prefix("preview:").and_then(|k| k.splitn(3, ':').nth(2)).map(str::to_owned);
+                if let (Some(file), Some(app)) = (file, self.app.as_ref().and_then(|a| a.upgrade())) {
+                    cx.defer(move |cx| app.update(cx, |a, cx| a.handle_print_link(&url, &file, cx)));
+                }
+            }
         }
         let _ = key;
         cx.notify();

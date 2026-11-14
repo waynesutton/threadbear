@@ -120,6 +120,11 @@ pub(crate) fn install(main: &mut Window, cx: &mut App) {
     cx.bind_keys([KeyBinding::new(paste_plain, crate::composer_spelling::PasteAndMatchStyle, None)]);
 }
 
+/// The main window, once it's open (a Print opening from a menu).
+pub(crate) fn main_window(cx: &App) -> Option<AnyWindowHandle> {
+    cx.try_global::<MainWindow>().map(|m| m.0)
+}
+
 fn with_front_window(cx: &mut App, f: impl FnOnce(&mut Window)) {
     if let Some(handle) = cx.active_window() {
         handle.update(cx, |_, window, _| f(window)).ok();

@@ -307,6 +307,7 @@ impl ThreadPane {
         let _ = pane.feed.set_pending(outbox(&pane.summary.id));
         // Its diagrams and pages drawing, and the web runtime (rich_boxes.rs).
         pane._subs.extend(crate::rich_boxes::watch(cx));
+        pane._subs.extend(crate::print_cards::watch(cx));
         pane.load(cx);
         pane.load_buttons(cx);
         pane
@@ -349,6 +350,7 @@ impl ThreadPane {
             _subs: vec![],
         };
         pane._subs.extend(crate::rich_boxes::watch(cx));
+        pane._subs.extend(crate::print_cards::watch(cx));
         pane.load_subagent(cx);
         pane._poll = Some(cx.spawn(async move |this, cx| loop {
             cx.background_executor().timer(Duration::from_secs(3)).await;
@@ -1535,8 +1537,8 @@ impl ThreadPane {
                     if let Some(rich) = crate::rich_boxes::dump(&item.text, cx) {
                         out["rich"] = rich;
                     }
-                    // Its Print cards (prints.rs).
-                    if let Some(prints) = crate::prints::dump(&item.text, cx) {
+                    // Its ```print cards (print_cards.rs).
+                    if let Some(prints) = crate::print_cards::dump(&item.text, cx) {
                         out["prints"] = prints;
                     }
                     if let Some(blocks) = crate::shell_blocks::dump_lines(&item.text, &self.summary.id, cx) {

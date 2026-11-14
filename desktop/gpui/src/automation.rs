@@ -440,6 +440,21 @@ fn step(app: &Entity<Threadbear>, cmd: &Value, window: &mut Window, cx: &mut App
             if let Some(done) = crate::settings_window::automation(app, cmd, cx)? {
                 return Ok(done);
             }
+            // A picture of the Settings window itself, as `screenshot` takes
+            // the main one's.
+            if let Some(by) = cmd["scroll"].as_f64() {
+                crate::settings_window::scroll_down(app, by as f32, cx);
+            }
+            if let Some(path) = cmd["shot"].as_str() {
+                let handle = app.read(cx).settings_window.as_ref().map(|(h, _)| *h).ok_or("Settings isn't open")?;
+                let path = path.to_owned();
+                handle
+                    .update(cx, |_, window, cx| -> Result<(), String> {
+                        window.render_frame(cx);
+                        window.render_to_image().map_err(|e| e.to_string())?.save(&path).map_err(|e| e.to_string())
+                    })
+                    .map_err(|e| e.to_string())??;
+            }
             Ok(json!("ok"))
         }
         // Settings > Keyboard, as the Swift app's `shortcuts` (settings_window/keyboard.rs).
@@ -493,6 +508,7 @@ fn step(app: &Entity<Threadbear>, cmd: &Value, window: &mut Window, cx: &mut App
         // Projects (projects.rs): a project's page, its parent, the Projects
         // page's search, and the sidebar's folded project rows.
         "project" | "projectParent" => crate::projects::automation(app, cmd, window, cx),
+        "print" => crate::prints::automation(app, cmd, window, cx),
         "decision" => crate::project_decisions::automation(app, cmd, window, cx),
         "projectTab" => crate::project_decisions::tab_automation(app, cmd, cx),
         "search" if cmd["projects"].as_bool() == Some(true) => crate::projects::automation(app, cmd, window, cx),

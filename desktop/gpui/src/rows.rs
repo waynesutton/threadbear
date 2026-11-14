@@ -465,8 +465,8 @@ impl ThreadPane {
             .plugin(chips)
             // A closed ```mermaid or ```html fence as what it shows (rich_boxes.rs).
             .plugin(crate::rich_boxes::RichBoxes)
-            // A closed ```print fence as the Print's card (prints.rs).
-            .plugin(crate::prints::PrintCards { thread: self.summary.id.clone() })
+            // A closed ```print fence as the Print's card (print_cards.rs).
+            .plugin(crate::print_cards::PrintCards)
     }
 
     /// The reading column's text: markdown, selectable, links going where they

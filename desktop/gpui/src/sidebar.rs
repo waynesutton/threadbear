@@ -250,6 +250,10 @@ impl MenuRow {
         self.enabled = false;
         self
     }
+    /// A line with a tick when it's on (a Print's Projects).
+    pub(crate) fn check(title: impl Into<String>, symbol: &'static str, checked: bool, action: MenuAction) -> Self {
+        Self { title: title.into(), symbol: Some(symbol), action: Some(action), checked, enabled: true, children: vec![], separator: false }
+    }
     pub(crate) fn submenu(title: impl Into<String>, symbol: &'static str, children: Vec<MenuRow>) -> Self {
         Self { title: title.into(), symbol: Some(symbol), action: None, checked: false, enabled: true, children, separator: false }
     }
@@ -315,6 +319,8 @@ pub(crate) enum MenuAction {
     RunSchedule(String),
     PauseSchedule(String, bool),
     DeleteSchedule(String),
+    /// A Print's menu (prints.rs).
+    Print(crate::prints::PrintAction),
 }
 
 /// The sidebar's own state; the app holds one of these (`Threadbear::sidebar`).
@@ -855,6 +861,7 @@ impl Threadbear {
             MenuAction::DeleteSchedule(id) => return self.delete_schedule(id, window, cx),
             MenuAction::Project(action) => return self.run_project_action(action, window, cx),
             MenuAction::BearColor(bear, color) => return self.set_bear_color(bear, color, cx),
+            MenuAction::Print(action) => return self.run_print_action(action, window, cx),
             _ => {}
         }
         let Some(id) = thread else { return };
@@ -912,7 +919,8 @@ impl Threadbear {
             | MenuAction::PauseSchedule(..)
             | MenuAction::DeleteSchedule(_)
             | MenuAction::Project(_)
-            | MenuAction::BearColor(..) => {}
+            | MenuAction::BearColor(..)
+            | MenuAction::Print(_) => {}
         }
         cx.notify();
     }

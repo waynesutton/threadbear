@@ -1329,6 +1329,17 @@ pub(crate) fn scroll_into_view(app: &Entity<Threadbear>, bounds: Bounds<Pixels>,
     true
 }
 
+/// Scrolls Settings' pane down by `by` points, for a picture of what's
+/// below the window's height.
+#[cfg(feature = "automation")]
+pub(crate) fn scroll_down(app: &Entity<Threadbear>, by: f32, cx: &App) {
+    let Some((_, view)) = app.read(cx).settings_window.as_ref() else { return };
+    let scroll = &view.read(cx).scroll;
+    let (offset, most) = (scroll.offset(), scroll.max_offset());
+    let y = (offset.y - gpui_kit::px(by)).max(gpui_kit::px(0.) - most.y).min(gpui_kit::px(0.));
+    scroll.set_offset(point(offset.x, y));
+}
+
 #[cfg(feature = "automation")]
 pub(crate) use keyboard::automation as keyboard_automation;
 

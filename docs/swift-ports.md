@@ -57,19 +57,19 @@ the keyboard shortcut.
 
 | # | Commit | What it does | Status |
 |---|---|---|---|
-| 34 | dbbf3fc2 | A Prints section on a project's page | to do |
-| 33 | 8e2d98be | Print menu, doc editor, versions | to do |
-| 29 | f5c9a15b | Pages are called Prints | to do |
-| 32 | 19aa34f1 | Print cards in replies, preview on top | to do |
-| 31 | efbfb928 | Download a Print as a PDF | to do |
-| 21 | f0d66f56 | Publish a Print to phone and web | to do |
-| 28 | 321c447c | Prints menus show icons | to do |
-| 19 | ed22d3ba | Diagram Prints | to do |
-| 16 | 76d2baba | Prints open in the side pane and follow versions | to do |
-| 15 | ae966880 | Prints in Highlights and on the rail | to do |
-| 17 | cf844799 | Make Prints only when asked (Settings switch) | to do |
-| 11 | 611d2564 | Todo list and kanban board Prints | to do |
-| 10 | 5d406b1f | Show in Finder and Delete on every Print menu | to do |
+| 34 | dbbf3fc2 | A Prints section on a project's page | done |
+| 33 | 8e2d98be | Print menu, doc editor, versions | done |
+| 29 | f5c9a15b | Pages are called Prints | done |
+| 32 | 19aa34f1 | Print cards in replies, preview on top | done (the preview picture needs the web runtime; untried here) |
+| 31 | efbfb928 | Download a Print as a PDF | done (needs the web runtime; untried here) |
+| 21 | f0d66f56 | Publish a Print to phone and web | done (untried: needs sync and the alert) |
+| 28 | 321c447c | Prints menus show icons | done |
+| 19 | ed22d3ba | Diagram Prints | done |
+| 16 | 76d2baba | Prints open in the side pane and follow versions | done |
+| 15 | ae966880 | Prints in Highlights and on the rail | done |
+| 17 | cf844799 | Make Prints only when asked (Settings switch) | done |
+| 11 | 611d2564 | Todo list and kanban board Prints | done (a real click in the page needs the web runtime; untried here) |
+| 10 | 5d406b1f | Show in Finder and Delete on every Print menu | done |
 
 ## Customizing pages
 

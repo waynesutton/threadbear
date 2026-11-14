@@ -127,6 +127,8 @@ pub struct Threadbear {
     /// The bears this Mac's runner lists, for the @ list and a table's page
     /// (bears.rs).
     pub(crate) bear_list: crate::bears::BearList,
+    /// Prints (prints.rs), with the pages experiment on.
+    pub(crate) prints: crate::prints::PrintsState,
     pub(crate) done_note: Option<String>,
     pub(crate) done_task: Option<Task<()>>,
     /// CLI updates that failed and were dismissed from the banner, by
@@ -389,8 +391,6 @@ impl Threadbear {
         cx.set_global(crate::reply_buttons::PressHook(Rc::new(move |thread: String, id: String, window: &mut Window, cx: &mut App| {
             press_app.update(cx, |this, cx| this.press_reply_button(thread, id, window, cx)).ok();
         })));
-        // The Print cards in replies (prints.rs), which open in this app's side pane.
-        crate::prints::init(app.clone(), cx);
         let dock = cx.new(|_| {
             let mut model = DockModel::new(layout);
             let app = app.clone();
@@ -528,6 +528,7 @@ impl Threadbear {
             connection_error: None,
             busy_notes: Vec::new(),
             bear_list: Default::default(),
+            prints: Default::default(),
             done_note: None,
             done_task: None,
             dismissed_cli_failures: HashSet::new(),
@@ -829,7 +830,6 @@ impl Threadbear {
                 if let Status::Connected { hello, .. } = &status {
                     self.logins = RunnerLogins::from_hello(hello);
                     self.remote.experiments = hello["experiments"].as_array().into_iter().flatten().filter_map(|e| e.as_str().map(str::to_owned)).collect();
-                    crate::prints::connected(self.client.clone(), &self.remote.experiments, cx);
                     self.runner_version = hello["runnerVersion"].as_str().unwrap_or("").to_owned();
                     self.upstream_on = hello["updates"]["upstream"]["state"].as_str().is_some_and(|s| s != "off");
                     self.upstream_checkout = hello["updates"]["upstream"]["checkout"].as_str().filter(|c| !c.is_empty()).map(str::to_owned);
@@ -868,6 +868,7 @@ impl Threadbear {
                     self.load_projects(cx);
                     self.load_runner_settings(cx);
                     self.load_schedules(cx);
+                    self.load_prints(cx);
                     self.load_remote(cx);
                     self.load_clis(cx);
                     self.load_connectors(cx);
@@ -960,12 +961,6 @@ impl Threadbear {
                 }
                 "librarian.updated" => self.librarian.status = Some(threadbear_core::librarian::Status::decode(&params["librarian"])),
                 "settings.updated" => self.runner_settings = Some(params["settings"].clone()),
-                // Every Print card shows the newest, and a pane showing one follows it.
-                // Deferred: the side pane reads the app, which this is inside.
-                "pages.updated" => {
-                    let (params, side) = (params.clone(), self.side.clone());
-                    cx.defer(move |cx| crate::prints::updated(&params, &side, cx));
-                }
                 // A login appearing or going, its models once asked, its
                 // usage; and the pools after a save: both replace `hello`'s.
                 "accounts.updated" => self.logins.set_accounts(&params["accounts"]),
@@ -986,6 +981,8 @@ impl Threadbear {
                     self.side.update(cx, |side, cx| side.schedules_updated(&params["schedules"], cx));
                 }
                 "remoteThreads.updated" => self.receive_remote(&params, cx),
+                // The whole list of Prints, as `pages.list` gives it.
+                "pages.updated" => self.receive_prints(threadbear_core::prints::Page::list(&params["pages"]), cx),
                 "clis.updated" => self.clis_updated(&params),
                 "runner.updates" => self.runner_updates_changed(&params),
                 "connectors.updated" => self.connectors_updated(&params),
@@ -1614,6 +1611,7 @@ impl Threadbear {
         // The small motions, as last seen (juice.feature): the row a click
         // last slid off (row_swipe.rs), and the card that last arrived in
         // the box while it was on screen (composer_card.rs).
+        dump["prints"] = crate::prints::dump(self, cx);
         dump["juice"] = json!({
             "slidOff": self.sidebar.gestures.last_slid(),
             "cardArrived": self.composer(cx).and_then(|c| c.read(cx).card_arrival.last),

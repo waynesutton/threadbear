@@ -383,6 +383,7 @@ impl Threadbear {
         let showing = |panel: &str| dock.controller.is_showing(panel);
         let highlights_shown = showing(shell::HIGHLIGHTS);
         let files_shown = showing(shell::FILES);
+        let prints_shown = showing(shell::PRINTS);
         let patches_shown = showing(shell::PATCHES);
         let browser_shown = showing(shell::BROWSER);
         // The accent dot while the last turn's asks aren't all ticked.
@@ -423,6 +424,12 @@ impl Threadbear {
             if self.settings.saved.rail_terminal.unwrap_or(false) {
                 column.push(rail_button(RailButton::new("rail-terminal", "terminal", "Terminal", self.dock.read(cx).controller.is_showing(shell::TERMINAL)), |this, window, cx| crate::terminal::toggle(this, window, cx), cx));
             }
+        }
+        // Every Print, under Files (Wayne, 11 Nov), with how many.
+        if self.shows_prints_rail(&thread) {
+            let mut b = RailButton::new("rail-prints", "doc.richtext", "Every Print, and the projects each is in", prints_shown);
+            b.badge = Some(threadbear_core::prints::rows::all(&self.prints.list).len());
+            column.push(rail_button(b, |this, _, cx| this.click_rail(shell::PRINTS, cx), cx));
         }
         let patches = thread.patches.as_ref().map_or(0, Vec::len);
         let hairline = cx.theme().border;
@@ -480,6 +487,9 @@ impl Threadbear {
                 if self.settings.saved.rail_terminal.unwrap_or(false) {
                     right.push(json!({ "title": "Terminal", "active": showing(shell::TERMINAL) }));
                 }
+            }
+            if self.shows_prints_rail(&thread) {
+                right.push(json!({ "title": "Prints", "badge": threadbear_core::prints::rows::all(&self.prints.list).len(), "active": showing(shell::PRINTS) }));
             }
             if thread.patches.as_ref().is_some_and(|p| !p.is_empty()) {
                 right.push(json!({ "title": "Patches", "badge": thread.patches.as_ref().map(Vec::len), "active": showing(shell::PATCHES) }));

@@ -5,6 +5,8 @@
 // Read-outs that exist only for the scripted control (`automation.rs`).
 #![cfg_attr(not(feature = "automation"), allow(dead_code, unused_imports))]
 mod a11y;
+mod print_cards;
+mod prints;
 mod activity;
 mod activity_panels;
 mod agent_browser;
@@ -97,7 +99,6 @@ mod remote_pictures;
 mod reply_buttons;
 mod reply_links;
 mod review_window;
-mod prints;
 mod rich_boxes;
 mod rich_window;
 mod row_motion;
@@ -270,6 +271,7 @@ fn main() {
         web_runtime::init(cx);
         // The diagrams and pages in replies, drawn through it.
         rich_boxes::init(cx);
+        print_cards::init(cx);
         // And the panels' pages, the Convex dashboard's among them.
         web_panels::init(cx);
         // Videos and PDFs in the system's views: their calls back (a PDF's
