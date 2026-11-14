@@ -94,6 +94,7 @@ pub struct Composer {
     pub(crate) bear_gate: threadbear_core::bears::Gate,
     pub(crate) bear_selected: usize,
     pub(crate) palette_asked: Option<String>,
+    pub(crate) mentions_asked: Option<String>,
     /// The palette's list, kept so the arrows can scroll the pick into sight.
     pub(crate) palette_scroll: ScrollHandle,
     /// The palette's own search field, made the first time it's drawn.
@@ -238,6 +239,7 @@ impl Composer {
             bear_gate: Default::default(),
             bear_selected: 0,
             palette_asked: None,
+            mentions_asked: None,
             palette_scroll: ScrollHandle::new(),
             palette_search: None,
             card_width: Rc::new(Cell::new(style::MAX_CONTENT_WIDTH)),
@@ -1605,6 +1607,8 @@ impl Composer {
 
 impl Render for Composer {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        self.preload_mentions(cx);
+        self.draw_spelling_marks(cx);
         // The box as it was before an edit that's just gone, first: it
         // replaces what's there, so anything given back goes after it.
         if let Some((text, images)) = self.pending_box.take() {

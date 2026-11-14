@@ -2153,7 +2153,8 @@ will run. Skills page skills show under their own names, as `/pele`
 (`/threadbear:pele` works too). That's any skill the thread can use: the Skills page's, and
 the ones Claude or Codex find themselves, such as those in
 `~/.claude/skills` or the folder's own. Click one for the Skills page,
-or for one that isn't there, its SKILL.md. It works anywhere in
+or for one that isn't there, its SKILL.md. In the GPUI app, the link
+opens its SKILL.md beside the thread. It works anywhere in
 the message, in Claude and Codex threads alike. A change reaches threads
 that are already running too: each gets a fresh start before its next
 message, carrying on the same conversation with the new skills. Remove

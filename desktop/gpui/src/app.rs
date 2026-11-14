@@ -1641,6 +1641,7 @@ impl Threadbear {
         });
         if let Some(composer) = composer {
             let data = composer.chip_data(cx);
+            out["skills"] = composer.skill_mentions_dump(cx);
             if let Some(t) = &data.summary {
                 out["cwd"] = json!(t.cwd);
                 out["account"] = json!(t.account_id);

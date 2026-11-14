@@ -54,6 +54,12 @@ impl Threadbear {
                         this.slash.commands.entry(thread_id.clone()).or_default();
                     }
                 }
+                let pane = this.pane.clone();
+                let composer = pane.as_ref().map(|p| p.read(cx).composer.clone()).or_else(|| this.new_thread.composer.clone());
+                cx.defer(move |cx| {
+                    if let Some(composer) = composer { composer.update(cx, |_, cx| cx.notify()); }
+                    if let Some(pane) = pane { pane.update(cx, |_, cx| cx.notify()); }
+                });
                 cx.notify();
             })
             .ok();
@@ -107,6 +113,12 @@ impl Threadbear {
                         this.slash.commands.entry(key.clone()).or_default();
                     }
                 }
+                let pane = this.pane.clone();
+                let composer = pane.as_ref().map(|p| p.read(cx).composer.clone()).or_else(|| this.new_thread.composer.clone());
+                cx.defer(move |cx| {
+                    if let Some(composer) = composer { composer.update(cx, |_, cx| cx.notify()); }
+                    if let Some(pane) = pane { pane.update(cx, |_, cx| cx.notify()); }
+                });
                 cx.notify();
             })
             .ok();
@@ -163,7 +175,7 @@ impl Composer {
 
     /// Where the palette's list is kept: the thread's id, or for a new
     /// thread its runner, login and folder's (`paletteListKey`).
-    fn palette_list_key(&self, cx: &App) -> String {
+    pub(crate) fn palette_list_key(&self, cx: &App) -> String {
         match (&self.thread_id, self.app.upgrade()) {
             (Some(id), _) => id.clone(),
             (None, Some(app)) => app.read(cx).new_thread_commands_key(),
@@ -673,7 +685,7 @@ impl Composer {
     /// page), it goes through the open gate, which opens the real file and
     /// asks before anything that would run. Another runner's thread has no
     /// button at all.
-    fn palette_open_file(&mut self, path: String, cx: &mut Context<Self>) {
+    pub(crate) fn palette_open_file(&mut self, path: String, cx: &mut Context<Self>) {
         let data = self.chip_data(cx);
         if data.away.is_none() {
             let thread = data.summary.filter(|_| self.thread_id.is_some());

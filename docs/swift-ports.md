@@ -23,7 +23,7 @@ app does it), **nothing** (nothing to rebuild), **skip** (Wayne said no).
 | 23 | 7cd127cd | A close button on the slash palette | done |
 | 25 | aa01270d | Palette search field, Left/Right through categories, palette or list; optional Terminal rail button | done |
 | 12 | ae1dd28a | Store skills listed by plain name | done |
-| 14 | d3c96861 | Every listed skill turns blue in the box and links to its SKILL.md | to do |
+| 14 | d3c96861 | Every listed skill turns blue in the box and links to its SKILL.md | done |
 | 92 | 0a003c67 | Files open ready to type, autosave switch, unsaved dot, Save prompt | done |
 | 93 | 41275129 | Line numbers and ⌘S, opened ready to type | done |
 | 98 | d28e38f4 | A saved plan opens in the side pane, with a link under the reply | done |

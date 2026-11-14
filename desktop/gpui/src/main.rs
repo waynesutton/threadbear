@@ -111,6 +111,7 @@ mod shell;
 mod shell_blocks;
 mod sidebar;
 mod slash_palette;
+mod skill_mentions;
 mod slash_resize;
 mod spinner;
 mod style;

@@ -93,7 +93,8 @@ impl Composer {
             if let Some(typed) = spelling::typed_boundary(&old, &text, caret) {
                 let paragraph = text[..caret].rfind('\n').map_or(0, |i| i + 1);
                 let found = text_services::check(&text, paragraph..caret, &checks, true);
-                let chips: Vec<Range<usize>> = Self::chips_in(&input, cx).into_iter().map(|(r, _)| r).collect();
+                let mut chips: Vec<Range<usize>> = Self::chips_in(&input, cx).into_iter().map(|(r, _)| r).collect();
+                chips.extend(threadbear_core::skill_mentions::find(&text, &self.mention_commands(cx)).into_iter().map(|m| m.range));
                 let subs: Vec<_> = spelling::substitutions(&found, caret, typed)
                     .into_iter()
                     .filter(|(r, _)| !chips.iter().any(|c| c.start < r.end && r.start < c.end))
@@ -136,8 +137,10 @@ impl Composer {
         .detach();
     }
 
-    fn draw_spelling_marks(&mut self, cx: &mut Context<Self>) {
-        let drawn: Vec<TextDecoration> = self.spell.marks.iter().map(|(r, grammar)| TextDecoration::new(r.clone(), mark_style(*grammar))).collect();
+    pub(crate) fn draw_spelling_marks(&mut self, cx: &mut Context<Self>) {
+        let skills = self.skill_marks(cx);
+        let mut drawn: Vec<TextDecoration> = self.spell.marks.iter().filter(|(r, _)| !skills.iter().any(|m| m.range.start < r.end && r.start < m.range.end)).map(|(r, grammar)| TextDecoration::new(r.clone(), mark_style(*grammar))).collect();
+        drawn.extend(skills);
         self.input.update(cx, |s, cx| s.set_text_marks(drawn, cx));
     }
 
@@ -155,7 +158,8 @@ impl Composer {
             let mut asked = checks;
             asked.spelling = checks.spelling || now;
             let found = text_services::check(&text, 0..text.len(), &asked, false);
-            let chips: Vec<Range<usize>> = Self::chips_in(&input, cx).into_iter().map(|(r, _)| r).collect();
+            let mut chips: Vec<Range<usize>> = Self::chips_in(&input, cx).into_iter().map(|(r, _)| r).collect();
+            chips.extend(threadbear_core::skill_mentions::find(&text, &self.mention_commands(cx)).into_iter().map(|m| m.range));
             // The word being typed waits until it's finished.
             let caret = (selection.is_empty() && typing && !now).then_some(selection.end);
             spelling::marks(&found, caret, &chips)

@@ -291,6 +291,7 @@ impl ThreadPane {
             // lines laid out round them (chips.rs); the rest is one text.
             let chips = if answered { None } else { self.chip_lines(ix, message, max_text, window, cx) };
             let fit = (!answered && chips.is_none()).then(|| widest_line(&text, max_text, window));
+            let skill_text = self.skill_words(&row.id, &text, cx);
             let bubble = div()
                 .max_w(relative(BUBBLE_SHARE))
                 .when_some(fit, |d, (ink, _)| d.w(ink + px(BUBBLE_PAD_H * 2.)))
@@ -305,7 +306,7 @@ impl ThreadPane {
                 .when(faded, |d| d.opacity(0.5))
                 // A point over, as the layout rounds widths and a line that
                 // fits exactly would wrap.
-                .when_some(fit, |d, (ink, span)| d.child(div().w(span + px(1.)).mr(ink - span - px(1.)).child(SelectableText::new(("user-text", ix), text))))
+                .when_some(fit, |d, (ink, span)| d.child(div().w(span + px(1.)).mr(ink - span - px(1.)).child(skill_text.unwrap_or_else(|| SelectableText::new(("user-text", ix), text).into_any_element()))))
                 .when_some(chips.map(|c| c.1), |d, lines| d.child(lines))
                 .when_some(answered_words, |d, words| d.child(answers_body(ix, &words, cx)));
             // The pencil, left of the bubble and level with its last line, on

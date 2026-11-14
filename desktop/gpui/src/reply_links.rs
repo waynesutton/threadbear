@@ -284,6 +284,7 @@ impl ThreadPane {
         let scheme = url.split_once(':').map(|(s, _)| s.to_ascii_lowercase());
         let rest = url.split_once(':').map_or("", |(_, r)| r);
         match scheme.as_deref() {
+            Some("threadbear-skill") => return self.open_skill_link(rest, cx),
             Some("work") => return self.open_work_link(&crate::rows::markdown::percent_decode(rest), row_id, window, cx),
             Some("thread") => return self.open_thread_link(&crate::rows::markdown::percent_decode(rest), window, cx),
             Some("review") => return self.open_review_link(&crate::rows::markdown::percent_decode(rest), window, cx),
@@ -357,7 +358,7 @@ impl ThreadPane {
 
     /// A file in the pane beside the transcript, opening the pane if it's
     /// closed (`PaneModel.show`).
-    fn preview_in_pane(&mut self, path: &str, cx: &mut Context<Self>) {
+    pub(crate) fn preview_in_pane(&mut self, path: &str, cx: &mut Context<Self>) {
         let thread = self.summary.clone();
         let Some(app) = self.composer.read(cx).app.upgrade() else { return };
         let side = app.read(cx).side.clone();
