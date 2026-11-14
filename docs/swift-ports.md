@@ -21,7 +21,7 @@ app does it), **nothing** (nothing to rebuild), **skip** (Wayne said no).
 | 20 | 59336820 | Return allows the oldest waiting card | done |
 | 22 | 5e07e0c4 | Return fills a slash command in the box; a setting makes Return run it | done |
 | 23 | 7cd127cd | A close button on the slash palette | done |
-| 25 | aa01270d | Palette search field, Left/Right through categories, palette or list; optional Terminal rail button | doing |
+| 25 | aa01270d | Palette search field, Left/Right through categories, palette or list; optional Terminal rail button | done |
 | 12 | ae1dd28a | Store skills listed by plain name | done |
 | 14 | d3c96861 | Every listed skill turns blue in the box and links to its SKILL.md | to do |
 | 92 | 0a003c67 | Files open ready to type, autosave switch, unsaved dot, Save prompt | done |
@@ -31,8 +31,8 @@ app does it), **nothing** (nothing to rebuild), **skip** (Wayne said no).
 | 79 | 55498864 | Settings > Keyboard list full height | to do |
 
 The approval and slash palette batch passed 33 UI scenarios and 24 core checks.
-Item 25 has its search, arrows and compact list; its optional Terminal rail
-button is still to add.
+Item 25 also has its optional Terminal rail button, opening the same drawer as
+the keyboard shortcut.
 
 ## Terminal
 

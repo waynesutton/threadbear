@@ -420,6 +420,9 @@ impl Threadbear {
         }
         if !project_page {
             column.push(rail_button(RailButton::new("rail-files", "folder", "Files", files_shown), |this, _, cx| this.click_rail(shell::FILES, cx), cx));
+            if self.settings.saved.rail_terminal.unwrap_or(false) {
+                column.push(rail_button(RailButton::new("rail-terminal", "terminal", "Terminal", self.dock.read(cx).controller.is_showing(shell::TERMINAL)), |this, window, cx| crate::terminal::toggle(this, window, cx), cx));
+            }
         }
         let patches = thread.patches.as_ref().map_or(0, Vec::len);
         let hairline = cx.theme().border;
@@ -474,6 +477,9 @@ impl Threadbear {
             }
             if !project_page {
                 right.push(json!({ "title": "Files", "active": showing(shell::FILES) }));
+                if self.settings.saved.rail_terminal.unwrap_or(false) {
+                    right.push(json!({ "title": "Terminal", "active": showing(shell::TERMINAL) }));
+                }
             }
             if thread.patches.as_ref().is_some_and(|p| !p.is_empty()) {
                 right.push(json!({ "title": "Patches", "badge": thread.patches.as_ref().map(Vec::len), "active": showing(shell::PATCHES) }));

@@ -217,6 +217,7 @@ impl Composer {
         if key == PaletteKey::Escape {
             self.clear_palette_search(window, cx);
             self.focus(window, cx);
+            crate::web_panels::keyboard_to_app(window);
         }
         // Keep the pick in sight as the arrows move it (the list scrolls).
         if matches!(key, PaletteKey::Up | PaletteKey::Down) {

@@ -520,7 +520,7 @@ impl SettingsWindow {
 
     fn render_general(&mut self, settings: Option<&RunnerSettings>, window: &mut Window, cx: &mut Context<Self>) -> Vec<AnyElement> {
         // This Mac's own, so they're here while the runner's away too.
-        let mut sections = vec![self.appearance_section(cx), self.panels_section(cx), self.files_section(cx), self.slash_section(cx), self.quitting_section(cx), self.notifications_section(cx)];
+        let mut sections = vec![self.appearance_section(cx), self.panels_section(cx), self.files_section(cx), self.slash_section(cx), self.terminal_section(cx), self.quitting_section(cx), self.notifications_section(cx)];
         // The web runtime is this Mac's too (web_runtime.rs), last, so it
         // moves nothing the Swift app's General has.
         let web_runtime = section("settings-web-runtime", "Web runtime", crate::web_runtime::SETTINGS_ABOUT, "check whether it's installed and working, or why a diagram or panel isn't showing.", vec![row("Web runtime", crate::web_runtime::settings_control(cx), cx)], cx);
@@ -747,6 +747,18 @@ impl SettingsWindow {
             vec![row("Return sends a command right away", switch, cx), row("Use full palette for skills inside a message", skills, cx)],
             cx,
         )
+    }
+
+    /// The rail button opens the very same drawer as the Terminal shortcut.
+    fn terminal_section(&mut self, cx: &mut Context<Self>) -> AnyElement {
+        let on = self.app.upgrade().is_some_and(|a| a.read(cx).settings.saved.rail_terminal.unwrap_or(false));
+        let switch = self.switch("settings-rail-terminal", on, "Add a Terminal button to the rail beside Files. The keyboard shortcut works either way", cx, |this, on, cx| {
+            this.app.update(cx, |app, cx| {
+                app.settings.saved.rail_terminal = Some(on);
+                app.save_settings_soon(cx);
+            }).ok();
+        });
+        section("settings-terminal", "Terminal", "The Terminal opens under the thread. Add a button on the right-hand rail to open that same terminal with a click.", "change how the Terminal opens or looks.", vec![row("Show Terminal on the right-hand rail", switch, cx)], cx)
     }
 
     /// `QuitPrompt`'s switch: ticking Don't ask again turns it off, and this

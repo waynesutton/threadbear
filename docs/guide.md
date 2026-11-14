@@ -814,6 +814,10 @@ started. Threadbear remembers your layout between launches.
 ### Terminal
 <!-- slug: terminal -->
 
+For a Terminal button beside Files on the right-hand rail, turn on Settings >
+General > Terminal > Show Terminal on the right-hand rail. It opens the same
+terminal as the keyboard shortcut and is off by default.
+
 ⌘J opens a terminal under the thread, and ⌘J again hides it. It's a real
 one, with your login shell, its colours and full-screen programs like vim
 or htop, and it takes the keyboard as it opens. Each thread has a shell
