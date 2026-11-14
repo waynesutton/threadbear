@@ -70,3 +70,16 @@ Feature: Answering the agent
   Scenario: A review card says what it's comparing
     When I open the thread "Compare account picker designs"
     Then a review card says "images · pending"
+
+  @transcript.approval
+  Scenario: Return answers waiting approvals in the order they arrived
+    When I open the thread "Tidy the imports in the uploader"
+    And the agent asks for two approvals
+    Then an approval card asks to run "ls -la"
+    And an approval card asks to run "git status"
+    When I press Return
+    And I open the last folded work line
+    Then the approval for "ls -la" says it was allowed
+    When I select the earlier reply in the transcript
+    And I press Return
+    Then the transcript shows a reply starting "Both answered."

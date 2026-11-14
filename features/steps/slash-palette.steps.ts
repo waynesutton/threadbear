@@ -157,3 +157,24 @@ Then('the list is {int} points wider than it was', async function (this: Threadb
     return columns && near(columns[1], before.columns[1] + points);
   });
 });
+
+When('I step right through the palette categories', async function (this: ThreadbearWorld) {
+  await this.app.do({ cmd: 'menu-key', key: 'right' });
+});
+
+When('I step left through the palette categories', async function (this: ThreadbearWorld) {
+  await this.app.do({ cmd: 'menu-key', key: 'left' });
+});
+
+When('I search the palette for {string}', async function (this: ThreadbearWorld, text: string) {
+  await this.app.do({ cmd: 'click', title: 'Search skills and commands' });
+  for (const key of text) await this.app.do({ cmd: 'menu-key', key });
+});
+
+When('I close the slash settings window', async function (this: ThreadbearWorld) {
+  await this.app.do({ cmd: 'settings', close: true });
+});
+
+Then('the compact skill list is showing', async function (this: ThreadbearWorld) {
+  await this.until('the compact skill list', (d) => (d.palette as { compact?: boolean } | null)?.compact === true);
+});

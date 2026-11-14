@@ -647,8 +647,9 @@ or Tab puts the skill in your words, and nothing is sent until you send
 the message. Claude Code's own commands, and skills set to run only when
 you type them (`disable-model-invocation: true`), work only at the start
 of a message, so they aren't listed there. If you'd rather have the
-small list at the cursor for these (described under Skills), pick it in
-Settings > General > Slash commands. Only one of the two shows.
+small list above the message box for these, turn off Use full palette for
+skills inside a message in Settings > General > Slash commands. Only one
+of the two shows.
 
 The iPhone app has it too: type `/` in a thread's reply box and a list of
 its commands opens above it, with the categories as buttons along the top.

@@ -1315,7 +1315,7 @@ async function dispatch(client, method, p) {
         { name: 'claude-api', description: 'Model ids, pricing, params and the Anthropic SDK.', source: 'skill' },
         { name: 'deslop', description: 'A second-pass cleanup over AI-written code using the repo style guide.', source: 'skill', scope: 'project', path: `${t.summary.cwd}/.claude/skills/deslop/SKILL.md` },
         { name: 'delegate', description: 'Get answers from other labs and models, and run consensus panels.', source: 'skill' },
-        { name: 'ship', description: 'Drive a branch to merge-ready: PR, checks, bot comments.', source: 'skill' },
+        { name: 'ship', description: 'Drive a branch to merge-ready: PR, checks, bot comments.', source: 'skill', scope: 'store' },
       ];
       return { commands: [...own, ...cli, ...skills] };
     }
@@ -2193,6 +2193,19 @@ async function fakeTurn(threadId, text, images, turnId = 'turn_' + crypto.random
     for (const c of [head, ...calls]) persist(threadId, { type: 'tool.result', itemId: c.itemId, ok: answers[c.itemId] === 'allow', text: answers[c.itemId] === 'allow' ? 'Done.' : 'The user denied this.', truncated: false, images: [] }, turnId);
     const allowed = Object.values(answers).filter((d) => d === 'allow').length;
     persist(threadId, { type: 'assistant.text', itemId: 'm_' + crypto.randomBytes(4).toString('hex'), text: `Allowed ${allowed} of ${calls.length + 1}.` }, turnId);
+    return finishTurn(threadId, turnId, started, 'completed');
+  }
+
+  // "two approvals" in a message: two cards waiting at once, as subagents
+  // asking side by side do, for Return allowing the oldest first.
+  if (/two approvals/i.test(text)) {
+    const cards = ['ls -la', 'git status'].map((command) => ({ approvalId: 'ap_' + crypto.randomBytes(4).toString('hex'), command }));
+    for (const c of cards) persist(threadId, { type: 'approval.requested', approvalId: c.approvalId, name: 'Bash', title: c.command, input: { command: c.command }, options: ['allow', 'allowAlways', 'deny'] }, turnId);
+    setStatus(threadId, 'waiting', true);
+    t.approvalWaiters ??= new Map();
+    await Promise.all(cards.map((c) => new Promise((resolve) => t.approvalWaiters.set(c.approvalId, resolve))));
+    setStatus(threadId, 'running', false);
+    persist(threadId, { type: 'assistant.text', itemId: 'm_' + crypto.randomBytes(4).toString('hex'), text: 'Both answered.' }, turnId);
     return finishTurn(threadId, turnId, started, 'completed');
   }
 

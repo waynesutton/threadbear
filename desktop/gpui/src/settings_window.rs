@@ -520,7 +520,7 @@ impl SettingsWindow {
 
     fn render_general(&mut self, settings: Option<&RunnerSettings>, window: &mut Window, cx: &mut Context<Self>) -> Vec<AnyElement> {
         // This Mac's own, so they're here while the runner's away too.
-        let mut sections = vec![self.appearance_section(cx), self.panels_section(cx), self.files_section(cx), self.quitting_section(cx), self.notifications_section(cx)];
+        let mut sections = vec![self.appearance_section(cx), self.panels_section(cx), self.files_section(cx), self.slash_section(cx), self.quitting_section(cx), self.notifications_section(cx)];
         // The web runtime is this Mac's too (web_runtime.rs), last, so it
         // moves nothing the Swift app's General has.
         let web_runtime = section("settings-web-runtime", "Web runtime", crate::web_runtime::SETTINGS_ABOUT, "check whether it's installed and working, or why a diagram or panel isn't showing.", vec![row("Web runtime", crate::web_runtime::settings_control(cx), cx)], cx);
@@ -716,6 +716,35 @@ impl SettingsWindow {
             "Edit files like an editor opens a text file in the side pane ready to type in, with line numbers and a bar under it showing the line and column. Save files automatically writes what you type a second after you stop, and ⌘S saves at once; with it off, nothing is written until you save, and leaving a file with changes asks whether to save them.",
             "change either for you.",
             vec![row("Edit files like an editor", editor_switch, cx), row("Save files automatically", autosave_switch, cx)],
+            cx,
+        )
+    }
+
+    /// `SlashReturn`'s switch: whether Return in the slash palette sends the
+    /// command at once, or puts it in the box for the next Return to send.
+    fn slash_section(&mut self, cx: &mut Context<Self>) -> AnyElement {
+        let on = self.app.upgrade().is_some_and(|a| a.read(cx).settings.slash_return_runs());
+        let switch = self.switch("settings-slash-return-runs", on, "Off: Return puts the command in the box and the next Return sends it, so a new thread doesn't start by surprise. The Run button always sends", cx, |this, on, cx| {
+            this.app
+                .update(cx, |app, cx| {
+                    app.settings.saved.slash_return_runs = Some(on);
+                    app.save_settings_soon(cx);
+                })
+                .ok();
+        });
+        let full = self.app.upgrade().is_none_or(|a| a.read(cx).settings.saved.inline_skill_palette.unwrap_or(true));
+        let skills = self.switch("settings-inline-skill-palette", full, "Use the full palette for a /skill inside a message. Off shows a small skill list instead", cx, |this, on, cx| {
+            this.app.update(cx, |app, cx| {
+                app.settings.saved.inline_skill_palette = Some(on);
+                app.save_settings_soon(cx);
+            }).ok();
+        });
+        section(
+            "settings-slash",
+            "Slash commands",
+            "Typing / in the message box opens the slash palette: every command and skill, with a search field, categories you can step through with the left and right arrows, and Esc or its X to close. Return puts the picked command in the box, and the next Return sends it; turn on Return sends a command right away to skip that step (the Run button always sends).",
+            "change what the slash palette lists or how it looks.",
+            vec![row("Return sends a command right away", switch, cx), row("Use full palette for skills inside a message", skills, cx)],
             cx,
         )
     }

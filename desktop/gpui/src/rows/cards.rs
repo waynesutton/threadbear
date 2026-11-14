@@ -245,6 +245,8 @@ impl ThreadPane {
         } else {
             item.request.options.clone()
         };
+        // Only the card Return allows shows the ⏎ (approvalForReturn).
+        let returns = self.feed.model().approval_for_return(&self.rows.answering).as_deref() == Some(id.as_str());
         let mut row = h_flex().mt(px(12.)).gap(px(8.)).items_center();
         for option in [ApprovalOption::Allow, ApprovalOption::AllowAlways, ApprovalOption::Deny] {
             if !options.contains(&option) {
@@ -260,7 +262,7 @@ impl ThreadPane {
             let (id, decision_str) = (id.clone(), decision.to_owned());
             let start_allow = start && option == ApprovalOption::Allow;
             let start_card = start;
-            let mut button = pill(("approve", ix * 10 + n), title, prominent, !busy, if !start && option == ApprovalOption::Allow { Some("⏎") } else { None }, cx).tip(tip_text);
+            let mut button = pill(("approve", ix * 10 + n), title, prominent, !busy, if returns && option == ApprovalOption::Allow { Some("⏎") } else { None }, cx).tip(tip_text);
             if !busy {
                 button = button.on_click(cx.listener(move |this, _: &ClickEvent, _, cx| {
                     if start_card {
@@ -324,7 +326,8 @@ impl ThreadPane {
         let allow_words = format!("Allow {count}");
         let allow_tip = if count == ids.len() { "Let it do all of these (Return)" } else { "Let it do the ticked ones; the rest are refused (Return)" };
         let id_for_allow = approval_id.clone();
-        let mut allow = pill(("stack-allow", ix), &allow_words, true, !busy && count > 0, Some("⏎"), cx).tip(allow_tip);
+        let returns = self.feed.model().approval_for_return(&self.rows.answering).as_deref() == Some(approval_id.as_str());
+        let mut allow = pill(("stack-allow", ix), &allow_words, true, !busy && count > 0, returns.then_some("⏎"), cx).tip(allow_tip);
         if !busy && count > 0 {
             allow = allow.on_click(cx.listener(move |this, _: &ClickEvent, _, cx| this.respond_queued(&id_for_allow, "allow", cx)));
         }

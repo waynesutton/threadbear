@@ -18,17 +18,21 @@ app does it), **nothing** (nothing to rebuild), **skip** (Wayne said no).
 
 | # | Commit | What it does | Status |
 |---|---|---|---|
-| 20 | 59336820 | Return allows the oldest waiting card | to do |
-| 22 | 5e07e0c4 | Return fills a slash command in the box; a setting makes Return run it | to do |
-| 23 | 7cd127cd | A close button on the slash palette | to do |
-| 25 | aa01270d | Palette search field, Left/Right through categories, palette or list | to do |
-| 12 | ae1dd28a | Store skills listed by plain name | to do |
+| 20 | 59336820 | Return allows the oldest waiting card | done |
+| 22 | 5e07e0c4 | Return fills a slash command in the box; a setting makes Return run it | done |
+| 23 | 7cd127cd | A close button on the slash palette | done |
+| 25 | aa01270d | Palette search field, Left/Right through categories, palette or list; optional Terminal rail button | doing |
+| 12 | ae1dd28a | Store skills listed by plain name | done |
 | 14 | d3c96861 | Every listed skill turns blue in the box and links to its SKILL.md | to do |
 | 92 | 0a003c67 | Files open ready to type, autosave switch, unsaved dot, Save prompt | done |
 | 93 | 41275129 | Line numbers and ⌘S, opened ready to type | done |
 | 98 | d28e38f4 | A saved plan opens in the side pane, with a link under the reply | done |
 | 43 | 3708b1c7 | Side pane find and replace, and search in folders | to do |
 | 79 | 55498864 | Settings > Keyboard list full height | to do |
+
+The approval and slash palette batch passed 33 UI scenarios and 24 core checks.
+Item 25 has its search, arrows and compact list; its optional Terminal rail
+button is still to add.
 
 ## Terminal
 

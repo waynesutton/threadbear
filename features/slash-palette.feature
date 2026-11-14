@@ -90,12 +90,15 @@ Feature: The slash command palette
     Then the palette's pick is "/model"
 
   @composer.slash.keys
-  Scenario: Return runs the picked command
+  Scenario: Return fills the picked command before sending
     When I type "/cle" in the composer
     Then the palette's pick is "/clear"
     When I press Return
     Then the palette is closed
-    And the transcript shows my message "/clear"
+    And the composer says "/clear "
+    And the transcript doesn't show my message "/clear"
+    When I press Return
+    Then the transcript shows my message "/clear"
     And the composer is empty
 
   @composer.slash.keys
@@ -149,3 +152,57 @@ Feature: The slash command palette
     When I note the palette's size
     And I drag the list's edge 40 points right
     Then the list is 40 points wider than it was
+
+  @composer.slash.keys
+  Scenario: Left and Right step through the categories
+    When I type "/" in the composer
+    And I step right through the palette categories
+    Then the palette is open on "Threadbear"
+    When I step left through the palette categories
+    Then the palette is open on "All"
+
+  @composer.slash
+  Scenario: The close button leaves the words in the box
+    When I type "/mod" in the composer
+    And I press "Close the palette"
+    Then the palette is closed
+    And the composer says "/mod"
+
+  @composer.slash
+  Scenario: Searching inside the palette narrows the commands
+    When I type "/" in the composer
+    And I search the palette for "code-review"
+    Then the palette's commands are "/code-review"
+    When I press Return
+    Then the composer says "/code-review "
+    And the palette is closed
+
+  @composer.slash.keys
+  Scenario: The setting makes Return send the picked command immediately
+    When I open Settings on "general"
+    And I press "Off: Return puts the command" in Settings
+    And I close the slash settings window
+    And I type "/cle" in the composer
+    Then the palette's pick is "/clear"
+    When I press Return
+    Then the transcript shows my message "/clear"
+    And the composer is empty
+
+  @composer.slash
+  Scenario: A store skill uses its plain name and names the Skills page
+    When I type "/ship" in the composer
+    Then the palette's pick is "/ship"
+    And the palette's details say they're from "From your Skills page"
+
+  # The frozen Swift app uses a picker here; this step exercises GPUI's switch.
+  @composer.slash @swift-pending
+  Scenario: Skills inside a message can use the small list
+    When I open Settings on "general"
+    And I press "Use the full palette for a /skill" in Settings
+    And I close the slash settings window
+    And I type "use /desl" in the composer
+    Then the compact skill list is showing
+    And the palette's commands are "/deslop"
+    When I press Return
+    Then the composer says "use /deslop "
+    And the palette is closed

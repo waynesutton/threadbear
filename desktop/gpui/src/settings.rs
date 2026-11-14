@@ -62,6 +62,12 @@ pub struct Saved {
     pub completion_sound_volume: Option<f64>,
     /// `askBeforeQuitting` (QuitPrompt): None is yes.
     pub ask_before_quitting: Option<bool>,
+    /// `slashReturnRuns` (SlashReturn): Return in the slash palette sends
+    /// the command at once. None is no: Return puts it in the box, and the
+    /// next Return sends it (Wayne, 11 Nov).
+    pub slash_return_runs: Option<bool>,
+    /// Use the full palette for skills named inside a message (default on).
+    pub inline_skill_palette: Option<bool>,
     /// `activityLog` (ActivityRecorder): Settings > General's Keep an
     /// activity log (activity.rs). Off until it's turned on.
     pub activity_log: Option<bool>,
@@ -220,6 +226,10 @@ impl Settings {
 
     pub fn saves_files_automatically(&self) -> bool {
         self.saved.files_save_automatically.unwrap_or(true)
+    }
+
+    pub fn slash_return_runs(&self) -> bool {
+        self.saved.slash_return_runs.unwrap_or(false)
     }
 }
 

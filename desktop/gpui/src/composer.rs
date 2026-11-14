@@ -14,7 +14,7 @@ use crate::composer_chips::ModelPickerView;
 use crate::style;
 use crate::thread::ThreadPane;
 use gpui_kit::assets::IconName;
-use gpui_kit::component::input::{Copy, Cut, Enter, Escape, IndentInline, InlineToken, InlineTokenContext, InlineTokenHoverEvent, InputEvent, MoveDown, MoveUp, Textarea, TextareaState};
+use gpui_kit::component::input::{Copy, Cut, Enter, Escape, IndentInline, InlineToken, InlineTokenContext, InlineTokenHoverEvent, InputEvent, MoveDown, MoveLeft, MoveRight, MoveUp, Textarea, TextareaState};
 use gpui_kit::component::spinner::Spinner;
 use gpui_kit::component::{h_flex, v_flex, ActiveTheme as _, Icon, Sizable as _};
 use gpui_kit::prelude::*;
@@ -94,6 +94,8 @@ pub struct Composer {
     pub(crate) palette_asked: Option<String>,
     /// The palette's list, kept so the arrows can scroll the pick into sight.
     pub(crate) palette_scroll: ScrollHandle,
+    /// The palette's own search field, made the first time it's drawn.
+    pub(crate) palette_search: Option<(Entity<gpui_kit::component::input::InputState>, Subscription)>,
     /// The box's width at the last paint, for the palette's columns.
     pub(crate) card_width: Rc<Cell<f32>>,
     /// The chip row's right edge and the send button's, at the last paint:
@@ -232,6 +234,7 @@ impl Composer {
             palette: PaletteState::default(),
             palette_asked: None,
             palette_scroll: ScrollHandle::new(),
+            palette_search: None,
             card_width: Rc::new(Cell::new(style::MAX_CONTENT_WIDTH)),
             controls_fit: Rc::new(Cell::new((0., 0.))),
             box_top: Rc::new(Cell::new(f32::MAX)),
@@ -472,7 +475,7 @@ impl Composer {
     }
 
     /// ComposerView.returnWhenEmpty: Return with nothing typed allows the
-    /// sole waiting approval (the ⏎ its Allow button shows). Not while a
+    /// oldest waiting approval (the ⏎ its Allow button shows). Not while a
     /// message is being edited: the box is the edit then, an empty one
     /// sends nothing, and Return there is about that message, never a card
     /// that may be off screen (Daybreak, 11 Nov: pencil, clear, Return
@@ -1473,6 +1476,18 @@ impl Composer {
             }))
             .capture_action(cx.listener(|this, _: &IndentInline, window, cx| {
                 if this.palette_key(PaletteKey::Tab, window, cx) {
+                    cx.stop_propagation();
+                }
+            }))
+            // Left and Right step through its categories while it's open
+            // (Wayne, 10 Nov).
+            .capture_action(cx.listener(|this, _: &MoveLeft, window, cx| {
+                if this.palette_key(PaletteKey::Left, window, cx) {
+                    cx.stop_propagation();
+                }
+            }))
+            .capture_action(cx.listener(|this, _: &MoveRight, window, cx| {
+                if this.palette_key(PaletteKey::Right, window, cx) {
                     cx.stop_propagation();
                 }
             }))

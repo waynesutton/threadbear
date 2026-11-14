@@ -1077,16 +1077,14 @@ impl ThreadPane {
         }));
     }
 
-    /// Return in an empty box allows the sole waiting approval, the ⏎ its
-    /// Allow button shows (ComposerView.allowSoleApproval); with two, Return
-    /// can't know which, and another runner asking for a thread is started
-    /// only by a click on its card.
+    /// Return in an empty box, or in the transcript, allows the oldest
+    /// waiting approval whose answer isn't on its way, the one whose Allow
+    /// shows the ⏎ (ComposerView.allowSoleApproval, approvalForReturn), so
+    /// with several Return works down them in order. Another runner asking
+    /// for a thread is started only by a click on its card.
     pub(crate) fn allow_sole_approval(&mut self, cx: &mut Context<Self>) -> bool {
-        let pending = self.feed.model().pending_approval_ids();
-        let [id] = pending.as_slice() else { return false };
-        let id = id.clone();
+        let Some(id) = self.feed.model().approval_for_return(&self.rows.answering) else { return false };
         let stacked = match self.feed.model().item(&format!("ap:{id}")) {
-            Some(Row { content: RowContent::Approval(item), .. }) if item.is_start_request() => return false,
             Some(Row { content: RowContent::Approval(item), .. }) => !item.queued().is_empty(),
             _ => false,
         };
@@ -1785,9 +1783,19 @@ impl Render for ThreadPane {
                 Some(message) if !self.loaded => s.child(self.render_load_failure(message, cx)),
                 _ if self.loaded && self.subagent_id.is_some() && self.feed.model().rows().is_empty() => s.child(div().flex_1().flex().items_center().justify_center().text_size(px(13.)).text_color(muted).child("Nothing yet.")),
                 _ => s.child(crate::open_motion::transcript_frame(
-                    div()
+                    div().size_full().child(div()
+                        .id("thread-transcript-frame")
                         .relative()
                         .size_full()
+                        .on_key_down(cx.listener(|this, ev: &KeyDownEvent, window, cx| {
+                            let mods = ev.keystroke.modifiers;
+                            // A reply's text can forward Return. Embedded
+                            // question/secret fields keep their own Return.
+                            let plain_return = ev.keystroke.key == "enter" && !mods.secondary(cx) && !mods.control && !mods.alt && !mods.shift;
+                            if plain_return && this.rows.documents.values().any(|doc| doc.read(cx).focus_handle().contains_focused(window, cx)) && this.allow_sole_approval(cx) {
+                                cx.stop_propagation();
+                            }
+                        }))
                         .child(transcript_list(&self.scroller, bg, cx.processor(|this, ix: usize, window, cx| this.render_item(ix, window, cx)), cx))
                         // A small spinner in the middle of where the transcript
                         // will be, and no words, from the moment it's opened
@@ -1795,7 +1803,7 @@ impl Render for ThreadPane {
                         // over the transcript while `.loading`).
                         .when(loading, |s| s.child(div().absolute().inset_0().flex().items_center().justify_center().child(self.spinner(16., cx))))
                         // Where an archive's page starts from (archive_flight.rs); a sub-agent's never flies.
-                        .when(self.subagent_id.is_none(), |s| s.child(crate::archive_flight::transcript_mark(cx.entity_id()))),
+                        .when(self.subagent_id.is_none(), |s| s.child(crate::archive_flight::transcript_mark(cx.entity_id())))),
                     entering,
                 )),
             })

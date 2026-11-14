@@ -62,3 +62,16 @@ Then('a review card says {string}', async function (this: ThreadbearWorld, words
   await this.until(`a review card "${words}"`, (d) => d.transcript.rows.some((r) => r.kind === 'review' && r.text.includes(words)));
 });
 
+
+When('the agent asks for two approvals', async function (this: ThreadbearWorld) {
+  await this.app.do({ cmd: 'send', text: 'Please ask for two approvals' });
+});
+
+Then('the approval for {string} says it was allowed', async function (this: ThreadbearWorld, command: string) {
+  await this.until(`"${command}" allowed`, (d) => d.transcript.rows.some((r) => r.kind === 'approval' && r.text.includes(command) && r.text.endsWith('(allow)')));
+});
+
+When('I select the earlier reply in the transcript', async function (this: ThreadbearWorld) {
+  const row = await this.until('the earlier reply', (d) => d.transcript.rows.find((r) => r.kind === 'assistant'));
+  await this.app.do({ cmd: 'select-text', row: row.id, words: row.text });
+});
