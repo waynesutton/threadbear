@@ -177,10 +177,10 @@ against the GPUI app.
 | f248d332 | Quit asks first, with Don't ask again | to check |
 | 5e6c8146 | Attach Image takes Markdown files | to check |
 | 30fe46cd | Question card descriptions wrap | to check |
-| bf73c636 | Markdown files open drawn, Preview / Markdown menu | to check |
+| bf73c636 | Markdown files open drawn, Preview / Markdown menu | already |
 | ed662aab | Settings > General > Experiments switches | to check |
 | b4370100 | New Thread on a project's page starts in the project | to check |
-| 1d47f50c | Files panel: clicking opens again | to check |
+| 1d47f50c | Files panel: clicking opens again | already |
 | b79385cb | Web addresses in inline code are links | to check |
 | ba5d5cfc | Standing instructions for every session | to check |
 | 58151848 | New Skill | to check |
