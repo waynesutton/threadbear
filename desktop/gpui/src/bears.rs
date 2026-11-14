@@ -141,7 +141,7 @@ impl Threadbear {
         tables.into_iter().map(|(title, table)| {
             let mut section = v_flex().w_full().gap(px(2.)).child(crate::project_page::page_heading(&title, None, None, cx));
             for seat in bears::seats(table, &self.bear_list.bears) {
-                let row = h_flex().id(SharedString::from(format!("seat-{}-{}", project.id, seat.tile.id))).test_support().aria_label(seat.tip.clone()).tip(seat.tip)
+                let row = h_flex().id(SharedString::from(format!("seat-{}-{}", project.id, seat.tile.id))).test_support().role(Role::ListItem).aria_label(seat.tip.clone()).tip(seat.tip)
                     .gap(px(8.)).py(px(3.)).child(tile(&seat.tile, 22.))
                     .child(div().text_size(px(crate::style::size::LABEL)).text_color(cx.theme().foreground).child(seat.name))
                     .when_some(seat.does, |s, does| s.child(div().min_w_0().truncate().text_size(px(crate::style::size::DETAIL)).text_color(crate::style::secondary_text(cx)).child(does)));

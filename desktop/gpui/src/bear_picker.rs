@@ -90,7 +90,7 @@ impl Composer {
             let selected = self.bear_selected == index;
             let pick_range = range.clone();
             let tile = crate::bears::tipped_tile(SharedString::from(format!("bear-picker-tile-{}", bear.id)), &bear.tile(), 28.);
-            let row = h_flex().id(SharedString::from(format!("bear-picker-{}", bear.id))).test_support().aria_label(format!("Mention {}", bear.name)).tip(format!("Mention {}", bear.name))
+            let row = h_flex().id(SharedString::from(format!("bear-picker-{}", bear.id))).test_support().role(Role::Button).aria_label(format!("Mention {}", bear.name)).tip(format!("Mention {}", bear.name))
                 .gap(px(8.)).p(px(6.)).rounded(px(5.)).cursor_pointer()
                 .when(selected, |s| s.bg(style::sidebar_hover(cx)))
                 .child(tile)
