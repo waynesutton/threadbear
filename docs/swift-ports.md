@@ -26,7 +26,7 @@ app does it), **nothing** (nothing to rebuild), **skip** (Wayne said no).
 | 14 | d3c96861 | Every listed skill turns blue in the box and links to its SKILL.md | to do |
 | 92 | 0a003c67 | Files open ready to type, autosave switch, unsaved dot, Save prompt | to do |
 | 93 | 41275129 | Line numbers and ⌘S, opened ready to type | to do |
-| 98 | d28e38f4 | A saved plan opens in the side pane, with a link under the reply | to do |
+| 98 | d28e38f4 | A saved plan opens in the side pane, with a link under the reply | done |
 | 43 | 3708b1c7 | Side pane find and replace, and search in folders | to do |
 | 79 | 55498864 | Settings > Keyboard list full height | to do |
 

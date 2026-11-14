@@ -170,6 +170,7 @@ It comes from reading code, not from running anything, so "(unverified)" means n
 | `transcript.secret` | Secret card | Masked field, Save securely, Decline, settles to a line | `Input` in a masked mode (unverified that the mode exists) on a drawn card. | kit | M | `Cells` (`SecretRowCell`, `SecretField`) |
 | `transcript.review` | Review card | Compact card to reopen a review | Drawn. | build | S | `ReviewRowCell` |
 | `transcript.plan` | Plan card | Go ahead, Send back, expand, becomes a checklist | Drawn card. | build | M | `Cells` (`PlanCardCell`) |
+| `transcript.savedplan` | Saved plan | A Plan first plan the runner saved opens in the side pane, and the note under the reply links it | The runner pins it with `show`; a note with a Markdown link stays out of the folded work and draws its link. | build | S | `RowRenderer`, `TranscriptReducer` (`isWork`) |
 | `transcript.plansteps` | Plan steps row | Agent's step list | Drawn. | build | S | `RowRenderer` (`planSteps`) |
 | `transcript.turnfooter` | Turn footer | End-of-turn line from outcome, duration, cost and usage | Drawn. | build | S | `RowRenderer`, `Event` |
 | `transcript.note` | Note row | Quiet system line, folds into groups. GPUI only: a login's move or wait ("Moved to ...", "Carrying on at ...") stays on show, in place of the limit's error | Drawn. | build | S | `RowRenderer` |

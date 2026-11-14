@@ -34,6 +34,25 @@ fn testBasicTurnBecomesRows() {
     assert_eq!(model.last_seq(), 7);
 }
 
+/// The saved plan's note links the file, so it stays out where it can be
+/// clicked, while a plain note folds into the work (`LinkedNoteTests`).
+#[test]
+fn testANoteWithALinkIsNeverFoldedAway() {
+    let model = from_events(vec![
+        event(1, "turn.started", json!({"turnId": "t1"})),
+        user(2, "Plan the footer"),
+        call_titled(3, "c1", "ls"),
+        result_text(4, "c1", "ok"),
+        event(5, "system.note", json!({"text": "Resumed session"})),
+        text(6, "m1", "Here's the plan."),
+        event(7, "system.note", json!({"text": "Saved the plan in [plans/a.md](</tmp/plans/a.md>)."})),
+        done(8),
+    ]);
+    assert_eq!(ids(&model), ["u:2", "g:t:c1", "a:m1", "n:7", "f:t1"]);
+    assert!(RowContent::Note("Saved the plan in [plans/a.md](</tmp/plans/a.md>).".into()).is_linked_note());
+    assert!(!RowContent::Note("Resumed session".into()).is_linked_note());
+}
+
 /// "Woke up after hibernating for 2 days." is what Mike opened the thread
 /// to read, so it has a row of its own under the turn before.
 #[test]

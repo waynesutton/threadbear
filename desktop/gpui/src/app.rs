@@ -723,6 +723,14 @@ impl Threadbear {
                 self.side.update(cx, |side, cx| side.refresh_highlights(id, std::time::Duration::ZERO, cx));
                 return;
             }
+            // Still fetching: what's in Highlights now may be a fetch that
+            // left before the pin, so it waits for the one asked for above. A
+            // saved plan's note comes just before its pin, and its fetch came
+            // back first, so the plan never opened (Wayne's d28e38f4).
+            if item.is_none() && self.side.read(cx).fetching.contains(&thread.id) {
+                self.panel_gate.release(&request.id);
+                return;
+            }
             self.show_requested(&RequestedPanel::Section(requests::HIGHLIGHTS.to_owned()), &RequestedPlace::Usual, &thread, cx);
             // Only the pane: an agent showing a file never starts its app.
             // One unpinned since still opens Highlights.

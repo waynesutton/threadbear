@@ -536,6 +536,14 @@ impl RowContent {
         matches!(self, RowContent::Note(text) if text.starts_with("Woke up"))
     }
 
+    /// A note with a Markdown link in it: the saved plan's "Saved the plan in
+    /// [plans/…](<path>)." (runner.ts `savePlan`). It's something to click,
+    /// so it never folds into the work, where it couldn't be seen (`isWork`,
+    /// Wayne's d28e38f4).
+    pub fn is_linked_note(&self) -> bool {
+        matches!(self, RowContent::Note(text) if text.contains("](") && !text.contains('\n'))
+    }
+
     /// The note a thread leaves when its login ran out: it moved to another
     /// one ("Moved to mike@example.org: mike@example.net hit its 5-hour
     /// limit, back at 6:10 pm."), or nothing had room and it's waiting

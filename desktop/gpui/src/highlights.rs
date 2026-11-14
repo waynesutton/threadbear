@@ -241,7 +241,7 @@ pub(crate) struct SidePane {
     pub(crate) highlights: HashMap<String, ThreadHighlights>,
     pub(crate) highlights_unsupported: bool,
     wanted: HashMap<String, u64>,
-    fetching: HashSet<String>,
+    pub(crate) fetching: HashSet<String>,
     /// Folded headings, for every thread (`collapsedHighlights`).
     pub(crate) collapsed: HashSet<String>,
     /// The chosen section per thread (`panelChoice`).

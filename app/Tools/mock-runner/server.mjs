@@ -1361,6 +1361,34 @@ async function dispatch(client, method, p) {
       broadcastSummary(t.summary.id);
       return { request: t.summary.panelRequest };
     }
+    case 'mock.savedPlan': {
+      // A Plan first turn whose plan the runner saved, as runner.ts
+      // `savePlan` does: the file in the thread's folder, pinned with show
+      // (so the app opens it in the side pane), and the note linking it.
+      // {threadId}. For features/plans.feature and the port's pictures.
+      const t = need(p.threadId);
+      const id = t.summary.id;
+      const rel = `plans/${new Date().toISOString().slice(0, 10)}-site.md`;
+      const file = path.join(t.summary.cwd, rel);
+      fs.mkdirSync(path.dirname(file), { recursive: true });
+      fs.writeFileSync(file, `# Plan: ${t.summary.title}\n\n## Goal\n\nThe pricing page shows the real plan prices.\n\n## Steps\n\n1. Put the prices in the plan cards.\n2. Check the cards line up on a phone.\n3. Push and post the preview.\n`);
+      const turnId = 'turn_plan_' + crypto.randomBytes(3).toString('hex');
+      persist(id, { type: 'user.message', text: 'Plan the pricing page', images: [], mode: 'plan' }, turnId);
+      persist(id, { type: 'turn.started', turnId }, turnId);
+      persist(id, { type: 'assistant.text', itemId: turnId + '_m', text: 'Here is the plan: real prices in the three cards, a phone check, then the preview.' }, turnId);
+      persist(id, { type: 'system.note', text: `Saved the plan in [${rel}](<${file}>).` }, turnId);
+      persist(id, { type: 'turn.completed', turnId, outcome: 'completed', durationMs: 4000 }, turnId);
+      const list = highlights.get(id) ?? { highlights: [], edited: [] };
+      highlights.set(id, list);
+      const hid = `file:${file}`;
+      list.highlights = list.highlights.filter((h) => h.id !== hid);
+      list.highlights.unshift({ id: hid, kind: 'file', title: `Plan: ${t.summary.title}`, path: file, how: 'pinned', note: 'The plan from Plan first', seq: t.summary.lastSeq, lastSeq: t.summary.lastSeq, at: iso() });
+      t.summary.highlightsAt = iso();
+      t.summary.panelRequest = { id: 'pr_' + crypto.randomBytes(4).toString('hex'), panel: 'highlights', title: list.highlights[0].title, highlight: hid, at: iso() };
+      setStatus(id, 'idle');
+      broadcastSummary(id);
+      return { path: file };
+    }
     case 'mock.panelState': {
       // What's waiting on the thread and what the app has said it showed.
       const t = need(p.threadId);

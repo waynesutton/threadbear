@@ -207,7 +207,7 @@ impl ThreadPane {
             RowContent::Asks(asks) if asks.is_open => div().into_any_element(),
             RowContent::Asks(asks) => self.asks_row(ix, asks, cx),
             RowContent::Note(note) if row.in_group => self.grouped_note_row(ix, &row, note, cx),
-            RowContent::Note(note) => self.note_row(&row, note, cx),
+            RowContent::Note(note) => self.note_row(ix, &row, note, cx),
             RowContent::Error { message, kind } => self.error_row(message, *kind, cx),
             RowContent::Group(group) => self.group_row(ix, &row, group, cx),
             RowContent::Working(status) => self.working_row(status.started_at, window, cx),
@@ -524,14 +524,22 @@ impl ThreadPane {
     }
 
     /// A quiet centred system note.
-    fn note_row(&mut self, row: &Row, note: &str, cx: &mut Context<Self>) -> AnyElement {
+    fn note_row(&mut self, ix: usize, row: &Row, note: &str, cx: &mut Context<Self>) -> AnyElement {
         let quiet = style::quiet_text(cx);
         // A block as wide as the column, centred line by line. It used to be
         // a flex row centring a text box with no width of its own, so a long
         // note (the same-work one naming several threads) never wrapped and
         // ran off both sides of the window (13 Nov).
-        let content = div().py(px(ROW_TOP)).w_full().text_size(px(size::SMALL)).line_height(px(17.)).text_color(quiet).text_center().child(note.to_owned());
-        row_wrap(row, content)
+        let content = div().py(px(ROW_TOP)).w_full().text_size(px(size::SMALL)).line_height(px(17.)).text_color(quiet).text_center();
+        // A note with a link in it (the saved plan's) keeps the link, so a
+        // click opens it in the pane as a reply's does (`noteText`).
+        if row.content.is_linked_note() {
+            let doc = self.markdown_state(&row.id, note, cx);
+            let style = self.reading_style(cx).with_foreground(quiet).with_paragraph_gap(gpui_kit::rems(0.));
+            let text = crate::reply_links::link_aware(self.linked_text(&doc, &row.id, cx).style(style), ix, row, &self.summary.id, cx);
+            return row_wrap(row, content.child(text));
+        }
+        row_wrap(row, content.child(note.to_owned()))
     }
 
     /// A failed turn's message in its pink box, and what to do about it when

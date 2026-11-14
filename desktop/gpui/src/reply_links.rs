@@ -970,12 +970,17 @@ pub(crate) fn peek_command(app: &Entity<crate::app::Threadbear>, cmd: &serde_jso
         let ix = rows.iter().position(|r| r.id.starts_with(prefix))?;
         (ix, rows[ix].clone())
     };
-    let RowContent::Assistant(item) = &row.content else { return None };
+    // A reply's links, or a note's (the saved plan's).
+    let source = match &row.content {
+        RowContent::Assistant(item) => crate::rows::markdown::prepare(&item.text, &pane.read(cx).summary.id),
+        RowContent::Note(note) if row.content.is_linked_note() => note.clone(),
+        _ => return None,
+    };
     if cmd["show"].as_bool() == Some(false) {
         hide_peek(cx);
         return Some(Ok(json!("ok")));
     }
-    let links = reply_links_in(&crate::rows::markdown::prepare(&item.text, &pane.read(cx).summary.id));
+    let links = reply_links_in(&source);
     let named = |url: &str| -> Option<String> {
         match pane.read(cx).link_target(url)? {
             LinkTarget::Web(web) => Some(web),
