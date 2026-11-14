@@ -191,7 +191,7 @@ It comes from reading code, not from running anything, so "(unverified)" means n
 
 | ID | Feature | What it does | How in GPUI | Route | Size | Swift |
 |---|---|---|---|---|---|---|
-| `rich.inline` | Inline Markdown | Bold, italic, strike, inline code pills, bare URLs | `TextView` (unverified that its inline code can match our pill). | kit | M | `MarkdownRenderer`, `TextKit` |
+| `rich.inline` | Inline Markdown | Bold, italic, strike, inline code pills, bare URLs; user messages preserve typed line breaks | `TextView` (unverified that its inline code can match our pill). | kit | M | `MarkdownRenderer`, `TextKit` |
 | `rich.blocks` | Headings, lists, quotes | Block styles and list markers | `TextView`, styled through the theme. | kit | M | `MarkdownRenderer` |
 | `rich.codebox` | Code boxes | Rounded box behind code | `TextView` code blocks, with long ones capped and scrolled inside as Ghostex does. | kit | S | `MarkdownRenderer`, `TextKit` |
 | `rich.table` | Tables | Natural widths, scales down to fit | TextView with our opt-in natural-width style; wide tables still fit or scroll inside the column. | kit | M | `MarkdownRenderer` (`renderTable`) |

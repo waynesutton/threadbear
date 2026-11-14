@@ -61,6 +61,20 @@ pub fn linked_text(text: &str, mentions: &[Mention]) -> String {
     out
 }
 
+/// Keep the user's own Markdown while linking known skill words.
+pub fn linked_markdown_text(text: &str, mentions: &[Mention]) -> String {
+    let mut out=String::new();
+    let mut from=0;
+    for mention in mentions {
+        out.push_str(&text[from..mention.range.start]);
+        out.push('[');out.push_str(&text[mention.range.clone()]);
+        out.push_str("](threadbear-skill:");out.push_str(&mention.name);out.push(')');
+        from=mention.range.end;
+    }
+    out.push_str(&text[from..]);
+    out
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -89,6 +103,11 @@ mod tests {
         assert!(linked.contains("threadbear-skill:review"));
         assert!(!linked.contains("<script>"));
         assert!(linked.contains(r"\*\*use\*\*"));
+    }
+    #[test]
+    fn links_can_keep_the_users_own_markdown() {
+        let text="**use** /review\nnext";
+        assert_eq!(linked_markdown_text(text,&find(text,&commands())),"**use** [/review](threadbear-skill:review)\nnext");
     }
     #[test]
     fn names_are_case_insensitive_with_utf8_byte_ranges() {

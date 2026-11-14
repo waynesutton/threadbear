@@ -44,8 +44,9 @@ impl Composer {
 impl ThreadPane {
     pub(crate) fn skill_words(&mut self, id: &str, text: &str, cx: &mut Context<Self>) -> Option<AnyElement> {
         let mentions = skill_mentions::find(text, &self.mention_commands(cx));
-        if mentions.is_empty() { return None; }
-        let source = skill_mentions::linked_text(text, &mentions);
+        let linked = skill_mentions::linked_markdown_text(text, &mentions);
+        let source = threadbear_core::user_markdown::prepare(&linked)
+            .or_else(|| (!mentions.is_empty()).then_some(linked))?;
         let doc = self.markdown_state(&format!("user-skills-{id}"), &source, cx);
         let style = self.reading_style(cx).with_foreground(style::label_text(cx)).with_paragraph_gap(gpui_kit::rems(0.));
         Some(self.linked_text(&doc, id, cx).style(style).into_any_element())

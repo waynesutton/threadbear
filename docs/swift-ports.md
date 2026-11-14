@@ -192,7 +192,7 @@ against the GPUI app.
 | 0f5c08f0 | Notes, and Voice/skills/notes switches | done: Notes and Skills; Voice skipped |
 | 3d531d54 | Skills page | done: shared store list, import, suggested, Always on, update/remove/source actions |
 | f9f3c8e4 | Settings over the main panel | done: default main panel, optional own window, X/Esc/Back/gear closes |
-| 1d311b94 | Your messages show basic Markdown | to check |
+| 1d311b94 | Your messages show basic Markdown | done: basic formatting, preserved breaks, plain fallback and skill links |
 | c3603b16 | The bear's chat has Voice | skip (Voice) |
 | 540cc171 | The bear: a chat at the top of the sidebar | to check |
 | 25510a20 | Voice avatar | skip (Voice) |

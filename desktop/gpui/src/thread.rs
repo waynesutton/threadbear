@@ -1509,6 +1509,13 @@ impl ThreadPane {
                 // done card's later loose ends were cut off the dump, though
                 // drawn (the nightly parity run, 12 Nov).
                 let mut out = json!({ "id": row.id, "kind": row.kind().as_str(), "text": threadbear_core::reducer::RowDebug::excerpt(row, 300), "inGroup": row.in_group, "seq": row.seq, "onScreen": scroller.row_on_screen(index) });
+                if let RowContent::User(_) = &row.content {
+                    if let Some(document) = self.rows.documents.get(&format!("user-skills-{}",row.id)) {
+                        let rendered = document.read(cx).rendered_text();
+                        out["renderedText"] = json!(rendered.as_str());
+                        out["markdownSource"] = json!(rendered.source());
+                    }
+                }
                 if let Some(height) = scroller.row_height(index) {
                     out["height"] = json!(f32::from(height).round());
                 }
