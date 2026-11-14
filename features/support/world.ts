@@ -112,6 +112,10 @@ After({ tags: '@picture-loading' }, () => {
   else process.env.MOCK_SCRIPTED_TURNS = startingScriptedTurns;
 });
 
+// Bears fixtures are isolated to the scenarios that ask for them.
+Before({ tags: '@bears.tile or @bears.colour' }, () => { process.env.TB_MOCK_BEARS = '1'; });
+After({ tags: '@bears.tile or @bears.colour' }, () => { delete process.env.TB_MOCK_BEARS; });
+
 Before(async function (this: ThreadbearWorld, { pickle }) {
   // A scenario about paging needs a thread longer than one page of events.
   const long = pickle.tags.some((t) => t.name === '@long-thread');

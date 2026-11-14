@@ -247,6 +247,9 @@ pub struct Project {
     /// The project it's a part of (protocol, Projects, "Parts"); none for a
     /// project of its own and from a runner before parts.
     pub parent_id: Option<String>,
+    /// A table of bears (protocol "Tables"): who sits at it. None for any
+    /// other project, and from a runner without tables.
+    pub table: Option<crate::bears::Table>,
 }
 
 fn strings(v: &Value) -> Vec<String> {
@@ -287,6 +290,7 @@ impl Project {
             notion: some("notion"),
             tasks: Tasks::decode(&v["tasks"]),
             parent_id: some("parentId"),
+            table: crate::bears::Table::decode(&v["table"]),
         })
     }
 

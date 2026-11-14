@@ -42,8 +42,8 @@ app does it), **nothing** (nothing to rebuild), **skip** (Wayne said no).
 
 | # | Commit | What it does | Status |
 |---|---|---|---|
-| 9 | f69b7232 | Sidebar rows show a bear's icon on its colour, Bear Colour menu | to do |
-| 1 | d3e7a3f3 | The Bear Colour menu shows its icons | to do |
+| 9 | f69b7232 | Sidebar rows show a bear's icon on its colour, Bear Colour menu | done |
+| 1 | d3e7a3f3 | The Bear Colour menu shows its icons | done |
 | 8 | debffacf | Typing @ in the box lists your bears | to do |
 | 7 | 57934753 | The @ picker keeps to this Mac's runner | to do |
 | 5 | 38c291b6 | A table's bears shown, seated on join | to do |

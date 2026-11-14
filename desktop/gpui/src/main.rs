@@ -18,6 +18,7 @@ mod app_update;
 mod automation;
 #[cfg(feature = "automation")]
 mod automation_compat;
+mod bears;
 mod chips;
 mod colour_space;
 mod composer_media;

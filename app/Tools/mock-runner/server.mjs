@@ -428,6 +428,13 @@ if (process.env.TB_MOCK_PARTS) {
   const tb = projects.find((p) => p.title === 'Threadbear');
   if (photo && tb) photo.parentId = tb.id;
 }
+// Bears and tables (docs/protocol.md, "Bears", "Tables"), with
+// TB_MOCK_BEARS=1: three bears, each with a demo thread in its folder
+// (the summary's `bear`, the sidebar's tile), and two tables, Head table
+// on its own and Launch crew as a Part of Threadbear. Only when asked, as
+// it changes those threads' tiles.
+let bears = [];
+if (process.env.TB_MOCK_BEARS) addDemoBears();
 // A big set for timing the Projects view (TB_MOCK_PERF_PROJECTS=<threads>):
 // that many threads over 80 projects, nearly all archived, the open ones
 // partly waiting on a card of asks, and a third of the projects with a
@@ -1500,6 +1507,10 @@ async function dispatch(client, method, p) {
     case 'librarian.update':
       if (oldRunner) throw rpcError(-32601, `Unknown method ${method}`);
       return projectRequest(method, p);
+    case 'bears.list':
+    case 'bears.update':
+    case 'tables.list':
+      return bearsRequest(method, p);
     // The profile page (docs/protocol.md, "Profile page"): kept in memory,
     // sent nowhere.
     case 'profilePage.get':
@@ -3084,6 +3095,70 @@ function addDemoSchedules() {
     push({ type: 'turn.completed', outcome: 'completed', durationMs: 8400, costUsd: 0.02 });
     t.summary.lastSeq = seq;
     t.summary.lastSeenSeq = seq;
+  }
+}
+
+// ---------------------------------------------------------------- bears
+
+function addDemoBears() {
+  const now = Date.now();
+  const ago = (minutes) => new Date(now - minutes * 60_000).toISOString();
+  bears = [
+    { id: 'head-bear-1a2b', name: 'Head Bear', does: 'Runs the other bears and keeps their plans straight', head: true },
+    { id: 'writer-3c4d', name: 'Writer', does: 'Drafts posts, docs and release notes', icon: 'pencil', color: '#3E8ED0' },
+    { id: 'designer-5e6f', name: 'Designer', does: 'Mocks up screens and picks colours', icon: 'paintbrush', color: '#8A5CC2' },
+  ];
+  const homes = { 'head-bear-1a2b': 'demo_tidy_imports', 'writer-3c4d': 'demo_landing_pages', 'designer-5e6f': 'demo_codex_poster' };
+  for (const bear of bears) {
+    const t = threads.get(homes[bear.id]);
+    if (t) t.summary.bear = bearTile(bear);
+  }
+  const head = {
+    id: 'p_7ab1e001', title: 'Head table', folders: ['/Users/mike/Bears/Tables/head-table-7ab1'], goals: 'Where the bears plan the week together.',
+    state: '', notes: '', links: [], createdBy: 'mike', createdAt: ago(60 * 24), updatedAt: ago(30),
+    icon: { symbol: 'person.3', by: 'mike', updatedAt: ago(60 * 24) },
+    table: { bears: ['head-bear-1a2b', 'writer-3c4d'] },
+  };
+  const crew = {
+    id: 'p_7ab1e002', title: 'Launch crew', folders: ['/Users/mike/Bears/Tables/launch-crew-9c0d'], goals: 'Gets Threadbear 0.4 out the door.',
+    state: '', notes: '', links: [], createdBy: 'mike', createdAt: ago(60 * 12), updatedAt: ago(20),
+    icon: { symbol: 'person.3', by: 'mike', updatedAt: ago(60 * 12) },
+    parentId: projects.find((p) => p.title === 'Threadbear')?.id,
+    table: { bears: ['writer-3c4d'] },
+  };
+  projects.push(head, crew);
+  const tidy = threads.get('demo_tidy_imports');
+  if (tidy) join(tidy.summary, head, 'mike', false, ago(30));
+}
+
+/** What a thread in a bear's folder carries for its tile (Bears.tile). */
+function bearTile(b) {
+  return { id: b.id, name: b.name, ...(b.icon ? { icon: b.icon } : {}), ...(b.color ? { color: b.color } : {}), ...(b.head ? { head: true } : {}) };
+}
+
+function bearsRequest(method, p) {
+  const on = bears.length > 0;
+  switch (method) {
+    case 'bears.list':
+      return { on, bears: bears.map((b) => ({ ...b, folder: `/Users/mike/Bears/${b.id}`, state: {}, away: false, archived: false, routines: [] })) };
+    case 'bears.update': {
+      if (!on) throw rpcError(-32000, 'Bears are off: turn them on in Settings > General > Experiments.');
+      const bear = bears.find((b) => b.id === p.bear);
+      if (!bear) throw rpcError(-32602, `No bear ${p.bear}`);
+      if ('color' in p) {
+        if (p.color === null) delete bear.color;
+        else bear.color = String(p.color);
+      }
+      // As bears.update does, its threads' summaries go again so the tile follows.
+      for (const [id, t] of threads) {
+        if (t.summary.bear?.id !== bear.id) continue;
+        t.summary.bear = bearTile(bear);
+        broadcastSummary(id);
+      }
+      return { bear };
+    }
+    case 'tables.list':
+      return { on, tables: listedProjects(false).filter((x) => x.table) };
   }
 }
 

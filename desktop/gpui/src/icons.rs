@@ -12,6 +12,10 @@ use gpui_kit::component::Icon;
 /// here: the star's shape, filled with the current text colour.
 const STAR_FILLED: &[u8] = br#"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 2.5l2.9 6.4 7 .7-5.2 4.7 1.5 6.9L12 17.7l-6.2 3.5 1.5-6.9-5.2-4.7 7-.7z" fill="black"/></svg>"#;
 
+/// `circle.fill`, Bear Colour's mark for a colour that isn't the bear's
+/// now: Lucide's circle is an outline.
+const CIRCLE_FILLED: &[u8] = br#"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8" fill="black"/></svg>"#;
+
 /// A filled message bubble distinguishes a board card worked on by this
 /// thread from the outline button that opens another thread.
 const BUBBLE_FILLED: &[u8] = br#"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M4 3h16a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H7l-5 3V5a2 2 0 0 1 2-2z" fill="black"/></svg>"#;
@@ -79,6 +83,13 @@ pub fn try_symbol(name: &str) -> Option<Icon> {
         "star" => IconName::Star,
         "star.fill" => return Some(Icon::default().data(STAR_FILLED)),
         "bubble.left.fill" => return Some(Icon::default().data(BUBBLE_FILLED)),
+        "circle.fill" => return Some(Icon::default().data(CIRCLE_FILLED)),
+        // Bears (bears.rs): the head bear's crown, any other's paw, Bear
+        // Colour's palette, and a table's three people.
+        "crown" | "crown.fill" => IconName::Crown,
+        "pawprint.fill" => IconName::PawPrint,
+        "paintpalette" | "paintpalette.fill" => IconName::Palette,
+        "person.3" | "person.3.fill" => IconName::Users,
         "star.slash" => IconName::StarOff,
         "tray" => IconName::Inbox,
         "tray.and.arrow.up" => IconName::ArchiveRestore,

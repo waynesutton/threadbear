@@ -124,6 +124,9 @@ pub struct Threadbear {
     /// What clicks from a menu are doing, by their key, newest last, and
     /// what's just been done, for the banner (`busyNotes`, `doneNote`).
     pub(crate) busy_notes: Vec<(String, String)>,
+    /// The bears this Mac's runner lists, for the @ list and a table's page
+    /// (bears.rs).
+    pub(crate) bear_list: crate::bears::BearList,
     pub(crate) done_note: Option<String>,
     pub(crate) done_task: Option<Task<()>>,
     /// CLI updates that failed and were dismissed from the banner, by
@@ -516,6 +519,7 @@ impl Threadbear {
             error_message: None,
             connection_error: None,
             busy_notes: Vec::new(),
+            bear_list: Default::default(),
             done_note: None,
             done_task: None,
             dismissed_cli_failures: HashSet::new(),

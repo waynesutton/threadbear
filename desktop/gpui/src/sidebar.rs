@@ -298,6 +298,8 @@ pub(crate) enum MenuAction {
     ThreadProject { thread: String, add: Option<String>, remove: Option<String> },
     /// A project's menu, or one of a thread's that acts on projects (projects.rs).
     Project(crate::projects::ProjectAction),
+    /// Bear Colour: the bear and its new colour, none for its fur (bears.rs).
+    BearColor(threadbear_core::bears::ThreadBear, Option<String>),
     /// Runs on: where the new thread starts, its default, and a folder on
     /// the chosen runner (new_thread.rs).
     Runner(Option<String>),
@@ -852,6 +854,7 @@ impl Threadbear {
             MenuAction::PauseSchedule(id, paused) => return self.set_schedule_paused(id, paused, cx),
             MenuAction::DeleteSchedule(id) => return self.delete_schedule(id, window, cx),
             MenuAction::Project(action) => return self.run_project_action(action, window, cx),
+            MenuAction::BearColor(bear, color) => return self.set_bear_color(bear, color, cx),
             _ => {}
         }
         let Some(id) = thread else { return };
@@ -908,7 +911,8 @@ impl Threadbear {
             | MenuAction::RunSchedule(_)
             | MenuAction::PauseSchedule(..)
             | MenuAction::DeleteSchedule(_)
-            | MenuAction::Project(_) => {}
+            | MenuAction::Project(_)
+            | MenuAction::BearColor(..) => {}
         }
         cx.notify();
     }
@@ -960,6 +964,11 @@ impl Threadbear {
                     .collect();
                 rows.push(MenuRow::submenu("Move to", "arrow.right.square", children));
             }
+        }
+        // Bear Colour ▸ on a bear's thread (`BearColorMenu`): this Mac's
+        // bears only, as the colour is this runner's to change.
+        if let Some(bear) = t.bear.as_ref().filter(|_| !t.is_remote()) {
+            rows.push(self.bear_colour_menu(bear));
         }
         // "Copy thread id" comes after a divider, as `.iconContextMenu` adds it.
         rows.push(MenuRow::separator());
@@ -1753,6 +1762,7 @@ impl Threadbear {
             let tail = rows::trailing(t, &plain, mode, &clock, (key == "hibernating").then(|| wakes.get(&t.id)).flatten());
             let hovered = self.sidebar.hover_override.as_deref() == Some(t.id.as_str());
             let tile = match rows::tile(t).0 {
+                _ if t.bear.is_some() => format!("bear:{}", t.bear.as_ref().map_or("", |b| b.name.as_str())),
                 Tile::Letter(l) => l,
                 Tile::Folder if t.runner_id.is_some() => "runner".to_string(),
                 Tile::Folder => "folder".to_string(),
@@ -1831,13 +1841,18 @@ fn abbreviate_home(path: &str) -> String {
 /// flat box) in place of the folder, and names it in the tooltip.
 fn render_tile(t: &ThreadSummary, look: &RowLook, behind: Hsla, project_icon: Option<&ProjectIcon>, runner_tile: Option<(&'static str, String)>, p: &Palette) -> impl IntoElement {
     let (tile, stacked) = rows::tile(t);
-    let help = match &runner_tile {
-        Some((_, place)) => format!("{place}, in {}", abbreviate_home(&t.cwd)),
-        None => rows::tile_help(t),
+    // A bear's thread: its tile in place of the folder or a project's
+    // (`ProjectTiles.bear`), named in the tooltip.
+    let stacked = stacked && t.bear.is_none();
+    let help = match (&t.bear, &runner_tile) {
+        (Some(bear), _) => bear.tip(),
+        (None, Some((_, place))) => format!("{place}, in {}", abbreviate_home(&t.cwd)),
+        (None, None) => rows::tile_help(t),
     };
     let size = px(TILE);
     let tinted = |content: AnyElement| div().flex().items_center().justify_center().size(size).rounded(px(7.)).bg(p.tile).child(content).into_any_element();
     let face = match (&tile, project_icon) {
+        _ if t.bear.is_some() => t.bear.as_ref().map(|bear| crate::bears::tile(bear, TILE).into_any_element()).unwrap_or_else(|| div().into_any_element()),
         (Tile::Folder, _) => {
             let glyph = match &runner_tile {
                 Some((symbol, _)) => icon(symbol, 16., p.secondary),
