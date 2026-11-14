@@ -278,11 +278,26 @@ impl TranscriptModel {
     }
 
     /// Approval cards (not questions) still waiting on Mike, oldest first.
-    /// Return in an empty composer allows the one there is.
+    /// Return allows the first of them it can (`approval_for_return`).
     pub fn pending_approval_ids(&self) -> Vec<String> {
         let mut ids: Vec<&String> = self.pending_cards.keys().filter(|k| k.starts_with("ap:")).collect();
         ids.sort_by_key(|k| self.item_index.get(k.as_str()).copied().unwrap_or(0));
         ids.into_iter().map(|k| k[3..].to_owned()).collect()
+    }
+
+    /// The approval Return allows, and whose Allow button shows the ⏎
+    /// (TranscriptModel.approvalForReturn): the oldest still waiting whose
+    /// answer isn't on its way already (`answering`), so with several open
+    /// Return works down them in the order they asked. Never another
+    /// runner's request for a thread: that is started only by a click on
+    /// its card, after reading it.
+    pub fn approval_for_return(&self, answering: &HashSet<String>) -> Option<String> {
+        self.pending_approval_ids().into_iter().find(|id| {
+            if answering.contains(id) {
+                return false;
+            }
+            !matches!(self.item(&format!("ap:{id}")), Some(Row { content: RowContent::Approval(item), .. }) if item.is_start_request())
+        })
     }
 
     /// Replaces everything with this page of events (oldest first).

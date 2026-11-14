@@ -18,6 +18,25 @@ Then('the approval for {string} says it was denied', async function (this: Threa
   await this.until(`"${command}" denied`, (d) => d.transcript.rows.some((r) => r.kind === 'approval' && r.text.includes(command) && r.text.endsWith('(deny)')));
 });
 
+// mock.approval puts a waiting approval card on the open thread.
+When('the agent asks to run {string} and then {string}', async function (this: ThreadbearWorld, first: string, second: string) {
+  const d = await this.app.dump();
+  for (const title of [first, second]) {
+    await this.app.do({ cmd: 'mock', method: 'approval', params: { threadId: d.selection?.id, title } });
+    await this.until(`an approval for "${title}"`, (d) => d.transcript.rows.some((r) => r.kind === 'approval' && r.text.includes(title)));
+  }
+});
+
+Then('the approval for {string} says it was allowed', async function (this: ThreadbearWorld, command: string) {
+  await this.until(`"${command}" allowed`, (d) => d.transcript.rows.some((r) => r.kind === 'approval' && r.text.includes(command) && r.text.endsWith('(allow)')));
+});
+
+Then('the approval for {string} is still waiting', async function (this: ThreadbearWorld, command: string) {
+  const d = await this.app.dump();
+  const row = d.transcript.rows.find((r) => r.kind === 'approval' && r.text.includes(command));
+  assert.ok(row && !/\((allow|deny|allowAlways)\)$/.test(row.text), `"${command}" was answered: ${row?.text}`);
+});
+
 Then('a question card asks {string}', async function (this: ThreadbearWorld, question: string) {
   await this.until(`a question "${question}"`, (d) => d.transcript.rows.some((r) => r.kind === 'question' && r.text === question));
 });

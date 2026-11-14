@@ -296,6 +296,11 @@ fn testPendingApprovalIds() {
         event(3, "approval.requested", json!({"approvalId": "ap2", "name": "Bash", "title": "pwd", "input": {}, "options": ["allow", "deny"]})),
     ]);
     assert_eq!(model.pending_approval_ids(), ["ap1", "ap2"]);
+    // Return allows the oldest, then the next once that one's on its way.
+    let answering = |ids: &[&str]| ids.iter().map(|s| s.to_string()).collect::<std::collections::HashSet<String>>();
+    assert_eq!(model.approval_for_return(&answering(&[])).as_deref(), Some("ap1"));
+    assert_eq!(model.approval_for_return(&answering(&["ap1"])).as_deref(), Some("ap2"));
+    assert_eq!(model.approval_for_return(&answering(&["ap1", "ap2"])), None);
     model.apply(vec![event(4, "approval.resolved", json!({"approvalId": "ap1", "decision": "allow"}))]);
     assert_eq!(model.pending_approval_ids(), ["ap2"]);
     model.apply(vec![event(5, "approval.resolved", json!({"approvalId": "ap2", "decision": "deny"}))]);

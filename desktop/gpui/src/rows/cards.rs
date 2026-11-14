@@ -245,6 +245,8 @@ impl ThreadPane {
         } else {
             item.request.options.clone()
         };
+        // The ⏎ only on the card Return would allow: with two waiting, the older.
+        let returns = !start && self.return_approval_id().as_deref() == Some(id.as_str());
         let mut row = h_flex().mt(px(12.)).gap(px(8.)).items_center();
         for option in [ApprovalOption::Allow, ApprovalOption::AllowAlways, ApprovalOption::Deny] {
             if !options.contains(&option) {
@@ -252,7 +254,7 @@ impl ThreadPane {
             }
             let (title, decision, prominent, tip_text, n): (&str, &str, bool, &str, usize) = match option {
                 ApprovalOption::Allow if start => ("Start it", "allow", true, "Start this thread with this brief", 0),
-                ApprovalOption::Allow => ("Allow", "allow", true, "Let it do this once (Return)", 0),
+                ApprovalOption::Allow => ("Allow", "allow", true, if returns { "Let it do this once (Return)" } else { "Let it do this once" }, 0),
                 ApprovalOption::AllowAlways => ("Always allow", "allowAlways", false, "Allow this, and anything like it for the rest of this thread", 1),
                 ApprovalOption::Deny if start => ("Don't", "deny", false, "Don't start it; the asking thread is told no", 2),
                 ApprovalOption::Deny => ("Deny", "deny", false, "Don't let it do this; the agent is told no", 2),
@@ -260,7 +262,7 @@ impl ThreadPane {
             let (id, decision_str) = (id.clone(), decision.to_owned());
             let start_allow = start && option == ApprovalOption::Allow;
             let start_card = start;
-            let mut button = pill(("approve", ix * 10 + n), title, prominent, !busy, if !start && option == ApprovalOption::Allow { Some("⏎") } else { None }, cx).tip(tip_text);
+            let mut button = pill(("approve", ix * 10 + n), title, prominent, !busy, if returns && option == ApprovalOption::Allow { Some("⏎") } else { None }, cx).tip(tip_text);
             if !busy {
                 button = button.on_click(cx.listener(move |this, _: &ClickEvent, _, cx| {
                     if start_card {
@@ -322,9 +324,10 @@ impl ThreadPane {
             content = content.child(div().h(px(stacked::GAP / 2.)).border_b_1().border_color(hairline).mb(px(stacked::GAP / 2.))).child(head).child(body);
         }
         let allow_words = format!("Allow {count}");
-        let allow_tip = if count == ids.len() { "Let it do all of these (Return)" } else { "Let it do the ticked ones; the rest are refused (Return)" };
+        let returns = self.return_approval_id().as_deref() == Some(approval_id.as_str());
+        let allow_tip = format!("{}{}", if count == ids.len() { "Let it do all of these" } else { "Let it do the ticked ones; the rest are refused" }, if returns { " (Return)" } else { "" });
         let id_for_allow = approval_id.clone();
-        let mut allow = pill(("stack-allow", ix), &allow_words, true, !busy && count > 0, Some("⏎"), cx).tip(allow_tip);
+        let mut allow = pill(("stack-allow", ix), &allow_words, true, !busy && count > 0, returns.then_some("⏎"), cx).tip(allow_tip);
         if !busy && count > 0 {
             allow = allow.on_click(cx.listener(move |this, _: &ClickEvent, _, cx| this.respond_queued(&id_for_allow, "allow", cx)));
         }

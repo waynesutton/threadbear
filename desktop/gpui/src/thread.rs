@@ -1077,16 +1077,22 @@ impl ThreadPane {
         }));
     }
 
-    /// Return in an empty box allows the sole waiting approval, the ⏎ its
-    /// Allow button shows (ComposerView.allowSoleApproval); with two, Return
-    /// can't know which, and another runner asking for a thread is started
-    /// only by a click on its card.
-    pub(crate) fn allow_sole_approval(&mut self, cx: &mut Context<Self>) -> bool {
-        let pending = self.feed.model().pending_approval_ids();
-        let [id] = pending.as_slice() else { return false };
-        let id = id.clone();
+    /// The approval Return allows now, the one whose Allow shows the ⏎
+    /// (ThreadSession.returnApprovalId): the oldest waiting, past any whose
+    /// answer is already on its way.
+    pub(crate) fn return_approval_id(&self) -> Option<String> {
+        self.feed.model().approval_for_return(&self.rows.answering)
+    }
+
+    /// Return with nothing typed, in the composer or with the transcript
+    /// focused, allows the oldest waiting approval, the ⏎ its Allow button
+    /// shows (ThreadSession.allowNextApproval). With several waiting, each
+    /// Return works down them in the order they asked; another runner
+    /// asking for a thread is started only by a click on its card. False
+    /// when there's none, so the key goes on to do what it did.
+    pub(crate) fn allow_next_approval(&mut self, cx: &mut Context<Self>) -> bool {
+        let Some(id) = self.return_approval_id() else { return false };
         let stacked = match self.feed.model().item(&format!("ap:{id}")) {
-            Some(Row { content: RowContent::Approval(item), .. }) if item.is_start_request() => return false,
             Some(Row { content: RowContent::Approval(item), .. }) => !item.queued().is_empty(),
             _ => false,
         };
@@ -1788,6 +1794,16 @@ impl Render for ThreadPane {
                     div()
                         .relative()
                         .size_full()
+                        // Return with a reply's text focused (a click to select
+                        // or read takes the keys from the box) allows the
+                        // waiting approval, as it does in an empty box. Not a
+                        // held key: holding it mustn't work through every card.
+                        .on_key_down(cx.listener(|this, ev: &KeyDownEvent, _, cx| {
+                            let m = &ev.keystroke.modifiers;
+                            if ev.keystroke.key == "enter" && !ev.is_held && !m.shift && !m.alt && !m.control && !m.platform && this.allow_next_approval(cx) {
+                                cx.stop_propagation();
+                            }
+                        }))
                         .child(transcript_list(&self.scroller, bg, cx.processor(|this, ix: usize, window, cx| this.render_item(ix, window, cx)), cx))
                         // A small spinner in the middle of where the transcript
                         // will be, and no words, from the moment it's opened

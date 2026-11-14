@@ -486,7 +486,7 @@ impl Composer {
             return true;
         }
         let Some(pane) = self.pane() else { return false };
-        pane.update(cx, |p, cx| p.allow_sole_approval(cx))
+        pane.update(cx, |p, cx| p.allow_next_approval(cx))
     }
 
     /// Shift-Return, before the input takes it: a markdown list carries on

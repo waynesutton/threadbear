@@ -25,6 +25,19 @@ Feature: Answering the agent
     Then the approval for "rm -rf .build DerivedData" says it was denied
     And the transcript shows a reply starting "OK, I left it alone"
 
+  # With two waiting, Return in an empty box allows the one that asked
+  # first, then the next: it did nothing with two (Wayne, 10 Nov).
+  @transcript.approval
+  Scenario: With two approvals waiting, Return allows the older one, then the next
+    When I open the thread "Morning brief"
+    And the agent asks to run "ls first" and then "ls second"
+    Then an approval card asks to run "ls second"
+    When I press Return
+    Then the approval for "ls first" says it was allowed
+    And the approval for "ls second" is still waiting
+    When I press Return
+    Then the approval for "ls second" says it was allowed
+
   @transcript.question
   Scenario: A question card offers its answers
     When I open the thread "Pick a colour for the new Share button"
