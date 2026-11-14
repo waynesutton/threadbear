@@ -85,6 +85,11 @@ struct ProjectPage: View {
     private func info(_ threads: [ThreadSummary]) -> some View {
         PartsSection(project: project)
         if let table = project.table { TableBearsSection(table: table) }
+        // Tables that are Parts of this project: their bears too, under each
+        // table's name, so the bigger project shows who works on it.
+        ForEach(ProjectTable.tables(in: app.projectSections.parts[project.id] ?? [])) { part in
+            if let table = part.table { TableBearsSection(table: table, title: "Bears at \(part.title)") }
+        }
         TextSection(project: project, field: .goals)
         TextSection(project: project, field: .state)
         TasksSection(project: project)
@@ -955,11 +960,12 @@ struct TaskCard: View {
 private struct TableBearsSection: View {
     @Environment(AppModel.self) private var app
     let table: ProjectTable
+    var title = "Bears at this table"
     @State private var bears: [BearEntry] = BearList.bears
 
     var body: some View {
         VStack(alignment: .leading, spacing: zoomed(2)) {
-            PageHeading(title: "Bears at this table") { EmptyView() }
+            PageHeading(title: title) { EmptyView() }
             ForEach(table.bears, id: \.self) { id in
                 let bear = bears.first { $0.id == id }
                 HStack(spacing: zoomed(8)) {

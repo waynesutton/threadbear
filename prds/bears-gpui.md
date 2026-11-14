@@ -54,6 +54,7 @@ Every item uses `whileBusy` and gets a tooltip. No runner change.
 
 - Seating happens on the runner: a bear's thread put in a table's project (the thread's Projects menu, an agent's `join_project`) seats that bear (`Projects.onJoined`, `Tables.seatFromThread`). Taking the thread out doesn't unseat it. So the GPUI Projects menu needs nothing new; the section just follows `project.table`.
 - `tables.create` sets the project icon to `person.3`, so tables look like tables in every project list and menu. Draw the project icon as usual.
+- A bigger project whose Parts include tables shows each table's bears on its own Project tab too, under "Bears at <table name>" (`ProjectTable.tables(in:)` picks the table Parts, in the Parts' order). Port that with the section.
 - An Add bear… button on the section could call `tables.seat { add }`, and a row's menu Remove from table `tables.seat { remove }`, both behind a busy key. Not in the Swift app yet.
 - No runner change.
 

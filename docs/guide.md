@@ -1076,7 +1076,9 @@ table's state but never files a thread into one.
 To seat another bear, put one of its threads in the table's project (the
 thread's Projects menu) or run `tb tables seat <table> --add Designer`.
 The table's project page lists the bears at it, with their icons, under
-Bears at this table, and new tables get a three-people icon.
+Bears at this table, and new tables get a three-people icon. A project
+with tables among its Parts lists each table's bears on its own Project
+tab too, under Bears at and the table's name.
 
 ## The librarian
 <!-- slug: librarian -->

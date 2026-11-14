@@ -23,4 +23,15 @@ final class ProjectTableTests: XCTestCase {
         XCTAssertNil(p.table)
         XCTAssertEqual(p.title, "Head table")
     }
+
+    func testAProjectsTablePartsAreFoundInOrder() {
+        var crew = Project(id: "crew", title: "Launch crew", parentId: "launch")
+        crew.table = ProjectTable(bears: ["writer-1"])
+        let docs = Project(id: "docs", title: "Docs", parentId: "launch")
+        var art = Project(id: "art", title: "Art table", parentId: "launch")
+        art.table = ProjectTable(bears: [])
+        let parts = [crew, docs, art].map { ProjectSection(project: $0, threads: [], lastActivityAt: Date()) }
+        XCTAssertEqual(ProjectTable.tables(in: parts).map(\.title), ["Launch crew", "Art table"])
+        XCTAssertEqual(ProjectTable.tables(in: []).count, 0)
+    }
 }

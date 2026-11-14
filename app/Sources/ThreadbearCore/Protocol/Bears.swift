@@ -97,3 +97,11 @@ public struct ProjectTable: Sendable, Hashable, Decodable {
 
     enum CodingKeys: String, CodingKey { case bears, maxTurns }
 }
+
+public extension ProjectTable {
+    /// The Parts of a project that are tables, in the Parts' order: their
+    /// bears show on the bigger project's page too.
+    static func tables(in parts: [ProjectSection]) -> [Project] {
+        parts.map(\.project).filter { $0.table != nil }
+    }
+}

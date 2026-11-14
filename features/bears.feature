@@ -33,6 +33,13 @@ Feature: Bear tiles in the sidebar
     Then Designer sits at the table
     And the Head table project page lists Head Bear, Writer and Designer under "Bears at this table"
 
+  @bears.tablepage @manual @gpui-pending
+  Scenario: A project lists the bears of the tables among its Parts
+    Given a project called "Launch" with the table "Launch crew" as one of its Parts
+    And Writer sits at Launch crew
+    When I open the Launch project's Project tab
+    Then it lists Writer under "Bears at Launch crew"
+
   @bears.colour @manual @gpui-pending
   Scenario: Pick a bear's colour from its thread's menu
     Given a thread in Writer's folder
