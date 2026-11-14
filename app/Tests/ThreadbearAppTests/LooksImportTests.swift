@@ -1,4 +1,6 @@
 import AppKit
+import ImageIO
+import UniformTypeIdentifiers
 import XCTest
 @testable import Threadbear
 
@@ -27,6 +29,42 @@ final class LooksImportTests: XCTestCase {
             let rep = try XCTUnwrap(copy.representations.first)
             XCTAssertLessThanOrEqual(max(rep.pixelsWide, rep.pixelsHigh), 1200, ext)
         }
+    }
+
+    /// Two frames, written the way any GIF maker does.
+    private func animatedGIF() throws -> URL {
+        let out = FileManager.default.temporaryDirectory.appendingPathComponent("looks-sample-\(UUID().uuidString).gif")
+        let gif = try XCTUnwrap(CGImageDestinationCreateWithURL(out as CFURL, UTType.gif.identifier as CFString, 2, nil))
+        for shade in [0.2, 0.8] {
+            let context = try XCTUnwrap(CGContext(data: nil, width: 40, height: 20, bitsPerComponent: 8, bytesPerRow: 0,
+                                                  space: CGColorSpaceCreateDeviceRGB(), bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue))
+            context.setFillColor(gray: shade, alpha: 1)
+            context.fill(CGRect(x: 0, y: 0, width: 40, height: 20))
+            let frame = [kCGImagePropertyGIFDictionary: [kCGImagePropertyGIFDelayTime: 0.1]] as CFDictionary
+            CGImageDestinationAddImage(gif, try XCTUnwrap(context.makeImage()), frame)
+        }
+        XCTAssertTrue(CGImageDestinationFinalize(gif))
+        return out
+    }
+
+    func testAnAnimatedGIFBackgroundStaysAGIF() throws {
+        let source = try animatedGIF()
+        defer { try? FileManager.default.removeItem(at: source) }
+        let name = try XCTUnwrap(Looks.importPicture(from: source, maxSide: 2880, prefix: "test", animated: true))
+        defer { Looks.remove(name) }
+        XCTAssertTrue(name.hasSuffix(".gif"))
+        XCTAssertTrue(Looks.isAnimated(try XCTUnwrap(Looks.image(name))))
+    }
+
+    /// A page's own picture (the bear's place) is drawn still, so a GIF
+    /// chosen there is kept as its first frame, scaled like any other.
+    func testAGIFForAPagesPictureBecomesAStill() throws {
+        let source = try animatedGIF()
+        defer { try? FileManager.default.removeItem(at: source) }
+        let name = try XCTUnwrap(Looks.importPicture(from: source, maxSide: 1200, prefix: "test"))
+        defer { Looks.remove(name) }
+        XCTAssertFalse(name.hasSuffix(".gif"))
+        XCTAssertFalse(Looks.isAnimated(try XCTUnwrap(Looks.image(name))))
     }
 
     func testSomethingThatIsntAPictureIsRefused() throws {

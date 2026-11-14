@@ -109,7 +109,7 @@ struct LookBackgroundSection<Look: PictureLook>: View {
                 Button(look.background == nil ? "Choose…" : "Replace…") {
                     Looks.choosePicture(prompt: "Use as Background") { importBackground($0) }
                 }
-                .tip("Pick a photo to fill the page behind everything")
+                .tip("Pick a photo or an animated GIF to fill the page behind everything")
                 if look.background != nil {
                     Button("Remove") { look.background = nil }
                         .tip("Take the background away and delete the copy")
@@ -134,7 +134,7 @@ struct LookBackgroundSection<Look: PictureLook>: View {
     }
 
     private func importBackground(_ url: URL) {
-        guard let name = Looks.importPicture(from: url, maxSide: 2880, prefix: "background") else {
+        guard let name = Looks.importPicture(from: url, maxSide: 2880, prefix: "background", animated: true) else {
             problem = "That file isn't a picture Threadbear can read."
             return
         }

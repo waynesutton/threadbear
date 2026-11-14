@@ -8,6 +8,7 @@ How Prints work today, what's missing and what's next: [Prints status](https://g
 
 ### Added
 
+- A background picture can be an animated GIF, in the main window (Settings > General > Look) and behind the Librarian, Scheduled and Projects pages. It plays, and holds still with Reduce Motion on. Swift Mac app only.
 - `tb bears access --auto` on a bear that runs on Codex says Auto works like Ask there.
 - Typing @ in the message box lists your bears as you type; picking one writes its name, so the message goes to that bear too.
 - A bear's threads show its icon on its colour in the sidebar, and Bear Colour on a bear thread's right-click menu picks the colour.

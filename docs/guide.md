@@ -2422,7 +2422,10 @@ it back. Fade lays the window's own colour over it so text stays
 readable in light and dark, and Show behind open threads too puts it behind
 every thread's transcript as well, a little more faded. The picture is
 copied, scaled down, into Threadbear's data folder (`looks/`), so the
-original can move; Remove deletes the copy. The Librarian, Scheduled and
+original can move; Remove deletes the copy. An animated GIF works too, here
+and as a page's background: it plays behind the window, is copied as it is
+rather than scaled down, and holds still when Reduce Motion is on in System
+Settings > Accessibility. The Librarian, Scheduled and
 Projects pages have their own backgrounds and layouts (The librarian,
 Schedules and Projects).
 
