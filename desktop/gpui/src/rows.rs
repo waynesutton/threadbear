@@ -530,6 +530,16 @@ impl ThreadPane {
         // a flex row centring a text box with no width of its own, so a long
         // note (the same-work one naming several threads) never wrapped and
         // ran off both sides of the window (13 Nov).
+        // A note with a link in it (the saved plan's) keeps the link, so a
+        // click opens it, in the side pane as a reply's file links do.
+        if row.content.is_linked_note() && !note.contains('\n') {
+            let source = markdown::prepare(note, &self.summary.id);
+            let doc = self.markdown_state(&row.id, &source, cx);
+            let text_style = self.reading_style(cx);
+            let text = self.linked_text(&doc, &row.id, cx).selectable(true).style(text_style);
+            let content = div().py(px(ROW_TOP)).w_full().text_size(px(size::SMALL)).line_height(px(17.)).text_color(quiet).flex().justify_center().child(text);
+            return row_wrap(row, content);
+        }
         let content = div().py(px(ROW_TOP)).w_full().text_size(px(size::SMALL)).line_height(px(17.)).text_color(quiet).text_center().child(note.to_owned());
         row_wrap(row, content)
     }

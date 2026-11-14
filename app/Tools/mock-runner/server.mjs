@@ -2026,6 +2026,27 @@ async function dispatch(client, method, p) {
     // A thread with the id and title given, idle with nothing in it, for a
     // spec that needs one an agent can name by its id (a thread chip): the
     // demo threads' ids aren't the shape the runner's are.
+    case 'mock.planNote': {
+      // A finished Plan turn as the runner leaves it: some work, the
+      // reply, and its note with a link to the saved plan, a real file in
+      // the mock's temp folder so the link opens.
+      const t = need(p.threadId);
+      const id = t.summary.id;
+      const turnId = 'turn_plan_' + crypto.randomBytes(4).toString('hex');
+      const dir = path.join(os.tmpdir(), 'threadbear-mock-plans');
+      fs.mkdirSync(dir, { recursive: true });
+      const file = path.join(dir, `${new Date().toISOString().slice(0, 10)}-mock.md`);
+      fs.writeFileSync(file, `# Plan: ${t.summary.title}\n\n## Steps\n\n1. Look\n2. Plan\n3. Do\n`);
+      persist(id, { type: 'user.message', text: 'Plan the upload retry', images: [] }, turnId);
+      persist(id, { type: 'turn.started', turnId }, turnId);
+      persist(id, { type: 'tool.call', itemId: turnId + '_ls', name: 'Bash', kind: 'command', title: 'ls src', input: { command: 'ls src' } }, turnId);
+      persist(id, { type: 'tool.result', itemId: turnId + '_ls', ok: true, text: 'upload.ts', truncated: false, images: [] }, turnId);
+      persist(id, { type: 'assistant.text', itemId: turnId + '_reply', text: 'Here is the plan: retry each chunk three times, then give up.' }, turnId);
+      persist(id, { type: 'system.note', text: `Saved the plan to [plans/${path.basename(file)}](<${file}>).` }, turnId);
+      persist(id, { type: 'turn.completed', turnId, outcome: 'completed', durationMs: 4000 }, turnId);
+      setStatus(id, 'idle');
+      return { file };
+    }
     case 'mock.thread': {
       const threadId = typeof p.id === 'string' && p.id ? p.id : crypto.randomUUID();
       const now = iso();

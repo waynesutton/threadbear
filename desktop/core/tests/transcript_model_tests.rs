@@ -56,6 +56,25 @@ fn testAWakeNoteStaysOutOfTheGroupAbove() {
     assert!(!RowContent::Note("Put in Threadbear".to_owned()).is_wake_note());
 }
 
+/// The saved plan's "Saved the plan to [plans/…](path)" is something to
+/// click, so it stays out of the folded work (Wayne, 5 Nov).
+#[test]
+fn testALinkedNoteStaysOutOfTheFoldedWork() {
+    let model = from_events(vec![
+        event(1, "turn.started", json!({"turnId": "t1"})),
+        user(2, "Plan the retry"),
+        call_titled(3, "c1", "ls src"),
+        result_text(4, "c1", "upload.ts"),
+        event(5, "system.note", json!({"text": "Saved the plan to [plans/a.md](</tmp/plans/a.md>)."})),
+        text(6, "m1", "Here's the plan."),
+        done(7),
+    ]);
+    let shown = ids(&model);
+    assert!(shown.contains(&"n:5".to_owned()), "{shown:?}");
+    assert!(RowContent::Note("Saved the plan to [plans/a.md](</tmp/plans/a.md>).".to_owned()).is_linked_note());
+    assert!(!RowContent::Note("Resumed session".to_owned()).is_linked_note());
+}
+
 /// The summary's background work is the last row while no turn runs: it
 /// comes and goes in place, and a running turn's working line takes its
 /// place.
