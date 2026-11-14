@@ -98,3 +98,46 @@ Then('both background frames are kept and the background is drawn', async functi
   assert.deepEqual(fs.readFileSync(path.join(home, 'looks', file)), animation);
   await this.app.do({ cmd: 'label-point', label: 'Page background photo' });
 });
+When('I quickly edit my profile page twice', async function(this: ThreadbearWorld) {
+  await this.app.do({ cmd: 'mode', mode: 'librarian' });
+  await this.app.do({ cmd: 'look', page: 'librarian', on: true, customize: true });
+  await this.until('profile loaded', d => profile(d).loaded && profile(d).draft);
+  await this.app.do({ cmd: 'profile', set: { name: 'Wayne first', bio: 'First draft' } });
+  await this.app.do({ cmd: 'profile', set: { name: 'Wayne latest', bio: 'Makes things with agents' } });
+});
+type ProfileDump = { loaded: boolean; saving: boolean; draft?: { name: string; bio: string; published: boolean; home: boolean; show: string[] }; saved?: { name: string; bio: string }; };
+const profile = (d: Dump) => (d as unknown as { profilePage: ProfileDump }).profilePage;
+Then('the profile page has saved my latest name and bio', async function(this: ThreadbearWorld) {
+  await this.until('latest profile saved through the runner', d => !profile(d).saving && profile(d).saved?.name === 'Wayne latest' && profile(d).saved?.bio === 'Makes things with agents');
+});
+When('I reopen the Librarian Customize panel', async function(this: ThreadbearWorld) {
+  await this.app.do({ cmd: 'look', page: 'librarian', customize: false });
+  await this.app.do({ cmd: 'look', page: 'librarian', customize: true });
+});
+Then('the profile page has loaded my latest name and bio', async function(this: ThreadbearWorld) {
+  await this.until('latest profile loaded', d => profile(d).loaded && profile(d).draft?.name === 'Wayne latest' && profile(d).draft?.bio === 'Makes things with agents');
+});
+
+When('I reopen the profile panel while my latest bio saves', async function(this: ThreadbearWorld) {
+  await this.app.do({ cmd: 'profile', set: { bio: 'The newest bio' } });
+  await this.app.do({ cmd: 'profile', load: true, delayMs: 4000 });
+});
+Then('the late load leaves my latest bio saved and on screen', async function(this: ThreadbearWorld) {
+  const d = await this.until('the delayed load completed', d => profile(d).loaded && !profile(d).saving && d);
+  assert.equal(profile(d).saved?.bio, 'The newest bio');
+  assert.equal(profile(d).draft?.bio, 'The newest bio');
+});
+
+When('I open my profile controls without editing them', async function(this: ThreadbearWorld) {
+  await this.app.do({ cmd: 'mode', mode: 'librarian' });
+  await this.app.do({ cmd: 'look', page: 'librarian', on: true, customize: true });
+  await this.until('profile controls loaded', d => profile(d).loaded && profile(d).draft);
+});
+Then('no profile has been sent and all its public parts are off', async function(this: ThreadbearWorld) {
+  const state = profile(await this.app.dump());
+  assert.equal(state.saved, null);
+  assert.equal(state.saving, false);
+  assert.equal(state.draft?.published, false);
+  assert.equal(state.draft?.home, false);
+  assert.deepEqual(state.draft?.show, []);
+});

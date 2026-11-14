@@ -89,6 +89,7 @@ pub fn try_symbol(name: &str) -> Option<Icon> {
         "crown" | "crown.fill" => IconName::Crown,
         "pawprint.fill" => IconName::PawPrint,
         "paintpalette" | "paintpalette.fill" => IconName::Palette,
+        "person.crop.circle" => IconName::UserRound,
         "person.3" | "person.3.fill" => IconName::Users,
         "star.slash" => IconName::StarOff,
         "tray" => IconName::Inbox,

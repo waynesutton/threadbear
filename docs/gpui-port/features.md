@@ -369,6 +369,7 @@ It comes from reading code, not from running anything, so "(unverified)" means n
 | `projects.icon` | Project icon | Choose or librarian's | GPUI path prompt, with Reveal going through the open gate. | kit | S | `ProjectPage`, `ProjectIconView` |
 | `projects.tasks` | Tasks board page | Status columns from Notion | Drawn columns. | build | M | `ProjectPage` (`TasksSection`) |
 | `projects.newthread` | New thread in project | "In" chip | Drawn chip. | build | S | `DetailView` (`NewThreadProjectChip`) |
+| `profile.page` | Profile page | Saved draft, publish controls and public page links | Existing runner RPC. | build | M | `ProfilePageSection` |
 | `librarian.customize` | Customize Librarian | Picture, background, layout, greeting, quote and activity | Shared look models and native Customize panel. | build | M | `LibrarianLookEditor`, `CustomizedLibrarianPage` |
 | `librarian.page` | Librarian page | Picture, tiles, Look at threads, Runs on | Drawn. | build | S | `LibrarianHome`, `HomePage` |
 | `librarian.log` | Librarian log | Recent, Next, Look at everything | Drawn list. | build | M | `LibrarianView` |

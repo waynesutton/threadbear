@@ -95,13 +95,13 @@ the keyboard shortcut.
 
 | # | Commit | What it does | Status |
 |---|---|---|---|
-| 67 | cc34b08a | A public page about you at /@handle | to do |
-| 58 | 447a0aa9 | One page per site at /profile, saved as you change it | to do |
-| 61 | c1d618b4 | Reopening Customize loads the saved page | to do |
-| 46 | a4af95c0 | Open goes to the profile, Open Site to the front page | to do |
-| 45 | f389447e | Its addresses as two rows | to do |
-| 44 | cf99cf58 | A Changelog of public commits; View profile page button | to do |
-| 66 | 58dd86ef | Its info tip names no other app | to do |
+| 67 | cc34b08a | A public page about you at /@handle | done |
+| 58 | 447a0aa9 | One page per site at /profile, saved as you change it | done |
+| 61 | c1d618b4 | Reopening Customize loads the saved page | done |
+| 46 | a4af95c0 | Open goes to the profile, Open Site to the front page | done |
+| 45 | f389447e | Its addresses as two rows | done |
+| 44 | cf99cf58 | A Changelog of public commits; View profile page button | done |
+| 66 | 58dd86ef | Its info tip names no other app | done |
 | 53 | ee9966b7 | No background photo option | already |
 
 ## Notes (needs Notes itself first, 0f5c08f0 below)

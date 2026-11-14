@@ -177,6 +177,7 @@ pub struct Threadbear {
     pub(crate) librarian: crate::librarian::LibrarianState,
     /// The Look parts: Customize panels and background photos (looks.rs).
     pub(crate) looks: crate::looks::LooksState,
+    pub(crate) profile: crate::profile_page::ProfileState,
     /// The Librarian page's year calendars (look_cards.rs).
     pub(crate) cards: crate::look_cards::CardsState,
     /// The customized Librarian page's boxes and clock (librarian_look.rs).
@@ -557,6 +558,7 @@ impl Threadbear {
             restoring_place: false,
             librarian: crate::librarian::LibrarianState::new(),
             looks: Default::default(),
+            profile: Default::default(),
             cards: Default::default(),
             librarian_look: Default::default(),
             librarian_pokes: crate::home_page::Pokes::new(crate::home_page::Art::Librarian),
@@ -1589,6 +1591,7 @@ impl Threadbear {
         // after, as the literal above is as long as serde_json's macro goes.
         dump["importNote"] = json!(self.import_note);
         dump["looks"] = self.looks_dump();
+        dump["profilePage"] = self.profile_dump();
         // Panels pinned to their threads (pinned_panels.rs).
         dump["pinnedPanels"] = self.pinned_panels_dump(cx);
         // The tour or a page's intro on show, and Finish setting up (tour.rs, setup_panel.rs).
