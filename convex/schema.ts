@@ -95,7 +95,8 @@ export const threadFields = {
         suggested: v.optional(v.number()),
         links: v.optional(v.array(v.object({ title: v.string(), url: v.string() }))),
         ticked: v.optional(v.boolean()),
-        // A command with a Run button, pressed like a reply button (phone:press). Since API 71.
+        // Run on the card's command (API 71). Taken out 14 Nov 2026: no runner sends it
+        // now, but rows from before can still have it, so it stays until a schema tidy.
         run: v.optional(v.object({ command: v.string(), buttonId: v.string(), cwd: v.optional(v.string()), running: v.optional(v.boolean()), failed: v.optional(v.string()) })),
       }),
     ),
@@ -502,7 +503,11 @@ export default defineSchema({
   messages: defineTable({
     threadId: v.string(),
     seq: v.number(),
-    role: v.union(v.literal('user'), v.literal('assistant'), v.literal('tool')),
+    // "note" (since API 78): a runner's note that the thread's login ran
+    // out and it moved to another or is waiting for room. Only the other
+    // runners read those (relay.ts); the phone's and the shared page's
+    // queries leave them out, as a note names logins.
+    role: v.union(v.literal('user'), v.literal('assistant'), v.literal('tool'), v.literal('note')),
     text: v.string(),
     origin: v.optional(v.string()),
     toolKind: v.optional(v.string()), // the protocol's ToolKind, for a tool row
@@ -717,7 +722,7 @@ export default defineSchema({
     .index('by_ip_at', ['ip', 'at'])
     .index('by_at', ['at']),
 
-  // Published Prints (docs/protocol.md, "Prints", since API 77): one row
+  // Published Prints (docs/protocol.md, "Prints", since API 80): one row
   // per print its runner's user chose to publish, with the print's
   // index.html as text, for the website's /p/<slug> page and the phone.
   // Nothing about a print is here until it's published, and the row goes
