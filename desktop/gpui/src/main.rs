@@ -19,6 +19,7 @@ mod automation;
 #[cfg(feature = "automation")]
 mod automation_compat;
 mod bears;
+mod bear_picker;
 mod chips;
 mod colour_space;
 mod composer_media;

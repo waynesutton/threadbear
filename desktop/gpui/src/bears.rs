@@ -8,6 +8,7 @@ use crate::icons;
 use crate::sidebar::{MenuAction, MenuRow};
 use crate::tips::Tip as _;
 use gpui_kit::prelude::*;
+use gpui_kit::base::TestSupportExt as _;
 use gpui_kit::*;
 use gpui_kit::component::Sizable;
 // Shadows gpui's px, so sizes here follow the app's zoom (style.rs).
@@ -126,4 +127,30 @@ pub(crate) fn tile(bear: &ThreadBear, size: f32) -> Div {
 /// table's page).
 pub(crate) fn tipped_tile(id: impl Into<ElementId>, bear: &ThreadBear, size: f32) -> impl IntoElement {
     tile(bear, size).id(id).tip(bear.tip())
+}
+
+impl Threadbear {
+    /// A table's members, then the tables among this project's Parts.
+    pub(crate) fn render_table_bears(&self, project: &threadbear_core::projects::Project, cx: &App) -> Vec<AnyElement> {
+        use gpui_kit::component::{v_flex, h_flex, ActiveTheme as _};
+        let mut tables = Vec::new();
+        if let Some(table) = &project.table { tables.push(("Bears at this table".to_owned(), table)); }
+        for part in self.projects.list.iter().filter(|p| p.parent_id.as_deref() == Some(project.id.as_str()) && !p.archived) {
+            if let Some(table) = &part.table { tables.push((format!("Bears at {}", part.title), table)); }
+        }
+        tables.into_iter().map(|(title, table)| {
+            let mut section = v_flex().w_full().gap(px(2.)).child(crate::project_page::page_heading(&title, None, None, cx));
+            for seat in bears::seats(table, &self.bear_list.bears) {
+                let row = h_flex().id(SharedString::from(format!("seat-{}-{}", project.id, seat.tile.id))).test_support().aria_label(seat.tip.clone()).tip(seat.tip)
+                    .gap(px(8.)).py(px(3.)).child(tile(&seat.tile, 22.))
+                    .child(div().text_size(px(crate::style::size::LABEL)).text_color(cx.theme().foreground).child(seat.name))
+                    .when_some(seat.does, |s, does| s.child(div().min_w_0().truncate().text_size(px(crate::style::size::DETAIL)).text_color(crate::style::secondary_text(cx)).child(does)));
+                section = section.child(row);
+            }
+            if table.bears.is_empty() {
+                section = section.child(div().text_size(px(crate::style::size::LABEL)).text_color(crate::style::faint_text(cx)).child(bears::NO_SEATS));
+            }
+            section.into_any_element()
+        }).collect()
+    }
 }

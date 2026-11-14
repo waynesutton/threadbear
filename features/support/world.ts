@@ -113,8 +113,8 @@ After({ tags: '@picture-loading' }, () => {
 });
 
 // Bears fixtures are isolated to the scenarios that ask for them.
-Before({ tags: '@bears.tile or @bears.colour' }, () => { process.env.TB_MOCK_BEARS = '1'; });
-After({ tags: '@bears.tile or @bears.colour' }, () => { delete process.env.TB_MOCK_BEARS; });
+Before({ tags: '@bears.tile or @bears.colour or @bears.mention or @bears.tablepage' }, () => { process.env.TB_MOCK_BEARS = '1'; });
+After({ tags: '@bears.tile or @bears.colour or @bears.mention or @bears.tablepage' }, () => { delete process.env.TB_MOCK_BEARS; });
 
 Before(async function (this: ThreadbearWorld, { pickle }) {
   // A scenario about paging needs a thread longer than one page of events.

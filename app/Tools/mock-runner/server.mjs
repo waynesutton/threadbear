@@ -3580,6 +3580,10 @@ function addDemoDecisions() {
 }
 
 function join(summary, project, by, pinned, at = iso(), why) {
+  // The real Projects.onJoined seats a bear when its thread joins a table.
+  if (project.table && summary.bear && !project.table.bears.includes(summary.bear.id)) {
+    project.table.bears.push(summary.bear.id);
+  }
   summary.projects = [...(summary.projects ?? []), { id: project.id, title: project.title, by, ...(pinned ? { pinned: true } : {}), at, ...(why ? { why } : {}) }];
 }
 

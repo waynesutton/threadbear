@@ -48,10 +48,10 @@ the keyboard shortcut.
 |---|---|---|---|
 | 9 | f69b7232 | Sidebar rows show a bear's icon on its colour, Bear Colour menu | done |
 | 1 | d3e7a3f3 | The Bear Colour menu shows its icons | done |
-| 8 | debffacf | Typing @ in the box lists your bears | to do |
-| 7 | 57934753 | The @ picker keeps to this Mac's runner | to do |
-| 5 | 38c291b6 | A table's bears shown, seated on join | to do |
-| 3 | eed7db3c | A project's page lists its table's bears | to do |
+| 8 | debffacf | Typing @ in the box lists your bears | done |
+| 7 | 57934753 | The @ picker keeps to this Mac's runner | done |
+| 5 | 38c291b6 | A table's bears shown, seated on join | done |
+| 3 | eed7db3c | A project's page lists its table's bears | done |
 
 ## Prints
 
