@@ -309,7 +309,8 @@ impl Threadbear {
             foot.push(rail_button(button, |this, _, cx| this.toggle_under_threads(shell::SETUP, cx), cx));
         }
         if self.connectors_on() {
-            let status = self.connectors_panel.status.as_ref();
+            let visible = self.visible_connectors();
+            let status = visible.as_ref();
             let mut button = RailButton::new("rail-connectors", "powerplug", threadbear_core::connectors::tooltip(status), self.activity_panel_showing(shell::CONNECTORS, cx));
             button.dot = threadbear_core::connectors::needs_you(status);
             button.quiet_dot = threadbear_core::connectors::quiet(status);
@@ -447,7 +448,8 @@ impl Threadbear {
         }
         // The foot's panels, with their dots: `dot` the accent, `quietDot` the grey.
         if self.connectors_on() {
-            let status = self.connectors_panel.status.as_ref();
+            let visible = self.visible_connectors();
+            let status = visible.as_ref();
             activity.push(json!({ "title": "Connectors", "dot": threadbear_core::connectors::needs_you(status), "quietDot": threadbear_core::connectors::quiet(status), "active": self.activity_panel_showing(shell::CONNECTORS, cx) }));
         }
         if self.remote.all_runners.len() > 1 {

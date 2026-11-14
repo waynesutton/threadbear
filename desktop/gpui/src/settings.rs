@@ -33,6 +33,8 @@ pub struct WindowFrame {
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", default)]
 pub struct Saved {
+    /// Hidden Connectors rows, with the Swift defaults key and newline format.
+    pub connectors_hidden: Option<String>,
     /// Highest thread-count milestone actually shown, as in the Swift app.
     pub thread_milestone_shown: Option<usize>,
     /// The window's frame, in points from the top left of the screens.

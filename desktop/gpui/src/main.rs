@@ -33,6 +33,7 @@ mod composer_inline;
 mod composer_send;
 mod composer_spelling;
 mod connectors_panel;
+mod connectors_setup;
 mod crash_reporting;
 mod deep_links;
 mod ding;

@@ -59,7 +59,7 @@ Then('the {word} panel lists {string}', async function (this: ThreadbearWorld, n
 
 When('I press {string} in the {word} panel', async function (this: ThreadbearWorld, tip: string, name: string) {
   await this.until(`the ${name} panel on show`, (d) => d[panelKey(name)]?.shown === true);
-  await this.app.do({ cmd: 'click', tipPrefix: tip });
+  await this.app.do({ cmd: 'click', tipPrefix: tip, ...(name === 'Connectors' ? { connectors: true } : {}) });
 });
 
 // What the mock runner says about the gateway and its own update

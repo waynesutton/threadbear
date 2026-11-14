@@ -1854,6 +1854,10 @@ the thread runs on.
 
 ### Setting up the gateway, and adding services
 
+The GPUI desktop app has the same setup, service suggestions, outside-agent
+forms and local-server review as the Swift app. Hidden rows stay hidden on
+this Mac, including their sign-in alerts.
+
 With the Connectors setup experiment on (Settings > General >
 Experiments), the plug icon shows before there's a gateway, and the panel
 has **Set up**.

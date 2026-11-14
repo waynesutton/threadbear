@@ -9,6 +9,7 @@
 // pages in the browser.
 use crate::inbox::parse_ms;
 use serde_json::Value;
+use std::collections::BTreeSet;
 
 /// `ConnectorsStatus`, read leniently, as the gateway's answer is still
 /// changing: an unknown state is shown as it is.
@@ -22,6 +23,9 @@ pub struct ConnectorsStatus {
     pub error: Option<String>,
     pub version: Option<String>,
     pub services: Vec<ConnectorService>,
+    pub can_set_up: bool,
+    pub can_add_local: bool,
+    pub catalog: Vec<ConnectorCatalogEntry>,
 }
 
 #[derive(Clone, Debug, Default, PartialEq)]
@@ -34,6 +38,8 @@ pub struct ConnectorService {
     pub message: Option<String>,
     /// Where Mike signs it in; set on anything not connected or disabled.
     pub connect_url: Option<String>,
+    pub local: bool,
+    pub state_note: Option<String>,
 }
 
 impl ConnectorsStatus {
@@ -46,6 +52,9 @@ impl ConnectorsStatus {
             checked_ms: v["checkedAt"].as_str().and_then(parse_ms),
             error: text("error"),
             version: text("version"),
+            can_set_up: v["canSetUp"].as_bool().unwrap_or(false),
+            can_add_local: v["canAddLocal"].as_bool().unwrap_or(false),
+            catalog: v["catalog"].as_array().into_iter().flatten().filter_map(ConnectorCatalogEntry::decode).collect(),
             services: v["services"].as_array().into_iter().flatten().filter_map(ConnectorService::decode).collect(),
         }
     }
@@ -59,9 +68,238 @@ impl ConnectorService {
             state: v["state"].as_str().unwrap_or("unknown").to_owned(),
             message: v["message"].as_str().map(str::to_owned),
             connect_url: v["connectUrl"].as_str().map(str::to_owned),
+            local: v["local"].as_bool().unwrap_or(false),
+            state_note: v["stateNote"].as_str().map(str::to_owned),
             id,
         })
     }
+}
+
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct ConnectorCatalogEntry {
+    pub id: String,
+    pub title: String,
+    pub blurb: String,
+    pub setup_note: Option<String>,
+    pub kind: String,
+    pub command: Option<String>,
+    pub asks: Vec<String>,
+}
+
+impl ConnectorCatalogEntry {
+    pub fn decode(v: &Value) -> Option<Self> {
+        let id = v["id"].as_str()?.to_owned();
+        Some(Self {
+            title: v["title"].as_str().unwrap_or(&id).to_owned(), id,
+            blurb: v["blurb"].as_str().unwrap_or_default().to_owned(),
+            setup_note: v["setupNote"].as_str().map(str::to_owned),
+            kind: v["kind"].as_str().unwrap_or("remote").to_owned(),
+            command: v["command"].as_str().map(str::to_owned),
+            asks: v["asks"].as_array().into_iter().flatten().filter_map(Value::as_str).map(str::to_owned).collect(),
+        })
+    }
+    pub fn is_local(&self) -> bool { self.kind == "local" }
+}
+
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct AgentKey {
+    pub id: String,
+    pub name: String,
+    pub scope: String,
+    pub read_all: bool,
+    pub expires_at: String,
+    pub last_used_ms: Option<i64>,
+    pub expired: bool,
+}
+
+impl AgentKey {
+    pub fn decode(v: &Value) -> Option<Self> {
+        Some(Self {
+            id: v["id"].as_str()?.to_owned(),
+            name: v["name"].as_str().unwrap_or("Agent").to_owned(),
+            scope: v["scope"].as_str().unwrap_or("read").to_owned(),
+            read_all: v["readAll"].as_bool().unwrap_or(false),
+            expires_at: v["expiresAt"].as_str().unwrap_or_default().to_owned(),
+            last_used_ms: v["lastUsedAt"].as_str().and_then(parse_ms),
+            expired: v["expired"].as_bool().unwrap_or(false),
+        })
+    }
+}
+
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct AgentsList {
+    pub on: bool,
+    pub reason: Option<String>,
+    pub url: Option<String>,
+    pub keys: Vec<AgentKey>,
+}
+impl AgentsList {
+    pub fn decode(v: &Value) -> Self {
+        Self {
+            on: v["on"].as_bool().unwrap_or(false),
+            reason: v["reason"].as_str().map(str::to_owned),
+            url: v["url"].as_str().map(str::to_owned),
+            keys: v["keys"].as_array().into_iter().flatten().filter_map(AgentKey::decode).collect(),
+        }
+    }
+}
+
+// Deliberately no Debug or serialization: the secret stays in the open panel.
+pub struct AgentConnected {
+    pub key: AgentKey,
+    pub secret: String,
+    pub url: String,
+}
+impl AgentConnected {
+    pub fn decode(v: &Value) -> Option<Self> {
+        Some(Self { key: AgentKey::decode(&v["key"] )?, secret: v["secret"].as_str()?.to_owned(), url: v["url"].as_str()?.to_owned() })
+    }
+}
+
+pub fn shows_icon(status: Option<&ConnectorsStatus>, agents: Option<&AgentsList>) -> bool {
+    status.is_some_and(|s| s.state != "off" || s.can_set_up) || agents.is_some_and(|a| a.on)
+}
+pub fn scope_line(key: &AgentKey) -> String {
+    format!("{}, {}", if key.scope == "write" { "Starts Ask threads" } else { "Read only" }, if key.read_all { "reads all your threads" } else { "reads threads it started" })
+}
+pub fn last_used(key: &AgentKey, now_ms: i64) -> String {
+    if key.expired { return "Expired".into(); }
+    let Some(at) = key.last_used_ms else { return "Not used yet".into() };
+    let mins = (now_ms - at) / 60_000;
+    if mins < 2 { "Used just now".into() }
+    else if mins < 60 { format!("Used {mins} minutes ago") }
+    else if mins < 2880 { format!("Used {} hours ago", mins / 60) }
+    else { format!("Used {} days ago", mins / 1440) }
+}
+
+pub struct AgentFormField {
+    pub label: &'static str,
+    pub value: String,
+    pub shown: String,
+    pub copies: bool,
+    pub tip: &'static str,
+}
+
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub enum OutsideAgentApp { #[default] Grok, Notion, Slack }
+impl OutsideAgentApp {
+    pub const ALL: [Self; 3] = [Self::Grok, Self::Notion, Self::Slack];
+    pub fn name(self) -> &'static str { match self { Self::Grok => "Grok Bot", Self::Notion => "Notion", Self::Slack => "Slack" } }
+    pub fn can_connect(self) -> bool { self != Self::Slack }
+    pub fn for_key(name: &str) -> Self { if name == "Notion" { Self::Notion } else { Self::Grok } }
+    pub fn needs(self) -> &'static str {
+        match self {
+            Self::Grok => "xAI's agent in the cloud. On a team plan, your admin's connector policy has to allow servers by address.",
+            Self::Notion => "For Notion's Custom Agents, on the Business or Enterprise plan. A workspace admin turns on custom MCP servers first, in Settings > Connections.",
+            Self::Slack => "Slackbot only connects to servers that sign in with OAuth or with Slack's own sign-in, through a Slack app. It can't take a key, so Threadbear can't connect to it yet.",
+        }
+    }
+    pub fn guide(self) -> &'static str {
+        match self {
+            Self::Grok => "https://docs.x.ai/grok-bot/computer-and-apps",
+            Self::Notion => "https://www.notion.com/help/mcp-connections-for-custom-agents",
+            Self::Slack => "https://docs.slack.dev/ai/slackbot-mcp-client/",
+        }
+    }
+    pub fn intro(self) -> &'static str {
+        match self {
+            Self::Grok => "In Grok Bot, open Connect apps, then Add a custom connector, and fill in each box:",
+            Self::Notion => "In your Custom Agent's settings, open Tools & Access, then Add connection, then Custom MCP server, and fill in each box:",
+            Self::Slack => "",
+        }
+    }
+    pub fn outro(self) -> &'static str {
+        match self {
+            Self::Grok => "Save it, then ask Grok Bot to list your Threadbear threads. Its row here says Used just now once it works. If the key ever leaks, Revoke it and make a new one.",
+            Self::Notion => "Connect it, then ask the agent to list your Threadbear threads. Its row here says Used just now once it works. If the key ever leaks, Revoke it and make a new one.",
+            Self::Slack => "",
+        }
+    }
+    pub fn form(self, url: &str, secret: &str) -> Vec<AgentFormField> {
+        if !self.can_connect() { return vec![]; }
+        let field = |label, value: &str, copies, tip| AgentFormField { label, value: value.into(), shown: value.into(), copies, tip };
+        let mut fields = vec![field("Name", if self == Self::Notion { "Threadbear" } else { "threadbear" }, true, "Copy a name for the connector")];
+        if self == Self::Grok { fields.push(field("Type", "Remote HTTPS", false, "Pick Remote HTTPS in the menu, not Command")); }
+        fields.push(field("Server URL", url, true, "Copy the server address"));
+        if self == Self::Notion { fields.push(field("Auth", "A header", false, "Pick header-based auth, not OAuth")); }
+        fields.push(field("Header key", "Authorization", true, "Copy the header name, for the left box under HTTP headers"));
+        fields.push(AgentFormField { label: "Header value", value: format!("Bearer {secret}"), shown: format!("Bearer {}••••••••", if secret.starts_with("tba_") { "tba_" } else { "" }), copies: true, tip: "Copy \"Bearer\", a space and the key, for the right box under HTTP headers" });
+        if self == Self::Grok { fields.push(field("Client ID", "Leave it empty", false, "Only for services you sign in to in a browser; the key does that here")); }
+        fields
+    }
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct LocalServer { pub launcher: String, pub package: String, pub version: String, pub title: String }
+impl LocalServer {
+    pub fn new(launcher: &str, package: &str, version: &str, title: &str) -> Self {
+        Self { launcher: launcher.into(), package: package.trim().into(), version: version.trim().into(), title: title.trim().into() }
+    }
+    pub fn command(&self) -> String { format!("{} {}{}@{}", self.launcher, if self.launcher == "npx" { "-y " } else { "" }, self.package, self.version) }
+    pub fn key(&self) -> String { format!("local:{}:{}@{}", self.launcher, self.package, self.version) }
+    // Matches Swift's exact-version grammar without adding a regex dependency.
+    pub fn is_pinned(&self) -> bool {
+        let mut package = self.package.bytes();
+        if !package.next().is_some_and(|b| b.is_ascii_alphanumeric() || b == b'@') || !package.all(|b| b.is_ascii_alphanumeric() || b"._/-".contains(&b)) { return false; }
+        fn digits(s: &mut &str, max: usize) -> bool {
+            let n = s.bytes().take_while(u8::is_ascii_digit).count();
+            if n == 0 || n > max { return false; }
+            *s = &s[n..]; true
+        }
+        let mut version = self.version.as_str();
+        if !digits(&mut version, 6) { return false; }
+        match self.launcher.as_str() {
+            "npx" => {
+                for _ in 0..2 {
+                    let Some(rest) = version.strip_prefix('.') else { return false };
+                    version = rest;
+                    if !digits(&mut version, 6) { return false; }
+                }
+                version.is_empty() || version.strip_prefix('-').is_some_and(|rest| rest.split('.').all(|part| !part.is_empty() && part.bytes().all(|b| b.is_ascii_alphanumeric())))
+            }
+            "uvx" => {
+                for _ in 0..3 {
+                    if !version.starts_with('.') || !version.as_bytes().get(1).is_some_and(u8::is_ascii_digit) { break; }
+                    version = &version[1..];
+                    if !digits(&mut version, 6) { return false; }
+                }
+                for prefix in ["rc", "a", "b"] {
+                    if let Some(rest) = version.strip_prefix(prefix) { version = rest; if !digits(&mut version, 4) { return false; } break; }
+                }
+                for prefix in [".post", ".dev"] {
+                    if let Some(rest) = version.strip_prefix(prefix) { version = rest; if !digits(&mut version, 4) { return false; } }
+                }
+                version.is_empty()
+            }
+            _ => false,
+        }
+    }
+}
+
+pub fn trust_lines(asks: &[String]) -> Vec<String> {
+    vec!["Runs on this Mac whenever Connectors is running, as you, with what you can reach. Every login and Codex gets its tools.".into(),
+        if asks.is_empty() { "None of its tools ask first, unless the gateway's own rules catch them (sends, posts and deletes).".into() }
+        else { format!("These wait for your OK on the gateway's approval page: {}.", list(&asks.iter().map(String::as_str).collect::<Vec<_>>())) },
+        "It stays at this version until you add a newer one.".into()]
+}
+
+pub const HIDDEN_AGENT: &str = "agent:grok-bot";
+pub fn hidden_decode(raw: &str) -> BTreeSet<String> { raw.lines().map(str::trim).filter(|s| !s.is_empty()).map(str::to_owned).collect() }
+pub fn hidden_encode(hidden: &BTreeSet<String>) -> String { hidden.iter().cloned().collect::<Vec<_>>().join("\n") }
+pub fn visible_status(status: Option<&ConnectorsStatus>, hidden: &BTreeSet<String>) -> Option<ConnectorsStatus> {
+    status.cloned().map(|mut s| { s.services.retain(|r| !hidden.contains(&format!("service:{}", r.id))); s.catalog.retain(|r| !hidden.contains(&format!("catalog:{}", r.id))); s })
+}
+pub fn show_agents(agents: Option<&AgentsList>, hidden: &BTreeSet<String>) -> bool {
+    agents.is_some_and(|a| a.on && (!hidden.contains(HIDDEN_AGENT) || !a.keys.is_empty()))
+}
+pub fn hidden_items(hidden: &BTreeSet<String>, status: Option<&ConnectorsStatus>, agents: Option<&AgentsList>) -> Vec<(String, String)> {
+    let mut rows = vec![];
+    if let Some(s) = status {
+        rows.extend(s.services.iter().map(|r| (format!("service:{}", r.id), r.title.clone())));
+        if s.state == "ok" { rows.extend(s.catalog.iter().map(|r| (format!("catalog:{}", r.id), r.title.clone()))); }
+    }
+    if agents.is_some_and(|a| a.on && a.reason.is_none()) { rows.push((HIDDEN_AGENT.into(), "Connect an agent".into())); }
+    rows.retain(|(id, _)| hidden.contains(id)); rows
 }
 
 /// The services that need Mike to sign in again.
@@ -225,6 +463,7 @@ fn path_segment(id: &str) -> String {
 
 /// A service's state in a word or two.
 pub fn state_line(service: &ConnectorService) -> String {
+    if service.local && service.state == "connected" { return "Running on this Mac".into(); }
     match service.state.as_str() {
         "connected" => "Signed in".to_owned(),
         "signed_out" => "Signed out".to_owned(),
@@ -241,6 +480,7 @@ pub fn state_line(service: &ConnectorService) -> String {
 
 /// The button beside a service, or None when there's nothing to press.
 pub fn button_title(service: &ConnectorService) -> Option<&'static str> {
+    if service.local { return None; }
     service.connect_url.as_deref().filter(|u| !u.is_empty())?;
     match service.state.as_str() {
         "connected" | "disabled" => None,

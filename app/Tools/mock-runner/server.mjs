@@ -1572,9 +1572,10 @@ async function dispatch(client, method, p) {
     case 'agents.revoke':
       mockAgents = { ...mockAgents, keys: p.id ? mockAgents.keys.filter((k) => k.id !== p.id) : [] };
       return mockAgents;
+    case 'connectors.setup':
     case 'connectors.add':
       // Opens a demo thread, as the runner's starts one.
-      return { threadId: 'demo_upload', already: false };
+      return { threadId: 'demo_upload_resume', already: false };
     case 'connectors.status':
       if (oldRunner) throw rpcError(-32601, `Unknown method ${method}`);
       if (p.refresh) connectors = { ...connectors, checkedAt: iso() };
@@ -1890,6 +1891,8 @@ async function dispatch(client, method, p) {
       // { catalog: [...] } or { local: true }: Add a service's list, and
       // with local, Local connectors on (Blender, a local service in error
       // and Other local server).
+      if (typeof p.canSetUp === 'boolean') connectors.canSetUp = p.canSetUp;
+      if (typeof p.canAddLocal === 'boolean') connectors.canAddLocal = p.canAddLocal;
       if (Array.isArray(p.catalog)) connectors.catalog = p.catalog;
       if (p.local === true) {
         connectors.canAddLocal = true;

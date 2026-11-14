@@ -1,5 +1,14 @@
 # Files
 
+## GPUI Connectors
+
+- `desktop/core/src/connectors.rs` connector status, catalog and agent types, masked form fields, local pin validation and hidden-row rules.
+- `desktop/gpui/src/connectors_setup.rs` setup and add actions, outside-agent forms and revoke, local trust sheet and hidden-row menu.
+- `desktop/gpui/src/connectors_panel.rs` service and X search rows, panel status and automation dump.
+- `desktop/core/tests/connectors_setup.rs` pure rule checks for keys, permissions, local commands and hidden rows.
+- `features/connectors.feature` panel flows against the scripted desktop app.
+- `prds/gpui-connectors-setup.md` the Swift-to-GPUI port scope and checks.
+
 ## Bears, tables and webhooks
 
 - `runner/src/bears.ts` bear folders, the runner's bears.json, faces, quiet hours, Head Bear and the `bears.*` RPCs.

@@ -127,7 +127,7 @@ pub fn settings(defaults: &BTreeMap<String, Plist>, primary_screen_height: f64) 
     for key in ["collapsedSections", "collapsedScheduleSections", "projectsList.openRows"] {
         put(key, get(key).and_then(Plist::as_strings).map(Value::from));
     }
-    for key in ["inboxOrder", "completionSoundDing", "runnersPanelOpen", "usage.chartRange"] {
+    for key in ["inboxOrder", "completionSoundDing", "runnersPanelOpen", "usage.chartRange", "connectorsHidden"] {
         put(key, get(key).and_then(Plist::as_str).map(Value::from));
     }
     // "system" is what none means here.

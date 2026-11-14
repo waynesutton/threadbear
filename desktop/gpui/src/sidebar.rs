@@ -2196,6 +2196,14 @@ pub(crate) fn automation(app: &Entity<Threadbear>, cmd: &Value, window: &mut Win
                     found = shown(window);
                 }
             }
+            if cmd["connectors"].as_bool() == Some(true) {
+                let target = found.last().cloned().or_else(|| window.elements().into_iter().filter(|e| e.label().is_some_and(&matches)).last());
+                if target.is_some_and(|t| crate::connectors_setup::scroll_into_view(app, t.bounds(), cx)) {
+                    window.refresh();
+                    window.render_frame(cx);
+                    found = shown(window);
+                }
+            }
             let Some(target) = found.last() else { return Err(format!("no control with the tip {tip:?}")) };
             let at = target.visible_bounds().center();
             window.pointer_move(at, None, cx);

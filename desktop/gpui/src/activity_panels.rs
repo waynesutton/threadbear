@@ -98,7 +98,9 @@ impl Threadbear {
     pub(crate) fn activity_panel_shown(&mut self, panel: &'static str, showing: bool, cx: &mut Context<Self>) {
         match panel {
             shell::RUNNERS => self.runners_panel_shown(showing, cx),
-            shell::CONNECTORS if showing => self.refresh_connectors(false, cx),
+            shell::CONNECTORS => {
+                if showing { self.refresh_connectors(false, cx); } else { self.close_connector_forms(); }
+            },
             shell::SETUP if showing => self.load_setup_devices(cx),
             _ => {}
         }
@@ -283,12 +285,17 @@ pub(crate) fn text_button(id: impl Into<SharedString>, label: impl Into<SharedSt
 /// The ⓘ: says what the panel shows in a popover under it, a paragraph a
 /// line, 280 points wide (`RunnersAbout`, `ConnectorsAbout`). Words in
 /// backticks are drawn as code, as SwiftUI's Markdown draws them.
-pub(crate) fn about_button(id: &'static str, paragraphs: Vec<String>, footnote: Option<String>, cx: &App) -> AnyElement {
+pub(crate) fn about_button(id: impl Into<SharedString>, paragraphs: Vec<String>, footnote: Option<String>, cx: &App) -> AnyElement {
+    about_button_with_tip(id, "What this panel shows", paragraphs, footnote, cx)
+}
+
+pub(crate) fn about_button_with_tip(id: impl Into<SharedString>, tip: impl Into<SharedString>, paragraphs: Vec<String>, footnote: Option<String>, cx: &App) -> AnyElement {
+    let id = id.into();
     let secondary = style::secondary_text(cx);
     let fg = style::label_text(cx);
-    Popover::new(ElementId::Name(id.into()))
+    Popover::new(ElementId::Name(id.clone()))
         .anchor(Anchor::TopRight)
-        .trigger(AboutTrigger { id, color: secondary })
+        .trigger(AboutTrigger { id, tip: tip.into(), color: secondary })
         .content(move |_, _, cx| {
             let mono = cx.theme().mono_font_family.clone();
             v_flex()
@@ -325,7 +332,8 @@ fn code_runs(text: &str, mono: SharedString) -> AnyElement {
 
 #[derive(IntoElement)]
 struct AboutTrigger {
-    id: &'static str,
+    id: SharedString,
+    tip: SharedString,
     color: Hsla,
 }
 
@@ -341,7 +349,7 @@ impl gpui_kit::component::Selectable for AboutTrigger {
 impl RenderOnce for AboutTrigger {
     fn render(self, _window: &mut Window, cx: &mut App) -> impl IntoElement {
         let fg = style::label_text(cx);
-        tipped(div().id(SharedString::from(format!("{}-button", self.id))).flex_none().size(px(14.)).flex().items_center().justify_center().cursor_pointer().text_color(self.color).hover(move |s| s.text_color(fg)), "What this panel shows")
+        tipped(div().id(SharedString::from(format!("{}-button", self.id))).flex_none().size(px(14.)).flex().items_center().justify_center().cursor_pointer().text_color(self.color).hover(move |s| s.text_color(fg)), self.tip)
             .child(icons::symbol("info.circle").with_size(px(11.)))
     }
 }

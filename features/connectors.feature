@@ -38,3 +38,74 @@ Feature: The Connectors panel
     When every service on the gateway is signed in
     Then the Connectors panel lists "Sentry: Signed in"
     And the Connectors panel doesn't list "Can't reach bruce: timed out."
+
+  # The Swift dump predates the setup, catalog, agent and hidden sections.
+  @connectors.panel @swift-pending
+  Scenario: Set up is offered without a gateway and opens its thread
+    When I open the Connectors panel
+    And no gateway is set up and setup is available
+    Then the Connectors panel lists "Set up"
+    When I press "Start a thread that installs" in the Connectors panel
+    Then the connector setup thread is open
+
+  @connectors.panel @swift-pending
+  Scenario: Adding a catalog service opens the thread that adds it
+    When I open the Connectors panel
+    And the connector catalog offers Slack
+    Then the Connectors panel lists "Slack [Add]"
+    When I press "Start a thread that adds Slack" in the Connectors panel
+    Then the connector setup thread is open
+
+  @connectors.panel @swift-pending
+  Scenario: A new agent key is copied through its form and can be revoked
+    When I open the Connectors panel
+    And I press "Let Grok Bot, Notion" in the Connectors panel
+    And I press "Make a key for Grok Bot" in the Connectors panel
+    Then the Connectors panel lists "Header value: Bearer tba_•••••••• [Copy]"
+    And the Connectors panel never displays the new secret
+    When I press "End this key" in the Connectors panel
+    Then the Connectors panel doesn't list "Grok Bot: Read only, reads threads it started"
+    And the Connectors panel doesn't list "Header value: Bearer tba_•••••••• [Copy]"
+
+  @connectors.panel @swift-pending
+  Scenario: Hiding a service removes its alert and the hidden menu restores it
+    When I open the Connectors panel
+    And I press "Hide Sentry from this panel" in the Connectors panel
+    Then the Connectors panel lists "+ 1 hidden"
+    And the Connectors panel doesn't list "Sentry: Signed out [Connect]"
+    And the Connectors rail has no sign-in alert
+    When I restore the hidden Sentry connector
+    Then the Connectors panel lists "Sentry: Signed out [Connect]"
+
+  @connectors.panel @swift-pending
+  Scenario: A local server shows its exact command before it is added
+    When I open the Connectors panel
+    And the connector catalog offers a local server
+    Then the Connectors panel lists "Blender: On this Mac [Add...]"
+    When I press "See the exact command Blender" in the Connectors panel
+    Then the Connectors panel lists "uvx mcp-for-blender@2.2.7"
+    And the Connectors panel lists "It stays at this version until you add a newer one."
+    When I press "Don't add it" in the Connectors panel
+    Then the Connectors panel doesn't list "uvx mcp-for-blender@2.2.7"
+    When I press "See the exact command Blender" in the Connectors panel
+    And I press "Start a thread that adds it to the gateway with exactly this command" in the Connectors panel
+    Then the connector setup thread is open
+    And the Connectors panel doesn't list "uvx mcp-for-blender@2.2.7"
+
+  @connectors.panel @swift-pending
+  Scenario: Closing the panel puts the one-time key away
+    When I open the Connectors panel
+    And I press "Let Grok Bot, Notion" in the Connectors panel
+    And I press "Make a key for Grok Bot" in the Connectors panel
+    Then the Connectors panel lists "Header value: Bearer tba_•••••••• [Copy]"
+    When I close and reopen the Connectors panel
+    Then the Connectors panel doesn't list "Header value: Bearer tba_•••••••• [Copy]"
+    And the Connectors panel lists "Grok Bot: Read only, reads threads it started"
+
+  @connectors.panel @swift-pending
+  Scenario: Slack explains why it cannot take a key
+    When I open the Connectors panel
+    And I press "Let Grok Bot, Notion" in the Connectors panel
+    And I press "Connect Slack to Threadbear" in the Connectors panel
+    Then the Connectors panel doesn't list "Make key"
+    And the Connectors panel lists "Slackbot only connects to servers that sign in with OAuth or with Slack's own sign-in, through a Slack app. It can't take a key, so Threadbear can't connect to it yet."
