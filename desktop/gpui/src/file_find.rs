@@ -19,7 +19,7 @@ use gpui_kit::prelude::*;
 use gpui_kit::*;
 use threadbear_core::find::{self as core_find, Finder};
 
-actions!(file_preview, [FindNext, FindPrevious]);
+actions!(file_preview, [FindNext, FindPrevious, FindReplace]);
 
 /// The key context of a file in the pane, which ⌘F, ⌘G and ⇧⌘G work in.
 pub(crate) const CONTEXT: &str = "FilePreview";
@@ -35,6 +35,7 @@ pub(crate) fn bind_keys(cx: &mut App) {
             KeyBinding::new(if mac { "cmd-f" } else { "ctrl-f" }, gpui_kit::component::input::Search, Some(CONTEXT)),
             KeyBinding::new(if mac { "cmd-g" } else { "ctrl-g" }, FindNext, Some(CONTEXT)),
             KeyBinding::new(if mac { "cmd-shift-g" } else { "ctrl-shift-g" }, FindPrevious, Some(CONTEXT)),
+            KeyBinding::new(if mac { "cmd-alt-f" } else { "ctrl-h" }, FindReplace, Some(CONTEXT)),
         ]);
     });
 }
@@ -42,6 +43,8 @@ pub(crate) fn bind_keys(cx: &mut App) {
 /// The bar, while it's up over a file.
 pub(crate) struct FindBar {
     pub(crate) input: Entity<InputState>,
+    /// What a match becomes: Replace and All, while the file's being edited.
+    pub(crate) replacement: Entity<InputState>,
     /// The drawn page's matches; the code editor keeps its own.
     finder: Finder,
     /// The page's text when it was last searched: a page that changes (its
@@ -94,8 +97,15 @@ impl SidePane {
             });
             let query = self.files.last_query.clone();
             input.update(cx, |s, cx| s.set_value(query, window, cx));
+            let replacement = cx.new(|cx| InputState::new(window, cx).placeholder("Replace with"));
+            let id = thread_id.to_owned();
+            let replace_sub = cx.subscribe_in(&replacement, window, move |this, _, ev: &InputEvent, window, cx| {
+                if let InputEvent::PressEnter { .. } = ev {
+                    this.replace_match(&id, false, window, cx);
+                }
+            });
             if let Some(open) = self.files.open.get_mut(thread_id) {
-                open.find = Some(FindBar { input, finder: Finder::default(), searched: None, _subs: vec![sub] });
+                open.find = Some(FindBar { input, replacement, finder: Finder::default(), searched: None, _subs: vec![sub, replace_sub] });
             }
             self.find_changed(thread_id, cx);
         }
@@ -160,6 +170,44 @@ impl SidePane {
             }
         }
         cx.notify();
+    }
+
+    /// Whether the bar can replace: the file's own text being edited and
+    /// taking typing, not a page or a read-only view.
+    fn replaces(&self, thread_id: &str) -> bool {
+        self.files.open.get(thread_id).and_then(|o| o.edit.as_ref()).is_some_and(|e| e.session.takes_typing())
+    }
+
+    /// Replace (or All, with `all`): the picked match, then on to the next,
+    /// or every match at once, as one undo. Saved as typing is.
+    pub(crate) fn replace_match(&mut self, thread_id: &str, all: bool, window: &mut Window, cx: &mut Context<Self>) {
+        if !self.replaces(thread_id) {
+            return;
+        }
+        let Some(open) = self.files.open.get(thread_id) else { return };
+        let (Some(bar), Some(editor)) = (open.find.as_ref(), open.raw_editor()) else { return };
+        let with = bar.replacement.read(cx).value().to_string();
+        let changed = editor.update(cx, |s, cx| if all { s.replace_all_search_matches(&with, window, cx) > 0 } else { s.replace_current_search_match(&with, window, cx) });
+        if changed {
+            // The editor's own replace says nothing to the typing watch.
+            self.edit_typed(thread_id, cx);
+        }
+        cx.notify();
+    }
+
+    /// ⌥⌘F: the bar with the replace field ready, while editing.
+    pub(crate) fn open_replace(&mut self, thread_id: &str, window: &mut Window, cx: &mut Context<Self>) {
+        self.open_find(thread_id, window, cx);
+        if !self.replaces(thread_id) {
+            return;
+        }
+        if let Some(bar) = self.files.open.get(thread_id).and_then(|o| o.find.as_ref()) {
+            bar.replacement.update(cx, |s, cx| {
+                s.focus(window, cx);
+                crate::web_panels::keyboard_to_app(window);
+                s.select_all(window, cx);
+            });
+        }
     }
 
     /// ⌘G or ⇧⌘G with the bar down finds the last words again, as AppKit's
@@ -319,9 +367,29 @@ impl SidePane {
         )
         .on_click(cx.listener(move |this, _: &ClickEvent, window, cx| this.close_find(&done_id, window, cx)));
         let escape_id = id.clone();
-        Some(
+        let replace_row = self.replaces(thread_id).then(|| {
+            let (one_id, all_id) = (id.clone(), id.clone());
+            let button = |el_id: &'static str, label: &'static str, tip: &'static str| {
+                tipped(
+                    div()
+                        .id(el_id)
+                        .flex_none()
+                        .h(px(21.))
+                        .px(px(10.))
+                        .flex()
+                        .items_center()
+                        .rounded(px(6.))
+                        .bg(field_fill)
+                        .when(has_matches, |s| s.cursor_pointer().active(|s| s.opacity(0.7)))
+                        .text_size(px(style::size::LABEL))
+                        .text_color(if has_matches { p.fg } else { p.faint })
+                        .child(label),
+                    tip,
+                )
+            };
+            let one = button("find-replace", "Replace", "Replace the match picked and go to the next (Return)").when(has_matches, |s| s.on_click(cx.listener(move |this, _: &ClickEvent, window, cx| this.replace_match(&one_id, false, window, cx))));
+            let every = button("find-replace-all", "All", "Replace every match").when(has_matches, |s| s.on_click(cx.listener(move |this, _: &ClickEvent, window, cx| this.replace_match(&all_id, true, window, cx))));
             h_flex()
-                .id("find-bar")
                 .flex_none()
                 .w_full()
                 .h(px(31.))
@@ -331,16 +399,49 @@ impl SidePane {
                 .items_center()
                 .border_b_1()
                 .border_color(p.hairline)
-                // Escape in the field closes the bar, as AppKit's does.
+                .child(
+                    h_flex()
+                        .flex_1()
+                        .min_w_0()
+                        .h(px(21.))
+                        .pl(px(7.))
+                        .pr(px(4.))
+                        .gap(px(4.))
+                        .rounded_full()
+                        .bg(field_fill)
+                        .child(icon("arrow.triangle.2.circlepath", 12., p.secondary).flex_none())
+                        .child(div().flex_1().min_w_0().child(Input::new(&bar.replacement).appearance(false).small().pl(px(0.)).text_size(px(style::size::LABEL)))),
+                )
+                .child(one)
+                .child(every)
+        });
+        let find_row = h_flex()
+            .flex_none()
+            .w_full()
+            .h(px(31.))
+            .pl(px(6.))
+            .pr(px(8.))
+            .gap(px(7.))
+            .items_center()
+            .border_b_1()
+            .border_color(p.hairline)
+            .child(field)
+            .child(steps)
+            .child(done);
+        Some(
+            gpui_kit::component::v_flex()
+                .id("find-bar")
+                .flex_none()
+                .w_full()
+                // Escape in either field closes the bar, as AppKit's does.
                 .capture_key_down(cx.listener(move |this, ev: &KeyDownEvent, window, cx| {
                     if ev.keystroke.key == "escape" {
                         this.close_find(&escape_id, window, cx);
                         cx.stop_propagation();
                     }
                 }))
-                .child(field)
-                .child(steps)
-                .child(done)
+                .child(find_row)
+                .children(replace_row)
                 .into_any_element(),
         )
     }

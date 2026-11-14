@@ -55,6 +55,10 @@ Then('the pane shows Highlights', async function (this: ThreadbearWorld) {
   await this.until('Highlights to be showing, with no preview over it', (d) => !previewLine(d) && pane(d)?.section === 'threadbear.highlights');
 });
 
+When('I replace every match with {string}', async function (this: ThreadbearWorld, words: string) {
+  await this.app.do({ cmd: 'preview', replace: words, all: true });
+});
+
 Then('the pane shows a {string} page with the words {string}', async function (this: ThreadbearWorld, kind: string, words: string) {
   await this.until(`a ${kind} preview with "${words}"`, (d) => pane(d)?.previewKind === kind && pane(d)?.previewText?.includes(words));
 });

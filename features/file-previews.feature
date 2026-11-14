@@ -77,6 +77,19 @@ Feature: Files opened in the side pane
     When I find the next match
     Then the find bar says "WORDS: 1 of 2"
 
+  # While editing, the find bar has Replace and All (Wayne, 9 Nov). The
+  # Swift driver's find has no replace.
+  @file.find @swift-pending
+  Scenario: Replace and All change the matches in a file being edited
+    When I open the thread "Rebuild the three landing pages"
+    And I open "src/hero.ts" in the thread's folder in the pane
+    And I start editing the pane's file
+    And I look for "words" in the pane's file
+    Then the find bar says "words: 1 of 2"
+    When I replace every match with "text"
+    Then the pane's page has the words "hero(text: string)"
+    And the pane's page has the words "<h1>${text}</h1>"
+
   @file.textview
   Scenario: A code file is shown as selectable, coloured text
     When I open the thread "Rebuild the three landing pages"

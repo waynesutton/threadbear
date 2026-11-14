@@ -1025,6 +1025,10 @@ impl SidePane {
             .on_action(cx.listener(move |this, _: &gpui_kit::component::input::Search, window, cx| this.open_find(&find, window, cx)))
             .on_action(cx.listener(move |this, _: &FindNext, window, cx| this.find_again(&next, false, window, cx)))
             .on_action(cx.listener(move |this, _: &FindPrevious, window, cx| this.find_again(&previous, true, window, cx)))
+            .on_action(cx.listener({
+                let id = thread_id.to_owned();
+                move |this, _: &crate::file_find::FindReplace, window, cx| this.open_replace(&id, window, cx)
+            }))
             .on_action(cx.listener(move |this, _: &SaveFile, window, cx| {
                 // Only while it's being worked on, as the Swift app's ⌘S.
                 if this.files.open.get(&save).is_some_and(|o| o.edit.as_ref().is_some_and(|e| e.session.takes_typing())) {
@@ -1298,7 +1302,7 @@ pub(crate) fn preview_command(side: &Entity<SidePane>, thread: &ThreadSummary, c
         let shown = side.read(cx).previews.get(&id).map_or_else(|| "no preview".to_owned(), |p| format!("showing {}", p.title));
         return Ok(json!(format!("ok {shown}")));
     }
-    if ["find", "findNext", "findPrevious", "findDone"].iter().any(|k| !cmd[*k].is_null()) {
+    if ["find", "findNext", "findPrevious", "findDone", "replace"].iter().any(|k| !cmd[*k].is_null()) {
         let id = thread.id.clone();
         let showing = side.read(cx).files.open.get(&id).is_some_and(|o| matches!(o.body, FileBody::Markdown { .. } | FileBody::Text { .. }) || o.edit.is_some());
         if !showing {
@@ -1313,6 +1317,15 @@ pub(crate) fn preview_command(side: &Entity<SidePane>, thread: &ThreadSummary, c
             }
             if cmd["findPrevious"].as_bool() == Some(true) {
                 pane.find_again(&id, true, window, cx);
+            }
+            // `"replace": "words"` types them in the replace field and presses
+            // Replace (`"all": true`, All).
+            if let Some(with) = cmd["replace"].as_str() {
+                if let Some(bar) = pane.files.open.get(&id).and_then(|o| o.find.as_ref()) {
+                    let field = bar.replacement.clone();
+                    field.update(cx, |s, cx| s.set_value(with.to_owned(), window, cx));
+                }
+                pane.replace_match(&id, cmd["all"].as_bool() == Some(true), window, cx);
             }
             if cmd["findDone"].as_bool() == Some(true) {
                 pane.close_find(&id, window, cx);
