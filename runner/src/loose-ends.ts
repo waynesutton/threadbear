@@ -153,17 +153,33 @@ async function unmergedLooseEnds(top: string, pushed: string[], prs: PrLookup, b
   const into = main.slice('origin/'.length);
   const url = await readGit(top, ['remote', 'get-url', 'origin']);
   const repo = url.ok ? githubRepo(url.stdout.trim()) : undefined;
+  // A fork's PRs go to the repo it was forked from (its `upstream`
+  // remote), which origin's own PR list doesn't have: Wayne's bears PR,
+  // mikecann/threadbear#66, read as "isn't on main" (14 Nov 2026). Only a
+  // PR whose head is origin's owner counts, as anyone's branch can share
+  // the name.
+  const up = repo ? await readGit(top, ['remote', 'get-url', 'upstream']) : undefined;
+  const upstream = up?.ok ? githubRepo(up.stdout.trim()) : undefined;
+  const owner = repo?.split('/')[0];
   const out: LooseEnd[] = [];
   for (const branch of [...branches].sort()) {
     if (out.length >= MAX_UNMERGED) break;
-    const pr = repo && budget.lookups++ < MAX_LOOKUPS ? await prs(repo, branch) : undefined;
+    let pr = repo && budget.lookups++ < MAX_LOOKUPS ? await prs(repo, branch) : undefined;
+    let to: string | undefined;
+    if (!pr && upstream && upstream !== repo && budget.lookups++ < MAX_LOOKUPS) {
+      const theirs = await prs(upstream, branch);
+      if (theirs && theirs.headOwner?.toLowerCase() === owner?.toLowerCase()) {
+        pr = theirs;
+        to = upstream;
+      }
+    }
     if (pr && pr.state !== 'OPEN') {
       const tip = await readGit(top, ['rev-parse', '--verify', '--quiet', `refs/remotes/origin/${branch}^{commit}`]);
       if (tip.ok && tip.stdout.trim() === pr.headRefOid) continue;
     }
     out.push({
       kind: 'unmerged',
-      text: pr?.state === 'OPEN' ? `PR #${pr.number} in ${name} ${pr.isDraft ? 'is still a draft' : "isn't merged"}` : `Work it pushed to ${branch} in ${name} isn't on ${into}`,
+      text: pr?.state === 'OPEN' ? `PR #${pr.number} ${to ? `to ${to}` : `in ${name}`} ${pr.isDraft ? 'is still a draft' : "isn't merged"}` : `Work it pushed to ${branch} in ${name} isn't on ${into}`,
     });
   }
   return out;
@@ -175,7 +191,8 @@ export function githubRepo(url: string): string | undefined {
   return m ? `${m[1]}/${m[2]}` : undefined;
 }
 
-export type Pr = { number: number; state: 'OPEN' | 'MERGED' | 'CLOSED'; isDraft: boolean; headRefOid?: string };
+// headOwner: whose repo the PR's branch is in (a fork's PR to upstream).
+export type Pr = { number: number; state: 'OPEN' | 'MERGED' | 'CLOSED'; isDraft: boolean; headRefOid?: string; headOwner?: string };
 export type PrLookup = (repo: string, branch: string) => Promise<Pr | undefined>;
 
 // The newest PR from that branch, through the gh CLI, or undefined (no gh,
@@ -191,13 +208,15 @@ export const githubPr: PrLookup = (repo, branch) => {
   const pr = new Promise<Pr | undefined>((resolve) => {
     execFile(
       'gh',
-      ['pr', 'list', '-R', repo, '--head', branch, '--state', 'all', '--limit', '1', '--json', 'number,state,isDraft,headRefOid'],
+      ['pr', 'list', '-R', repo, '--head', branch, '--state', 'all', '--limit', '1', '--json', 'number,state,isDraft,headRefOid,headRepositoryOwner'],
       { cwd: os.tmpdir(), timeout: 15_000, killSignal: 'SIGKILL', env: { ...process.env, GH_PROMPT_DISABLED: '1', GIT_TERMINAL_PROMPT: '0' } },
       (err, stdout) => {
         if (err) return resolve(undefined);
         try {
-          const [p] = JSON.parse(String(stdout)) as Pr[];
-          resolve(p && typeof p.number === 'number' ? p : undefined);
+          const [p] = JSON.parse(String(stdout)) as (Pr & { headRepositoryOwner?: { login?: string } })[];
+          if (!p || typeof p.number !== 'number') return resolve(undefined);
+          const { headRepositoryOwner, ...rest } = p;
+          resolve({ ...rest, ...(typeof headRepositoryOwner?.login === 'string' ? { headOwner: headRepositoryOwner.login } : {}) });
         } catch {
           resolve(undefined);
         }

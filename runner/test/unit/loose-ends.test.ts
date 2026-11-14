@@ -284,6 +284,20 @@ test('looseEnds: work pushed to a branch that main lacks is open until its PR is
   assert.deepEqual(await editedLooseEnds([a], [], undefined, { pushed: [sha, more], prs: lookup(merged) }), [
     { kind: 'unmerged', text: "Work it pushed to mike/examples in website isn't on main" },
   ]);
+  // A fork's PR goes to its upstream: found there when it's from this
+  // fork's owner, and named with the repo it went to.
+  sh(repo, 'git remote add upstream https://github.com/mikecann/website.git');
+  const byRepo = (map: Record<string, Pr | undefined>): PrLookup => async (r) => map[r];
+  assert.deepEqual(await editedLooseEnds([a], [], undefined, { pushed: [sha, more], prs: byRepo({ 'mikecann/website': { number: 66, state: 'OPEN', isDraft: false, headOwner: 'convex' } }) }), [
+    { kind: 'unmerged', text: "PR #66 to mikecann/website isn't merged" },
+  ]);
+  // Someone else's branch with the same name doesn't count.
+  assert.deepEqual(await editedLooseEnds([a], [], undefined, { pushed: [sha, more], prs: byRepo({ 'mikecann/website': { number: 70, state: 'OPEN', isDraft: false, headOwner: 'someone' } }) }), [
+    { kind: 'unmerged', text: "Work it pushed to mike/examples in website isn't on main" },
+  ]);
+  // Merged upstream with this tip: not open.
+  assert.deepEqual(await editedLooseEnds([a], [], undefined, { pushed: [sha, more], prs: byRepo({ 'mikecann/website': { number: 66, state: 'MERGED', isDraft: false, headOwner: 'convex', headRefOid: more } }) }), []);
+  sh(repo, 'git remote remove upstream');
   // A thread that changed files only through a shell is found by its folder.
   assert.deepEqual(await editedLooseEnds([], [], undefined, { pushed: [more], dirs: [repo], prs: lookup(undefined) }), [
     { kind: 'unmerged', text: "Work it pushed to mike/examples in website isn't on main" },
