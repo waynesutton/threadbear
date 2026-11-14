@@ -734,12 +734,22 @@ impl SettingsWindow {
                 })
                 .ok();
         });
+        let autosave_on = self.app.upgrade().is_none_or(|a| a.read(cx).settings.saves_files_automatically());
+        let autosave = self.switch("settings-files-autosave", autosave_on, "Write what's typed about a second after you stop, and when you leave the file", cx, |this, on, cx| {
+            this.app
+                .update(cx, |app, cx| {
+                    app.settings.saved.files_save_automatically = Some(on);
+                    app.save_settings_soon(cx);
+                    cx.notify();
+                })
+                .ok();
+        });
         section(
             "settings-files",
             "Files",
-            "Edit files like an editor opens a text file in the side pane ready to type in, with line numbers and a bar showing the line, the column and whether what you typed is saved. It's written when you save (⌘S or Save) or leave the file, rather than as you type.",
+            "Edit files like an editor opens a text file in the side pane ready to type in, with line numbers and a bar showing the line, the column and whether what you typed is saved. Save files automatically writes it about a second after you stop typing and when you leave the file. Off, it waits for ⌘S or Save, the file's title has a dot while anything isn't saved, and leaving it asks Save, Don't Save or Cancel.",
             "change how files open in the side pane.",
-            vec![row("Edit files like an editor", switch, cx)],
+            vec![row("Edit files like an editor", switch, cx), row("Save files automatically", autosave, cx)],
             cx,
         )
     }

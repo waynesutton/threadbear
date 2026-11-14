@@ -120,11 +120,15 @@ pub(crate) struct FilesState {
     /// The window the pane draws in, for putting a file's text in its editor
     /// after a save or a check that came later.
     pub(crate) window: Option<AnyWindowHandle>,
+    /// What the Save the changes? question gets instead of showing, for a
+    /// script ("save", "discard" or "cancel"), and the file last asked about.
+    pub(crate) scripted_answer: Option<String>,
+    pub(crate) last_asked: Option<String>,
 }
 
 impl Default for FilesState {
     fn default() -> Self {
-        FilesState { open: HashMap::new(), known_folders: HashSet::new(), reading_style: None, prefs: crate::files_store::load(), last_query: String::new(), focus: None, window: None }
+        FilesState { open: HashMap::new(), known_folders: HashSet::new(), reading_style: None, prefs: crate::files_store::load(), last_query: String::new(), focus: None, window: None, scripted_answer: None, last_asked: None }
     }
 }
 
@@ -1098,6 +1102,7 @@ impl SidePane {
                 if let Some(edit) = open.edit.as_ref().filter(|_| preview.editing) {
                     pane.insert("previewKind".into(), json!(if core::is_markdown(path) || core::code_language(path).is_none() { "text" } else { "code" }));
                     pane.insert("previewText".into(), json!(edit.editor.read(cx).value().chars().take(4000).collect::<String>()));
+                    pane.insert("previewUnsaved".into(), json!(edit.session.drafted()));
                     if edit.editor_mode && edit.session.takes_typing() {
                         let place = edit.editor.read(cx).cursor_position();
                         pane.insert("previewStatus".into(), json!(words::status(place.line, place.character, edit.session.drafted())));
@@ -1192,9 +1197,28 @@ pub(crate) fn preview_command(side: &Entity<SidePane>, thread: &ThreadSummary, c
                 app.save_settings_soon(cx);
             });
         }
-        if cmd.as_object().is_some_and(|o| o.keys().all(|k| k == "cmd" || k == "editor" || k == "autosave")) {
-            return Ok(json!(format!("ok editor {on}")));
+    }
+    // Save files automatically, set first (the Swift `autosave`).
+    if let Some(on) = cmd["autosave"].as_bool() {
+        if let Some(app) = side.read(cx).app.upgrade() {
+            app.update(cx, |app, cx| {
+                app.settings.saved.files_save_automatically = Some(on);
+                app.save_settings_soon(cx);
+            });
         }
+    }
+    // What the Save the changes? question gets instead of showing.
+    if let Some(answer) = cmd["answer"].as_str() {
+        side.update(cx, |pane, _| pane.files.scripted_answer = Some(answer.to_owned()));
+    }
+    if cmd.as_object().is_some_and(|o| !o.is_empty() && o.keys().all(|k| matches!(k.as_str(), "cmd" | "editor" | "autosave" | "answer"))) {
+        return Ok(json!("ok"));
+    }
+    // What's unsaved and what was asked.
+    if cmd["state"].as_bool() == Some(true) {
+        let pane = side.read(cx);
+        let unsaved = pane.files.open.get(&thread.id).and_then(|o| o.edit.as_ref().filter(|e| e.session.drafted()).map(|_| o.path.clone()));
+        return Ok(json!(format!("ok unsaved {:?}, asked {:?}", unsaved, pane.files.last_asked)));
     }
     if cmd["play"].as_bool() == Some(true) {
         // The film's play button, for a picture of it playing.

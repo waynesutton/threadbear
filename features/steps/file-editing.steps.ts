@@ -18,8 +18,9 @@ Then('the pane\'s file can be edited', async function (this: ThreadbearWorld) {
 });
 
 When('I start editing the pane\'s file', async function (this: ThreadbearWorld) {
-  await this.until('the bar to offer the pencil', (d) => pane(d)?.previewMode === 'reading');
-  await this.app.do({ cmd: 'preview', edit: true });
+  // Like an editor (the default), it opened ready to type in already.
+  const d = await this.until('the bar to offer the pencil, or the file being edited', (x) => (pane(x)?.previewMode === 'reading' || editing(x)) && x);
+  if (pane(d)?.previewMode === 'reading') await this.app.do({ cmd: 'preview', edit: true });
 });
 
 Then('the pane\'s file is being edited', async function (this: ThreadbearWorld) {
@@ -38,6 +39,33 @@ When('I type {string} at the end of the pane\'s file, without waiting', async fu
 
 When('I turn on Edit files like an editor', async function (this: ThreadbearWorld) {
   await this.app.do({ cmd: 'preview', editor: true });
+});
+
+When('I turn off Edit files like an editor', async function (this: ThreadbearWorld) {
+  await this.app.do({ cmd: 'preview', editor: false });
+});
+
+When('I turn off Save files automatically', async function (this: ThreadbearWorld) {
+  await this.app.do({ cmd: 'preview', autosave: false });
+});
+
+When('I\'d answer {string} to saving the changes', async function (this: ThreadbearWorld, answer: string) {
+  await this.app.do({ cmd: 'preview', answer });
+});
+
+const unsaved = (d: Parameters<typeof pane>[0]) => (pane(d) as { previewUnsaved?: boolean } | null | undefined)?.previewUnsaved;
+
+Then('the pane\'s file isn\'t saved yet', async function (this: ThreadbearWorld) {
+  await this.until('the file marked unsaved', (d) => unsaved(d) === true);
+});
+
+Then('the pane\'s file is saved', async function (this: ThreadbearWorld) {
+  await this.until('the file marked saved', (d) => unsaved(d) === false);
+});
+
+Then('the file {string} on disk doesn\'t end with {string}', async function (this: ThreadbearWorld, relative: string, words: string) {
+  const file = path.join(await threadFolder(this), relative);
+  if (fs.readFileSync(file, 'utf8').trimEnd().endsWith(words)) throw new Error(`${relative} ends with "${words}"`);
 });
 
 const status = (d: Parameters<typeof pane>[0]) => (pane(d) as { previewStatus?: string | null } | null | undefined)?.previewStatus;

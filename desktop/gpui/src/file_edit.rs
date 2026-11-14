@@ -22,7 +22,7 @@ use gpui_kit::*;
 use std::collections::HashSet;
 use std::path::Path;
 use std::time::Duration;
-use threadbear_core::text_file::{words, EditSession, Saved, CHECK_DELAY_MS, SAVE_DELAY_MS};
+use threadbear_core::text_file::{words, EditSession, Saved, CHECK_DELAY_MS, EDITOR_SAVE_DELAY_MS, SAVE_DELAY_MS};
 
 actions!(file_preview, [SaveFile]);
 
@@ -39,6 +39,9 @@ pub(crate) struct FileEdit {
     /// Edit files like an editor, as it was when the file opened: typing
     /// waits for ⌘S, Save or leaving the file, and a status bar shows.
     pub(crate) editor_mode: bool,
+    /// A save just landed: the status bar's quiet "Saved" tick, for a moment.
+    pub(crate) just_saved: bool,
+    just_saved_soon: Option<Task<()>>,
     pub(crate) editor: Entity<EditorState>,
     /// The save a moment after the last keystroke.
     save_soon: Option<Task<()>>,
@@ -95,7 +98,7 @@ impl FileEdit {
             watch.set(&HashSet::from([folder]));
             Some(watch)
         });
-        FileEdit { session, editor_mode, editor, save_soon: None, check_soon: None, _watch: watch, _typing: typing }
+        FileEdit { session, editor_mode, just_saved: false, just_saved_soon: None, editor, save_soon: None, check_soon: None, _watch: watch, _typing: typing }
     }
 }
 
@@ -111,14 +114,20 @@ impl SidePane {
             return;
         }
         edit.session.typed();
-        // Like an editor: nothing's written until ⌘S, Save or leaving it.
-        if edit.editor_mode {
+        let editor_mode = edit.editor_mode;
+        // Like an editor with Save files automatically off: nothing's
+        // written until ⌘S, Save or leaving it.
+        if editor_mode && !self.saves_files_automatically(cx) {
             cx.notify();
             return;
         }
+        let Some(edit) = self.edit_mut(thread_id) else { return };
         let id = thread_id.to_owned();
+        // About a second after the typing stops like an editor, a moment otherwise.
+        let delay = if editor_mode { EDITOR_SAVE_DELAY_MS } else { SAVE_DELAY_MS };
+        cx.notify();
         edit.save_soon = Some(cx.spawn(async move |this, cx| {
-            cx.background_executor().timer(Duration::from_millis(SAVE_DELAY_MS)).await;
+            cx.background_executor().timer(Duration::from_millis(delay)).await;
             this.update(cx, |this, cx| {
                 this.save_edit(&id, None, cx);
             })
@@ -133,7 +142,23 @@ impl SidePane {
         let Some(edit) = self.files.open.get_mut(thread_id).and_then(|o| o.edit.as_mut()) else { return Saved::Done };
         edit.save_soon = None;
         let typed = edit.editor.read(cx).value().to_string();
+        let was_drafted = edit.session.drafted();
         let saved = edit.session.save_now(&typed);
+        // The quiet tick, for a moment, once something typed is in the file.
+        if was_drafted && !edit.session.drafted() && edit.editor_mode {
+            edit.just_saved = true;
+            let id = thread_id.to_owned();
+            edit.just_saved_soon = Some(cx.spawn(async move |this, cx| {
+                cx.background_executor().timer(Duration::from_millis(1500)).await;
+                this.update(cx, |this, cx| {
+                    if let Some(edit) = this.edit_mut(&id) {
+                        edit.just_saved = false;
+                    }
+                    cx.notify();
+                })
+                .ok();
+            }));
+        }
         if let Saved::DoneShowing(text) = &saved {
             let editor = edit.editor.clone();
             show_text(&editor, text.clone(), window, handle, cx);
@@ -253,6 +278,7 @@ impl SidePane {
         let p = palette(cx);
         let place = edit.editor.read(cx).cursor_position();
         let edited = edit.session.drafted();
+        let autosaves = self.saves_files_automatically(cx);
         let id = thread_id.to_owned();
         let side = cx.entity().downgrade();
         let save = PushButton::new("editor-save", words::SAVE, words::SAVE_TIP).disabled(!edited || edit.session.conflict.is_some()).render(cx, move |_, window, cx| {
@@ -274,10 +300,74 @@ impl SidePane {
             .text_size(px(style::size::LABEL))
             .child(div().text_color(p.secondary).child(format!("Line {}, Column {}", place.line + 1, place.character + 1)))
             .child(div().flex_1())
-            .when(edited, |s| s.child(div().size(px(6.)).rounded_full().bg(style::accent(cx))).child(div().text_color(p.secondary).child("Edited")))
-            .when(!edited, |s| s.child(div().text_color(p.faint).child("Saved")))
+            .when(edited, |s| s.child(div().size(px(6.)).rounded_full().bg(style::accent(cx))).child(div().text_color(p.secondary).child(words::edited(autosaves))))
+            .when(!edited && edit.just_saved, |s| s.child(icon("checkmark", style::size::LABEL, p.secondary)).child(div().text_color(p.secondary).child("Saved")))
+            .when(!edited && !edit.just_saved, |s| s.child(div().text_color(p.faint).child("Saved")))
             .child(save)
             .into_any_element()
+    }
+
+    /// Save files automatically, as Settings has it now.
+    pub(crate) fn saves_files_automatically(&self, cx: &App) -> bool {
+        self.app.upgrade().is_none_or(|app| app.read(cx).settings.saves_files_automatically())
+    }
+
+    /// Whether leaving the thread's file has to ask first: like an editor,
+    /// with Save files automatically off and something typed not saved.
+    pub(crate) fn must_ask_to_leave(&self, thread_id: &str, cx: &App) -> bool {
+        !self.saves_files_automatically(cx) && self.files.open.get(thread_id).and_then(|o| o.edit.as_ref()).is_some_and(|e| e.editor_mode && e.session.drafted())
+    }
+
+    /// Leaving the file with unsaved typing (`EditedFiles.mayLeave`): Save,
+    /// Don't Save or Cancel. Save or Don't Save then does `then`, the
+    /// leaving that was asked about; Cancel stays. A save that can't land
+    /// (a conflict waiting) stays too, with the bar saying why.
+    pub(crate) fn ask_to_leave(&mut self, thread_id: &str, then: impl FnOnce(&mut Self, &mut Context<Self>) + 'static, cx: &mut Context<Self>) {
+        let file = self.files.open.get(thread_id).map(|o| threadbear_core::highlights::last_component(&o.path).to_owned()).unwrap_or_default();
+        self.files.last_asked = Some(file.clone());
+        let id = thread_id.to_owned();
+        if let Some(picked) = self.files.scripted_answer.clone() {
+            self.answer_leave(&id, &picked, Box::new(then), cx);
+            cx.notify();
+            return;
+        }
+        let Some(handle) = self.files.window else { return };
+        let question = format!("Save the changes to {file}?");
+        let Ok(reply) = handle.update(cx, |_, window, cx| window.prompt(PromptLevel::Warning, &question, Some("If you don't save them, what you typed is lost."), &["Save", "Cancel", "Don't Save"], cx)) else { return };
+        let then: Box<dyn FnOnce(&mut Self, &mut Context<Self>)> = Box::new(then);
+        cx.spawn(async move |this, cx| {
+            let Ok(picked) = reply.await else { return };
+            let picked = match picked {
+                0 => "save",
+                2 => "discard",
+                _ => "cancel",
+            };
+            this.update(cx, |this, cx| {
+                this.answer_leave(&id, picked, then, cx);
+                cx.notify();
+            })
+            .ok();
+        })
+        .detach();
+    }
+
+    /// What Save, Don't Save or Cancel does: Save writes it and goes on if
+    /// it landed; Don't Save drops what's typed, writing nothing, and goes on.
+    fn answer_leave(&mut self, thread_id: &str, picked: &str, then: Box<dyn FnOnce(&mut Self, &mut Context<Self>)>, cx: &mut Context<Self>) {
+        match picked {
+            "save" => {
+                if self.save_edit(thread_id, None, cx) == Saved::Done {
+                    then(self, cx);
+                }
+            }
+            "discard" => {
+                if let Some(open) = self.files.open.get_mut(thread_id) {
+                    open.edit = None;
+                }
+                then(self, cx);
+            }
+            _ => {}
+        }
     }
 
     /// Edit files like an editor, as Settings has it now.

@@ -529,6 +529,11 @@ impl SidePane {
 
     /// Shows a section (`choosePanel`), closing a preview over another one.
     pub(crate) fn choose_section(&mut self, thread_id: &str, id: &str, cx: &mut Context<Self>) {
+        if self.previews.get(thread_id).is_some_and(|p| p.from != id) && self.must_ask_to_leave(thread_id, cx) {
+            let (t, s) = (thread_id.to_owned(), id.to_owned());
+            self.ask_to_leave(thread_id, move |this, cx| this.choose_section(&t, &s, cx), cx);
+            return;
+        }
         if self.previews.get(thread_id).is_some_and(|p| p.from != id) {
             self.leave_edit(thread_id, cx);
             self.previews.remove(thread_id);
@@ -665,6 +670,11 @@ impl SidePane {
     }
 
     pub(crate) fn show_preview(&mut self, mut preview: PanePreview, thread_id: &str, cx: &mut Context<Self>) {
+        if self.must_ask_to_leave(thread_id, cx) {
+            let id = thread_id.to_owned();
+            self.ask_to_leave(thread_id, move |this, cx| this.show_preview(preview, &id, cx), cx);
+            return;
+        }
         // It takes an explanation's place, as a preview of its own would.
         self.stop_explaining(thread_id);
         // A file being worked on is saved before anything takes its place.
@@ -694,6 +704,11 @@ impl SidePane {
     /// then out to the section (`previewBack`).
     pub(crate) fn preview_back(&mut self, thread_id: &str, cx: &mut Context<Self>) {
         let Some(current) = self.previews.get(thread_id).cloned() else { return };
+        if self.must_ask_to_leave(thread_id, cx) {
+            let id = thread_id.to_owned();
+            self.ask_to_leave(thread_id, move |this, cx| this.preview_back(&id, cx), cx);
+            return;
+        }
         self.leave_edit(thread_id, cx);
         match current.back.split_last() {
             None => {
@@ -714,6 +729,11 @@ impl SidePane {
     }
 
     pub(crate) fn close_preview(&mut self, thread_id: &str, cx: &mut Context<Self>) {
+        if self.must_ask_to_leave(thread_id, cx) {
+            let id = thread_id.to_owned();
+            self.ask_to_leave(thread_id, move |this, cx| this.close_preview(&id, cx), cx);
+            return;
+        }
         self.leave_edit(thread_id, cx);
         self.previews.remove(thread_id);
         self.remember(thread_id);
@@ -1636,7 +1656,17 @@ impl SidePane {
             let thread_id = thread.id.clone();
             let back_to = preview.back.last().map_or_else(|| self.section_title(thread, &preview.from), |b| b.title.clone());
             row = row.child(self.header_button("hl-back", "chevron.left", format!("Back to {back_to}"), p, cx, move |this, cx| this.preview_back(&thread_id.clone(), cx)));
-            row = row.child(div().flex_1().min_w_0().truncate().text_size(px(style::size::LABEL)).font_semibold().child(preview.title.clone()));
+            // A dot while anything typed isn't in the file yet (`EditedFiles`).
+            let unsaved = self.files.open.get(&thread.id).and_then(|o| o.edit.as_ref()).is_some_and(|e| e.editor_mode && e.session.drafted());
+            row = row.child(
+                h_flex()
+                    .flex_1()
+                    .min_w_0()
+                    .gap(px(6.))
+                    .items_center()
+                    .when(unsaved, |s| s.child(crate::highlights::tipped_as(div().id("hl-unsaved").flex_none().size(px(7.)).rounded_full().bg(p.accent), "Not saved yet", gpui_kit::Role::Image)))
+                    .child(div().min_w_0().truncate().text_size(px(style::size::LABEL)).font_semibold().child(preview.title.clone())),
+            );
             row = row.child(self.preview_buttons(preview, thread, p, cx));
         } else {
             row = row.child(div().flex_1().min_w_0().truncate().text_size(px(style::size::LABEL)).font_semibold().child(self.section_title(thread, section)));

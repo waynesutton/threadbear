@@ -6,9 +6,11 @@ Feature: Working on a file in the side pane
   Background:
     Given the app is connected to a runner with the demo threads
 
+  # With Edit files like an editor off, as it was before it came in.
   @file.editor
   Scenario: The pencil opens the file's text to type in, and what's typed is saved by itself
     When I open the thread "Rebuild the three landing pages"
+    And I turn off Edit files like an editor
     And I open "logs/docs-build.txt" in the thread's folder in the pane
     Then the pane's file can be edited
     When I start editing the pane's file
@@ -26,6 +28,7 @@ Feature: Working on a file in the side pane
   Scenario: Like an editor, a file opens ready to type, and what's typed waits for a save
     When I open the thread "Rebuild the three landing pages"
     And I turn on Edit files like an editor
+    And I turn off Save files automatically
     And I open "src/hero.ts" in the thread's folder in the pane
     Then the pane's file is being edited
     And the pane's status bar says "Line 1, Column 1 · Saved"
@@ -34,6 +37,34 @@ Feature: Working on a file in the side pane
     When I save the pane's file
     Then the pane's status bar ends "Saved"
     And the file "src/hero.ts" on disk ends with "// later"
+
+  # Save files automatically, on to begin with (Wayne, 6 Nov): written about
+  # a second after the typing stops, with a dot on the title until then.
+  @file.editor @swift-pending
+  Scenario: Like an editor, what's typed is saved by itself a moment later
+    When I open the thread "Rebuild the three landing pages"
+    And I open "src/hero.ts" in the thread's folder in the pane
+    Then the pane's file is being edited
+    When I type "// soon" at the end of the pane's file, without waiting
+    Then the pane's file isn't saved yet
+    And the file "src/hero.ts" on disk ends with "// soon"
+    And the pane's file is saved
+
+  # With Save files automatically off, leaving a file with unsaved typing
+  # asks Save, Don't Save or Cancel (Wayne, 6 Nov).
+  @file.editor @swift-pending
+  Scenario: Leaving unsaved typing asks, and Don't Save leaves the file as it was
+    When I open the thread "Rebuild the three landing pages"
+    And I turn off Save files automatically
+    And I open "src/hero.ts" in the thread's folder in the pane
+    And I type "// gone" at the end of the pane's file, without waiting
+    And I'd answer "cancel" to saving the changes
+    And I open "logs/docs-build.txt" in the thread's folder in the pane
+    Then the pane is showing the file "src/hero.ts"
+    When I'd answer "discard" to saving the changes
+    And I open "logs/docs-build.txt" in the thread's folder in the pane
+    Then the pane is showing the file "logs/docs-build.txt"
+    And the file "src/hero.ts" on disk doesn't end with "// gone"
 
   @file.editor @file.markdown
   Scenario: ⌘S saves at once, in a Markdown file's own text

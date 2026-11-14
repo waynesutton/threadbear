@@ -17,6 +17,9 @@ pub const LIMIT: usize = 2_000_000;
 
 /// How long after the last keystroke the file is written (`saveDelay`).
 pub const SAVE_DELAY_MS: u64 = 800;
+/// Like an editor, with Save files automatically: about a second after the
+/// typing stops.
+pub const EDITOR_SAVE_DELAY_MS: u64 = 1000;
 
 /// A write comes as a burst of events; one read a short while after the last.
 pub const CHECK_DELAY_MS: u64 = 120;
@@ -214,6 +217,15 @@ pub mod words {
     pub const EDITOR_EDIT_TIP: &str = "Edit the file here. ⌘S saves.";
     pub const EDITOR_DONE_TIP: &str = "Stop editing and read it. What you typed is saved.";
     pub const SAVE: &str = "Save";
+
+    /// The status bar's word while what's typed isn't in the file yet.
+    pub fn edited(autosaves: bool) -> &'static str {
+        if autosaves {
+            "Edited, saving…"
+        } else {
+            "Edited"
+        }
+    }
     pub const SAVE_TIP: &str = "Write what's typed into the file (⌘S)";
 
     /// The editor's status bar (`EditorStatusBar`): where the cursor is, from
