@@ -203,8 +203,10 @@ impl Composer {
             return false;
         }
         if let Some((command, run)) = slash::handle_key(key, &matches, &mut self.palette, &text) {
-            // A skill named partway through a message isn't sent on its own.
-            self.palette_pick(command, run && !view.mid_message, window, cx);
+            // A skill named partway through a message isn't sent on its own,
+            // and Return only fills it in unless Settings says it sends.
+            let runs = self.slash_return_runs(cx);
+            self.palette_pick(command, run && !view.mid_message && runs, window, cx);
         }
         // Keep the pick in sight as the arrows move it (the list scrolls).
         if matches!(key, PaletteKey::Up | PaletteKey::Down) {
@@ -214,6 +216,12 @@ impl Composer {
         }
         cx.notify();
         true
+    }
+
+    /// `SlashReturn.runs`: whether Return and a double-click send the picked
+    /// command at once (Settings > General). The Run button always sends.
+    fn slash_return_runs(&self, cx: &App) -> bool {
+        self.app.upgrade().is_some_and(|app| app.read(cx).settings.slash_return_runs())
     }
 
     /// `ComposerView.pick`: puts the command in the box in place of what was
@@ -424,7 +432,15 @@ impl Composer {
     fn render_palette_row(&mut self, command: &SlashCommand, on: bool, mid_message: bool, cx: &mut Context<Self>) -> impl IntoElement {
         let name = command.name.clone();
         let title = format!("/{name}");
-        let tip: SharedString = if mid_message { format!("/{name}: double-click to put it in the message") } else { format!("/{name}: double-click to run it") }.into();
+        let runs = self.slash_return_runs(cx);
+        let tip: SharedString = if mid_message {
+            format!("/{name}: double-click to put it in the message")
+        } else if runs {
+            format!("/{name}: double-click to run it")
+        } else {
+            format!("/{name}: double-click to put it in the box")
+        }
+        .into();
         let (fg, accent, hover) = (cx.theme().foreground, style::accent(cx).opacity(0.75), style::primary_opacity(cx, 0.05));
         let picked = command.clone();
         div()
@@ -444,8 +460,9 @@ impl Composer {
             // picked row runs it (read from the click itself).
             .on_click(cx.listener(move |this, event: &ClickEvent, window, cx| {
                 if event.click_count() >= 2 && this.palette.selected.as_deref() == Some(picked.name.as_str()) {
-                    // Partway through a message it goes into the words.
-                    this.palette_pick(picked.clone(), !mid_message, window, cx);
+                    // Partway through a message it goes into the words, and
+                    // it only runs at once when Settings says Return sends.
+                    this.palette_pick(picked.clone(), !mid_message && runs, window, cx);
                 } else {
                     this.palette.selected = Some(picked.name.clone());
                     this.focus(window, cx);
@@ -483,13 +500,14 @@ impl Composer {
     /// Run, Add details and Open file along the bottom.
     fn render_palette_buttons(&mut self, view: &PaletteView, command: &SlashCommand, cx: &mut Context<Self>) -> impl IntoElement {
         let (run, fill) = (command.clone(), command.clone());
+        let runs = self.slash_return_runs(cx);
         let mut row = h_flex().flex_none().gap(px(8.)).px(px(16.)).py(px(12.));
         if view.mid_message {
             row = row.child(palette_button("Insert", format!("Put /{} in the message, for the agent to run (Return or Tab)", command.name), cx, cx.listener(move |this, _: &ClickEvent, window, cx| this.palette_pick(fill.clone(), false, window, cx))));
         } else {
             row = row
-            .child(palette_button("Run", format!("Send /{} now (Return)", command.name), cx, cx.listener(move |this, _: &ClickEvent, window, cx| this.palette_pick(run.clone(), true, window, cx))))
-            .child(palette_button("Add details", format!("Put /{} in the box to type more after it (Tab)", command.name), cx, cx.listener(move |this, _: &ClickEvent, window, cx| this.palette_pick(fill.clone(), false, window, cx))));
+            .child(palette_button("Run", format!("Send /{} now{}", command.name, if runs { " (Return)" } else { "" }), cx, cx.listener(move |this, _: &ClickEvent, window, cx| this.palette_pick(run.clone(), true, window, cx))))
+            .child(palette_button("Add details", format!("Put /{} in the box to type more after it ({})", command.name, if runs { "Tab" } else { "Return or Tab" }), cx, cx.listener(move |this, _: &ClickEvent, window, cx| this.palette_pick(fill.clone(), false, window, cx))));
         }
         if let Some(path) = command.path.clone().filter(|_| view.can_open_files) {
             let tip = format!("Open {} beside the thread", slash::short_path(&path, &view.home));

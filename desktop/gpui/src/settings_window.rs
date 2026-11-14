@@ -520,7 +520,7 @@ impl SettingsWindow {
 
     fn render_general(&mut self, settings: Option<&RunnerSettings>, window: &mut Window, cx: &mut Context<Self>) -> Vec<AnyElement> {
         // This Mac's own, so they're here while the runner's away too.
-        let mut sections = vec![self.appearance_section(cx), self.panels_section(cx), self.quitting_section(cx), self.notifications_section(cx)];
+        let mut sections = vec![self.appearance_section(cx), self.panels_section(cx), self.slash_section(cx), self.quitting_section(cx), self.notifications_section(cx)];
         // The web runtime is this Mac's too (web_runtime.rs), last, so it
         // moves nothing the Swift app's General has.
         let web_runtime = section("settings-web-runtime", "Web runtime", crate::web_runtime::SETTINGS_ABOUT, "check whether it's installed and working, or why a diagram or panel isn't showing.", vec![row("Web runtime", crate::web_runtime::settings_control(cx), cx)], cx);
@@ -681,6 +681,29 @@ impl SettingsWindow {
             "To move a panel, drag its title or tab. With this on, pressing and holding anywhere on a panel picks it up too. A panel with its title hidden can always be moved that way, as it has nothing else to drag it by.",
             "change it for you.",
             vec![row("Move panels by their background", switch, cx)],
+            cx,
+        )
+    }
+
+    /// `SlashReturn`: whether Return in the slash palette sends the picked
+    /// command at once, or puts it in the box for the next Return (off).
+    fn slash_section(&mut self, cx: &mut Context<Self>) -> AnyElement {
+        let on = self.app.upgrade().is_some_and(|a| a.read(cx).settings.slash_return_runs());
+        let switch = self.switch("settings-slash-return-runs", on, "Off: Return puts the command in the box and the next Return sends it, so a new thread doesn't start by surprise. The Run button always sends", cx, |this, on, cx| {
+            this.app
+                .update(cx, |app, cx| {
+                    app.settings.saved.slash_return_runs = Some(on);
+                    app.save_settings_soon(cx);
+                    cx.notify();
+                })
+                .ok();
+        });
+        section(
+            "settings-slash-commands",
+            "Slash commands",
+            "Typing / in the message box opens the slash palette. Return puts the picked command in the box, and the next Return sends it; turn on Return sends a command right away to skip that step. The Run button always sends.",
+            "change what the slash palette does when you press Return.",
+            vec![row("Return sends a command right away", switch, cx)],
             cx,
         )
     }

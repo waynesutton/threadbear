@@ -115,6 +115,11 @@ pub struct Saved {
     /// 13 Nov). A panel with its title hidden moves from its background
     /// either way. The GPUI app's own.
     pub panel_background_drag: Option<bool>,
+    /// `slashReturnRuns` (SlashReturn): Settings > General's Return sends a
+    /// command right away. None is off: Return (and a double-click) puts the
+    /// picked command in the box and the next Return sends it, so a new
+    /// thread's box doesn't start a thread by surprise (Wayne, 11 Nov).
+    pub slash_return_runs: Option<bool>,
 }
 
 /// The settings file: where it is and what's in it. Reading is at launch only;
@@ -200,6 +205,10 @@ impl Settings {
 
     pub fn panel_background_drag(&self) -> bool {
         self.saved.panel_background_drag.unwrap_or(false)
+    }
+
+    pub fn slash_return_runs(&self) -> bool {
+        self.saved.slash_return_runs.unwrap_or(false)
     }
 
     pub fn asks_before_quitting(&self) -> bool {

@@ -89,9 +89,25 @@ Feature: The slash command palette
     And I press the up arrow
     Then the palette's pick is "/model"
 
+  # Return fills it in first, so a new thread's box doesn't start a thread by
+  # surprise (Wayne, 11 Nov); the next Return sends it.
   @composer.slash.keys
-  Scenario: Return runs the picked command
+  Scenario: Return puts the picked command in the box, and the next Return sends it
     When I type "/cle" in the composer
+    Then the palette's pick is "/clear"
+    When I press Return
+    Then the palette is closed
+    And the composer says "/clear "
+    When I press Return
+    Then the transcript shows my message "/clear"
+    And the composer is empty
+
+  # A scripted click on the Swift app's Settings form never answers (see
+  # settings.feature), so this one is driven on the GPUI app.
+  @composer.slash.keys @swift-pending
+  Scenario: With Return sends a command right away on, Return runs the picked command
+    When I press "Off: Return puts the command in the box" in Settings
+    And I type "/cle" in the composer
     Then the palette's pick is "/clear"
     When I press Return
     Then the palette is closed
