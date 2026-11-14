@@ -15,12 +15,8 @@ enum BearChat {
     /// the button: the bear's chats, memory and Voice carry on.
     static let shownKey = "bearShown"
 
-    /// ~/ThreadbearThreads/Bear, or a profile's own (ThreadbearThreads/Work/Bear),
-    /// so Work's bear never reads Personal's memory.
-    @MainActor static var folder: URL {
-        let root = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("ThreadbearThreads", isDirectory: true)
-        guard let profile = AppProfile.current, !profile.isPersonal else { return root.appendingPathComponent("Bear", isDirectory: true) }
-        return root.appendingPathComponent(profile.name, isDirectory: true).appendingPathComponent("Bear", isDirectory: true)
+    static var folder: URL {
+        FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("ThreadbearThreads/Bear", isDirectory: true)
     }
 
     static let instructions = """

@@ -29,8 +29,6 @@ enum Notifier {
                 content.body = thread.preview.isEmpty ? "Finished." : PreviewText.plain(thread.preview)
             }
         }
-        // Which profile, when there's more than one (AppProfile).
-        if AppProfile.hasSeveral, let profile = AppProfile.current { content.subtitle = profile.name }
         content.userInfo = ["threadId": thread.id]
         content.threadIdentifier = thread.id
         let request = UNNotificationRequest(identifier: "\(thread.id)-\(thread.lastSeq)", content: content, trigger: nil)
@@ -40,17 +38,14 @@ enum Notifier {
 
 /// Starts the runner's LaunchAgent with `launchctl kickstart`.
 enum RunnerLauncher {
-    /// This profile's runner (Personal's, or a profile's own LaunchAgent).
-    static var label: String { RunnerConfig.launchdLabel(dataDir: RunnerConfig.dataDir()) }
-
     static var plistPath: String {
-        NSHomeDirectory() + "/Library/LaunchAgents/\(label).plist"
+        NSHomeDirectory() + "/Library/LaunchAgents/\(RunnerConfig.launchdLabel).plist"
     }
 
     /// Returns a readable failure, or nil when launchctl accepted it.
     static func start() async -> String? {
         let domain = "gui/\(getuid())"
-        let service = "\(domain)/\(label)"
+        let service = "\(domain)/\(RunnerConfig.launchdLabel)"
         if await run(["kickstart", service]) == 0 { return nil }
         // Not loaded yet: load it from its plist, then start it.
         guard FileManager.default.fileExists(atPath: plistPath) else {
@@ -58,7 +53,7 @@ enum RunnerLauncher {
         }
         _ = await run(["bootstrap", domain, plistPath])
         if await run(["kickstart", service]) == 0 { return nil }
-        return "launchctl couldn't start \(label)."
+        return "launchctl couldn't start \(RunnerConfig.launchdLabel)."
     }
 
     private static func run(_ arguments: [String]) async -> Int32 {

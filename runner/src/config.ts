@@ -162,14 +162,8 @@ export type Config = {
   connectorsRefused?: string;
 };
 
-// A profile (docs/guide.md, "Profiles"): one whole Threadbear setup on
-// this Mac, such as Work beside Personal, with its own runner, data folder,
-// Convex deployment and logins. The first setup has none and is Personal.
-export type ProfileInfo = { id: string; name: string };
-
 export type RunnerJson = {
   port?: number;
-  profile?: ProfileInfo;
   defaults?: {
     cwd?: string;
     accountId?: string;
@@ -428,9 +422,6 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env, opts: { readOnl
   const codexPath = nonEmpty(env.THREADBEAR_CODEX_PATH) ?? nonEmpty(json.codexPath);
   const models = providerMap(json.defaults?.models, nonEmpty);
   const efforts = providerMap(json.defaults?.efforts, (v) => (isEffortLevel(v) ? v : undefined));
-  const profile = profileFrom(json.profile);
-  // A profile keeps its logins in its own folder (profiles.ts, profileDirs).
-  const own = profile ? profileDirs(home) : undefined;
   return {
     home,
     userHome,
@@ -635,32 +626,4 @@ export function ensureHome(home: string): void {
 
 export function readToken(home: string): string {
   return fs.readFileSync(paths.token(home), 'utf8').trim();
-}
-
-// A profile's id and name from runner.json, when both are there.
-export function profileFrom(v: unknown): ProfileInfo | undefined {
-  if (!v || typeof v !== 'object') return undefined;
-  const { id, name } = v as Record<string, unknown>;
-  if (typeof id !== 'string' || !/^[a-z0-9][a-z0-9-]{0,39}$/.test(id) || typeof name !== 'string' || !name.trim()) return undefined;
-  return { id, name: name.trim().slice(0, 40) };
-}
-
-// Where a profile's own logins live, inside its data folder.
-export function profileDirs(home: string) {
-  const own = path.join(home, 'logins');
-  return {
-    convexCliHome: path.join(own, 'convex'),
-    claudeMainDir: path.join(own, 'claude-main'),
-    claudeMainJson: path.join(own, 'claude-main.json'),
-    codexMainDir: path.join(own, 'codex-main'),
-    tokenStatsAccountsDir: path.join(own, 'token-stats'),
-  };
-}
-
-// What a profile's agents are told with their standing instructions: which
-// profile this is, and to keep its work inside it (Work code never pushed
-// to a personal repo). Nothing for the first setup, which has no profile.
-export function profileLine(profile: ProfileInfo | undefined): string {
-  if (!profile) return '';
-  return `[Threadbear profile] This runner is the "${profile.name}" profile on this Mac, with its own Convex backend and its own Claude, Codex and Convex logins, separate from any other Threadbear profile here. Keep this profile's work inside it: don't copy its code, data or secrets to another profile's repos, accounts or services unless the user asks.`;
 }

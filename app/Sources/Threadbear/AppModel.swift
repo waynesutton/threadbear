@@ -373,7 +373,7 @@ final class AppModel {
     var defaultRunnerId: String? = UserDefaults.standard.string(forKey: AppModel.defaultRunnerKey) {
         didSet { UserDefaults.standard.set(defaultRunnerId, forKey: Self.defaultRunnerKey) }
     }
-    static var defaultRunnerKey: String { AppProfile.key("defaultRunnerId") }
+    static let defaultRunnerKey = "defaultRunnerId"
 
     /// Mike picked this draft's runner himself, so the default doesn't
     /// move it when the runner list next changes.
@@ -728,8 +728,8 @@ final class AppModel {
         didSet { UserDefaults.standard.set(try? JSONEncoder().encode(slashPaletteLayout), forKey: "slashPaletteLayout") }
     }
     /// The commands picked from the palette lately, newest first.
-    var recentSlashCommands: [String] = UserDefaults.standard.stringArray(forKey: AppProfile.key("recentSlashCommands")) ?? [] {
-        didSet { UserDefaults.standard.set(recentSlashCommands, forKey: AppProfile.key("recentSlashCommands")) }
+    var recentSlashCommands: [String] = UserDefaults.standard.stringArray(forKey: "recentSlashCommands") ?? [] {
+        didSet { UserDefaults.standard.set(recentSlashCommands, forKey: "recentSlashCommands") }
     }
     /// Each thread's highlights once `threads.highlights` has answered
     /// (PaneModel.swift). Only threads Mike has opened this session.
@@ -818,11 +818,11 @@ final class AppModel {
     @ObservationIgnored var lastDownReason: String?
 
     static let maxSessions = 24
-    static var lastAccountKey: String { AppProfile.key("lastAccountId") }
+    static let lastAccountKey = "lastAccountId"
     /// The last pool Mike picked, and the provider he last picked a model
     /// of in each pool (a mixed one has two).
-    static var lastPoolKey: String { AppProfile.key("lastPoolId") }
-    static var lastPoolProvidersKey: String { AppProfile.key("lastPoolProviders") }
+    static let lastPoolKey = "lastPoolId"
+    static let lastPoolProvidersKey = "lastPoolProviders"
     /// Claude's keys keep their old names, so a model picked before Codex
     /// came along is still remembered; other providers add ".<provider>".
     static let lastModelKey = "lastModel"

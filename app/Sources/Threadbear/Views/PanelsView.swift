@@ -894,7 +894,7 @@ final class WebPanelPool: NSObject, ObservableObject, WKNavigationDelegate, WKUI
 
     init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
-        convexSelections = defaults.dictionary(forKey: AppProfile.key("convexPanelDeployments")) as? [String: String] ?? [:]
+        convexSelections = defaults.dictionary(forKey: "convexPanelDeployments") as? [String: String] ?? [:]
         super.init()
     }
 
@@ -904,7 +904,7 @@ final class WebPanelPool: NSObject, ObservableObject, WKNavigationDelegate, WKUI
 
     func selectConvex(_ deployment: String, for configured: ConvexDeployment) {
         convexSelections[configured.deployment] = deployment
-        defaults.set(convexSelections, forKey: AppProfile.key("convexPanelDeployments"))
+        defaults.set(convexSelections, forKey: "convexPanelDeployments")
     }
 
     func convexBrowserURL(_ configured: ConvexDeployment) -> URL? {
