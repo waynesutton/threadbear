@@ -702,6 +702,30 @@ impl SidePane {
         cx.notify();
     }
 
+    /// A Print shown in a pane moves on to its new version as it's saved
+    /// (`pages.updated`), unless an older one was opened on purpose
+    /// (`followPageVersions`, threadbear_core::prints::newer_file). The
+    /// pane keeps its place in Back and is read again.
+    pub(crate) fn follow_print_versions(&mut self, before: &[threadbear_core::prints::Page], after: &[threadbear_core::prints::Page], cx: &mut Context<Self>) {
+        let mut moved = Vec::new();
+        for (thread_id, preview) in self.previews.iter_mut() {
+            let Some(newer) = preview.file_path().and_then(|path| threadbear_core::prints::newer_file(path, before, after)) else { continue };
+            preview.target = Target::File(newer);
+            preview.opened += 1;
+            moved.push(thread_id.clone());
+        }
+        if moved.is_empty() {
+            return;
+        }
+        for thread_id in &moved {
+            self.remember(thread_id);
+        }
+        if let Some(thread) = self.thread(cx).filter(|t| moved.contains(&t.id)) {
+            self.begin_preview(&thread, cx);
+        }
+        cx.notify();
+    }
+
     /// Back: through the folders and files Mike came through in the browser,
     /// then out to the section (`previewBack`).
     pub(crate) fn preview_back(&mut self, thread_id: &str, cx: &mut Context<Self>) {

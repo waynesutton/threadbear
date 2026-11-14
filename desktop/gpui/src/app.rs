@@ -383,6 +383,8 @@ impl Threadbear {
         cx.set_global(crate::reply_buttons::PressHook(Rc::new(move |thread: String, id: String, window: &mut Window, cx: &mut App| {
             press_app.update(cx, |this, cx| this.press_reply_button(thread, id, window, cx)).ok();
         })));
+        // The Print cards in replies (prints.rs), which open in this app's side pane.
+        crate::prints::init(app.clone(), cx);
         let dock = cx.new(|_| {
             let mut model = DockModel::new(layout);
             let app = app.clone();
@@ -818,6 +820,7 @@ impl Threadbear {
                 if let Status::Connected { hello, .. } = &status {
                     self.logins = RunnerLogins::from_hello(hello);
                     self.remote.experiments = hello["experiments"].as_array().into_iter().flatten().filter_map(|e| e.as_str().map(str::to_owned)).collect();
+                    crate::prints::connected(self.client.clone(), &self.remote.experiments, cx);
                     self.runner_version = hello["runnerVersion"].as_str().unwrap_or("").to_owned();
                     self.upstream_on = hello["updates"]["upstream"]["state"].as_str().is_some_and(|s| s != "off");
                     self.upstream_checkout = hello["updates"]["upstream"]["checkout"].as_str().filter(|c| !c.is_empty()).map(str::to_owned);
@@ -948,6 +951,12 @@ impl Threadbear {
                 }
                 "librarian.updated" => self.librarian.status = Some(threadbear_core::librarian::Status::decode(&params["librarian"])),
                 "settings.updated" => self.runner_settings = Some(params["settings"].clone()),
+                // Every Print card shows the newest, and a pane showing one follows it.
+                // Deferred: the side pane reads the app, which this is inside.
+                "pages.updated" => {
+                    let (params, side) = (params.clone(), self.side.clone());
+                    cx.defer(move |cx| crate::prints::updated(&params, &side, cx));
+                }
                 // A login appearing or going, its models once asked, its
                 // usage; and the pools after a save: both replace `hello`'s.
                 "accounts.updated" => self.logins.set_accounts(&params["accounts"]),

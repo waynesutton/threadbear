@@ -55,13 +55,33 @@ Feature: Diagram Prints
     When I ask a thread to "make a chart of this data"
     Then it makes the Print without a card
 
-  @prints.pane @manual @gpui-pending
+  # The Swift dump doesn't list a reply's Print cards (AppDump.swift, frozen).
+  @prints.card @swift-pending
+  Scenario: A reply shows a Print as a card with its title, kind and version
+    Given the app is connected to a runner with the demo threads
+    When I open the thread "Export last quarter's invoices as CSV"
+    Then the reply shows the Print card "Invoice totals by month" saying "Chart · v1"
+    And the card offers Open and Refresh
+
+  @prints.card @swift-pending @pages-off
+  Scenario: With Prints off a print block stays code
+    Given the app is connected to a runner with the demo threads
+    When I open the thread "Morning brief"
+    And a reply with a print block streams in
+    Then the reply shows its print block as code
+
+  # The Swift app opens a reply's Print in a window of its own; the side pane
+  # is the GPUI app's (and the guide's) Open. Its dump has no card to press.
+  @prints.pane @swift-pending
   Scenario: A Print opened from its card follows new versions in the side pane
-    Given a reply in a thread shows a Print's card at version 1
-    When I click Open on the card
-    Then the Print opens in the thread's side pane
-    When the thread saves version 2 of that Print
-    Then the side pane shows version 2 without another click
+    Given the app is connected to a runner with the demo threads
+    When I open the thread "Export last quarter's invoices as CSV"
+    Then the reply shows the Print card "Invoice totals by month" saying "Chart · v1"
+    When I click Open on the Print card
+    Then the side pane shows version 1 of "pg_invoice_totals"
+    When the thread saves version 2 of "pg_invoice_totals"
+    Then the side pane shows version 2 of "pg_invoice_totals"
+    And the reply shows the Print card "Invoice totals by month" saying "Chart · v2"
 
   @prints.list @manual @gpui-pending
   Scenario: Prints show in Highlights and on the rail with their projects

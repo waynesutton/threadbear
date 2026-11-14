@@ -1535,6 +1535,10 @@ impl ThreadPane {
                     if let Some(rich) = crate::rich_boxes::dump(&item.text, cx) {
                         out["rich"] = rich;
                     }
+                    // Its Print cards (prints.rs).
+                    if let Some(prints) = crate::prints::dump(&item.text, cx) {
+                        out["prints"] = prints;
+                    }
                     if let Some(blocks) = crate::shell_blocks::dump_lines(&item.text, &self.summary.id, cx) {
                         out["shellBlocks"] = json!(blocks);
                     }
