@@ -586,6 +586,20 @@ impl SettingsWindow {
                 cx,
             ));
         }
+        // Only while Prints is on: with it off there are none to hold back
+        // (Wayne, 11 Nov). A runner that lists no experiments shows it.
+        let prints_on = settings.experiments.iter().find(|e| e.id == "pages").is_none_or(|e| e.on);
+        if let Some(on) = settings.prints_when_asked.filter(|_| prints_on) {
+            let switch = self.switch("settings-prints-when-asked", on, "Have threads ask before making a Print you didn't ask for", cx, |this, on, cx| this.update(json!({ "printsWhenAsked": on }), cx));
+            sections.push(section(
+                "settings-prints",
+                "Prints",
+                "Threads can still make Prints, but only when you ask for one. If a thread goes to make one your message didn't ask for, like a progress Print on a long task, it asks you first, and No means none is made. Saying print, chart, graph, dashboard or diagram counts as asking.",
+                "make a Print for something, or turn this on or off.",
+                vec![row("Only make Prints when I ask", switch, cx)],
+                cx,
+            ));
+        }
         if let Some(on) = settings.full_sync {
             let switch = self.switch("settings-full-sync", on, "Send tool output and diffs to your Convex deployment", cx, |this, on, cx| this.update(json!({ "fullSync": on }), cx));
             sections.push(section("settings-full-sync", "Full sync", FULL_SYNC_ABOUT, FULL_SYNC_ASK, vec![row("Send tool output to Convex", switch, cx)], cx));
@@ -1167,6 +1181,7 @@ impl SettingsWindow {
             "defaultFolder": settings.as_ref().map(|s| s.default_cwd.clone()),
             "keepAwake": settings.as_ref().and_then(|s| s.keep_awake),
             "fullSync": settings.as_ref().and_then(|s| s.full_sync),
+            "printsWhenAsked": settings.as_ref().and_then(|s| s.prints_when_asked),
             "labReview": settings.as_ref().map(|s| s.lab_review),
             "privateFolders": settings.as_ref().map(|s| s.private_folders.clone()),
             "smallJobsPool": settings.as_ref().and_then(|s| s.pool.clone()),

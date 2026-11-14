@@ -74,6 +74,9 @@ pub struct RunnerSettings {
     /// Full sync (runner.json's sync.full), as it'll be from the runner's next
     /// start. None from a runner from before it, and Settings then hides it.
     pub full_sync: Option<bool>,
+    /// Only make Prints when I ask (runner.json's printsWhenAsked). None from
+    /// a runner too old to have it, and Settings then hides it.
+    pub prints_when_asked: Option<bool>,
     pub bring_in: BringIn,
     pub bring_in_supported: bool,
     /// The pool whose Claude logins answer small jobs (titles, the
@@ -102,6 +105,7 @@ impl RunnerSettings {
             lab_review_supported: v.get("labReview").is_some_and(Value::is_boolean),
             keep_awake: v["keepAwake"].as_bool(),
             full_sync: v["fullSync"].as_bool(),
+            prints_when_asked: v["printsWhenAsked"].as_bool(),
             bring_in_supported: bring_in.is_some(),
             bring_in: bring_in.unwrap_or(BringIn::STANDARD),
             pool: models["pool"].as_str().filter(|p| !p.is_empty()).map(str::to_owned),
@@ -169,6 +173,8 @@ mod tests {
         }));
         assert!(!s.lab_review && s.lab_review_supported);
         assert_eq!(s.keep_awake, Some(true));
+        assert_eq!(s.prints_when_asked, None, "a runner without it hides the switch");
+        assert_eq!(RunnerSettings::decode(&json!({ "printsWhenAsked": true })).prints_when_asked, Some(true));
         assert_eq!(s.full_sync, Some(false));
         assert_eq!(s.bring_in, BringIn::Important);
         assert_eq!(s.pool.as_deref(), Some("claude"));

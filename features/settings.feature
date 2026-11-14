@@ -35,6 +35,14 @@ Feature: Settings
     When I press "Stop your Mac sleeping on its own while a thread is working" in Settings
     Then Settings says the Mac isn't kept awake
 
+  # Threads ask before a Print the message didn't ask for (Wayne, 11 Nov).
+  @settings.general @swift-pending
+  Scenario: Turning on Only make Prints when I ask changes the runner's setting
+    When I open Settings
+    Then Settings says Prints are made without asking
+    When I press "Have threads ask before making a Print you didn't ask for" in Settings
+    Then Settings says Prints are only made when I ask
+
   # The Swift app is frozen, so it never gets this switch (AGENTS.md).
   @settings.general @swift-pending
   Scenario: Turning on full sync changes the runner's setting

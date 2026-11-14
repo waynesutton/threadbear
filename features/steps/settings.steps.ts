@@ -3,7 +3,7 @@ import { Then, When } from '@cucumber/cucumber';
 import type { ThreadbearWorld } from '../support/world.ts';
 
 /** The Settings window while it's open, from either app's dump. */
-type SettingsInfo = { tab: string; keepAwake?: boolean | null; fullSync?: boolean | null; privateFolders?: string[] | null };
+type SettingsInfo = { tab: string; keepAwake?: boolean | null; fullSync?: boolean | null; printsWhenAsked?: boolean | null; privateFolders?: string[] | null };
 const shown = (d: unknown) => (d as { settingsWindow?: SettingsInfo | null }).settingsWindow;
 
 When('I open Settings', async function (this: ThreadbearWorld) {
@@ -42,6 +42,14 @@ Then('Settings says full sync is off', async function (this: ThreadbearWorld) {
 
 Then('Settings says full sync is on', async function (this: ThreadbearWorld) {
   await this.until('Full sync on', (d) => shown(d)?.fullSync === true);
+});
+
+Then('Settings says Prints are made without asking', async function (this: ThreadbearWorld) {
+  await this.until('Only make Prints when I ask off', (d) => shown(d)?.printsWhenAsked === false);
+});
+
+Then('Settings says Prints are only made when I ask', async function (this: ThreadbearWorld) {
+  await this.until('Only make Prints when I ask on', (d) => shown(d)?.printsWhenAsked === true);
 });
 
 Then('Settings lists the private folder {string}', async function (this: ThreadbearWorld, folder: string) {
