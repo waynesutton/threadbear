@@ -131,6 +131,30 @@ pub struct Saved {
     /// second after it stops; off, only ⌘S or Save, and leaving a file with
     /// changes asks first. None is on.
     pub files_save_automatically: Option<bool>,
+    /// `librarianLookOn`: Settings > General > Look's Customize the
+    /// Librarian page (looks.rs). Off, the page is as it ships, whatever look
+    /// is saved; the look is kept for when it's back on.
+    pub librarian_look_on: Option<bool>,
+    /// `librarianLook`: core's `LibrarianLook`, in the Swift app's JSON.
+    pub librarian_look: Option<Value>,
+    /// `scheduledLookOn` and `scheduledLook`, the same for the Scheduled page.
+    pub scheduled_look_on: Option<bool>,
+    pub scheduled_look: Option<Value>,
+    /// `projectsLookOn` and `projectsLook`, the same for the Projects page.
+    pub projects_look_on: Option<bool>,
+    pub projects_look: Option<Value>,
+    /// `mainBackgroundOn`: Background picture in the main window.
+    pub main_background_on: Option<bool>,
+    /// `mainBackground`: its file's name in the data folder's `looks/`.
+    pub main_background: Option<String>,
+    /// `mainBackgroundDim`: how much of the window's colour lies over it.
+    pub main_background_dim: Option<f64>,
+    /// `mainBackgroundX` and `mainBackgroundY`: which part shows when the
+    /// window crops it (core's `BackdropFocus`). Bottom centre unless moved.
+    pub main_background_x: Option<f64>,
+    pub main_background_y: Option<f64>,
+    /// `mainBackgroundEverywhere`: behind open threads too, not only a new one.
+    pub main_background_everywhere: Option<bool>,
 }
 
 /// The settings file: where it is and what's in it. Reading is at launch only;

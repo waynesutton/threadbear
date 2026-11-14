@@ -172,6 +172,12 @@ pub struct Threadbear {
     pub(crate) restoring_place: bool,
     /// The Librarian view (librarian.rs).
     pub(crate) librarian: crate::librarian::LibrarianState,
+    /// The Look parts: Customize panels and background photos (looks.rs).
+    pub(crate) looks: crate::looks::LooksState,
+    /// The Librarian page's year calendars (look_cards.rs).
+    pub(crate) cards: crate::look_cards::CardsState,
+    /// The customized Librarian page's boxes and clock (librarian_look.rs).
+    pub(crate) librarian_look: crate::librarian_look::LibrarianLookState,
     /// What the Librarian page's picture says when it's poked.
     pub(crate) librarian_pokes: crate::home_page::Pokes,
     /// The Usage panel's numbers and the honey pot (usage.rs).
@@ -547,6 +553,9 @@ impl Threadbear {
             shows_home: false,
             restoring_place: false,
             librarian: crate::librarian::LibrarianState::new(),
+            looks: Default::default(),
+            cards: Default::default(),
+            librarian_look: Default::default(),
             librarian_pokes: crate::home_page::Pokes::new(crate::home_page::Art::Librarian),
             usage,
             runner_settings: None,
@@ -1579,6 +1588,7 @@ impl Threadbear {
         // What came across from the Swift app, while its note's up. Set
         // after, as the literal above is as long as serde_json's macro goes.
         dump["importNote"] = json!(self.import_note);
+        dump["looks"] = self.looks_dump();
         // Panels pinned to their threads (pinned_panels.rs).
         dump["pinnedPanels"] = self.pinned_panels_dump(cx);
         // The tour or a page's intro on show, and Finish setting up (tour.rs, setup_panel.rs).

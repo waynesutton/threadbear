@@ -1563,6 +1563,16 @@ impl Threadbear {
         if self.pane.is_some() || page.is_some() || self.open_project().is_some() || self.open_elsewhere(cx).is_some() {
             self.opening.page_shown = None;
         }
+        // The main window's background picture (Settings > General > Look):
+        // behind a new thread, or behind every thread with "Show behind open
+        // threads too", faded more there as there's more text to read.
+        let is_new = self.pane.is_none() && page.is_none() && self.open_project().is_none() && self.open_elsewhere(cx).is_none();
+        let behind = self.main_background();
+        let backdrop = match (&behind.file, behind.on) {
+            (Some(file), true) if is_new => self.render_backdrop(crate::looks::Slot::Main, file, behind.dim, behind.focus, cx),
+            (Some(file), true) if behind.everywhere && self.pane.is_some() && page.is_none() && self.open_project().is_none() => self.render_backdrop(crate::looks::Slot::Main, file, (behind.dim + 0.2).min(0.95), behind.focus, cx),
+            _ => None,
+        };
         let main: AnyElement = match (&self.pane, page) {
             // A project's page takes the thread's place until a thread is
             // picked again (project_page.rs).
@@ -1573,7 +1583,7 @@ impl Threadbear {
                 None => div().size_full().child(pane.clone()).into_any_element(),
             },
             (_, Some(SidebarMode::Scheduled)) => self.render_scheduled_home(cx),
-            (_, Some(SidebarMode::Librarian)) => self.render_librarian_home(cx),
+            (_, Some(SidebarMode::Librarian)) => self.render_librarian_home(window, cx),
             (_, Some(_)) => self.render_projects_home(window, cx),
             // Its thread is open in a panel of its own (thread_panels.rs).
             (None, None) if self.open_elsewhere(cx).is_some() => {
@@ -1584,7 +1594,7 @@ impl Threadbear {
             (None, None) => self.render_new_page(window, cx),
         };
         let toasts = self.render_toasts(window, cx);
-        div().relative().size_full().child(v_flex().size_full().child(banners).child(div().flex_1().min_h_0().child(main))).child(toasts)
+        div().relative().size_full().children(backdrop).child(v_flex().size_full().child(banners).child(div().flex_1().min_h_0().child(main))).child(toasts)
     }
 
     fn render_pane_placeholder(&mut self, panel: &str, cx: &mut Context<Self>) -> impl IntoElement {

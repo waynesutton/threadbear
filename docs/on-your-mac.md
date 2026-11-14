@@ -322,7 +322,7 @@ background, and the Librarian, Scheduled and Projects pages' pictures and
 backgrounds when their Customize switches are on; all off by default) are copied, scaled down,
 into `looks/` in the data folder; removing or replacing one deletes its
 copy. The rest of those settings are in the app's own settings. Neither
-is ever sent anywhere (`app/Sources/Threadbear/Looks.swift`), except as
+is ever sent anywhere (`desktop/gpui/src/looks.rs`; frozen Swift: `app/Sources/Threadbear/Looks.swift`), except as
 below for a profile page.
 The public profile page (the Customize panel's Profile page section, none
 until you change something there) is kept in `profile.json` in the runner's data folder.
@@ -710,7 +710,7 @@ the host's `CLAUDE.md`. Faces are drawn by the `open-bot-avatar` package
 | GitHub, Hugging Face | Kyutai's | Only with the `voiceMode` experiment on, the first time Voice is used: the pocket-tts download, then its model and voices. Nothing of yours is sent. |
 | Your Convex deployment, for the profile page | yours | Only once you make a profile page in the Librarian page's Customize panel: the parts you turned on (see the data folder above), as you change them and then at most once an hour when something changed. Published, anyone with its link can read them; Take the page down deletes them. |
 | xAI (api.x.ai) | xAI's | Only with the `xSearch` experiment on, when an agent calls `x_search`: its question, any accounts and days it names, and your xAI key, to xAI's Responses API. It answers with Grok's reply, links to the X posts it used and what it billed your xAI credit (`runner/src/x-search.ts`). Nothing else of yours goes. |
-| GitHub Contributions API (github-contributions-api.jogruber.de) | Jonathan Gruber's, a free public service | Only with Customize the Librarian page on (Settings > General > Look, off by default) and a GitHub user name typed in its GitHub activity: that user name and a year, when the page shows, at most once an hour for the current year. It answers with that profile's public contribution calendar. No token, nothing else of yours (`GitHubActivity` in `app/Sources/Threadbear/Looks.swift`). |
+| GitHub Contributions API (github-contributions-api.jogruber.de) | Jonathan Gruber's, a free public service | Only with Customize the Librarian page on (Settings > General > Look, off by default) and a GitHub user name typed in its GitHub activity: that user name and a year, when the page shows, at most once an hour for the current year. It answers with that profile's public contribution calendar. No token, nothing else of yours (`desktop/gpui/src/look_cards.rs`; frozen Swift: `GitHubActivity` in `app/Sources/Threadbear/Looks.swift`). |
 | Sentry | Mike's | Nothing from your copy. Only a copy whose `origin` is Mike's own repo reports errors or uploads the app's debug symbols (`runner/src/sentry.ts`, `app/Sources/Threadbear/CrashReporting.swift`, `app/build-app.sh`). The installed GPUI app of Mike's repo, on the real data folder, sends its panics, crashes and freezes of 15 seconds or more, each as one POST to Sentry's endpoint with the function names and nothing typed or opened (`desktop/core/src/crash_report.rs`, `desktop/gpui/src/crash_reporting.rs`); it uploads no symbols. The App Store iPhone app sends anonymous crash reports. |
 
 An HTML file opened in the side pane (a mockup or report an agent made,

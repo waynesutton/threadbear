@@ -75,18 +75,18 @@ the keyboard shortcut.
 
 | # | Commit | What it does | Status |
 |---|---|---|---|
-| 75 | 52170ffa | Customize the Librarian page: picture, background, layout, GitHub activity | to do |
-| 63 | 29a2aa09 | A greeting by the clock; title parts hide on their own | to do |
-| 60 | 03ff9f81 | A quote of the day; Layout's switches line up | to do |
-| 59 | 59b51fa1 | Picture choice is plain buttons | to do |
-| 57 | 964f0ddd | Copy Quote menu shows its icon | to do |
-| 56 | a2d6ecca | Customize panel is plain cards | to do |
-| 54 | 41964018 | Background photos on the bottom edge, drag to move | to do |
-| 52 | 79084074 | Background photo doesn't block clicks; GitHub trouble message | to do |
-| 51 | 970b8308 | Threadbear activity: a year of threads | to do |
-| 50 | 2b0a8dab | Photo picker as a sheet; drags from Photos | to do |
-| 47 | 5b2e6d8e | Your own picture sticks | to do |
-| 6 | 13069201 | Animated GIF backgrounds play | to do |
+| 75 | 52170ffa | Customize the Librarian page: picture, background, layout, GitHub activity | done |
+| 63 | 29a2aa09 | A greeting by the clock; title parts hide on their own | done |
+| 60 | 03ff9f81 | A quote of the day; Layout's switches line up | done |
+| 59 | 59b51fa1 | Picture choice is plain buttons | done |
+| 57 | 964f0ddd | Copy Quote menu shows its icon | done |
+| 56 | a2d6ecca | Customize panel is plain cards | done |
+| 54 | 41964018 | Background photos on the bottom edge, drag to move | done |
+| 52 | 79084074 | Background photo doesn't block clicks; GitHub trouble message | done |
+| 51 | 970b8308 | Threadbear activity: a year of threads | done |
+| 50 | 2b0a8dab | Photo picker as a sheet; drags from Photos | done |
+| 47 | 5b2e6d8e | Your own picture sticks | done |
+| 6 | 13069201 | Animated GIF backgrounds play | done |
 | 39 | 6f5cc154 | Customize the Scheduled page | to do |
 | 38 | 78be088e | Scheduled page parts move to their place | to do |
 | 37 | 84fad5ff | Customize the Projects page | to do |

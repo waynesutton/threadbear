@@ -95,46 +95,7 @@ impl Threadbear {
     /// `HomePage`: the picture, the lines about the view, its numbers in
     /// tiles, and `below` under them.
     pub(crate) fn render_home_page(&mut self, art: Art, about: AnyElement, stats: &[HomeStat], below: Option<AnyElement>, cx: &mut Context<Self>) -> AnyElement {
-        let secondary = style::secondary_text(cx);
-        let line = self.pokes_mut(art).line;
-        let poked = self.pokes_mut(art).poked.filter(|at| at.elapsed() < threadbear_core::juice::WOBBLE);
-        let (width, height) = art.size();
-        // Poked, it squashes and sways from its feet and settles (HomePage's
-        // keyframes). GPUI can't turn a picture, so the Swift app's tilt is a
-        // sway: the picture's middle moving as far as the tilt would take it.
-        let picture_el = match poked {
-            None => img(art.image()).size_full().object_fit(ObjectFit::Contain).into_any_element(),
-            Some(at) => {
-                let length = threadbear_core::juice::WOBBLE;
-                div()
-                    .relative()
-                    .size_full()
-                    .child(div().absolute().bottom_0().child(img(art.image()).size_full().object_fit(ObjectFit::Contain)).with_animation(
-                        SharedString::from(format!("home-wobble-{at:?}")),
-                        Animation::new(length),
-                        move |el, t| {
-                            let (squash, sway) = threadbear_core::juice::wobble(t * length.as_secs_f32(), height);
-                            let (w, h) = (width * squash, height * (2. - squash));
-                            el.w(px(w)).h(px(h)).left(px((width - w) / 2. + sway))
-                        },
-                    ))
-                    .into_any_element()
-            }
-        };
-        let picture = div()
-            .relative()
-            .child(
-                div()
-                    .id("home-picture")
-                    .test_support()
-                    .role(Role::Image).aria_label(art.label())
-                    .w(px(width))
-                    .h(px(height))
-                    .on_click(cx.listener(move |this, _: &ClickEvent, _, cx| this.poke_home_picture(art, cx)))
-                    .child(picture_el),
-            )
-            // Drawn in the gap below, taking no room of its own.
-            .when_some(line, |s, line| s.child(div().absolute().left_0().bottom(px(-24.)).whitespace_nowrap().text_size(px(style::size::LABEL)).line_height(px(16.)).text_color(secondary).child(line)));
+        let picture = self.render_poke_picture(art, None, cx);
         let tiles = (!stats.is_empty()).then(|| {
             // Three across at most, so six tiles make even rows.
             h_flex().flex_wrap().max_w(px(620.)).gap(px(14.)).children(stats.iter().enumerate().map(|(i, stat)| home_stat_tile(i, stat, cx)))
@@ -158,6 +119,60 @@ impl Threadbear {
                         .children(below.map(|b| div().max_w(px(620.)).child(b))),
                 ),
             )
+            .into_any_element()
+    }
+
+    /// `PokeablePicture`: the bear, which says something and wobbles when
+    /// it's clicked. `side` is a customized page's picture size, its
+    /// largest side; None is the page as it ships.
+    pub(crate) fn render_poke_picture(&mut self, art: Art, side: Option<f32>, cx: &mut Context<Self>) -> AnyElement {
+        let secondary = style::secondary_text(cx);
+        let line = self.pokes_mut(art).line;
+        let poked = self.pokes_mut(art).poked.filter(|at| at.elapsed() < threadbear_core::juice::WOBBLE);
+        let (width, height) = match side {
+            None => art.size(),
+            Some(side) => {
+                let (w, h) = art.size();
+                let scale = side / w.max(h);
+                (w * scale, h * scale)
+            }
+        };
+        // Poked, it squashes and sways from its feet and settles (HomePage's
+        // keyframes). GPUI can't turn a picture, so the Swift app's tilt is a
+        // sway: the picture's middle moving as far as the tilt would take it.
+        let picture_el = match poked {
+            None => img(art.image()).size_full().object_fit(ObjectFit::Contain).into_any_element(),
+            Some(at) => {
+                let length = threadbear_core::juice::WOBBLE;
+                div()
+                    .relative()
+                    .size_full()
+                    .child(div().absolute().bottom_0().child(img(art.image()).size_full().object_fit(ObjectFit::Contain)).with_animation(
+                        SharedString::from(format!("home-wobble-{at:?}")),
+                        Animation::new(length),
+                        move |el, t| {
+                            let (squash, sway) = threadbear_core::juice::wobble(t * length.as_secs_f32(), height);
+                            let (w, h) = (width * squash, height * (2. - squash));
+                            el.w(px(w)).h(px(h)).left(px((width - w) / 2. + sway))
+                        },
+                    ))
+                    .into_any_element()
+            }
+        };
+        div()
+            .relative()
+            .child(
+                div()
+                    .id("home-picture")
+                    .test_support()
+                    .role(Role::Image).aria_label(art.label())
+                    .w(px(width))
+                    .h(px(height))
+                    .on_click(cx.listener(move |this, _: &ClickEvent, _, cx| this.poke_home_picture(art, cx)))
+                    .child(picture_el),
+            )
+            // Drawn in the gap below, taking no room of its own.
+            .when_some(line, |s, line| s.child(div().absolute().left_0().bottom(px(-24.)).whitespace_nowrap().text_size(px(style::size::LABEL)).line_height(px(16.)).text_color(secondary).child(line)))
             .into_any_element()
     }
 
@@ -211,11 +226,21 @@ pub(crate) fn mode_header(title: &'static str, count: Option<usize>, p: &Palette
 
 /// `HomeTitle`: the page's title, with more behind the ⓘ, and the line under it.
 pub(crate) fn home_title(title: &'static str, line: &'static str, more: &'static str, cx: &App) -> impl IntoElement {
+    home_title_parts(Some(title), Some(line), more, cx)
+}
+
+/// The same with either part taken off by a customized page: no title
+/// leaves the line with the ⓘ beside it.
+pub(crate) fn home_title_parts(title: Option<&'static str>, line: Option<&'static str>, more: &'static str, cx: &App) -> impl IntoElement {
     let secondary = style::secondary_text(cx);
-    v_flex()
-        .gap(px(12.))
-        .child(h_flex().items_center().gap(px(8.)).child(div().text_size(px(24.)).line_height(px(29.)).font_semibold().child(title)).child(info_tip("home-more", more, cx)))
-        .child(div().text_size(px(style::size::LABEL)).line_height(px(16.)).text_color(secondary).child(line))
+    let words = line.map(|line| div().text_size(px(style::size::LABEL)).line_height(px(16.)).text_color(secondary).child(line));
+    match title {
+        Some(title) => v_flex()
+            .gap(px(12.))
+            .child(h_flex().items_center().gap(px(8.)).child(div().text_size(px(24.)).line_height(px(29.)).font_semibold().child(title)).child(info_tip("home-more", more, cx)))
+            .children(words),
+        None => v_flex().child(h_flex().items_center().gap(px(8.)).children(words).child(info_tip("home-more", more, cx))),
+    }
 }
 
 /// `InfoTip`: an ⓘ that says more in its tooltip, and in a popover when
@@ -267,9 +292,14 @@ pub(crate) fn home_status_line(text: &str, busy: bool, cx: &App) -> impl IntoEle
 }
 
 /// `HomeStatTile`: one number, what it counts, and more in its tooltip.
-fn home_stat_tile(index: usize, stat: &HomeStat, cx: &App) -> impl IntoElement {
+pub(crate) fn home_stat_tile(index: usize, stat: &HomeStat, cx: &App) -> impl IntoElement {
+    home_stat_tile_on(index, stat, false, cx)
+}
+
+/// The same tile, frosted when the page has a photo behind it.
+pub(crate) fn home_stat_tile_on(index: usize, stat: &HomeStat, on_picture: bool, cx: &App) -> impl IntoElement {
     let secondary = style::secondary_text(cx);
-    let fill = style::primary_opacity(cx, 0.04);
+    let fill = crate::looks::tile_fill(on_picture, cx);
     crate::highlights::tipped_as(div().id(("home-stat", index)).flex_grow(1.).flex_basis(px(170.)).min_w(px(170.)), stat.help.clone(), gpui_kit::Role::GenericContainer).child(
         v_flex()
             .gap(px(4.))

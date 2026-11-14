@@ -364,6 +364,7 @@ It comes from reading code, not from running anything, so "(unverified)" means n
 | `projects.icon` | Project icon | Choose or librarian's | GPUI path prompt, with Reveal going through the open gate. | kit | S | `ProjectPage`, `ProjectIconView` |
 | `projects.tasks` | Tasks board page | Status columns from Notion | Drawn columns. | build | M | `ProjectPage` (`TasksSection`) |
 | `projects.newthread` | New thread in project | "In" chip | Drawn chip. | build | S | `DetailView` (`NewThreadProjectChip`) |
+| `librarian.customize` | Customize Librarian | Picture, background, layout, greeting, quote and activity | Shared look models and native Customize panel. | build | M | `LibrarianLookEditor`, `CustomizedLibrarianPage` |
 | `librarian.page` | Librarian page | Picture, tiles, Look at threads, Runs on | Drawn. | build | S | `LibrarianHome`, `HomePage` |
 | `librarian.log` | Librarian log | Recent, Next, Look at everything | Drawn list. | build | M | `LibrarianView` |
 | `librarian.picture` | Pokeable picture | Secret lines | Built, with its wobble on a poke (`home_page.rs`, core's `juice::wobble`): GPUI can't turn a picture, so the Swift tilt is a sway of the picture's middle, with the squash as it is. | build | S | `HomePage` |

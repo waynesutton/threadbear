@@ -520,7 +520,7 @@ impl SettingsWindow {
 
     fn render_general(&mut self, settings: Option<&RunnerSettings>, window: &mut Window, cx: &mut Context<Self>) -> Vec<AnyElement> {
         // This Mac's own, so they're here while the runner's away too.
-        let mut sections = vec![self.appearance_section(cx), self.panels_section(cx), self.files_section(cx), self.slash_section(cx), self.terminal_section(cx), self.quitting_section(cx), self.notifications_section(cx)];
+        let mut sections = vec![self.appearance_section(cx), self.panels_section(cx), self.files_section(cx), self.slash_section(cx), self.terminal_section(cx), self.quitting_section(cx), self.look_section(cx), self.notifications_section(cx)];
         // The web runtime is this Mac's too (web_runtime.rs), last, so it
         // moves nothing the Swift app's General has.
         let web_runtime = section("settings-web-runtime", "Web runtime", crate::web_runtime::SETTINGS_ABOUT, "check whether it's installed and working, or why a diagram or panel isn't showing.", vec![row("Web runtime", crate::web_runtime::settings_control(cx), cx)], cx);
@@ -791,6 +791,53 @@ impl SettingsWindow {
             "Quit Threadbear (⌘Q or the Threadbear menu) asks first, so a stray ⌘Q doesn't close the app. Ticking Don't ask again turns this off; turn it back on here. Your threads keep running on the runner while the app is closed.",
             "change it for you.",
             vec![row("Ask before quitting", switch, cx)],
+            cx,
+        )
+    }
+
+    /// Look (`LookSettings`): Customize on the Librarian, Scheduled and
+    /// Projects pages, and a background picture in the main window. All kept
+    /// on this Mac, off until turned on, and never sent anywhere.
+    fn look_section(&mut self, cx: &mut Context<Self>) -> AnyElement {
+        use crate::looks::Page;
+        let Some(app) = self.app.upgrade() else { return div().into_any_element() };
+        let mut rows = vec![];
+        for (page, label, tip) in [
+            (Page::Librarian, "Customize the Librarian page", "Add Customize to the Librarian page: its picture, a background, the layout, and what shows"),
+        ] {
+            let on = app.read(cx).customizable(page);
+            let switch = self.switch_owned(format!("settings-look-{}", page.name()), on, tip.to_owned(), cx, move |this, on, cx| {
+                this.app.update(cx, |app, cx| app.set_customizable(page, on, cx)).ok();
+            });
+            rows.push(row(label, switch, cx));
+        }
+        let background = app.read(cx).main_background();
+        let switch = self.switch("settings-look-main", background.on, "A photo or animated GIF of yours behind new threads", cx, |this, on, cx| {
+            this.app.update(cx, |app, cx| app.edit_main_background(cx, |b| b.on = on)).ok();
+        });
+        rows.push(row("Background picture in the main window", switch, cx));
+        if background.on {
+            let made = app.update(cx, |app, cx| app.background_rows(crate::looks::Slot::Main, background.file.as_deref(), background.dim, background.focus, false, cx));
+            let mut made = made.into_iter();
+            if let Some(picture) = made.next() {
+                rows.push(row_with(div().into_any_element(), picture, cx));
+            }
+            if background.file.is_some() {
+                let everywhere = self.switch("settings-look-everywhere", background.everywhere, "Off, only a new thread has it. On, every thread's transcript sits over it", cx, |this, on, cx| {
+                    this.app.update(cx, |app, cx| app.edit_main_background(cx, |b| b.everywhere = on)).ok();
+                });
+                rows.push(row("Show behind open threads too", everywhere, cx));
+            }
+            for rest in made {
+                rows.push(row_with(div().into_any_element(), rest, cx));
+            }
+        }
+        section(
+            "settings-look",
+            "Look",
+            "Customize the Librarian page adds Customize at the top right of the Librarian page: change or remove the bear, put a photo behind the page, move each part to the top, middle or bottom, hide parts and numbers, and show your GitHub activity. Customize the Scheduled page does the same for the Scheduled page: its picture, a background photo, and the picture, title and numbers each at the top, middle or bottom, or hidden. Customize the Projects page adds a picture of your own (it has none as it ships), a background photo, the title and search and the cards each at the top, middle or bottom, or hidden, and what each card shows. Turning any of them off puts its page back as it ships and keeps your changes for next time. Background picture puts a photo of yours behind a new thread in the main window, or behind every thread, faded so text stays readable in light and dark. A background can be an animated GIF, which plays (and holds still with Reduce Motion on). Pictures are copied into Threadbear's data folder and never sent anywhere.",
+            "change the Librarian, Scheduled or Projects page, or the background, for you.",
+            rows,
             cx,
         )
     }

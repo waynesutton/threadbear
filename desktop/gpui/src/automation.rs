@@ -474,6 +474,7 @@ fn step(app: &Entity<Threadbear>, cmd: &Value, window: &mut Window, cx: &mut App
         }
         // The activity bar's panels, as the Swift app's commands of these names.
         "runners" => crate::runners_panel::automation(app, cmd, window, cx),
+        "look" => crate::looks::automation(app, cmd, cx),
         "updates" => crate::updates_panel::automation(app, cmd, window, cx),
         "connectors" => crate::connectors_panel::automation(app, cmd, cx),
         "usage" => crate::usage::automation(app, cmd, cx),

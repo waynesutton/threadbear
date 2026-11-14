@@ -1122,3 +1122,24 @@ size_t tb_media_thumbnail(int fd, long long length, const char *name, bool pdf, 
     return png.length;
   }
 }
+
+// The page picture picker is attached to the window that opened it. The
+// borrowed UTF-8 path is copied by Rust before this completion returns.
+void tb_picture_sheet(void *view, const char *prompt, void *context,
+                      void (*done)(void *, const char *)) {
+  NSWindow *window = [(__bridge NSView *)view window];
+  if (!window) { done(context, NULL); return; }
+  NSOpenPanel *panel = [NSOpenPanel openPanel];
+  if (!panel) { done(context, NULL); return; }
+  panel.canChooseFiles = YES;
+  panel.canChooseDirectories = NO;
+  panel.allowsMultipleSelection = NO;
+  panel.prompt = [NSString stringWithUTF8String:prompt];
+  [panel beginSheetModalForWindow:window completionHandler:^(NSModalResponse result) {
+    NSURL *url = result == NSModalResponseOK ? panel.URLs.firstObject : nil;
+    done(context, url.isFileURL ? url.path.UTF8String : NULL);
+  }];
+}
+
+// Read the local account name without spawning a process.
+const char *tb_full_user_name(void) { return NSFullUserName().UTF8String; }

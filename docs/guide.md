@@ -1204,6 +1204,7 @@ off Look at threads there to pause it; what's queued waits until you turn
 it back on. If it files a thread wrongly, take the thread out of the
 project and it won't put it back.
 
+The GPUI app keeps page looks in its desktop settings on this Mac.
 With Customize the Librarian page on (Settings › General › Look, off by
 default), the page gets a Customize button at its top right. It opens a
 panel beside the page that changes it as you go: keep the bear, use a
