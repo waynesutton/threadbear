@@ -324,11 +324,21 @@ const devicesRefusal = () => {
 let mockInstructions = { text: '' };
 const settings = {
   defaultCwd: defaults.cwd, idleMinutes: 30, maxLiveCLIs: 6, followMain: true, bulletReplies: true, oneReply: true, labReview: true, keepAwake: true, fullSync: false,
+  // Prints' "Only make Prints when I ask" (Settings > General > Prints),
+  // shown while the pages experiment below is on.
+  printsWhenAsked: false,
   models: {
     pool: 'claude',
     privateFolders: ['~/dev/clients/acme'],
   },
+  // Every experiment, as the real runner lists them (runner/src/experiments):
+  // only Prints here, on unless TB_MOCK_PAGES_OFF, so both apps' Prints
+  // scenarios have a store to read (features/prints.feature).
+  experiments: [{ id: 'pages', name: 'Prints', does: 'Threads make Prints you keep: charts, dashboards, reports, docs and diagrams, with versions, in a reply as a card.', on: !process.env.TB_MOCK_PAGES_OFF }],
 };
+const pagesOn = () => settings.experiments.some((e) => e.id === 'pages' && e.on);
+/** Prints by id: { page, versions: number[], sources: Map(version -> { markdown?, mermaid? }) }. */
+const mockPages = new Map();
 
 /** threadId -> { summary, events: [], inProgress: Map(itemId -> {type,text}), timers: [] } */
 const threads = new Map();
@@ -343,6 +353,8 @@ addDemoPools();
 const highlights = new Map();
 addDemoHighlights();
 addDemoSubagents();
+// Prints (the pages experiment): a chart and a diagram, the chart's card in a reply.
+addDemoPrints();
 applyScriptedThreads();
 /**
  * The runners a schedule can run on (runners.list, docs/protocol.md,
@@ -414,7 +426,7 @@ addDemoProjects();
 // TB_MOCK_OPEN_ANYTHING_OFF, for the spec that it's gone while off, and
 // Decisions on the Projects page with TB_MOCK_DECISIONS.
 function mockExperiments() {
-  return [...(process.env.TB_MOCK_OPEN_ANYTHING_OFF ? [] : ['openAnything']), ...(process.env.TB_MOCK_DECISIONS ? ['projectDecisions'] : [])];
+  return [...(process.env.TB_MOCK_OPEN_ANYTHING_OFF ? [] : ['openAnything']), ...(process.env.TB_MOCK_DECISIONS ? ['projectDecisions'] : []), ...(pagesOn() ? ['pages'] : [])];
 }
 
 // Decisions on the Projects page (the projectDecisions experiment): three of
@@ -1651,6 +1663,101 @@ async function dispatch(client, method, p) {
       mockInstructions = { text: p.text.trim() ? p.text.trim() + '\n' : '' };
       broadcast('instructions.updated', { instructions: mockInstructions });
       return { instructions: mockInstructions };
+    // Prints (docs/protocol.md, "Prints"): the pages experiment's store,
+    // in memory with each version's files under <data dir>/pages, as the
+    // real runner keeps them.
+    case 'pages.list': {
+      if (!pagesOn()) return { pages: [] };
+      let list = [...mockPages.values()].map((x) => x.page).filter((pg) => (p.deleted ? pg.deletedAt : !pg.deletedAt));
+      if (p.project) list = list.filter((pg) => pg.projects.some((r) => r.id === p.project));
+      if (p.thread) list = list.filter((pg) => pg.ownerThread === p.thread);
+      if (p.none) list = list.filter((pg) => pg.projects.length === 0);
+      return { pages: list.sort((a, b) => Date.parse(b.updatedAt) - Date.parse(a.updatedAt)) };
+    }
+    case 'pages.get': {
+      const x = knownPage(p.pageId);
+      const version = p.version ?? x.page.version;
+      if (!x.versions.includes(version)) throw rpcError(-32602, `${p.pageId} has no version ${version}`);
+      return { page: x.page, file: pageFile(x.page.id, version), versions: x.versions, ...x.sources.get(version) };
+    }
+    case 'pages.saveDoc': {
+      const x = knownPage(p.pageId);
+      if (typeof p.markdown !== 'string') throw rpcError(-32602, 'markdown must be text');
+      if (p.title) x.page.title = String(p.title);
+      return { page: savePageVersion(x, docPage(x.page.title, p.markdown), { markdown: p.markdown }, 'user') };
+    }
+    case 'pages.saveDiagram': {
+      const x = knownPage(p.pageId);
+      // The real runner draws it with Pele and refuses what doesn't parse;
+      // here a source that doesn't open with a diagram type is malformed.
+      if (typeof p.mermaid !== 'string' || !/^\s*(graph|flowchart|sequenceDiagram|classDiagram|stateDiagram)/.test(p.mermaid)) throw rpcError(-32602, "Couldn't render the diagram: it doesn't start with a diagram type like flowchart");
+      return { page: savePageVersion(x, diagramPage(x.page.title, p.mermaid), { mermaid: p.mermaid }, 'user') };
+    }
+    case 'pages.toggleItem':
+    case 'pages.moveCard':
+      knownPage(p.pageId);
+      throw rpcError(-32602, `${p.pageId} isn't a todo list or a board`);
+    case 'pages.restoreVersion': {
+      const x = knownPage(p.pageId);
+      if (!x.versions.includes(p.version)) throw rpcError(-32602, `${p.pageId} no longer keeps version ${p.version}`);
+      return { page: savePageVersion(x, fs.readFileSync(pageFile(x.page.id, p.version), 'utf8'), x.sources.get(p.version) ?? {}, x.page.editedBy ?? 'agent') };
+    }
+    case 'pages.delete': {
+      const x = knownPage(p.pageId, true);
+      x.page.deletedAt = iso();
+      delete x.page.published;
+      broadcastPages();
+      return { page: x.page };
+    }
+    case 'pages.restore': {
+      const x = knownPage(p.pageId, true);
+      delete x.page.deletedAt;
+      broadcastPages();
+      return { page: x.page };
+    }
+    case 'pages.export': {
+      const x = knownPage(p.pageId);
+      const version = p.version ?? x.page.version;
+      if (typeof p.dest !== 'string' || !path.isAbsolute(p.dest)) throw rpcError(-32602, 'dest must be an absolute folder');
+      if (fs.existsSync(p.dest) && fs.readdirSync(p.dest).length) throw rpcError(-32602, `${p.dest} isn't empty`);
+      fs.mkdirSync(p.dest, { recursive: true });
+      fs.cpSync(path.dirname(pageFile(x.page.id, version)), p.dest, { recursive: true });
+      return { file: path.join(p.dest, 'index.html') };
+    }
+    case 'pages.publish': {
+      const x = knownPage(p.pageId);
+      x.page.published = { slug: crypto.randomBytes(16).toString('hex'), at: iso(), version: x.page.version };
+      broadcastPages();
+      return { page: x.page, url: `${DEMO_SITE}/p/${x.page.published.slug}` };
+    }
+    case 'pages.unpublish': {
+      const x = knownPage(p.pageId);
+      delete x.page.published;
+      broadcastPages();
+      return { page: x.page };
+    }
+    case 'pages.refresh':
+    case 'pages.edit': {
+      // Only asks the thread that made it; nothing is made here.
+      const x = knownPage(p.pageId);
+      return { threadId: x.page.ownerThread, started: false };
+    }
+    case 'pages.setProjects': {
+      const x = knownPage(p.pageId);
+      const remove = new Set(p.remove ?? []);
+      x.page.projects = x.page.projects.filter((r) => !remove.has(r.id));
+      for (const id of p.add ?? []) if (!x.page.projects.some((r) => r.id === id)) x.page.projects.push({ id, by: 'mike', pinned: true });
+      broadcastPages();
+      return { page: x.page };
+    }
+    // A thread saving the next version of a Print, for the scenario where
+    // the side pane follows it (`pageId`, default the chart).
+    case 'mock.savePage': {
+      const x = knownPage(p.pageId ?? 'pg_invoice_totals');
+      const next = x.page.version + 1;
+      const html = x.page.kind === 'diagram' ? diagramPage(x.page.title, mockDiagram()) : chartPage(x.page.title, next);
+      return { page: savePageVersion(x, html, x.sources.get(x.page.version) ?? {}, 'agent') };
+    }
     case 'settings.get':
       return { settings };
     case 'settings.update': {
@@ -1672,6 +1779,12 @@ async function dispatch(client, method, p) {
       if (p.labReview !== undefined) settings.labReview = Boolean(p.labReview);
       if (p.keepAwake !== undefined) settings.keepAwake = Boolean(p.keepAwake);
       if (p.fullSync !== undefined) settings.fullSync = Boolean(p.fullSync);
+      if (p.printsWhenAsked !== undefined) settings.printsWhenAsked = Boolean(p.printsWhenAsked);
+      for (const [id, on] of Object.entries(p.experiments ?? {})) {
+        const e = settings.experiments.find((x) => x.id === id);
+        if (!e) throw rpcError(-32602, `No experiment called ${id}`);
+        e.on = Boolean(on);
+      }
       const m = p.models ?? {};
       if (m.pool !== undefined) {
         if (m.pool !== null && !poolOf(m.pool)) throw rpcError(-32602, `No pool called ${m.pool}`);
@@ -3823,6 +3936,111 @@ function onePagePdf(line, link) {
   const table = out.length;
   out += `xref\n0 ${objects.length + 1}\n0000000000 65535 f \n${offsets.map((n) => `${String(n).padStart(10, '0')} 00000 n \n`).join('')}`;
   return `${out}trailer\n<< /Size ${objects.length + 1} /Root 1 0 R >>\nstartxref\n${table}\n%%EOF\n`;
+}
+
+// ------------------------------------------------------------------ Prints
+
+// Two Prints the invoice export thread made (docs/protocol.md, "Prints"):
+// a chart, whose card its reply shows as the real runner's agents write it
+// (a ```print <id> block), and a diagram with its Mermaid source. Static
+// HTML and SVG under <data dir>/pages/<id>/v<n>/index.html, as the runner
+// keeps them, so either app can draw a card's picture and open it in the pane.
+function addDemoPrints() {
+  if (!pagesOn()) return;
+  const thread = threads.get('demo_invoice_export');
+  const owner = thread ? 'demo_invoice_export' : '';
+  const made = (minutesAgo) => new Date(Date.now() - minutesAgo * 60_000).toISOString();
+  addMockPage({ id: 'pg_invoice_totals', title: 'Invoice totals by month', summary: 'Last quarter\'s invoice totals for July, August and September, from the CSV export.', kind: 'chart', ownerThread: owner, source: 'invoices-q3.csv', recipe: 'Read invoices-q3.csv and chart the total per month as bars.', createdAt: made(70), updatedAt: made(60) }, chartPage('Invoice totals by month', 1), {});
+  addMockPage({ id: 'pg_export_flow', title: 'How the export runs', summary: 'The invoice export: read the PDFs, fill in missing client names, write the CSV.', kind: 'diagram', ownerThread: owner, createdAt: made(65), updatedAt: made(64) }, diagramPage('How the export runs', mockDiagram()), { mermaid: mockDiagram() });
+  // The reply carries the chart's card after what it said.
+  const reply = thread?.events.find((e) => e.type === 'assistant.text');
+  if (reply) reply.text += '\n\nHere are the totals by month:\n\n```print pg_invoice_totals\n```';
+}
+
+function addMockPage(fields, html, source) {
+  const page = { projects: [], version: 1, bytes: Buffer.byteLength(html), live: false, editedBy: 'agent', ...fields };
+  const x = { page, versions: [1], sources: new Map([[1, source]]) };
+  writePageFile(page.id, 1, html);
+  mockPages.set(page.id, x);
+  return x;
+}
+
+function pageFile(id, version) {
+  return path.join(path.resolve(dataDir), 'pages', id, `v${version}`, 'index.html');
+}
+
+function writePageFile(id, version, html) {
+  const file = pageFile(id, version);
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  fs.writeFileSync(file, html);
+}
+
+/** A Print by id, refusing an unknown or deleted one (or any, with the experiment off). */
+function knownPage(id, evenDeleted = false) {
+  const x = pagesOn() ? mockPages.get(id) : undefined;
+  if (!x || (x.page.deletedAt && !evenDeleted)) throw rpcError(-32602, `No print ${id}`);
+  return x;
+}
+
+/** The next version, the last 10 kept, and every client told. */
+function savePageVersion(x, html, source, editedBy) {
+  const version = x.page.version + 1;
+  writePageFile(x.page.id, version, html);
+  x.versions = [...x.versions, version].slice(-10);
+  x.sources.set(version, source);
+  Object.assign(x.page, { version, bytes: Buffer.byteLength(html), editedBy, updatedAt: iso() });
+  if (x.page.published) x.page.published = { ...x.page.published, at: iso(), version };
+  broadcastPages();
+  return x.page;
+}
+
+function broadcastPages() {
+  if (!pagesOn()) return;
+  broadcast('pages.updated', { pages: [...mockPages.values()].map((x) => x.page).filter((pg) => !pg.deletedAt) });
+}
+
+function mockDiagram() {
+  return 'flowchart LR\n  A[Read the invoice PDFs] --> B{Client name?}\n  B -->|Missing| C[Fill it in from the PDF]\n  B -->|There| D[Write a CSV row]\n  C --> D';
+}
+
+function printStyle() {
+  return `<style>
+:root { color-scheme: light dark; --bg: #ffffff; --fg: #1d1d1f; --muted: #6e6e73; --line: #e5e5ea; --bar: #0a84ff; --bar2: #5e5ce6; }
+@media (prefers-color-scheme: dark) { :root { --bg: #1c1c1e; --fg: #f5f5f7; --muted: #98989d; --line: #3a3a3c; --bar: #0a84ff; --bar2: #7d7aff; } }
+body { margin: 0; padding: 28px 32px; background: var(--bg); color: var(--fg); font: 15px -apple-system, system-ui, sans-serif; }
+h1 { margin: 0 0 4px; font-size: 26px; font-weight: 650; }
+p { margin: 0 0 20px; color: var(--muted); }
+svg text { fill: var(--fg); font: 13px -apple-system, system-ui, sans-serif; }
+</style>`;
+}
+
+/** A bar chart Print; each version's numbers move a little, so a new one looks new. */
+function chartPage(title, version) {
+  const months = [['July', 18400], ['August', 21250], ['September', 19900 + (version - 1) * 2600]];
+  const most = Math.max(...months.map(([, n]) => n));
+  const bars = months.map(([month, n], i) => {
+    const h = Math.round((n / most) * 220);
+    const x = 70 + i * 220;
+    return `<rect x="${x}" y="${260 - h}" width="140" height="${h}" rx="8" style="fill: var(--bar${i === 2 ? '2' : ''})"/>`
+      + `<text x="${x + 70}" y="${250 - h}" text-anchor="middle">$${n.toLocaleString('en-US')}</text>`
+      + `<text x="${x + 70}" y="284" text-anchor="middle">${month}</text>`;
+  }).join('');
+  return `<!doctype html><html><head><meta charset="utf-8"><title>${title}</title>${printStyle()}</head><body>
+<h1>${title}</h1><p>Q3 invoices from the CSV export, version ${version}. Two invoices still have no client name.</p>
+<svg viewBox="0 0 740 300" width="740" height="300" role="img" aria-label="${title}"><line x1="50" y1="260" x2="720" y2="260" style="stroke: var(--line)"/>${bars}</svg>
+</body></html>\n`;
+}
+
+/** A diagram Print: static SVG drawn here in place of Pele, with its source folded under it. */
+function diagramPage(title, mermaid) {
+  const box = (x, label) => `<rect x="${x}" y="70" width="170" height="56" rx="10" style="fill: none; stroke: var(--bar)"/><text x="${x + 85}" y="103" text-anchor="middle">${label}</text>`;
+  const arrow = (x1, x2) => `<line x1="${x1}" y1="98" x2="${x2 - 6}" y2="98" style="stroke: var(--muted)"/><path d="M${x2 - 8},92 L${x2},98 L${x2 - 8},104 Z" style="fill: var(--muted)"/>`;
+  const escaped = mermaid.replace(/&/g, '&amp;').replace(/</g, '&lt;');
+  return `<!doctype html><html><head><meta charset="utf-8"><title>${title}</title>${printStyle()}</head><body>
+<h1>${title}</h1><p>Drawn from its Mermaid source.</p>
+<svg viewBox="0 0 740 200" width="740" height="200" role="img" aria-label="${title}">${box(10, 'Read the PDFs')}${arrow(180, 285)}${box(285, 'Client name?')}${arrow(455, 560)}${box(560, 'Write a CSV row')}</svg>
+<details><summary>Source</summary><pre>${escaped}</pre></details>
+</body></html>\n`;
 }
 
 // The landing pages thread works in a real folder under the data dir, so its
