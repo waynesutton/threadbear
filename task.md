@@ -9,9 +9,33 @@ Status and gap list: prds/prints-status.md
 
 ## In Progress
 
-- [ ] Land the network probe test fix and verify the runner update. prds/runner-update-probe-tests.md
+Nothing.
 
 ## Completed
+
+- [x] 2026-11-14 09:30 UTC A project with tables among its Parts lists each table's bears on its Project tab ("Bears at <table>"). app ProjectPage.swift, Bears.swift (ProjectTable.tables(in:)); docs, bears skill, GPUI PRD. Verified: ProjectTableTests 4, TipsTests, EveryClickShowsTests.
+
+- [x] 2026-11-14 08:55 UTC Tables show their bears: a bear's thread put in a table project seats the bear (Projects.onJoined, Tables.seatFromThread), new tables get the person.3 icon, and the Swift project page has Bears at this table (ProjectTable, TableBearsSection). Also: the done card finds a fork's PR to upstream (8732a6a7). Wayne's Head table now seats Designer and its goals say Head Bear. runner/src/projects.ts, tables.ts, main.ts; app ProjectPage.swift, Project.swift, Bears.swift. Verified: tables 7, loose-ends 10; ProjectTableTests 3, BearPickerTests, TipsTests, EveryClickShowsTests.
+
+- [x] 2026-11-13 21:40 UTC Bears docs sync after the head bear, sidebar tiles and @ picker: guide, protocol, SECURITY, the bears skill and both PRDs say what shipped since 79ab733c and what was observed with a Codex Designer bear (image_gen saves without a card, Auto is Claude only, a pin card that looked missing; corrected later the same day: the card showed and Wayne answered it after the turn ended, so it isn't a bug). `tb bears access` now says Auto works like Ask on a Codex bear. runner/src/cli-bears.ts, docs, prds. Verified: bears 17 tests, typecheck.
+
+- [x] 2026-11-13 18:44 UTC @ bear picker review fixes: no list for a message going to another runner, modified keys stay the composer's, Esc and lost focus keep it shut. app/Sources/Threadbear/Views/BearPicker.swift, ComposerView.swift. Verified: BearPickerTests 5, EveryClickShowsTests, TipsTests; quick check on land (57934753).
+
+- [x] 2026-11-13 18:24 UTC @ bear picker in the Swift composer, from bears.list. BearPicker.swift, ComposerView.swift, AppModel+Bears.swift. Verified: BearPickerTests, EveryClickShowsTests, TipsTests; seen in a debug app against a dev runner (Hey @wr, Tab, Hey @Writer); Wayne confirmed it on his app (debffacf).
+
+- [x] 2026-11-13 17:45 UTC Bear icons and colours in the Swift sidebar: ThreadSummary.bear from the runner, BearTile, and Bear Colour on a bear thread's menu; tb bears set --color. Verified: bears tests, scenarios, sync, Swift tests; Wayne confirmed the crown tile (f69b7232).
+
+- [x] 2026-11-13 17:11 UTC Rename the chief of staff from Momma to head bear everywhere, with tb bears head; Wayne's bear moved to head-bear-d2f8 and his table to Head table. Verified: bears, mentions and tables tests; a case-insensitive grep finds none of the old name (d68c4850).
+
+- [x] 2026-11-13 09:20 UTC Bears build wrap-up: live webhook test on the deployed backend (202, quoted Ask thread with the bolt, repeat 200, unknown 404, over 64 KB 413, Origin 403, revoked 404; hooks revoked and webhooks off after), Head Bear made on Wayne's runner with bears, tables and bear notes on for him, home patch ~/.threadbear/patches/bears.ts, prds/bears-for-mike.md and prds/bears-gpui.md. Verified: swift build -c release in app/ passed; ./check.sh --quick passed on every land. Skipped: the full ./check.sh, as load stayed between 10 and 21 from other threads all night.
+
+- [x] 2026-11-13 08:53 UTC Mentions, tables and bear notes (experiments bears, tables, bearNotes): `@Name` and `tb bears ask` hand a message to a bear in the lower mode and bring its reply back; tables are projects with a `table` marker, a host folder and a reply cap; the librarian never files a thread into a table; opted-in bears leave one cheer or idea in Highlights. prds/bears-and-webhooks.md. runner/src/mentions.ts, tables.ts, librarian.ts, projects.ts, runner.ts, cli-bears.ts. Verified: mentions 8, tables 6, bear-notes 4, projects 61 and guard tests pass; typecheck clean.
+
+- [x] 2026-11-13 08:45 UTC Webhooks (experiment webhooks, backend API 78): POST /hook/<key> starts an Ask or Auto thread in a folder or bear, or messages a thread, with hashed keys, a 64 KB cap, limits, dedupe, batching and scrubbing. Security check run: no confirmed findings; repeats now count against limits and the runner keeps its own hook registry. prds/bears-and-webhooks.md. convex/webhooks.ts, hookHttp.ts, http.ts, schema.ts; runner/src/webhooks.ts, sync.ts. Verified: webhooks 9 and webhooks-backend 13 tests; ./check.sh --quick passed in tb land (f570e343).
+
+- [x] 2026-11-13 08:45 UTC Bears (experiment bears): bear folders with persona, memory, git, faces from open-bot-avatar 0.2.1, a daily memory tidy, quiet hours, access fields in the runner's bears.json, Head Bear as default chief of staff (Wayne asked mid-build), and tb bears for every management action. prds/bears-and-webhooks.md. runner/src/bears.ts, cli-bears.ts, rpc-gate.ts, schedules.ts, new-threads.ts, skills/bears/. Verified: bears 14 tests; ./check.sh --quick passed in tb land (af708f3f).
+
+- [x] 2026-11-12 05:15 UTC Cap the updater's npm unit suite at four workers to reduce contention from Git subprocesses. runner/package.json. Verified: actual npm test script with eight fixture files never exceeded four workers; runner typecheck, 26 probe and deploy-step tests, and 3,091 active unit tests with four workers and no retries. The broader check.sh change was withdrawn after unrelated app and iPhone gates hit time limits. prds/runner-update-probe-tests.md
 
 - [x] 2026-11-12 04:54 UTC Remove network probe tests' wall-clock assumptions using a controlled socket and mock clock. runner/test/unit/net-probe.test.ts. Verified: four focused tests, runner typecheck, and mutation checks rejecting a missing absolute deadline and missing response-size limit. prds/runner-update-probe-tests.md
 

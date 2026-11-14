@@ -118,6 +118,7 @@ public enum SlashPalette {
         switch command.scope {
         case "user": return "Your \(kind)"
         case "project", "repo": return "This folder's \(kind)"
+        case "store": return "From your Skills page"
         case "plugin": return command.plugin.map { "From the \($0) plugin" } ?? "From a plugin"
         case "claude.ai": return "Synced from claude.ai"
         case "admin": return "Set up by your organisation"

@@ -1,4 +1,5 @@
 import AppKit
+import ImageIO
 import Observation
 import SwiftUI
 import UniformTypeIdentifiers
@@ -117,9 +118,15 @@ enum Looks {
     /// Copies a picture in, scaled so its longest side is at most
     /// `maxSide` pixels. A picture with see-through parts stays a PNG; a
     /// photo becomes a JPEG. Nil when it isn't a picture macOS can read.
-    static func importPicture(from url: URL, maxSide: CGFloat, prefix: String) -> String? {
+    /// With `animated` (backgrounds), an animated GIF is copied as it is,
+    /// every frame at its own size: scaling it down here would mean
+    /// writing each frame again, and a still of it isn't what was chosen.
+    static func importPicture(from url: URL, maxSide: CGFloat, prefix: String, animated: Bool = false) -> String? {
         let scoped = url.startAccessingSecurityScopedResource()
         defer { if scoped { url.stopAccessingSecurityScopedResource() } }
+        if animated, isAnimatedGIF(url), let data = try? Data(contentsOf: url) {
+            return save(data, ext: "gif", prefix: prefix)
+        }
         guard let image = NSImage(contentsOf: url),
               let source = image.cgImage(forProposedRect: nil, context: nil, hints: nil) else { return nil }
         let scale = min(1, maxSide / CGFloat(max(source.width, source.height)))
@@ -137,6 +144,26 @@ enum Looks {
             ? (rep.representation(using: .png, properties: [:]), "png")
             : (rep.representation(using: .jpeg, properties: [.compressionFactor: 0.88]), "jpg")
         guard let data else { return nil }
+        return save(data, ext: ext, prefix: prefix)
+    }
+
+    /// A GIF with more than one frame, told by what's in the file, not its
+    /// name: a picture dropped from a browser comes without one.
+    static func isAnimatedGIF(_ url: URL) -> Bool {
+        guard let source = CGImageSourceCreateWithURL(url as CFURL, nil),
+              let type = CGImageSourceGetType(source) as String? else { return false }
+        return type == UTType.gif.identifier && CGImageSourceGetCount(source) > 1
+    }
+
+    /// Whether a picture from `looks/` moves: an animated GIF kept as one.
+    static func isAnimated(_ image: NSImage) -> Bool {
+        image.representations.contains { rep in
+            ((rep as? NSBitmapImageRep)?.value(forProperty: .frameCount) as? Int ?? 1) > 1
+        }
+    }
+
+    /// Writes a copy into `looks/` under a new name, which it returns.
+    private static func save(_ data: Data, ext: String, prefix: String) -> String? {
         let name = "\(prefix)-\(UUID().uuidString.prefix(8).lowercased()).\(ext)"
         do {
             try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
@@ -225,13 +252,24 @@ struct BackdropPicture: View {
     let dim: Double
     var focus: BackdropFocus = .bottom
     var slot: BackdropSlot?
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    /// SwiftUI's Image only ever draws a GIF's first frame, so an animated
+    /// one goes through AppKit's image view, which plays it.
+    @ViewBuilder private var picture: some View {
+        if Looks.isAnimated(image) {
+            AnimatedPicture(image: image, plays: !reduceMotion)
+        } else {
+            Image(nsImage: image)
+                .resizable()
+                .interpolation(.high)
+        }
+    }
 
     var body: some View {
         GeometryReader { proxy in
             let frame = focus.frame(image: image.size, in: proxy.size)
-            Image(nsImage: image)
-                .resizable()
-                .interpolation(.high)
+            picture
                 .frame(width: frame.width, height: frame.height)
                 .offset(x: frame.minX, y: frame.minY)
                 .frame(width: proxy.size.width, height: proxy.size.height, alignment: .topLeading)
@@ -243,6 +281,31 @@ struct BackdropPicture: View {
         }
         .allowsHitTesting(false)
         .accessibilityHidden(true)
+    }
+}
+
+/// An animated GIF, playing, stretched to whatever frame it's given. It
+/// holds still with Reduce Motion on (System Settings > Accessibility).
+private struct AnimatedPicture: NSViewRepresentable {
+    let image: NSImage
+    let plays: Bool
+
+    func makeNSView(context: Context) -> NSImageView {
+        let view = NSImageView()
+        view.imageScaling = .scaleAxesIndependently
+        view.imageFrameStyle = .none
+        view.isEditable = false
+        // Sized by SwiftUI's frame, never by the GIF's own size.
+        for axis in [NSLayoutConstraint.Orientation.horizontal, .vertical] {
+            view.setContentHuggingPriority(.init(1), for: axis)
+            view.setContentCompressionResistancePriority(.init(1), for: axis)
+        }
+        return view
+    }
+
+    func updateNSView(_ view: NSImageView, context: Context) {
+        if view.image !== image { view.image = image }
+        view.animates = plays
     }
 }
 

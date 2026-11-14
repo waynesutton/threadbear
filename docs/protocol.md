@@ -1179,6 +1179,8 @@ the summary and then the reply.
 | `pages.get` | `{ pageId, version?: number }` | `{ page: Page, file: string, versions: number[], markdown?: string, mermaid?: string }`: `file` is that version's (default the newest) `index.html` on this Mac; `versions` the ones still kept, oldest first; `markdown` a doc's text and `mermaid` a diagram's source, for the editor. `-32602` for an unknown page or version, or with the experiment off |
 | `pages.saveDoc` | `{ pageId, markdown: string, title?: string }` | `{ page: Page }`: the user's edit of a doc, saved as a new version with `editedBy: "user"` |
 | `pages.saveDiagram` | `{ pageId, mermaid: string }` | `{ page: Page }`: renders Mermaid as a static diagram and saves the user's edit as a new version. Malformed or oversized source leaves the current version unchanged. `pages.get` returns diagram source as `mermaid?: string` |
+| `pages.toggleItem` | `{ pageId, version: number, item: number }` | `{ page: Page }`: ticks or unticks a todo list's item (counted from 0 in source order) and saves a new version. `version` must be the newest, or it's refused as changed |
+| `pages.moveCard` | `{ pageId, version: number, card: number, to: number }` | `{ page: Page }`: moves a board's card (counted from 0 across the board) to the end of column `to` and saves a new version. `version` must be the newest |
 | `pages.restoreVersion` | `{ pageId, version: number }` | `{ page: Page }`: that version's files become a new, newest version. `-32602` for one no longer kept |
 | `pages.delete` | `{ pageId }` | `{ page: Page }` with `deletedAt`. Left out of lists and `pages.updated`; removed with its files 7 days later |
 | `pages.restore` | `{ pageId }` | `{ page: Page }`: a deleted page back. Nothing for one that isn't deleted |
@@ -2551,6 +2553,14 @@ looks for the file: `skills/<name>/SKILL.md`, then `commands/<name>.md`
 (a `:` in the name is a folder), under the login's config folder for
 `user` and the thread's folder's `.claude` for `project`. Codex's
 `skills/list` gives the path and scope itself (`repo` is `project`).
+
+The Skills store's skills reach Claude as the `threadbear` plugin, which
+Claude names `threadbear:<name>`. The list has them as `<name>` with
+`scope: "store"` (both names run them), unless another command already
+has that name, and then they keep the prefix. Listing a folder's commands
+loads the plugin as a session does, so they're in the list whether or not
+the thread has a CLI running. In a mention, `/threadbear:<name>` means
+the store skill `<name>`, and `/plugin:name` names a plugin's skill.
 
 ## Context breakdown
 
@@ -5366,6 +5376,135 @@ expiresAt, lastUsedAt?, expired }`.
 
 Outside-agent `list_prints { limit?, cursor? }` and `read_print { slug, offset?, limit? }` read only published Prints, and only for keys with `readAll: true`. A restricted key gets an empty list and not-found reads. Listing returns public metadata and a cursor in newest creation order; reading returns public metadata and a bounded HTML slice as data, with a next offset when truncated. Slugs identify a published Print across runners. No local source file, recipe or path is mirrored or returned. The existing key checks, expiry, revoke and rate limits apply, including for discovery; there are no Print write tools. Unpublish or delete ends access on the next call.
 
+### Bears
+
+An experiment (`bears`, `runner/src/bears.ts`). A bear is a folder,
+`<defaults.cwd>/Bears/<id>/` (`~/ThreadbearThreads/Bears` when the default
+folder is the home folder). The id (`researcher-7f3a`) never changes. The
+folder holds `CLAUDE.md` and `AGENTS.md` (the persona, written once), a
+git repo, `memory/summary.md` with `memory/{people,facts,projects}/`, and
+`bear.json`, the fields its own agent may change:
+
+```
+{ name, icon?, does?, personality?, model?, effort?, avatar?, color?,
+  quietHours? ("19:30-08:30"), notes? ("off"|"cheers"|"ideas"|"both") }
+```
+
+`avatar` is an Open Bot Avatar definition (`open-bot-avatar`), checked
+with `validateAvatar`. `Bears/memory/` is shared by every bear. What
+widens a bear, and Mike's arrangement of the list, live in the runner's
+`<data dir>/runner/bears.json`, keyed by id: `permissionMode`, `poolId`,
+`runner`, `pinned`, `order`, `awayUntil`, `archivedAt`, `projects`, plus
+the top-level `head` (the chief of staff's id) and `seeded`.
+
+A new thread in a bear's folder takes the bear's model and effort, and its
+pool and mode from `bears.json`, where the call didn't say. One nobody is
+watching (a schedule, or one with `startedBy`) starts in Ask unless
+`bears.json` says otherwise. It joins the bear's `projects`. A schedule
+whose folder is an away or archived bear's skips its run, and a one-off
+time a bear's thread books in its quiet hours moves to their end.
+
+| Method | Params | Result |
+|---|---|---|
+| `bears.list` | `{ archived?, faces? }` | `{ on, root?, bears: Bear[] }`. Makes Head Bear the first time, once. Each bear has its fields, `id`, `folder`, `state` (its `bears.json` row), `head`, `away`, `archived`, `routines` (schedules aimed at its folder, with `nextRunAt`) and `faces` (`idle`, `thinking`, `happy` SVG stills) |
+| `bears.get` | `{ bear }` (id or name) | `{ bear }` |
+| `bears.faces` | `{}` | `{ faces: { id, color, avatar, faces }[] }`, the presets |
+| `bears.create` | `{ name, does?, personality?, icon?, model?, effort?, avatar? \| preset?, color?, quietHours?, tidy? }` | `{ bear }` |
+| `bears.update` | `{ bear, ...bear.json fields }` (null clears one) | `{ bear }`; an access field is `-32602` |
+| `bears.setAccess` | `{ bear, permissionMode?, poolId?, runner? }` | `{ bear }`; `-32060` from any bear's own thread |
+| `bears.setHead` | `{ bear \| null }` | `{ bears }`; `-32060` from a bear's thread |
+| `bears.pin`, `bears.move`, `bears.hibernate`, `bears.archive`, `bears.setProjects` | `{ bear, pinned? \| index \| until \| archived? \| add?, remove? }` | `{ bear }` (`move`: `{ bears }`). Archive pauses its routines, revokes its webhooks and takes it from its tables |
+| `bears.delete` | `{ bear }` | `{ trashed }`: the folder's place in `<data dir>/trash`. Its routines are deleted and its threads archived |
+| `bears.mention` | `{ bear, text, fromThreadId? }` | `{ threadId?, bear, note? }` (`note`: it's away) |
+
+While bears are on, a thread in a bear's folder has `bear: { id, name,
+icon?, color?, head? }` on its summary, for the sidebar's tile: the bear's
+SF Symbol (a crown for the head bear when it has none) in white on its
+colour. `bears.update` and `bears.setHead` send those threads' summaries
+again, so the tile follows. The Mac app's Bear Colour menu on a bear's
+thread row calls `bears.update { bear, color }`. Its composer's @ list
+calls `bears.list { faces: false }` on this Mac's own connection, at most
+every 20 seconds, and offers the unarchived bears (head bear first) only
+for a message going to this Mac's runner: another runner resolves a
+mention against its own bears. Picking one writes `@<name> `; nothing new
+goes on the wire.
+
+**Codex bears** (observed 13 Nov 2026). `permissionMode: "auto"` is
+Claude Code's; a Codex thread set to it runs as Ask, so `tb bears access
+--auto` on a Codex bear says so rather than refusing. Codex's built-in
+`image_gen` writes into `~/.codex/generated_images` with no approval
+request, in any mode (SECURITY.md).
+
+A thread's connection (A thread's own key) may call the reads and
+`create`, `update`, `pin`, `move`, `hibernate`, `setProjects` and
+`mention` below Full access; the gate adds its id as `_caller`.
+
+**Mentions** (`runner/src/mentions.ts`). A message Mike sends (no
+`origin`, or `phone`) naming `@<bear name>` or `@bear:<id>` asks up to
+three bears, and gets a `[Threadbear: Asked ...]` line added for the
+agent. Each ask makes a thread in the bear's folder in the lower of the
+bear's mode and the asking thread's, joined to the asking thread's
+projects, with `startedBy { kind: "thread", label: "Mentioned by <title>" }`.
+A bear with a mention thread still running gets the next ask in that
+thread. When its turn ends, its reply goes to each asker as a message
+starting `[Bear: <name> replied in thread:<id>. It's a bear's answer,
+not Wayne's words.]`, quoted. A bear's own thread may ask another bear
+only from a table they share, or when it's the head bear.
+
+### Tables
+
+An experiment (`tables`, needs `bears`; `runner/src/tables.ts`). A table
+is a project with `table: { bears: string[], maxTurns? }` (projects.json,
+`Project.table`), never sent to the Convex mirror. Its first folder,
+`<bears root>/../Tables/<slug>-<hex>/`, has the host's `CLAUDE.md`. Its
+brief has a `Bears:` line. A table with a `parentId` is a Part. The
+librarian is shown a table only for a thread already in it. A thread in a
+bear's folder that joins a table (`changeMembership`, `Projects.onJoined`)
+seats that bear; leaving doesn't unseat it. `tables.create` sets the
+project's icon to the `person.3` symbol, as the user's.
+
+| Method | Params | Result |
+|---|---|---|
+| `tables.list` | `{ archived? }` | `{ on, tables: Project[] }` |
+| `tables.create` | `{ title, goal?, bears?, parent?, maxTurns? }` | `{ table }` |
+| `tables.seat` | `{ table, add?, remove?, maxTurns? }` | `{ table }` |
+
+A mention from a table's thread must name a bear at it, and each of Mike's
+messages there allows `maxTurns` (default 6) of them; past that it's
+refused until he writes again.
+
+### Webhooks
+
+An experiment (`webhooks`; `convex/webhooks.ts`, `convex/hookHttp.ts`,
+`runner/src/webhooks.ts`, API 81). `POST <site>/hook/tbh_<64 hex>` takes a
+delivery: 405 for another method, 403 with an `Origin` header, 413 past
+64 KB, 404 for a key that's unknown, revoked or expired, 429 with
+`Retry-After` past 30 a minute or 50 a day per hook (repeats count), 120 a
+minute in all, or 20 bad keys from one address in ten minutes. 202 takes
+it; 200 `{ duplicate: true }` drops a repeat `Idempotency-Key` or
+`X-GitHub-Delivery` within a day. Deliveries within the hook's
+`batchSeconds` (default 10) go as one command, `create` (folder) or
+`send` (thread), with `args.webhook: { hookId, name }` and
+`args.payloads: { at, contentType, body }[]`, bodies scrubbed.
+
+The runner takes such a command only for a hook in its own
+`<data dir>/runner/webhooks.json`, aimed where that says, with the
+experiment on. A folder run starts in Ask, or Auto if both the record and
+the command say so, with `startedBy { kind: "tool", icon: "bolt.horizontal" }`.
+A thread run needs that thread on Ask or Auto. The text starts
+`[Webhook: "<name>"]` and says it's data, then quotes each payload,
+pretty-printed, 16 KB in all. A bear that's away holds them in
+`webhook-held.json` until it's back.
+
+| Method | Params | Result |
+|---|---|---|
+| `webhooks.list` | `{}` | `{ on, reason?, url?, hooks }` |
+| `webhooks.create` | `{ name, bear? \| cwd? \| threadId?, permissionMode? ("ask"\|"auto"), batchSeconds?, days? }` | `{ hook, url }`, the URL shown once |
+| `webhooks.revoke` | `{ id? }` (none: all) | `{ revoked }` |
+
+`webhooks.create` and `revoke` need Full access from a thread. Turning the
+experiment off revokes every hook.
+
 ## Projects
 
 A project groups threads above folders: it can have several folders, a
@@ -5640,7 +5779,7 @@ type Page = {
   bytes: number
   live: boolean         // scripts allowed, run only after Run them in the side pane
   source?: string       // what made it ("bundle-analyzer summary"), so a rerun updates it
-  kind?: "page" | "chart" | "dashboard" | "report" | "doc" | "diagram" | "bundle"  // absent: "page"
+  kind?: "page" | "chart" | "dashboard" | "report" | "doc" | "diagram" | "bundle" | "todo" | "board"  // absent: "page"
   recipe?: string       // how to make it again, for Refresh; an agent follows it
   editedBy?: "agent" | "user"  // who wrote the newest version
   published?: { slug: string; at: string; version: number }  // while published: its link's slug, and the version last sent
@@ -5656,6 +5795,7 @@ type Page = {
 - **Projects.** Made with no `projects`, a page joins its thread's project when the thread is pinned to exactly one; `[]` means none.
 - **Docs.** A page given as `markdown` is a doc: the runner draws it (`runner/src/page-doc.ts`, a small escaped subset: headings, lists, task lists, tables, quotes, code, http(s) and mailto links; no HTML passes through) and keeps the text as `source.md` beside it, so the user can edit it (`pages.saveDoc`) and the next agent starts from their words.
 - **Diagrams.** A Print given as `mermaid` is a diagram. The runner renders static SVG with the app's pinned Pele bundle, keeps `source.mmd`, and returns it from `pages.get` and `read_print`. Edit Text saves through `pages.saveDiagram`. Source and generated HTML are size-limited; rendering has a timeout. Source is never executed as code. Restore and export keep the Mermaid source. Only the resulting static HTML goes to Convex when published.
+- **Todo lists and boards.** `create_print` with `markdown` and `kind: "todo"` or `"board"` (`runner/src/page-list.ts`). A todo list is GitHub task-list markdown (`- [ ] item`, `- [x] done`) under optional headings; a board is one `#`, `##` or `###` heading per column with a list item per card. The runner draws them static, like a doc, with each box and each card's move a link: `threadbear-print:toggle?v=<version>&item=<n>` and `threadbear-print:move?v=<version>&card=<n>&to=<column>`, counted in source order from 0. The Mac app catches those links in a Print's view (nothing else follows them) and calls `pages.toggleItem { pageId, version, item }` or `pages.moveCard { pageId, version, card, to }`, which change that line of the source and save a new version marked edited by the user (so Versions undoes a click). A `version` that isn't the newest is refused (`-32602`, saying it changed). Editing the text keeps the kind, and restoring an old version draws it again so its links name the new version. Published or downloaded, the links go nowhere.
 - **Deleted** pages are kept 7 days (`pages.restore`), then removed with their files when the store next loads.
 - **Agent tools:** `create_print` (`kind`, `markdown`, `mermaid`, `recipe`), `update_print` (`markdown`, `mermaid`, `recipe`, `restoreVersion`), `list_prints` (`deleted`), `read_print` (`version`; shows the recipe, kept versions and Markdown or Mermaid source), `delete_print`, `restore_print`, `export_print`, `publish_print` (always asks the user), `unpublish_print`, `add_print_to_project`, `remove_print_from_project`, only while the experiment is on. `list_prints` and `read_print` never ask. The older arguments still work, and so does each tool's name from before the rename (`create_page` and the rest), for sessions that loaded them.
 - **Only when asked.** With `Settings.printsWhenAsked` on, `create_print`'s description says to make a Print only when the user asks for one, and the runner checks: when the thread's latest `user.message` doesn't name a print, chart, graph, dashboard or diagram (whole words, either number), the call puts an approval card up first ("Make the print "<title>"? You asked to approve Prints you didn't ask for."). Deny makes nothing and tells the agent so. Other Print tools act on one that exists and don't ask.
@@ -7175,6 +7315,9 @@ anyone's); "any runner" is any good key. Anything not sorted is owner only.
 | `issueAgentKey` | owner only | an outside agent's key (convex/mcp.ts) starts threads on the main Mac |
 | `listAgentKeys` | owner only | the keys outside agents hold |
 | `revokeAgentKey` | owner only | ending them is the owner's |
+| `issueWebhook` | owner only | a webhook's URL (convex/webhooks.ts) starts threads on a runner |
+| `listWebhooks` | owner only | the webhooks and their targets |
+| `revokeWebhook` | owner only | ending them is the owner's |
 | `issueToken` | owner only | a phone token reads everything and queues commands for every runner |
 | `listTokens` | owner only | |
 | `revokeToken` | owner only | |

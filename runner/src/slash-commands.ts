@@ -137,11 +137,30 @@ export function planCommand(provider: Provider, cmd: ParsedCommand, skills: Read
   return { kind: 'cli' };
 }
 
+// The Skills store's plugin (skills.ts), whose skills Claude lists as
+// `threadbear:name`. `/name` runs them too (docs/protocol.md, "Skills").
+export const STORE_PLUGIN = 'threadbear';
+
+// A store skill under its own name, as Mike's Skills page and Codex show it,
+// with scope "store"; kept as `threadbear:name` when another command has
+// that name already, so neither hides the other.
+export function storeNames(cli: SlashCommand[]): SlashCommand[] {
+  const prefix = `${STORE_PLUGIN}:`;
+  const plain = new Set(cli.filter((c) => !c.name.startsWith(prefix)).map((c) => c.name));
+  return cli.map((c) => {
+    if (!c.name.startsWith(prefix)) return c;
+    const name = c.name.slice(prefix.length);
+    if (!name || plain.has(name)) return c;
+    const { plugin: _plugin, ...rest } = c;
+    return { ...rest, name, scope: 'store' };
+  });
+}
+
 // The picker's list for a thread: Threadbear's own first, then the CLI's.
 export function commandList(provider: Provider, cli: SlashCommand[]): SlashCommand[] {
   const own = provider === 'codex' ? [...THREADBEAR_COMMANDS, ...CODEX_COMMANDS] : THREADBEAR_COMMANDS;
   const seen = new Set(own.map((c) => c.name));
-  const rest = cli.filter((c) => {
+  const rest = (provider === 'claude' ? storeNames(cli) : cli).filter((c) => {
     if (seen.has(c.name) || (provider === 'claude' && CLAUDE_HIDDEN.has(c.name))) return false;
     seen.add(c.name);
     return true;

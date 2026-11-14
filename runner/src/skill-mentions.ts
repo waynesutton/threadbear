@@ -8,15 +8,26 @@
 // more of a word or path.
 import type { Provider } from './protocol.ts';
 
-const MENTION = /(^|[\s(])\/([a-z0-9][a-z0-9-]*)(?![\w/-])/gi;
+// A plugin's skill is `plugin:name` (Claude's own way of naming them), and
+// `/threadbear:name` is a store skill's other name: it means `name`, never
+// the store skill called "threadbear" (Wayne, 12 Nov).
+const MENTION = /(^|[\s(])\/([a-z0-9][a-z0-9-]*(?::[a-z0-9][a-z0-9-]*)?)(?![\w/:-])/gi;
+
+// The known skill a /word names, or undefined.
+function known(word: string, names: Set<string>): string | undefined {
+  const w = word.toLowerCase();
+  if (names.has(w)) return w;
+  const rest = w.startsWith('threadbear:') ? w.slice('threadbear:'.length) : undefined;
+  return rest && names.has(rest) ? rest : undefined;
+}
 
 /** The installed skills named with /name in the text, in order, once each. */
 export function mentionedSkills(text: string, names: Iterable<string>): string[] {
-  const known = new Set([...names].map((n) => n.toLowerCase()));
+  const set = new Set([...names].map((n) => n.toLowerCase()));
   const out: string[] = [];
   for (const m of text.matchAll(MENTION)) {
-    const name = m[2].toLowerCase();
-    if (known.has(name) && !out.includes(name)) out.push(name);
+    const name = known(m[2], set);
+    if (name && !out.includes(name)) out.push(name);
   }
   return out;
 }
@@ -27,10 +38,14 @@ export function withSkillMentions(text: string, names: Iterable<string>, provide
   if (!skills.length) return text;
   if (provider === 'codex') {
     const set = new Set(skills);
-    return text.replace(MENTION, (whole, before: string, name: string) => (set.has(name.toLowerCase()) ? `${before}$${name.toLowerCase()}` : whole));
+    return text.replace(MENTION, (whole, before: string, word: string) => {
+      const name = known(word, set);
+      return name ? `${before}$${name}` : whole;
+    });
   }
   // Claude: the first word runs as a slash command already; any other needs asking for.
-  const leading = /^\s*\/([a-z0-9][a-z0-9-]*)/i.exec(text)?.[1]?.toLowerCase();
+  const first = /^\s*\/([a-z0-9][a-z0-9-]*(?::[a-z0-9][a-z0-9-]*)?)/i.exec(text)?.[1];
+  const leading = first ? known(first, new Set(skills)) : undefined;
   const asked = skills.filter((s) => s !== leading);
   if (!asked.length) return text;
   const list = asked.map((s) => `"${s}"`).join(', ');

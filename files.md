@@ -1,8 +1,29 @@
 # Files
 
+## Bears, tables and webhooks
+
+- `runner/src/bears.ts` bear folders, the runner's bears.json, faces, quiet hours, Head Bear and the `bears.*` RPCs.
+- `runner/src/mentions.ts` routes `@Name` and `tb bears ask` to a bear and brings its reply back.
+- `runner/src/tables.ts` tables as marked projects, their host folder and the `tables.*` RPCs.
+- `runner/src/webhooks.ts` webhook runs on the runner, its hook registry and the `webhooks.*` RPCs.
+- `runner/src/cli-bears.ts` `tb bears`, `tb tables` and `tb webhooks`, and the note that Auto works like Ask on a Codex bear.
+- `app/Sources/ThreadbearCore/Protocol/Bears.swift` a thread's bear for its sidebar tile, the @ list's bears, and the colour and list calls.
+- `app/Sources/Threadbear/AppModel+Bears.swift` Bear Colour and the @ list's cached bears.
+- `app/Sources/Threadbear/Views/BearPicker.swift` the composer's @ list of bears.
+- `app/Tests/ThreadbearAppTests/BearPickerTests.swift` what the @ list offers and when it stays shut.
+- `features/bears.feature` the bear tile, Bear Colour and @ list, checked by hand.
+- `runner/skills/bears/SKILL.md` how agents make, run and give faces to bears, routines and team templates.
+- `runner/skills/bears/avatars/*.json` six bear-shaped Open Bot Avatar presets.
+- `runner/src/experiments/{bears,webhooks,tables,bearNotes}.md` the four experiments.
+- `convex/webhooks.ts` webhook keys, delivery limits, dedupe, batching and pruning.
+- `convex/hookHttp.ts` the `/hook/<key>` route's status decisions.
+- `runner/test/unit/{bears,mentions,tables,bear-notes,webhooks,webhooks-backend}.test.ts` their tests.
+- `prds/bears-and-webhooks.md` the plan as built.
+
 ## Runner checks
 
 - `runner/test/unit/net-probe.test.ts` checks proxy deadlines and response-size limits with controlled time, plus real TCP and TLS connections.
+- `runner/package.json` caps the updater's npm unit suite at four workers, with failed files still rerun one at a time.
 
 ## Diagram Prints
 
@@ -54,3 +75,9 @@
 
 - `runner/skills/make-print/` builds Prints: charts, dashboards, reports, docs, progress, the Convex insights report (`insights.mjs`) and the Convex API map (`apimap.mjs`).
 - `runner/skills/bundle-report/` builds the Convex bundle size Print.
+
+## Todo lists and boards
+
+- `runner/src/page-list.ts` parses, draws, ticks and moves todo lists and boards from Markdown.
+- `app/Sources/ThreadbearCore/Protocol/Page.swift` has `PrintLink`, the `threadbear-print:` click.
+- `app/Sources/Threadbear/Pages.swift` has `handlePrintLink`; `Views/PanelsView.swift` catches the link in a Print's view.

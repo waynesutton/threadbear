@@ -200,6 +200,7 @@ It comes from reading code, not from running anything, so "(unverified)" means n
 | `prints.whenasked` | Prints only when asked | Settings switch; an unasked `create_print` waits on an approval card | The runner does the asking, so GPUI needs only the switch in its Settings and the existing approval card. | runner | S | `SettingsView`, `RunnerSettings` |
 | `prints.pane` | Prints in the side pane | A reply's Print card opens in the thread's side pane, which follows new versions | Open the Print's newest file in the GPUI side pane and swap it when `pages.updated` brings a newer version of the one shown. | runner | S | `openPageHere`, `followPageVersions`, `PagePath` |
 | `prints.list` | Prints in Highlights and on the rail | Highlights' Prints section and the rail's Prints list, each with its projects | Read `pages.list`; a Highlights section and a built-in rail panel listing rows that open in the side pane. | runner | S | `PrintRows`, `PrintRow`, `PrintsList` |
+| `prints.todo` | Todo lists and boards | Click to tick an item or move a card; each click a new version | Catch `threadbear-print:` links in the Print's web view and call `pages.toggleItem` or `pages.moveCard`; the page itself is static. | runner | S | `PrintLink`, `handlePrintLink`, `WebPanelPool` |
 | `rich.html` | HTML blocks | Static page, no scripts or network | Web runtime page with the same lockdown as `file.htmlpreview`, showing the source when the runtime isn't installed. | web | M | `RichRenderer`, `PreviewSandbox` |
 | `rich.chrome` | Rich box chrome | Language label, Diagram/Source switch, copy, full size | Drawn block header. | build | M | `RichBlocks` (`RichBlockCell`) |
 | `rich.fullsize` | Full-size rich window | Most of the screen | Own GPUI window holding the web runtime's page. | web | S | `RichBlockWindow` |
@@ -489,6 +490,10 @@ Size is `none` throughout: the planning docs don't size these, and work the app 
 | `planned.exp.acpagents` | ACP agents (`acpAgents`) | OpenCode and Cursor threads | Drive every provider choice from `ProviderInfo` rather than hardcoding two, and don't copy the web's `modelLabel`. | build | none | none |
 | `planned.exp.cardreviewer` | Card reviewer (`cardReviewer`) | Opus pre-reviews Auto cards | No new UI: a transcript note says "Allowed by the reviewer". | build | none | none |
 | `planned.exp.fastmode` | Fast mode (`fastMode`) | Standard or Fast per Claude thread, `/fast` | The Speed row in `composer.modelpicker` and a chip suffix. | build | none | none |
+| `bears.tile` | Bear tiles (`bears`) | A bear's threads show its icon on its colour where a folder would be; a crown for the head bear | Draw `ThreadSummary.bear` in the sidebar row's tile (Swift: `BearTile`). | build | none | `BearTile` |
+| `bears.colour` | Bear Colour (`bears`) | Pick a bear's tile colour from its thread's menu | A Bear Colour submenu on a bear thread's row calling `bears.update { color }`, behind a busy key. | build | none | `BearColorMenu` |
+| `bears.mention` | @ bear picker (`bears`) | Typing @ lists bears from `bears.list`; picking one writes `@Name` | A list over the cursor like the / list, only for messages going to this runner, leaving modified keys to the composer. | build | none | `BearPicker` |
+| `bears.tablepage` | A table's bears (`tables`) | The table's project page lists the bears at it | A section on the project page from `Project.table` and `bears.list`. | build | none | `TableBearsSection` |
 
 ## Route counts
 

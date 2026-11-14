@@ -12,7 +12,7 @@
   },
   "scripts": {
     "start": "node src/main.ts",
-    "test": "node --import=./test/helpers/clean-env.ts --test --test-reporter=spec --test-timeout=300000 --test-force-exit \"test/unit/**/*.test.ts\"",
+    "test": "node --import=./test/helpers/clean-env.ts --test --test-concurrency=4 --test-reporter=spec --test-timeout=300000 --test-force-exit \"test/unit/**/*.test.ts\"",
     "test:deploy": "bash test/deploy/run.sh",
     "test:e2e": "node --test --test-reporter=spec --test-concurrency=1 --test-timeout=600000 \"test/e2e/**/*.test.ts\"",
     "typecheck": "tsc --noEmit -p .",
@@ -24,6 +24,7 @@
     "@anthropic-ai/claude-agent-sdk": "0.3.310",
     "@sentry/node": "11.11.0",
     "convex": "1.49.0",
+    "open-bot-avatar": "0.2.1",
     "oxc-parser": "0.152.0",
     "ws": "8.22.0",
     "zod": "4.6.7"

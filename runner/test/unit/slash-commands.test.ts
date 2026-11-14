@@ -392,3 +392,20 @@ test('claudeCommands finds a user skill\'s file and a project command\'s, and ke
   fs.rmSync(home, { recursive: true, force: true });
   fs.rmSync(cwd, { recursive: true, force: true });
 });
+
+// Store skills under their own names in a Claude thread's list (Wayne, 12 Nov).
+test('commandList: threadbear:name store skills become name, unless taken', async () => {
+  const { commandList: list } = await import('../../src/slash-commands.ts');
+  const out = list('claude', [
+    { name: 'threadbear:pele', source: 'skill', scope: 'plugin', plugin: 'threadbear', description: 'Diagrams' },
+    { name: 'threadbear:blog-post', source: 'skill', scope: 'plugin', plugin: 'threadbear' },
+    { name: 'blog-post', source: 'skill', scope: 'user' },
+    { name: 'convex:add', source: 'skill', scope: 'plugin', plugin: 'convex' },
+  ]);
+  const byName = new Map(out.map((c) => [c.name, c]));
+  assert.deepEqual(byName.get('pele'), { name: 'pele', source: 'skill', scope: 'store', description: 'Diagrams' });
+  assert.ok(byName.has('threadbear:blog-post'), 'kept prefixed: a user skill has the plain name');
+  assert.equal(byName.get('blog-post')?.scope, 'user');
+  assert.ok(byName.has('convex:add'));
+  assert.equal(list('codex', [{ name: 'threadbear:pele', source: 'skill' }]).some((c) => c.name === 'threadbear:pele'), true);
+});

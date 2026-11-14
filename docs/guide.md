@@ -1101,6 +1101,8 @@ Ask in plain words, in any thread:
 | "Give me a report on where this project stands" | A **report**: sections of text with charts |
 | "Write up the launch plan as a print" | A **doc**. You can edit it yourself too |
 | "Draw this flow as a diagram print" | A **diagram** from Mermaid source, with text you can edit and an SVG you can download |
+| "Make a todo list for the launch" | A **todo list** you tick by clicking, with how many are done |
+| "Put these tasks on a kanban board" | A **board**: columns of cards you move with each card's arrows |
 | "Run bundle-analyzer summary" | A **bundle size** report for a Convex app |
 | "Make a Convex insights report" | A **dashboard** of the app's insights from the last 72 hours: write conflicts and functions near their read limits, by function, with each one's table and when it was last seen. Add "for prod" for production |
 | "Map my Convex API" | A **dashboard** of every function and HTTP route the app's deployment runs: public or internal, the arguments each takes, and any missing validators, listed first |
@@ -1112,10 +1114,11 @@ Ask in plain words, in any thread:
 
 **In a reply**, a thread shows a print as a card: a picture of the top of it, then its title, kind, version and age, with Open, Refresh and a ⋯ menu. Click the picture or Open to open it in the side pane beside the thread. While it's open there, a new version replaces it in the pane as soon as it's saved. If you opened an older version on purpose, it stays put. A thread on another Mac opens it in a window of its own instead. On the website, the same reply shows a card too. A published print's card has its title and an Open button that goes to its page. One that isn't published says it's kept on your Mac, since its files never leave it. The iPhone app shows the block as text for now. The card always shows the print as it is now, so when a print gets a new version, the card in an earlier reply moves to it too, marked "New version", rather than a second card appearing. While a refresh is under way, the card says so.
 
-**In Highlights and on the rail.** A thread's Highlights list the Prints it made, under Prints, each with its kind, version and the projects it's in, or "No project". The Prints button on the right-hand rail, under Files, lists every Print you have, newest first, with the same details. It shows once there's at least one. Click a Print in either to open it beside the thread; right-click for Open in a Window and Refresh.
+**In Highlights and on the rail.** A thread's Highlights list the Prints it made, under Prints, each with its kind, version and the projects it's in, or "No project". The Prints button on the right-hand rail, under Files, lists every Print you have, newest first, with the same details. It shows once there's at least one. Click a Print in either to open it beside the thread. Right-click one for everything a project's Print menu has: Show in Finder, Edit Text, Download, Versions, Publish, Delete and the rest. A deleted Print waits 7 days under **Recently deleted** on its project's page, where **Restore** brings it back.
 
 **Every row under Prints on the project's page** opens its print in a window of its own when you click it. Its ⋯ menu, or a right-click, has:
 
+- **Show in Finder** shows the print's newest `index.html` in its folder, to copy, attach or look through its files.
 - **Refresh** sends the print to the thread that made it, to be made again the same way, and opens that thread so you can watch.
 - **Edit with Agent…** asks for what should change, for example "make the region chart a pie". The thread does it and saves a new version.
 - **Edit Text…** opens a doc's Markdown or a diagram's Mermaid source to edit yourself. Save redraws it as a new version marked "edited by you". Invalid diagram source shows an error and keeps the previous version.
@@ -1132,11 +1135,33 @@ You can also ask a thread for any of these: "refresh the sales dashboard", "go b
 
 **Asking once.** In Ask before edits, the first change to a print asks you. Once you allow it, later versions of that same print from that thread go ahead without asking again, until the thread is next restarted. A different print, or deleting one, still asks.
 
+**Todo lists and boards** are Prints you change with a click. In a todo list, click an item to tick it or untick it. On a board, each card has arrows to move it to the column before or after. Each click saves a new version, so Versions takes back one you didn't mean. Edit Text opens the list as Markdown (`- [ ] item` for a todo, a `##` heading per column for a board) to add, rename or reorder things. Clicks work in the side pane and a Print's window on your Mac; published or downloaded, it's a plain list.
+
 **Diagrams** are drawn on your Mac with Pele, the same library used for diagrams in replies, and kept as static SVG with their Mermaid source. No package download or network access is needed to render one. A wide diagram uses the whole window and scrolls sideways rather than shrinking its labels too small to read; printed or saved as a PDF, it fits the page. Download includes `source.mmd` and `diagram.svg`. Published diagram HTML includes the diagram and its folded source, so both become public when you publish. Editable CSV sheets are deferred.
 
 **Outside agents** can list and read published Prints through the existing Threadbear MCP connector when their key allows **Can read all my threads and published Prints**. A key limited to its own threads sees no Prints. Only published copies are shared; nothing is read from your Mac's local Prints store. `list_prints` returns a page of metadata; `read_print` takes its slug and reads the HTML in bounded pieces. They cannot create, edit, publish or delete Prints. Unpublish removes access on the next read. Reconnect the outside app if it caches the old tool list.
 
 Prints are static: pictures, charts and text, with no scripts, so they open straight away and can't reach the internet. A thread can make a "live" print with scripts when you ask for one. Its scripts run only after you choose Run them, and again for each new version.
+
+### Tables
+
+An experiment (Tables, which needs Bears). A table is a group of bears
+around one goal, with you at the head. It's a project marked as a table:
+its goals are the table's goal and its notes are its decisions.
+`tb tables new "Launch crew" --bears "Researcher,Writer" --parent Launch`
+makes one inside the Launch project, with a folder of its own in
+`~/ThreadbearThreads/Tables`. A thread there is the table chat: its host
+passes work to the bears, and their replies come back into it, so you
+read every exchange. Each message you send allows at most 6 bear replies
+(`tb tables seat <table> --max 4` changes it). The librarian keeps a
+table's state but never files a thread into one.
+
+To seat another bear, put one of its threads in the table's project (the
+thread's Projects menu) or run `tb tables seat <table> --add Designer`.
+The table's project page lists the bears at it, with their icons, under
+Bears at this table, and new tables get a three-people icon. A project
+with tables among its Parts lists each table's bears on its own Project
+tab too, under Bears at and the table's name.
 
 ## The librarian
 <!-- slug: librarian -->
@@ -1411,6 +1436,20 @@ Mac arrives asking before tools run, even if it had Full access or Auto
 there. Agents can do the same with `move_thread` and a `runner`, and
 `tb move <thread> --to <machine>` (`--preview` to see where it would go).
 Moves are started from your first Mac and need Threadbear's backend.
+
+### Webhooks
+
+An experiment (Webhooks). `tb webhooks new "GitHub" --bear Researcher`
+makes a secret URL on your backend, shown once. A POST to it starts a
+thread in that bear's folder (or `--cwd` a folder, or `--thread` messages
+one thread on Ask or Auto), marked with a bolt and the webhook's name.
+Its threads run in Ask, or Auto with `--auto`, never Full access, and the
+payload arrives quoted as data, not your words. Deliveries 10 seconds
+apart become one run, a repeat `Idempotency-Key` or `X-GitHub-Delivery`
+is dropped, and each hook takes 30 calls a minute and 50 a day. Keep the
+URL like a password: `tb webhooks revoke <id>` ends it, and turning the
+experiment off ends them all. It needs your backend's public
+`.convex.site` address, so a local backend can't take webhooks.
 
 ## Accounts, pools and Usage
 <!-- slug: accounts -->
@@ -2105,7 +2144,8 @@ palette (see Slash commands), or, with Settings > General > Slash
 commands set to the small list, lists your skills over the cursor, narrowing as you type: ↑ and ↓ to choose, Return or Tab
 to put it in, Esc to close. A skill's command turns blue as you type it,
 and shows as a link in your message once sent, so you can see a skill
-will run. That's any skill the thread can use: the Skills page's, and
+will run. Skills page skills show under their own names, as `/pele`
+(`/threadbear:pele` works too). That's any skill the thread can use: the Skills page's, and
 the ones Claude or Codex find themselves, such as those in
 `~/.claude/skills` or the folder's own. Click one for the Skills page,
 or for one that isn't there, its SKILL.md. It works anywhere in
@@ -2613,7 +2653,10 @@ it back. Fade lays the window's own colour over it so text stays
 readable in light and dark, and Show behind open threads too puts it behind
 every thread's transcript as well, a little more faded. The picture is
 copied, scaled down, into Threadbear's data folder (`looks/`), so the
-original can move; Remove deletes the copy. The Librarian, Scheduled and
+original can move; Remove deletes the copy. An animated GIF works too, here
+and as a page's background: it plays behind the window, is copied as it is
+rather than scaled down, and holds still when Reduce Motion is on in System
+Settings > Accessibility. The Librarian, Scheduled and
 Projects pages have their own backgrounds and layouts (The librarian,
 Schedules and Projects).
 
@@ -2689,6 +2732,69 @@ the bear, Show the Bear's Folder): change them and it changes. It thinks
 while its chat is working. To hide it, turn off Show the bear in the
 sidebar in Settings (⌘,) > General; its chats, memory and Voice keep
 working.
+
+### Bears
+
+An experiment (Settings > General > Experiments, Bears). Bears are named
+teammates, like Researcher or Writer, each with a persona, a memory, a
+face and its own routines. A bear is a folder in
+`~/ThreadbearThreads/Bears`: a thread there is that bear. Its `CLAUDE.md`
+is its persona and house rules (short replies, drafts before anything is
+sent, say what it couldn't check), `memory/` is what it remembers, and
+`Bears/memory/` holds facts about you that every bear shares.
+
+The first time bears are listed, Head Bear is made as your chief of
+staff: it can hand work to the others. `tb bears head <bear>` gives the
+job to another one.
+
+Add the bears skill once (Settings > Skills, where it waits under
+Suggested): it teaches every thread, bears included, the `tb bears`
+commands, faces and routines. Store skills you've added reach bear threads
+like any other thread.
+
+Until the new desktop app draws them, bears live in `tb bears` (and the
+Bears & Tables panel, if you have the home patch):
+
+- `tb bears new "Researcher" --does "Finds sources" --personality "dry and calm" --face round`
+  makes one, with a daily "tidy memory" routine at 4:30. The routine runs
+  in Ask like every unattended run, so a tidy that changes a file waits
+  for your yes each morning until you raise the bear with `tb bears access`.
+- `tb bears rename`, `set`, `pin`, `move`, `archive`, `delete`. Renaming
+  keeps its memory, routines and old threads. Deleting moves its folder
+  to the runner's trash.
+- `tb bears away <bear> 3d` hibernates it: its routines skip, webhooks
+  hold their deliveries, and a mention gets "away until".
+- `tb bears access <bear> --auto` lets its unattended runs (routines,
+  webhooks, mentions) go past Ask. Only you can do that: a bear's own
+  thread can't. Auto is Claude only: a bear on Codex (`--model gpt-...`)
+  set to Auto still asks, and `tb bears access` says so.
+
+A bear on Codex can make pictures: Codex's own `image_gen` tool makes real
+PNGs (a Designer bear on `gpt-6-astra` made 1024 by 1024 ones on 13 Nov).
+That tool writes its picture into `~/.codex/generated_images` without
+asking, even in Ask; copying it into the bear's folder asks as usual.
+
+A bear's threads show its icon on its colour in the sidebar, where other
+threads show a folder or their project. Right-click one of its threads and
+pick Bear Colour to change the colour, or ask any thread to give a bear an
+icon (`tb bears set Writer --icon pencil --color "#3E8ED0"`, an SF Symbol
+name). The head bear shows a crown until you give it an icon of its own.
+
+Type `@` in the message box and a list of your bears comes up over the
+cursor, narrowing as you type: ↑↓ to move, Return or Tab to pick, Esc to
+close. Picking one writes its name for you. It only lists your bears for
+a thread on this Mac: a thread on another machine hands a mention to that
+machine's own bears.
+
+Write `@Researcher` in a message (or `@bear:<id>`), or run
+`tb bears ask Researcher "..."` from a thread, and the bear gets the
+message in a fresh thread in its folder, in the lower of its mode and
+that thread's. Its reply comes back to the thread that asked, as a new
+message there, while you watch. At most three bears a message.
+
+With Bear notes on too, a bear you opt in (`tb bears set <bear> --notes both`)
+can leave one short cheer or idea under the librarian's line in
+Highlights, only when it's earned.
 
 ### Where Settings opens
 

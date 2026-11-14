@@ -56,3 +56,12 @@ Feature: Diagram Prints
     Then it lists every Print with its projects
     When I click "Launch notes"
     Then it opens beside the thread
+
+  @prints.todo @manual @gpui-pending
+  Scenario: Tick a todo list and move a card on a board
+    Given a thread made a todo list Print "Launch checklist" and a board Print "PR board"
+    When I open "Launch checklist" beside the thread and click "Write the tests"
+    Then it is ticked in a new version and the count of done items goes up
+    When I open "PR board" and click a card's arrow to the next column
+    Then the card is in that column in a new version
+    And clicking in an older version says it changed and changes nothing

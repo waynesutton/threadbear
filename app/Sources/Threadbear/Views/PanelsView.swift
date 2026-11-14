@@ -879,6 +879,16 @@ final class WebPanelContainer: NSView {
 final class WebPanelPool: NSObject, ObservableObject, WKNavigationDelegate, WKUIDelegate {
     static let shared = WebPanelPool()
     private var views: [URL: WKWebView] = [:]
+
+    #if DEBUG
+    /// The scripted app's stand-in for a click on a link in a page it shows:
+    /// the same navigation check a real click goes through.
+    func debugNavigate(file: URL, to url: URL) -> Bool {
+        guard let view = views[file] else { return false }
+        view.load(URLRequest(url: url))
+        return true
+    }
+    #endif
     private var order: [URL] = []
     /// A patch panel's view: its own page, and where links off its site go.
     private var leavers: [ObjectIdentifier: (home: URL, open: (URL) -> Void)] = [:]
@@ -1212,6 +1222,14 @@ final class WebPanelPool: NSObject, ObservableObject, WKNavigationDelegate, WKUI
         // a script, in any frame, and nothing opens outside either: it may
         // have read a file beside it (LocalPreviewSchemeHandler).
         if isPreviewView(webView) {
+            // A todo list's box or a board card's arrow (PrintLink): never
+            // followed, but handed to the app with the page it came from.
+            if let url = navigationAction.request.url, let link = PrintLink.parse(url),
+               let file = views.first(where: { $0.value === webView })?.key, file.isFileURL {
+                decisionHandler(.cancel)
+                AppModel.shared.handlePrintLink(link, from: file)
+                return
+            }
             let allowed = LocalPreviewSchemeHandler.isPreview(navigationAction.request.url) && !navigationAction.shouldPerformDownload
             decisionHandler(allowed ? .allow : .cancel)
             return

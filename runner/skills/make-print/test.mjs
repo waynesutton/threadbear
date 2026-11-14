@@ -123,7 +123,7 @@ test("a saved style changes the theme, density and accent; a bad accent is ignor
   const { themeCss } = await import("./theme.mjs");
   const dark = themeCss({ theme: "dark", density: "airy", accent: "#ff8800" });
   assert.doesNotMatch(dark, /prefers-color-scheme/);
-  assert.match(dark, /--pad:20px/);
+  assert.match(dark, /--pad:22px/);
   assert.match(dark, /--accent:#ff8800/);
   assert.match(themeCss({}), /prefers-color-scheme: light/);
   assert.match(themeCss({ accent: "red;}body{x" }), /--accent:var\(--teal\)/);

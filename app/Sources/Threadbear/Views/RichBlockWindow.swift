@@ -29,9 +29,11 @@ final class RichBlockWindowController: NSWindowController, NSWindowDelegate {
     /// it blank.
     final class Refresh: ObservableObject { @Published var count = 0 }
     private let refresh = Refresh()
+    private let shown: Shown
     private var onClose: (() -> Void)?
 
     private init(page: URL, title: String, subtitle: String?) {
+        shown = Shown(page)
         let screen = NSApp.keyWindow?.screen ?? NSApp.mainWindow?.screen ?? NSScreen.main
         let frame = ReviewWindowController.frame(on: screen?.visibleFrame ?? NSRect(x: 0, y: 0, width: 1240 / 0.9, height: 860 / 0.9))
         let window = NSWindow(contentRect: frame, styleMask: [.titled, .closable, .miniaturizable, .resizable], backing: .buffered, defer: false)
@@ -42,7 +44,7 @@ final class RichBlockWindowController: NSWindowController, NSWindowDelegate {
         window.collectionBehavior = [.fullScreenPrimary]
         super.init(window: window)
         window.delegate = self
-        window.contentView = NSHostingView(rootView: Body(page: page, refresh: refresh))
+        window.contentView = NSHostingView(rootView: Body(shown: shown, refresh: refresh))
         window.setFrame(frame, display: false)
     }
 
@@ -64,9 +66,28 @@ final class RichBlockWindowController: NSWindowController, NSWindowDelegate {
     func windowWillClose(_ notification: Notification) { onClose?() }
 
     private struct Body: View {
-        let page: URL
+        @ObservedObject var shown: Shown
         @ObservedObject var refresh: Refresh
 
-        var body: some View { LocalPagePreview(url: page, opened: refresh.count) }
+        var body: some View { LocalPagePreview(url: shown.page, opened: refresh.count) }
+    }
+
+    /// The page on show, which a todo list or board moves to its new version
+    /// after a click (follow).
+    final class Shown: ObservableObject {
+        @Published var page: URL
+        init(_ page: URL) { self.page = page }
+    }
+
+    /// A Print's window showing version `from` moves to `to`, the version a
+    /// click in it just saved, so the next click isn't from an old one.
+    static func follow(pageId: String, from: Int, to page: URL, version: Int) {
+        let old = "page:\(pageId):\(from)"
+        guard let controller = open.removeValue(forKey: old) else { return }
+        let new = "page:\(pageId):\(version)"
+        open[new] = controller
+        controller.onClose = { open.removeValue(forKey: new) }
+        controller.shown.page = page
+        controller.window?.subtitle = "Version \(version)"
     }
 }

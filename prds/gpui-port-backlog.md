@@ -1,5 +1,11 @@
 # GPUI port backlog for Wayne's copy
 
+
+This replaces the list of 12 Nov 2026 (its last version is in git, `git show 3ab72108:prds/gpui-port-backlog.md`), refreshed after Mike's 14 Nov release and with Ask mode and Profiles gone from this copy. Two things from that list still hold:
+
+- Mike asked forks to wait before porting big things to the GPUI app, as big GPUI changes are still coming. Check after each bring-in what he's landed before starting a slice.
+- Most of Wayne's runner side is fork-only (`skills.ts`, `pages.ts`, `public-profile.ts`, `x-search.ts`, `outside-agents.ts`, `connectors-catalog.ts`, `page-diagram.ts`, bears, tables and webhooks). A GPUI view over one of those works only in this fork until that runner code goes to Mike (Prints is draft PR mikecann/threadbear#61; `prds/bears-for-mike.md` is the draft for Bears).
+
 ## Summary
 
 The GPUI app in `desktop/` is what Mike uses every day since 12 Nov, and the Swift app in `app/` is frozen. This copy just brought in Mike's release of 14 Nov (merge 9254b47c over 35906e10). Mike's side of the port is nearly done: the parity table has a handful of pending or partly rows, and `docs/gpui-port/whats-left.md` has a short list of open lines, a few of them already done in the log but not ticked yet. The bigger gap is Wayne's own work. About 165 of his commits since Mike's release live only in the Swift app and the runner, and the GPUI app has none of them: Prints, Skills, Notes, Voice, the bear, Customize and the public profile page, the Connectors additions, and a set of smaller changes to Files, the Terminal, the slash palette and Settings.
@@ -279,6 +285,12 @@ These come with the features above rather than as slices of their own. List them
 - Settings over the main panel, with an X, Esc, and Open Settings in (over the main panel or its own window). Swift: `Views/SettingsPage.swift`. GPUI's Settings is a window today (`settings_window.rs`). Size M. Not needed for any feature, so it can come last.
 - Settings > General sections GPUI lacks: Look, The bear, Skills, Notes, Slash commands, Terminal, Files, Prints. Settings > Voice as its own tab.
 - Activity bar buttons for Skills and Notes under the Librarian, with ⌘5 and ⌘6, and Back putting Settings, Skills or Notes away first (`rails.rs`, `navigation.rs`, `desktop/core/src/shortcuts.rs`, `features/settings-keyboard.feature`).
+
+### 2.10 Bears, tables and webhooks
+
+- Named teammate threads (bears), group chats (tables) and `/hook/` webhooks, behind the `bears`, `tables`, `webhooks` and `bearNotes` experiments. The runner side shipped on 13 Nov; `prds/bears-gpui.md` has the full GPUI list.
+- Port the three pieces that exist in the Swift app from its code and `features/bears.feature` (bear tiles and Bear Colour in the sidebar, the @ picker in the composer, a table's bears on its project page). Design the rest (menus, New bear and New table sheets, the table chat, webhooks on the Scheduled page, bear notes) from `prds/bears-gpui.md`.
+- Size L. Every runner call it needs exists. Order: after Prints, as it builds on the sidebar and composer pieces those slices touch.
 
 ## Order of the whole backlog
 

@@ -172,6 +172,10 @@ export const ACCESS: Record<string, Access> = {
   issueAgentKey: 'owner',
   listAgentKeys: 'owner',
   revokeAgentKey: 'owner',
+  // Webhooks (webhooks.ts): only the main Mac makes or ends them.
+  issueWebhook: 'owner',
+  listWebhooks: 'owner',
+  revokeWebhook: 'owner',
   appendMessages: 'own',
   messageHeads: 'own',
   setProjects: 'own',

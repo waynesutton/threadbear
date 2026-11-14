@@ -121,34 +121,43 @@ export function markdownToHtml(md: string): string {
   return out.join('\n');
 }
 
-// The page palette (the Split hero look, Wayne, 10 Nov 2026), shared with
-// the page-making skill's theme.css so a doc sits beside a dashboard as
-// one set. Follows the viewer's light or dark appearance with no script.
-export const PAGE_THEME_CSS = `:root{color-scheme:dark light;--bg:#0b0d10;--card:#12161b;--line:#20262e;--text:#e6e8eb;--dim:#7d8590;--teal:#4fb3d9;--slate:#5f7a94;--amber:#e8a33d;--amberline:#3a2e1a}
-@media (prefers-color-scheme: light){:root{--bg:#f5f3ee;--card:#fbfaf7;--line:#e2ded5;--text:#1d1f22;--dim:#7a766e;--teal:#3d86a3;--slate:#97a8b8;--amber:#d39634;--amberline:#ecd6ad}}
+// The page palette: neutral near-black and near-white, quiet grey lines and
+// the system's own type, no font to load (Wayne, 12 Nov 2026). Shared with
+// make-print's theme.mjs so a doc sits beside a dashboard as one set.
+// Follows the viewer's light or dark appearance with no script. The names
+// stay (--teal is the accent) so every kind keeps working.
+export const PAGE_THEME_CSS = `:root{color-scheme:dark light;--bg:#0a0a0a;--card:#141414;--line:#262626;--text:#fafafa;--dim:#a1a1a1;--faint:#737373;--teal:#4fb3d9;--slate:#6b7785;--amber:#e8a33d;--amberline:#3a2e1a;--radius:10px;--sans:-apple-system,BlinkMacSystemFont,"SF Pro Text","Segoe UI",system-ui,sans-serif;--display:-apple-system,BlinkMacSystemFont,"SF Pro Display","Segoe UI",system-ui,sans-serif;--mono:ui-monospace,"SF Mono",Menlo,Consolas,monospace}
+@media (prefers-color-scheme: light){:root{--bg:#ffffff;--card:#f7f7f7;--line:#e7e7e7;--text:#0a0a0a;--dim:#5c5c5c;--faint:#8a8a8a;--teal:#2f7fa0;--slate:#8fa0b2;--amber:#c7861d;--amberline:#ecd6ad}}
 *{box-sizing:border-box}
-body{margin:0;background:var(--bg);color:var(--text);font:14px/1.6 -apple-system,BlinkMacSystemFont,"SF Pro Text",system-ui,sans-serif;-webkit-font-smoothing:antialiased}`;
+body{margin:0;background:var(--bg);color:var(--text);font:15px/1.7 var(--sans);-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility}
+h1,h2,h3{font-family:var(--display);font-weight:600;color:var(--text)}
+h1{font-size:40px;line-height:1.1;letter-spacing:-.03em;margin:0 0 10px}
+h2{letter-spacing:-.015em}
+.meta{color:var(--faint);font-size:13px}
+a{color:var(--text);text-decoration:underline dotted;text-decoration-thickness:1.5px;text-underline-offset:4px}
+a:hover{text-decoration-style:solid}
+code{font:13px/1.5 var(--mono)}
+::selection{background:color-mix(in srgb,var(--text) 18%,transparent)}`;
 
-const DOC_CSS = `main{max-width:760px;margin:0 auto;padding:28px 22px 40px}
-header{border-bottom:1px solid var(--line);padding-bottom:14px;margin-bottom:18px}
-h1{font-size:24px;line-height:1.25;margin:0 0 4px;letter-spacing:-.01em}
-.meta{color:var(--dim);font-size:12px}
-h2{font-size:18px;margin:26px 0 8px}h3{font-size:15px;margin:20px 0 6px}h4{font-size:14px;margin:16px 0 4px;color:var(--dim)}
-p{margin:0 0 12px}
-a{color:var(--teal);text-decoration:none;border-bottom:1px solid color-mix(in srgb,var(--teal) 40%,transparent)}
-code{font:12.5px ui-monospace,"SF Mono",Menlo,monospace;background:var(--card);border:1px solid var(--line);border-radius:4px;padding:1px 4px}
-pre{background:var(--card);border:1px solid var(--line);border-radius:8px;padding:12px;overflow-x:auto}
-pre code{border:0;padding:0;background:none}
-ul,ol{margin:0 0 12px;padding-left:22px}li{margin:3px 0}
-li.task{list-style:none;margin-left:-20px}
-.box{display:inline-block;width:12px;height:12px;border:1.5px solid var(--dim);border-radius:3px;margin-right:8px;vertical-align:-1px}
-li.task.done .box{background:var(--teal);border-color:var(--teal)}
+const DOC_CSS = `main{max-width:760px;margin:0 auto;padding:48px 24px 64px}
+header{border-bottom:1px solid var(--line);padding-bottom:22px;margin-bottom:28px}
+h2{font-size:24px;line-height:1.25;margin:40px 0 12px}h3{font-size:18px;line-height:1.3;margin:28px 0 8px}h4{font-size:15px;margin:22px 0 6px;color:var(--dim)}
+p{margin:0 0 16px}
+strong{font-weight:600}
+code{background:var(--card);border:1px solid var(--line);border-radius:6px;padding:1px 6px}
+pre{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:16px 18px;overflow-x:auto;margin:0 0 18px}
+pre code{border:0;padding:0;background:none;font-size:13px;line-height:1.65}
+ul,ol{margin:0 0 16px;padding-left:22px}li{margin:6px 0}li::marker{color:var(--faint)}
+li.task{list-style:none;margin-left:-22px}
+.box{display:inline-block;width:14px;height:14px;border:1.5px solid var(--faint);border-radius:4px;margin-right:10px;vertical-align:-2px}
+li.task.done .box{background:var(--text);border-color:var(--text)}
 li.task.done{color:var(--dim)}
-blockquote{margin:0 0 12px;padding:2px 14px;border-left:3px solid var(--amber);color:var(--dim)}
-hr{border:0;border-top:1px solid var(--line);margin:22px 0}
-table{width:100%;border-collapse:collapse;margin:0 0 14px;font-size:13px}
-th,td{text-align:left;padding:6px 8px;border-bottom:1px solid var(--line)}
-th{color:var(--dim);font-weight:500}`;
+blockquote{margin:0 0 16px;padding:2px 0 2px 16px;border-left:2px solid var(--line);color:var(--dim)}
+hr{border:0;border-top:1px solid var(--line);margin:36px 0}
+table{width:100%;border-collapse:collapse;margin:0 0 18px;font-size:14px}
+th,td{text-align:left;padding:10px 12px;border-bottom:1px solid var(--line)}
+th{color:var(--dim);font-weight:500;font-size:13px}
+@media (max-width:600px){main{padding:28px 18px 48px}h1{font-size:30px}}`;
 
 export function renderDoc(title: string, md: string, meta: string): string {
   return `<!doctype html>

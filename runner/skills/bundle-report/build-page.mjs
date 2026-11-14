@@ -132,28 +132,28 @@ const chainBlocks = chains
 const fig = scaleSvg(summary);
 
 const css = `
-:root{color-scheme:dark light;--bg:#0b0d10;--card:#12161b;--line:#20262e;--text:#e6e8eb;--dim:#7d8590;--teal:#4fb3d9;--slate:#5f7a94;--amber:#e8a33d;--amberline:#3a2e1a;--own:#e6e8eb;
---pele-bg:transparent;--pele-fg:#e6e8eb;--pele-muted:#7d8590;--pele-line:#5f7a94;--pele-surface:#161b22;--pele-surface-alt:#1c222a;--pele-border:#2c343e;--pele-accent:#4fb3d9;--pele-font:-apple-system,BlinkMacSystemFont,"SF Pro Text",sans-serif;--pele-radius:6px}
-@media (prefers-color-scheme: light){:root{--bg:#f5f3ee;--card:#fbfaf7;--line:#e2ded5;--text:#1d1f22;--dim:#7a766e;--teal:#3d86a3;--slate:#97a8b8;--amber:#d39634;--amberline:#ecd6ad;--own:#1d1f22;
---pele-fg:#1d1f22;--pele-muted:#7a766e;--pele-line:#97a8b8;--pele-surface:#ffffff;--pele-surface-alt:#f5f3ee;--pele-border:#e2ded5;--pele-accent:#3d86a3}}
+:root{color-scheme:dark light;--bg:#0a0a0a;--card:#141414;--line:#262626;--text:#fafafa;--dim:#a1a1a1;--teal:#4fb3d9;--slate:#6b7785;--amber:#e8a33d;--amberline:#3a2e1a;--own:#fafafa;
+--pele-bg:transparent;--pele-fg:#fafafa;--pele-muted:#a1a1a1;--pele-line:#6b7785;--pele-surface:#1a1a1a;--pele-surface-alt:#202020;--pele-border:#2e2e2e;--pele-accent:#4fb3d9;--pele-font:-apple-system,BlinkMacSystemFont,"SF Pro Text",sans-serif;--pele-radius:6px}
+@media (prefers-color-scheme: light){:root{--bg:#ffffff;--card:#f7f7f7;--line:#e7e7e7;--text:#0a0a0a;--dim:#5c5c5c;--teal:#2f7fa0;--slate:#8fa0b2;--amber:#c7861d;--amberline:#ecd6ad;--own:#0a0a0a;
+--pele-fg:#0a0a0a;--pele-muted:#5c5c5c;--pele-line:#8fa0b2;--pele-surface:#ffffff;--pele-surface-alt:#f7f7f7;--pele-border:#e7e7e7;--pele-accent:#2f7fa0}}
 *{box-sizing:border-box}
-body{margin:0;background:var(--bg);color:var(--text);font:13px/1.45 -apple-system,BlinkMacSystemFont,"SF Pro Text",system-ui,sans-serif;-webkit-font-smoothing:antialiased}
-main{max-width:1080px;margin:0 auto;padding:22px}
-header{display:flex;justify-content:space-between;align-items:baseline;gap:12px;flex-wrap:wrap;margin-bottom:14px}
-h1{font-size:19px;margin:0;letter-spacing:-.01em}
+body{margin:0;background:var(--bg);color:var(--text);font:14px/1.55 -apple-system,BlinkMacSystemFont,"SF Pro Text","Segoe UI",system-ui,sans-serif;-webkit-font-smoothing:antialiased}
+main{max-width:1080px;margin:0 auto;padding:40px 24px 56px}
+header{display:flex;justify-content:space-between;align-items:baseline;gap:12px;flex-wrap:wrap;margin-bottom:24px}
+h1{font:600 32px/1.15 -apple-system,BlinkMacSystemFont,"SF Pro Display","Segoe UI",system-ui,sans-serif;margin:0;letter-spacing:-.025em}
 h2{font-size:13px;margin:0 0 10px}
 .dim{color:var(--dim)}
 code{font:12px ui-monospace,"SF Mono",Menlo,monospace}
-.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:16px}
 .hero{display:grid;grid-template-columns:1.55fr 1fr;gap:12px}
-.figure{padding:10px 12px 12px;background:radial-gradient(120% 90% at 45% 35%,color-mix(in srgb,var(--card) 70%,var(--text) 4%) 0%,var(--card) 72%)}
+.figure{padding:10px 12px 12px}
 .figure .iso{background:transparent}
 .fighead,.figfoot{display:flex;justify-content:space-between;color:var(--dim);font-size:11px}
 .figfoot{border-top:1px solid var(--line);padding-top:8px;margin-top:4px}
 .figfoot b{color:var(--text);font-weight:600}
 .tiles{display:grid;gap:10px;align-content:start}
 .tile .k{color:var(--dim);font-size:11px}
-.tile .v{font-size:22px;font-weight:600;letter-spacing:-.01em;font-variant-numeric:tabular-nums}
+.tile .v{font-size:26px;font-weight:600;letter-spacing:-.02em;font-variant-numeric:tabular-nums}
 .tile.big .v{font-size:32px}
 .tile.warn{border-color:var(--amberline)}
 .tile.warn .v{color:var(--amber)}

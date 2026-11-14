@@ -68,13 +68,27 @@ public enum SkillMentions {
         guard !known.isEmpty, text.contains("/") else { return [] }
         let ns = text as NSString
         var out: [NSRange] = []
-        // A slash at the start or after a space or bracket, then the name.
-        let regex = try! NSRegularExpression(pattern: #"(?<![\w/.~:-])/([a-z0-9][a-z0-9-]*)(?![\w/-])"#, options: [.caseInsensitive])
+        // A slash at the start or after a space or bracket, then the name:
+        // a plugin's is `plugin:name`, and `/threadbear:name` is a Skills
+        // store skill's other name, never the store skill called
+        // "threadbear" (as runner/src/skill-mentions.ts reads them).
+        let regex = try! NSRegularExpression(pattern: #"(?<![\w/.~:-])/([a-z0-9][a-z0-9-]*(?::[a-z0-9][a-z0-9-]*)?)(?![\w/:-])"#, options: [.caseInsensitive])
         for match in regex.matches(in: text, range: NSRange(location: 0, length: ns.length)) {
-            let name = ns.substring(with: match.range(at: 1)).lowercased()
-            if known.contains(name) { out.append(match.range) }
+            if skill(named: ns.substring(with: match.range(at: 1)), in: known) != nil { out.append(match.range) }
         }
         return out
+    }
+
+    /// The known skill a mention's word names: itself, or for
+    /// `threadbear:name` the store's `name`.
+    public static func skill(named word: String, in known: Set<String>? = nil) -> String? {
+        let names = known ?? self.names
+        let w = word.lowercased()
+        if names.contains(w) { return w }
+        let prefix = "threadbear:"
+        guard w.hasPrefix(prefix) else { return nil }
+        let rest = String(w.dropFirst(prefix.count))
+        return names.contains(rest) ? rest : nil
     }
 
     /// The link a mention carries; a click on it opens the Skills page.

@@ -1305,6 +1305,9 @@ public struct ThreadSummary: Sendable, Hashable, Codable, Identifiable {
     /// runner"). On another runner's thread, from what the main Mac's runner
     /// knows of it. Nil otherwise, and from a runner older than moves.
     public var moving: ThreadMoving?
+    /// The bear whose folder it's in, for the sidebar's icon (protocol
+    /// "Bears"). Nil for any other thread, and from a runner without bears.
+    public var bear: ThreadBear?
     /// Set by the app for another runner's thread (docs/protocol.md,
     /// "Other runners' threads"): which runner it lives on, so its rows can
     /// say so and its requests go there. Nil for this Mac's own. Never on
@@ -1453,6 +1456,7 @@ public struct ThreadSummary: Sendable, Hashable, Codable, Identifiable {
         share = (try? c.decodeIfPresent(ThreadShare.self, forKey: .share)) ?? nil
         looseEnds = (try? c.decodeIfPresent(LooseEnds.self, forKey: .looseEnds)) ?? nil
         moving = (try? c.decodeIfPresent(ThreadMoving.self, forKey: .moving)) ?? nil
+        bear = (try? c.decodeIfPresent(ThreadBear.self, forKey: .bear)) ?? nil
     }
 
     public func encode(to encoder: Encoder) throws {
@@ -1518,13 +1522,14 @@ public struct ThreadSummary: Sendable, Hashable, Codable, Identifiable {
         try c.encodeIfPresent(share, forKey: .share)
         try c.encodeIfPresent(looseEnds, forKey: .looseEnds)
         try c.encodeIfPresent(moving, forKey: .moving)
+        try c.encodeIfPresent(bear, forKey: .bear)
     }
 
     enum CodingKeys: String, CodingKey {
         case id, title, cwd, accountId, provider, model, effort, modelInUse, effortInUse, permissionMode, status, live, needsYou, pendingReviews
         case createdAt, updatedAt, lastActivityAt, snoozedUntil, snoozedUntilRestart, snoozedUntilRelease, wakeWhen, waitingOn, woke, archivedAt, starredAt, onOldRunner, preview
         case lastSeq, lastSeenSeq, nativeSessionId, contextTokens, contextWindow, costUsd, panels, actions, hooks, patches, background, subagents
-        case projects, worktree, needs, asks, asksSeq, highlightsAt, schedule, startedBy, asked, keywords, poolId, waitingForRoom, carryOnAtReset, waitingForNetwork, panelRequest, share, sample, looseEnds, moving
+        case projects, worktree, needs, asks, asksSeq, highlightsAt, schedule, startedBy, asked, keywords, poolId, waitingForRoom, carryOnAtReset, waitingForNetwork, panelRequest, share, sample, looseEnds, moving, bear
     }
 
     enum NetworkWaitKeys: String, CodingKey { case since }

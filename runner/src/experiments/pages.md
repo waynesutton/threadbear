@@ -15,6 +15,8 @@ Lets a thread's agent make a Print you keep (called Pages until 10 Nov 2026): a 
 
 ## Lives in
 
+Todo lists and boards are `runner/src/page-list.ts` (parse, draw, toggle and move), `pages.toggleItem` and `pages.moveCard` in `pages.ts`, and in the app `PrintLink` (`Page.swift`), `handlePrintLink` (`Pages.swift`) and the `threadbear-print:` catch in `WebPanelPool`'s navigation check (`PanelsView.swift`).
+
 Only make Prints when I ask is a normal setting, `printsWhenAsked` in runner.json (`config.ts`, `settings.ts`), checked in `create_print` in `runner/src/threadbear-mcp.ts` (`asksForPrint`), with its switch in the app's `SettingsView.swift`.
 
 Diagram rendering is in `runner/src/page-diagram.ts`, using the pinned bundle and license in `runner/skills/pele/`. The app reuses Edit Text; `Page.swift` and `RunnerAPI.swift` add diagram source and `pages.saveDiagram`.
