@@ -57,6 +57,14 @@ When('I press ⌘J', async function (this: ThreadbearWorld) {
   await this.app.do({ cmd: 'menu-key', key: 'j', modifiers: ['cmd'] });
 });
 
+When('I point at {string} in the Terminal', async function (this: ThreadbearWorld, words: string) {
+  await this.app.do({ cmd: 'terminal', hover: words });
+});
+
+Then('the Terminal underlines the link {string}', async function (this: ThreadbearWorld, url: string) {
+  await this.until(`the Terminal underlining ${url}`, (d) => (d.terminal as { hovering?: string | null } | undefined)?.hovering === url);
+});
+
 When('I follow the Terminal link {string}', async function (this: ThreadbearWorld, words: string) {
   await this.app.do({ cmd: 'terminal', follow: words });
 });

@@ -26,6 +26,18 @@ Feature: The Terminal
     When I follow the Terminal link "https://example.com/terminal"
     Then "https://example.com/terminal" was opened through the app
 
+  # Pointing at a web address underlines it, with a pointing hand and a tip
+  # (Wayne, 8 Nov). The Swift driver's hover answers differently.
+  @terminal.panel @windows-pending @swift-pending
+  Scenario: Pointing at a printed web address underlines it
+    Given the thread "Rename the Settings tabs" works in a folder of its own
+    When I open the thread "Rename the Settings tabs"
+    And I press ⌘J
+    And I type "printf 'https://example.com/terminal\n'" and press Return in the Terminal
+    Then the Terminal shows the line "https://example.com/terminal"
+    When I point at "https://example.com/terminal" in the Terminal
+    Then the Terminal underlines the link "https://example.com/terminal"
+
   @terminal.panel @windows-pending @swift-pending
   Scenario: A labelled Terminal hyperlink follows its address
     Given the thread "Rename the Settings tabs" works in a folder of its own

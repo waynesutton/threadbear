@@ -513,6 +513,14 @@ impl GridSize {
     }
 }
 
+/// A link under the pointer: its address, and each screen row's columns it
+/// covers (a wrapped address covers more than one).
+#[derive(Clone, Debug, PartialEq)]
+pub(crate) struct Hover {
+    pub(crate) url: String,
+    pub(crate) cells: Vec<(usize, std::ops::Range<usize>)>,
+}
+
 /// Where the grid was last drawn, for turning the pointer into a cell.
 #[derive(Clone, Copy, Debug)]
 pub(crate) struct DrawnAt {
@@ -617,6 +625,9 @@ pub(crate) struct Session {
     pub(crate) focus: FocusHandle,
     pub(crate) size: GridSize,
     pub(crate) drawn_at: Option<DrawnAt>,
+    /// The web address under the pointer, underlined, with the cells it
+    /// covers on screen (`showHover`).
+    pub(crate) hover: Option<Hover>,
     /// It had the keyboard when it was last drawn.
     pub(crate) focused: bool,
     /// An input method's text still being composed (a Japanese word, an
@@ -698,6 +709,7 @@ impl Session {
             focus: cx.focus_handle(),
             size,
             drawn_at: None,
+            hover: None,
             focused: false,
             marked: String::new(),
             scroll_rest: 0.,
@@ -1163,6 +1175,11 @@ impl Session {
     /// The scan follows soft-wrapped lines, capped so a very long line can
     /// never make a click stall the app.
     fn link_at(&self, col: usize, row: usize) -> Option<String> {
+        self.link_and_cells_at(col, row).map(|(link, _)| link)
+    }
+
+    /// `link_at`, with the screen cells the link covers.
+    fn link_and_cells_at(&self, col: usize, row: usize) -> Option<(String, Vec<(usize, std::ops::Range<usize>)>)> {
         use alacritty_terminal::term::cell::Flags;
         let term = self.term.lock();
         let grid = term.grid();
@@ -1173,13 +1190,16 @@ impl Session {
         let point = GridPoint::new(GridLine(row as i32 - grid.display_offset() as i32), Column(col));
         let cell = &grid[point];
         if let Some(link) = cell.hyperlink() {
-            return (link.uri().len() <= 4096).then(|| link.uri().to_owned());
+            return (link.uri().len() <= 4096).then(|| (link.uri().to_owned(), vec![(row, col..col + 1)]));
         }
+        let offset = grid.display_offset() as i32;
         let mut first = point.line;
         while first > grid.topmost_line() && ((point.line.0 - first.0 + 2) as usize) * cols <= 4096 && grid[GridLine(first.0 - 1)][Column(cols - 1)].flags.contains(Flags::WRAPLINE) {
             first = GridLine(first.0 - 1);
         }
         let mut chars = Vec::new();
+        // Each char's screen row and column, for the underline.
+        let mut places: Vec<(i32, usize)> = Vec::new();
         let mut clicked = None;
         let mut line = first;
         loop {
@@ -1191,13 +1211,46 @@ impl Session {
                     continue;
                 }
                 chars.push(cell.c);
-                chars.extend(cell.zerowidth().into_iter().flatten());
+                places.push((line.0 + offset, column));
+                for c in cell.zerowidth().into_iter().flatten() {
+                    chars.push(*c);
+                    places.push((line.0 + offset, column));
+                }
                 if chars.len() > 4096 { return None; }
             }
             if line >= grid.bottommost_line() || !grid[line][Column(cols - 1)].flags.contains(Flags::WRAPLINE) { break; }
             line = GridLine(line.0 + 1);
         }
-        rules::link_word(&chars, clicked?)
+        let (first, last) = rules::link_span(&chars, clicked?)?;
+        let mut cells: Vec<(usize, std::ops::Range<usize>)> = Vec::new();
+        for &(screen_row, column) in &places[first..last] {
+            if screen_row < 0 {
+                continue;
+            }
+            match cells.last_mut() {
+                Some((r, cols)) if *r == screen_row as usize => cols.end = column + 1,
+                _ => cells.push((screen_row as usize, column..column + 1)),
+            }
+        }
+        Some((chars[first..last].iter().collect(), cells))
+    }
+
+    /// The web address under a cell, to underline (`linkSpan`).
+    fn hover_at(&self, col: usize, row: usize) -> Option<Hover> {
+        let (link, cells) = self.link_and_cells_at(col, row)?;
+        let home = crate::files::home_dir();
+        let target = rules::link_target(&link, &self.target.cwd, &home, |_| false)?;
+        rules::underlines(&target).then(|| Hover { url: link, cells })
+    }
+
+    /// The pointer moved with no button down: underline the link under it,
+    /// or take the underline away.
+    fn update_hover(&mut self, position: Point<Pixels>, cx: &mut Context<Self>) {
+        let hover = if self.exited { None } else { self.cell_at(position, false).and_then(|(col, row, _)| self.hover_at(col, row)) };
+        if hover != self.hover {
+            self.hover = hover;
+            cx.notify();
+        }
     }
 
     fn open_link_at(&self, col: usize, row: usize, cx: &mut App) -> bool {
@@ -1267,7 +1320,12 @@ impl Session {
     }
 
     pub(crate) fn mouse_moved(&mut self, event: &MouseMoveEvent, cx: &mut Context<Self>) {
-        let Some(drag) = self.dragging else { return };
+        let Some(drag) = self.dragging else {
+            if event.pressed_button.is_none() {
+                self.update_hover(event.position, cx);
+            }
+            return;
+        };
         if event.pressed_button.is_none() {
             self.dragging = None;
             return;
@@ -1401,6 +1459,24 @@ impl Render for Session {
             // A little in from the panel's edges, on the terminal's own
             // background (TerminalHost.Container.inset).
             .child(div().size_full().px(px(10.)).py(px(6.)).child(TerminalElement::new(me, focused, self.blink_shown)));
+        // The link under the pointer: underlined in the text's colour, with a
+        // pointing hand and a tip, and ⌘-click opens it.
+        if let (Some(hover), Some(at)) = (self.hover.clone(), self.drawn_at) {
+            let ink = colours.foreground_hsla();
+            for (row, cols) in &hover.cells {
+                view = view.child(
+                    div()
+                        .absolute()
+                        .left(px(10.) + at.cell_width * cols.start as f32)
+                        .top(px(6.) + at.cell_height * (*row as f32 + 1.) - gpui_kit::px(2.))
+                        .w(at.cell_width * (cols.end - cols.start) as f32)
+                        .h(gpui_kit::px(1.))
+                        .bg(ink),
+                );
+            }
+            let key = if cfg!(target_os = "macos") { "⌘" } else { "Ctrl" };
+            view = crate::tips::Tip::tip(view.cursor(gpui_kit::CursorStyle::PointingHand), format!("{key}-click to open {}", hover.url));
+        }
         if self.waiting_for_return() {
             // Over whatever's in the terminal's top corner.
             view = view.child(
@@ -1538,6 +1614,7 @@ pub(crate) fn dump(app: &Threadbear, cx: &App) -> Value {
         "cols": session.map(|s| s.size.cols),
         "rows": session.map(|s| s.size.rows),
         "screen": session.map(|s| s.screen_lines()),
+        "hovering": session.and_then(|s| s.hover.as_ref().map(|h| h.url.clone())),
         "lines": session.map(|s| s.screen_text_lines()),
         "shells": shells,
     })
@@ -1776,6 +1853,16 @@ pub(crate) fn automation(app: &Entity<Threadbear>, cmd: &Value, window: &mut Win
             let event = ScrollEvent { position: at, delta: ScrollDelta::Lines(point(0., -(lines as f32))), modifiers: Modifiers::default(), touch_phase: TouchPhase::Moved, source: ScrollSource::Pointer };
             window.dispatch_event(event.to_platform_input(), cx);
         }
+    }
+    // The pointer over a link, as a move there would (the Swift `hover`).
+    if let Some(words) = cmd["hover"].as_str() {
+        window.render_frame(cx);
+        let session = session.as_ref().ok_or("no shell")?;
+        let s = session.read(cx);
+        let at = s.drawn_at.ok_or("the terminal hasn't been drawn")?;
+        let (row, col) = s.screen_lines().iter().enumerate().rev().find_map(|(r, line)| line.find(words).map(|i| (r, line[..i].chars().count()))).ok_or("that link isn't visible")?;
+        let position = point(at.origin.x + at.cell_width * (col as f32 + 0.5), at.origin.y + at.cell_height * (row as f32 + 0.5));
+        window.dispatch_event(MouseMoveEvent { position, pressed_button: None, modifiers: Modifiers::default() }.to_platform_input(), cx);
     }
     if let Some(words) = cmd["follow"].as_str() {
         window.render_frame(cx);

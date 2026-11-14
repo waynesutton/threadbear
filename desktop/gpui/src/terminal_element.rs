@@ -44,6 +44,10 @@ impl Colours {
         rgb_hsla(self.background)
     }
 
+    pub(crate) fn foreground_hsla(&self) -> Hsla {
+        rgb_hsla(self.foreground)
+    }
+
     /// A numbered colour, or the terminal's own (256 the text, 257 the
     /// background), for a program that asks (OSC 4, 10 and 11).
     pub(crate) fn indexed(&self, index: usize) -> Rgb8 {

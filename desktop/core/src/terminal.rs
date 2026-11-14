@@ -794,6 +794,12 @@ pub fn local_file_url(link: &str, hostname: &str) -> Option<String> {
 /// The printed address/path under a terminal cell. OSC 8 links use their
 /// explicit URI instead; this is for ordinary build output and shell text.
 pub fn link_word(chars: &[char], at: usize) -> Option<String> {
+    link_span(chars, at).map(|(first, last)| chars[first..last].iter().collect())
+}
+
+/// Where `link_word`'s word starts and ends in `chars`, end not included:
+/// the cells to underline under the pointer.
+pub fn link_span(chars: &[char], at: usize) -> Option<(usize, usize)> {
     let boundary = |c: char| c.is_whitespace() || "\"'<>`".contains(c) || c.is_control();
     if at >= chars.len() || boundary(chars[at]) { return None; }
     let mut first = at;
@@ -806,7 +812,15 @@ pub fn link_word(chars: &[char], at: usize) -> Option<String> {
         let unmatched = [(')', '('), (']', '['), ('}', '{')].iter().any(|(close, open)| tail == *close && chars[first..last].iter().filter(|c| **c == *close).count() > chars[first..last].iter().filter(|c| **c == *open).count());
         if first < last && (".,;!".contains(tail) || unmatched) { last -= 1; } else { break; }
     }
-    (first <= at && at < last && last - first <= 4096).then(|| chars[first..last].iter().collect())
+    (first <= at && at < last && last - first <= 4096).then_some((first, last))
+}
+
+/// Whether the pointer over a link underlines it, with a pointing hand and a
+/// tip: a web address, as the Swift terminal's `LinkPolicy.web`. A file's
+/// path still opens on ⌘-click, but isn't marked, as nearly any word could be
+/// one.
+pub fn underlines(link: &Link) -> bool {
+    matches!(link, Link::Url(url) if url.get(..7).is_some_and(|s| s.eq_ignore_ascii_case("http://")) || url.get(..8).is_some_and(|s| s.eq_ignore_ascii_case("https://")))
 }
 
 pub fn link_target(link: &str, folder: &str, home: &str, exists: impl Fn(&str) -> bool) -> Option<Link> {
@@ -1263,6 +1277,11 @@ mod tests {
     #[test]
     fn printed_terminal_links_keep_url_punctuation_and_file_positions() {
         let word = |line: &str, at| link_word(&line.chars().collect::<Vec<_>>(), at);
+        let chars: Vec<char> = "see https://example.com/a, ok".chars().collect();
+        assert_eq!(link_span(&chars, 6), Some((4, 25)), "the trailing comma isn't the link's");
+        assert!(underlines(&Link::Url("https://example.com".into())));
+        assert!(!underlines(&Link::File("/tmp/a".into())));
+        assert!(!underlines(&Link::Url("mailto:a@b.c".into())));
         assert_eq!(word("see (https://example.com/a(b)).", 12).as_deref(), Some("https://example.com/a(b)"));
         assert_eq!(word("error: src/main.rs:12:4", 12).as_deref(), Some("src/main.rs:12:4"));
         assert_eq!(word("雪 https://example.com", 8).as_deref(), Some("https://example.com"));
