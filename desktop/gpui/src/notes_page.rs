@@ -129,7 +129,7 @@ impl Threadbear {
             let id = note.id.clone();
             let menu_id = id.clone();
             let weak = cx.entity().downgrade();
-            v_flex().id(SharedString::from(format!("note-{}",note.id))).p(px(12.)).gap(px(4.)).w_full()
+            v_flex().id(SharedString::from(format!("note-{}",note.id))).test_support().role(Role::ListItem).aria_label(note.title.clone()).aria_selected(self.notes.selected.as_ref() == Some(&note.id)).p(px(12.)).gap(px(4.)).w_full()
                 .when(self.notes.selected.as_ref() == Some(&note.id), |s|s.bg(style::sidebar_hover(cx)))
                 .tip("Open note").child(div().child(note.title.clone()))
                 .child(div().text_size(px(12.)).text_color(secondary).child(note.preview().unwrap_or("Empty note").to_owned()))
