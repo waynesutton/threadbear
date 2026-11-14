@@ -1734,6 +1734,7 @@ export class Runner {
     if (opts.scheduleId) msg.scheduleId = opts.scheduleId;
     if (opts.preserveSchedule !== undefined) msg.preserveSchedule = opts.preserveSchedule;
     if (opts.scheduledSince !== undefined) msg.scheduledSince = opts.scheduledSince;
+    if (opts.retryMessageSeq !== undefined) msg.retryMessageSeq = opts.retryMessageSeq;
     if (opts.answers?.length) msg.answers = opts.answers;
     if (opts.editOf) msg.editOf = opts.editOf;
     rec.lastActivityAt = this.isoNow();
@@ -1925,7 +1926,11 @@ export class Runner {
     // stable message ID keeps the original user row rather than duplicating it.
     const reviewMessage = msg.reviewId ? this.store.log(rec.id).read(1, rec.lastSeq).find(e => e.type === 'user.message' && e.reviewId === msg.reviewId && e.turnId === msg.turnId) : undefined;
     const scheduledMessage = msg.scheduledSince !== undefined ? this.scheduledMessage(st, msg.turnId, msg.scheduledSince) : undefined;
-    const messageSeq = reviewMessage?.seq ?? scheduledMessage?.seq ?? this.emit(st, userMessage(msg), msg.turnId).seq;
+    // A late answer can have written its message before turn.started failed.
+    // Reuse only that exact surviving row, never an unrelated or rewound one.
+    const retryMessage = msg.retryMessageSeq === undefined ? undefined : this.store.log(rec.id).read(msg.retryMessageSeq, msg.retryMessageSeq).find(e =>
+      e.type === 'user.message' && e.turnId === msg.turnId && !cutOut(rec, e.seq));
+    const messageSeq = reviewMessage?.seq ?? scheduledMessage?.seq ?? retryMessage?.seq ?? this.emit(st, userMessage(msg), msg.turnId).seq;
     try {
       this.emit(st, { type: 'turn.started', turnId: msg.turnId }, msg.turnId);
     } catch (e) {
@@ -4467,7 +4472,7 @@ export function stoppedWorkMessage(what: string[], last: boolean): string {
   ].join('\n');
 }
 
-export type SendOptions = { origin?: MessageOrigin; scheduleId?: string; preserveSchedule?: boolean; queue?: boolean; answers?: AskAnswer[]; editOf?: number; messageId?: string; scheduledSince?: number };
+export type SendOptions = { origin?: MessageOrigin; scheduleId?: string; preserveSchedule?: boolean; queue?: boolean; answers?: AskAnswer[]; editOf?: number; messageId?: string; retryMessageSeq?: number; scheduledSince?: number };
 
 type ScheduledDelivery = { seq: number; started: boolean; text: string; images: ImageRef[]; superseded?: false } | { superseded: true; started: true };
 

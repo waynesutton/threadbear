@@ -1,6 +1,6 @@
 # Bears that pick up where they left off
 
-Updated 2026-11-14 23:25 UTC. Approved in thread 327a5a9e.
+Updated 2026-11-14 23:46 UTC. Approved in thread 327a5a9e.
 
 ## Purpose
 
@@ -26,6 +26,16 @@ Build the five approved improvements from the always-on agents plan on this fork
 ## GPUI follow-through
 
 Expose the shared worker and folded work in a bear row; show expired tool cards as resumable only when supported. Existing APIs keep their argument forms. No new Swift UI.
+
+## Review corrections (14 Nov 2026)
+
+Review 8f9c5f07 found three valid issues before landing:
+
+- Folded mentions now compare the caller's saved mode and confinement with the worker's current authority. The real CallerGate-to-bears.mention regression rejects a sandbox escape without queuing work.
+- Folded routines compare explicit account, pool, model and effort settings. Incompatible work stays due; matching settings still fold. The regression confirms a waiting Codex routine starts with its requested model and effort once the worker finishes.
+- A late-answer retry requires a queue entry or a successful turn.started event before treating delivery as accepted. A partially logged message is reused by sequence and turn ID on retry, including across a runner restart. A different answer or note cannot silently replace the first saved one.
+
+All eight targeted regression cases passed at 2026-11-14 23:42 UTC. At 23:46 UTC, all 226 affected tests (shared workers, mentions, late answers, schedules, runner and cross-device scenarios) and runner typecheck passed. Repeat review and the repository quick check still precede landing; the Mac's load was 13 at this check.
 
 ## Verification evidence
 

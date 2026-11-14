@@ -10,9 +10,11 @@ Status and gap list: prds/prints-status.md
 ## In Progress
 
 - [ ] Land verified Settings review fixes when the Mac is quiet, then verify the installed update.
-- [ ] Build five always-on bear improvements and document the GPUI follow-through. prds/bears-always-on.md. Verification pending.
+- [ ] Build five always-on bear improvements and document the GPUI follow-through. prds/bears-always-on.md. Focused verification passed; repeat review and quiet-Mac repository check precede landing.
 
 ## Completed
+
+- [x] 2026-11-14 23:46 UTC Fix all three always-on bears review findings: prevent folded mentions escaping a caller's sandbox, preserve explicitly configured routine login/pool/model/effort, and recover a late answer whose message was saved before starting its turn failed. Verified: eight regression cases, 226 affected tests and runner typecheck passed. Committed separately before repeat review; not yet landed. prds/bears-always-on.md
 
 - [x] 2026-11-15 07:28 UTC Fix both Settings review findings: preserve failed Instructions edits for retry, surface errors after the page closes, hold automatic updates while unsaved, and inspect the rendered main-window page in the spec. Automation build, failure/recovery/update-hold and broad navigation/save driver checks, focus guard, spec pairing and syntax checks pass. Full landing check waits for quiet Mac load. prds/gpui-settings-in-main.md
 
