@@ -94,9 +94,84 @@ impl Tab {
 const SIDEBAR_WIDTH: f32 = 215.;
 
 impl Threadbear {
+    /// Normal Settings covers the main panel, while the scripted command can
+    /// still ask for the separate window used by the shared behaviour specs.
+    pub(crate) fn open_settings(&mut self, tab: Option<Tab>, cx: &mut Context<Self>) {
+        let window_open = self.settings_window.as_ref().is_some_and(|(handle, _)| handle.update(cx, |_, _, _| {}).is_ok());
+        if self.settings.saved.settings_in_window.unwrap_or(false) || window_open {
+            self.open_settings_window(tab, cx);
+            return;
+        }
+        if !window_open { self.settings_window = None; }
+        if self.settings_page_open && tab.is_none() { return; }
+        self.settings_page_open = true;
+        let view = self.settings_page.clone();
+        let (app, weak, main) = (cx.entity(), cx.weak_entity(), self.main_window);
+        let (client, instructions) = (self.client.clone(), self.standing_instructions.clone());
+        cx.defer(move |cx| {
+            main.update(cx, |_, window, cx| {
+                let view = match view {
+                    Some(view) => {
+                        view.update(cx, |view, cx| {
+                            if let Some(tab) = tab { view.show(tab, window, cx); }
+                            window.focus(&view.sidebar_focus, cx);
+                            crate::web_panels::keyboard_to_app(window);
+                        });
+                        view
+                    }
+                    None => cx.new(|cx| SettingsWindow::new(weak, client, instructions, tab.unwrap_or(Tab::General), true, window, cx)),
+                };
+                app.update(cx, |app, cx| {
+                    if app.settings_page_open { app.settings_page = Some(view); }
+                    cx.notify();
+                });
+            }).ok();
+        });
+        self.load_standing_instructions(cx);
+        cx.notify();
+    }
+
+    /// Keep the form alive so its pending saves finish, but stop key recording.
+    pub(crate) fn hide_settings_page(&mut self, cx: &mut Context<Self>) {
+        if !self.settings_page_open { return; }
+        self.settings_page_open = false;
+        if let Some(view) = self.settings_page.clone() {
+            cx.defer(move |cx| view.update(cx, |view, cx| view.hidden(cx)));
+        }
+        cx.notify();
+    }
+
+    pub(crate) fn close_settings_page(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        self.hide_settings_page(cx);
+        let composer = if self.home_page().is_none() && self.open_project().is_none() {
+            self.pane.as_ref().map(|p| p.read(cx).composer.clone()).or_else(|| self.new_thread.composer.clone())
+        } else { None };
+        if let Some(composer) = composer { composer.update(cx, |composer, cx| composer.focus(window, cx)); }
+        else { window.focus(&self.search.read(cx).focus_handle(cx), cx); }
+        crate::web_panels::keyboard_to_app(window);
+    }
+
+    pub(crate) fn render_settings_page(&self, cx: &mut Context<Self>) -> AnyElement {
+        let close = div().id("settings-page-close").test_support().role(Role::Button).aria_label("Close Settings")
+            .size(px(28.)).rounded_full().flex().items_center().justify_center().cursor_pointer()
+            .bg(style::primary_opacity(cx, 0.08)).tip("Close Settings (Esc)")
+            .on_click(cx.listener(|this, _: &ClickEvent, window, cx| this.close_settings_page(window, cx)))
+            .child(icons::symbol("xmark").with_size(px(12.)));
+        let body = self.settings_page.clone().map(|view| view.into_any_element()).unwrap_or_else(|| div().size_full().flex().items_center().justify_center().child(Spinner::new().small()).into_any_element());
+        v_flex().id("settings-page").size_full().min_w_0().overflow_hidden().bg(cx.theme().background)
+            .on_key_down(cx.listener(|this, event: &KeyDownEvent, window, cx| {
+                if event.keystroke.key == "escape" { this.close_settings_page(window, cx); cx.stop_propagation(); }
+            }))
+            .child(h_flex().h(px(52.)).flex_none().pl(px(20.)).pr(px(28.)).items_center()
+                .child(div().flex_1().text_size(px(17.)).font_semibold().child("Settings")).child(close))
+            .child(div().h(gpui_kit::px(1.)).flex_none().bg(style::hairline(cx)))
+            .child(div().flex_1().min_h_0().min_w_0().child(body))
+            .into_any_element()
+    }
     /// ⌘, or the gear: the window, brought forward if it's open, on `tab` if
     /// one's given (Settings › Models from the Librarian's page, say).
-    pub(crate) fn open_settings(&mut self, tab: Option<Tab>, cx: &mut Context<Self>) {
+    pub(crate) fn open_settings_window(&mut self, tab: Option<Tab>, cx: &mut Context<Self>) {
+        self.hide_settings_page(cx);
         if let Some((handle, view)) = self.settings_window.clone() {
             let alive = handle
                 .update(cx, |_, window, cx| {
@@ -130,7 +205,7 @@ impl Threadbear {
                     ..Default::default()
                 },
                 cx,
-                move |window, cx| cx.new(|cx| SettingsWindow::new(app, client, instructions, tab, window, cx)),
+                move |window, cx| cx.new(|cx| SettingsWindow::new(app, client, instructions, tab, false, window, cx)),
             );
             me.update(cx, |me, cx| match opened {
                 Ok((handle, view)) => {
@@ -168,6 +243,7 @@ impl Threadbear {
 /// The window's content (`SettingsView`).
 pub(crate) struct SettingsWindow {
     app: WeakEntity<Threadbear>,
+    embedded: bool,
     client: std::sync::Arc<threadbear_client::runner::Client>,
     pub(crate) tab: Tab,
     hovered: Option<Tab>,
@@ -218,7 +294,7 @@ fn bind_sidebar_keys(cx: &mut App) {
 }
 
 impl SettingsWindow {
-    fn new(app: WeakEntity<Threadbear>, client: std::sync::Arc<threadbear_client::runner::Client>, instructions_now: Option<StandingInstructions>, tab: Tab, window: &mut Window, cx: &mut Context<Self>) -> Self {
+    fn new(app: WeakEntity<Threadbear>, client: std::sync::Arc<threadbear_client::runner::Client>, instructions_now: Option<StandingInstructions>, tab: Tab, embedded: bool, window: &mut Window, cx: &mut Context<Self>) -> Self {
         let instructions = cx.new(|cx| TextareaState::new(window, cx).placeholder("For example: I build with React, TypeScript and Convex. Write plainly and briefly."));
         let mut subs = vec![cx.subscribe_in(&instructions, window, |this, _, ev: &InputEvent, _, cx| {
             if matches!(ev, InputEvent::Change) && !this.filling {
@@ -253,14 +329,14 @@ impl SettingsWindow {
         }));
         // Closing it saves what's typed and not yet sent (`onDisappear`).
         let me = cx.entity().downgrade();
-        window.on_window_should_close(cx, move |window, cx| {
+        if !embedded { window.on_window_should_close(cx, move |window, cx| {
             if let Some(me) = me.upgrade() {
                 me.update(cx, |this, cx| this.commit_instructions(window, cx));
             }
             // Gone, it isn't in front, whether or not it says so first.
             crate::thread::set_looking(crate::thread::window_key(window), false);
             true
-        });
+        }); }
         // The ding's volume: kept as it's dragged, and heard when it's let go
         // (the Swift slider's `editing` ending).
         let volume_now = app.upgrade().map_or(completion_sound::DEFAULT_VOLUME, |a| a.read(cx).settings.ding_volume());
@@ -283,6 +359,7 @@ impl SettingsWindow {
         }));
         let mut this = SettingsWindow {
             app,
+            embedded,
             client,
             tab,
             hovered: None,
@@ -317,13 +394,19 @@ impl SettingsWindow {
             self.stop_listening(cx);
             self.devices_hidden();
             self.tab = tab;
-            window.set_window_title(tab.title());
+            if !self.embedded { window.set_window_title(tab.title()); }
             self.scroll.set_offset(point(gpui_kit::px(0.), gpui_kit::px(0.)));
             cx.notify();
         }
     }
 
     /// The section above or below the one showing, stopping at the ends.
+    fn hidden(&mut self, cx: &mut Context<Self>) {
+        if self.instructions_save.take().is_some() { self.write_instructions(cx); }
+        self.stop_listening(cx);
+        self.devices_hidden();
+    }
+
     fn step_section(&mut self, step: i32, window: &mut Window, cx: &mut Context<Self>) {
         let at = Tab::ALL.iter().position(|t| *t == self.tab).unwrap_or(0) as i32 + step;
         if let Some(tab) = usize::try_from(at).ok().and_then(|i| Tab::ALL.get(i)) {
@@ -493,7 +576,7 @@ impl SettingsWindow {
             .key_context(SIDEBAR_CONTEXT)
             .on_action(cx.listener(|this, _: &PreviousSection, window, cx| this.step_section(-1, window, cx)))
             .on_action(cx.listener(|this, _: &NextSection, window, cx| this.step_section(1, window, cx)))
-            .w(px(SIDEBAR_WIDTH))
+            .w(px(if self.embedded { 160. } else { SIDEBAR_WIDTH }))
             .flex_none()
             .h_full()
             .bg(cx.theme().sidebar)
@@ -520,7 +603,7 @@ impl SettingsWindow {
 
     fn render_general(&mut self, settings: Option<&RunnerSettings>, window: &mut Window, cx: &mut Context<Self>) -> Vec<AnyElement> {
         // This Mac's own, so they're here while the runner's away too.
-        let mut sections = vec![self.appearance_section(cx), self.panels_section(cx), self.files_section(cx), self.slash_section(cx), self.terminal_section(cx), self.quitting_section(cx), self.look_section(cx), self.notifications_section(cx)];
+        let mut sections = vec![self.appearance_section(cx), self.settings_place_section(cx), self.panels_section(cx), self.files_section(cx), self.slash_section(cx), self.terminal_section(cx), self.quitting_section(cx), self.look_section(cx), self.notifications_section(cx)];
         sections.push(self.notes_section(cx));
         // The web runtime is this Mac's too (web_runtime.rs), last, so it
         // moves nothing the Swift app's General has.
@@ -772,6 +855,18 @@ impl SettingsWindow {
             }).ok();
         });
         section("settings-terminal", "Terminal", "The Terminal opens under the thread. Add a button on the right-hand rail to open that same terminal with a click.", "change how the Terminal opens or looks.", vec![row("Show Terminal on the right-hand rail", switch, cx)], cx)
+    }
+
+    fn settings_place_section(&mut self, cx: &mut Context<Self>) -> AnyElement {
+        let on = self.app.upgrade().is_some_and(|a| a.read(cx).settings.saved.settings_in_window.unwrap_or(false));
+        let switch = self.switch("settings-in-window", on, "Use a separate Settings window. Off opens Settings over the main panel", cx, |this, on, cx| {
+            this.app.update(cx, |app, cx| {
+                app.settings.saved.settings_in_window = Some(on);
+                app.save_settings_soon(cx);
+                cx.notify();
+            }).ok();
+        });
+        section("settings-place", "Settings", "Settings opens over the main panel, keeping your thread and its draft underneath. Close it with the X, Escape or the gear. You can keep a separate Settings window instead.", "change where Settings opens.", vec![row("Open Settings in its own window", switch, cx)], cx)
     }
 
     /// `QuitPrompt`'s switch: ticking Don't ask again turns it off, and this
@@ -1240,7 +1335,7 @@ impl Render for SettingsWindow {
                 .text_color(cx.theme().foreground)
                 .child(sidebar)
                 .child(div().id("settings-pane").flex_1().min_w_0().h_full().child(page))
-                .child(crate::tips::window_presses());
+                .children((!self.embedded).then(crate::tips::window_presses));
         }
         let mut sections = match self.tab {
             Tab::General => self.render_general(settings.as_ref(), window, cx),
@@ -1279,7 +1374,7 @@ impl Render for SettingsWindow {
                 ),
             )
             // Last: every press in the window, for the activity log (tips.rs).
-            .child(crate::tips::window_presses())
+            .children((!self.embedded).then(crate::tips::window_presses))
     }
 }
 

@@ -66,6 +66,8 @@ pub struct Saved {
     pub completion_sound_volume: Option<f64>,
     /// `askBeforeQuitting` (QuitPrompt): None is yes.
     pub ask_before_quitting: Option<bool>,
+    /// Main panel by default; opt into a separate Settings window.
+    pub settings_in_window: Option<bool>,
     /// `slashReturnRuns` (SlashReturn): Return in the slash palette sends
     /// the command at once. None is no: Return puts it in the box, and the
     /// next Return sends it (Wayne, 11 Nov).

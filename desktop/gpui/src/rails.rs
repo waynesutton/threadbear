@@ -345,10 +345,13 @@ impl Threadbear {
         button.face = Some(pot);
         button.tip = tip;
         let usage = rail_button(button, |this, _, cx| this.toggle_under_threads(shell::USAGE, cx), cx);
-        let mut button = RailButton::new("rail-settings", "gearshape", "Settings", false);
+        let mut button = RailButton::new("rail-settings", "gearshape", "Settings", self.settings_page_open);
         button.tip = self.shortcut_tip("Settings", ShortcutCommand::Settings);
         button.hint = self.shortcut_display(ShortcutCommand::Settings);
-        let settings = rail_button(button, |this, window, cx| this.run_command(shell::Command::Settings, window, cx), cx);
+        let settings = rail_button(button, |this, window, cx| {
+            if this.settings_page_open { this.close_settings_page(window, cx); }
+            else { this.run_command(shell::Command::Settings, window, cx); }
+        }, cx);
         let hairline = cx.theme().border;
         div()
             .relative()

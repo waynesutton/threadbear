@@ -194,6 +194,8 @@ pub struct Threadbear {
     pub(crate) small_jobs: Vec<String>,
     /// The Settings window while it's open (settings_window.rs).
     pub(crate) settings_window: Option<(AnyWindowHandle, Entity<crate::settings_window::SettingsWindow>)>,
+    pub(crate) settings_page: Option<Entity<crate::settings_window::SettingsWindow>>,
+    pub(crate) settings_page_open: bool,
     /// The main window, for opening a thread from outside it (a
     /// notification's click).
     pub(crate) main_window: AnyWindowHandle,
@@ -566,6 +568,8 @@ impl Threadbear {
             runner_settings: None,
             small_jobs: vec!["claude".into()],
             settings_window: None,
+            settings_page: None,
+            settings_page_open: false,
             main_window: window.window_handle(),
             pending_open: None,
             pending_restore: None,
@@ -1241,6 +1245,7 @@ impl Threadbear {
     /// `open`, with the pane of a thread brought back from a panel of its own
     /// (thread_panels.rs), which goes on reading it rather than reading it again.
     pub(crate) fn open_with(&mut self, id: String, moved: Option<Entity<ThreadPane>>, window: &mut Window, cx: &mut Context<Self>) {
+        self.hide_settings_page(cx);
         // How it comes in (open_motion.rs): taken now, so an open that goes
         // nowhere doesn't leave it for the next one. One brought back from a
         // panel of its own was on screen a moment ago.
@@ -1590,6 +1595,7 @@ impl Threadbear {
         // What came across from the Swift app, while its note's up. Set
         // after, as the literal above is as long as serde_json's macro goes.
         dump["importNote"] = json!(self.import_note);
+        dump["settingsPage"] = self.settings_page.as_ref().filter(|_| self.settings_page_open).map_or(Value::Null, |view| view.read(cx).dump(cx));
         dump["looks"] = self.looks_dump();
         dump["profilePage"] = self.profile_dump();
         // Panels pinned to their threads (pinned_panels.rs).

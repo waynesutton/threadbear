@@ -2807,15 +2807,14 @@ Highlights, only when it's earned.
 ### Where Settings opens
 
 Settings (⌘, or the gear at the bottom of the bar on the left) opens over
-the main panel, with its tabs along the top. The thread or page you had
+the main panel, with its sections down the left. The thread or page you had
 open stays as it was under it: the X at the top right, Esc, the gear again
-or picking a thread closes Settings and puts you back. To have Settings in
-a window of its own instead, set Open Settings in to Its own window in
-Settings > General.
+or picking a thread closes Settings and puts you back. For a separate window,
+turn on Open Settings in its own window in Settings > General > Settings.
 
-Over the main panel, Settings widens with the window, up to the width its
-rows reach. Its own window can be dragged wider too; each tab still sets
-how tall it is.
+Settings uses the available panel height. On Keyboard, the search box and
+Reset All stay in view while the shortcuts scroll between them. The separate
+Settings window can be resized too.
 
 ### The activity log
 

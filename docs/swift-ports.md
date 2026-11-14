@@ -28,7 +28,7 @@ app does it), **nothing** (nothing to rebuild), **skip** (Wayne said no).
 | 93 | 41275129 | Line numbers and ⌘S, opened ready to type | done |
 | 98 | d28e38f4 | A saved plan opens in the side pane, with a link under the reply | done |
 | 43 | 3708b1c7 | Side pane find and replace, and search in folders | done |
-| 79 | 55498864 | Settings > Keyboard list full height | to do |
+| 79 | 55498864 | Settings > Keyboard list full height | done: fills embedded Settings, fixed search/footer |
 
 The approval and slash palette batch passed 33 UI scenarios and 24 core checks.
 Item 25 also has its optional Terminal rail button, opening the same drawer as
@@ -191,7 +191,7 @@ against the GPUI app.
 | 52e060a3 | Files and Terminal on the rail | to check |
 | 0f5c08f0 | Notes, and Voice/skills/notes switches | done (Notes part) |
 | 3d531d54 | Skills page | to check |
-| f9f3c8e4 | Settings over the main panel | to check |
+| f9f3c8e4 | Settings over the main panel | done: default main panel, optional own window, X/Esc/Back/gear closes |
 | 1d311b94 | Your messages show basic Markdown | to check |
 | c3603b16 | The bear's chat has Voice | skip (Voice) |
 | 540cc171 | The bear: a chat at the top of the sidebar | to check |
