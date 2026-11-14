@@ -49,6 +49,18 @@ desktop/scripts/remote.sh tinker-desk --desk -- desktop/scripts/spec.sh --shot "
 
 Mike is closing these himself, and his releases come in here every few days. For each, check after a bring-in whether it's landed upstream before starting on it: doing it twice makes a conflict at the next merge.
 
+### Checked on 14 Nov, after the bring-in
+
+Mike's Mac leftovers are done in the code; only some `whats-left.md` lines aren't ticked yet (his doc, so they're left for him, to keep his next release from clashing here):
+
+- Narrow-panel chips: done by Mike on 12 Nov (`c49323c8`). Checked in the scripted GPUI app at 560 points: `chipsFit` is true and Send stays in the box.
+- Only the main panel's thread puts commands in the Terminal: done (`threadbear_core::terminal::can_put`, Mike's 10 Nov fix), with unit tests. Its scenario is still `@manual`.
+- Switch sizes on the Librarian page and Usage: done by Mike on 13 Nov (`86086fe2`, `MacSwitch` with `outside_form` on Usage).
+- Look Up, Translate, Writing Tools and Services on selected words: Mike's thread 0ff64630 is on it (`text_services.rs`). Don't start it here.
+- What's still open on Mike's list is Windows and Linux (1.2), a VoiceOver pass by ear, and the row press GPUI can't do.
+
+So the first slice of real work in this copy is Prints (2.1).
+
 ### 1.1 You'd notice these in a day
 
 **Narrow-panel composer chips** (`composer.modelpicker`, `composer.permission`)
