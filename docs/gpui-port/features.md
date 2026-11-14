@@ -359,6 +359,7 @@ It comes from reading code, not from running anything, so "(unverified)" means n
 
 | ID | Feature | What it does | How in GPUI | Route | Size | Swift |
 |---|---|---|---|---|---|---|
+| `projects.customize` | Customize Projects | Picture, background, layout and card parts | Native panel. | build | S | `ProjectsLookEditor` |
 | `projects.home` | Projects home | Cards, New project, search | Drawn cards with `Input`. | build | M | `ProjectsHome`, `ProjectCards` |
 | `projects.list` | Projects list | Sidebar view, Archive, Merge, Delete, copy id | gpui-kit list and menus. | kit | M | `ProjectsList`, `ProjectSections` |
 | `projects.page` | Project page | Title, goals, state, notes editing, folders, threads | Drawn page using `Input` and `Textarea`. | build | L | `ProjectPage`, `Projects` |
@@ -372,6 +373,7 @@ It comes from reading code, not from running anything, so "(unverified)" means n
 | `librarian.page` | Librarian page | Picture, tiles, Look at threads, Runs on | Drawn. | build | S | `LibrarianHome`, `HomePage` |
 | `librarian.log` | Librarian log | Recent, Next, Look at everything | Drawn list. | build | M | `LibrarianView` |
 | `librarian.picture` | Pokeable picture | Secret lines | Built, with its wobble on a poke (`home_page.rs`, core's `juice::wobble`): GPUI can't turn a picture, so the Swift tilt is a sway of the picture's middle, with the squash as it is. | build | S | `HomePage` |
+| `scheduled.customize` | Customize Scheduled | Picture, background, layout and numbers | Native panel. | build | S | `ScheduledLookEditor` |
 | `schedule.page` | Scheduled page | Stats tiles | Drawn. | build | S | `ScheduledHome`, `HomePage` |
 | `schedule.list` | Scheduled list | Active, Paused, Done, Run now, Edit, Delete | gpui-kit list, menus and dialog. | kit | M | `ScheduledList`, `Schedules` |
 | `schedule.editor` | Schedule editor | Message, once or repeat, cron, target, model, machine | Form of `Input`, `Textarea` and menus, with the parsing ported. | build | L | `ScheduleEditor`, `ScheduleText`, `ScheduleModels` |

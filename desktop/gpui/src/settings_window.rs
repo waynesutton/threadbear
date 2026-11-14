@@ -803,6 +803,8 @@ impl SettingsWindow {
         let Some(app) = self.app.upgrade() else { return div().into_any_element() };
         let mut rows = vec![];
         for (page, label, tip) in [
+            (Page::Scheduled, "Customize the Scheduled page", "Add Customize to the Scheduled page: picture, background, layout and numbers"),
+            (Page::Projects, "Customize the Projects page", "Add Customize to the Projects page: picture, background, layout and card parts"),
             (Page::Librarian, "Customize the Librarian page", "Add Customize to the Librarian page: its picture, a background, the layout, and what shows"),
         ] {
             let on = app.read(cx).customizable(page);

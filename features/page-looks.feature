@@ -26,3 +26,18 @@ Feature: Customize the home pages
     And the customized page draws its greeting and quote
     When I ask for another quote
     Then the customized page draws a different quote
+
+  @scheduled.customize @swift-pending
+  Scenario: Scheduled parts can sit at the bottom and individual numbers can be hidden
+    When I customize the Scheduled page with its numbers at the bottom
+    Then the Scheduled numbers are drawn near the bottom of the window
+
+  @projects.customize @swift-pending
+  Scenario: Hiding the Projects search does not leave a secret filter
+    When I search for projects then hide the customized page header
+    Then every project card is shown
+
+  @librarian.customize @swift-pending
+  Scenario: An animated background keeps both frames for playback
+    When I choose an animated Librarian background
+    Then both background frames are kept and the background is drawn

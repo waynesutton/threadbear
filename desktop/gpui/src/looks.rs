@@ -505,7 +505,7 @@ impl Threadbear {
                 .left_0()
                 .size_full()
                 .overflow_hidden()
-                .when(drawn.is_some(), |d| d.child(div().id("look-background-image").test_support().role(Role::Image).aria_label("Page background photo").absolute().left(px(x)).top(px(y)).w(px(w)).h(px(h)).child(img(path).size_full().object_fit(ObjectFit::Fill))))
+                .when(drawn.is_some(), |d| d.child(div().id("look-background-image").test_support().role(Role::Image).aria_label("Page background photo").absolute().left(px(x)).top(px(y)).w(px(w)).h(px(h)).child(img(path).id(SharedString::from(format!("backdrop-{}-{file}", slot_name(slot)))).size_full().object_fit(ObjectFit::Fill))))
                 .child(div().absolute().top_0().left_0().size_full().bg(wash))
                 // The size it's drawn at, for the next frame and for Position.
                 .child(
@@ -555,6 +555,7 @@ impl Threadbear {
         let editing = self.looks.editing == Some(page);
         let secondary = style::secondary_text(cx);
         let gap = 32.;
+        let viewport = self.looks.sizes.borrow().get(&Slot::Page(page)).map_or(600., |(_, h)| *h);
         let filled: Vec<bool> = zones.iter().map(|z| !z.is_empty()).collect();
         let column: AnyElement = if filled.iter().all(|f| !f) {
             div().text_size(px(style::size::LABEL)).line_height(px(16.)).text_color(secondary).child("Everything on this page is hidden. Customize puts it back.").into_any_element()
@@ -563,7 +564,7 @@ impl Threadbear {
             let any_after_top = filled[1] || filled[2];
             v_flex()
                 .w_full()
-                .flex_1()
+                .min_h(px((viewport - 104.).max(0.)))
                 .when(filled[0], |c| c.child(v_flex().w_full().gap(px(32.)).children(top)))
                 // The gap only between places that have something, so an
                 // empty one leaves no hole when the page scrolls.
@@ -581,15 +582,27 @@ impl Threadbear {
                 cx.notify();
             }))
         });
+        let measured = self.looks.sizes.clone();
+        let notify = cx.entity().downgrade();
         let area = div()
             .relative()
             .flex_1()
             .min_w_0()
             .h_full()
             .children(backdrop)
+            .child(canvas(move |bounds, _, cx| {
+                let one = style::zoomed(1.);
+                let now = (f32::from(bounds.size.width) / one, f32::from(bounds.size.height) / one);
+                let old = measured.borrow().get(&Slot::Page(page)).copied();
+                if now.0 > 1. && now.1 > 1. && old.is_none_or(|old| (old.0 - now.0).abs() > 0.5 || (old.1 - now.1).abs() > 0.5) {
+                    measured.borrow_mut().insert(Slot::Page(page), now);
+                    let notify = notify.clone();
+                    cx.defer(move |cx| { notify.update(cx, |_, cx| cx.notify()).ok(); });
+                }
+            }, |_, _, _, _| {}).absolute().top_0().left_0().size_full())
             .child(
                 div().id(SharedString::from(format!("{}-home", page.name()))).size_full().overflow_y_scroll().child(
-                    h_flex().w_full().min_h_full().justify_center().child(
+                    h_flex().w_full().min_h_full().items_start().justify_center().child(
                         v_flex()
                             .w_full()
                             .min_h_full()
