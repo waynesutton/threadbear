@@ -684,7 +684,6 @@ export class RpcServer {
           // caller gate takes it out of any thread's own call.
           ...(p.unconfine === true ? { unconfine: true } : {}),
           ...optStartedBy(p),
-          ...optTurnMode(p),
           ...optProjectIds(p),
         });
         return { thread: res.thread, turnId: res.turnId };
@@ -708,7 +707,7 @@ export class RpcServer {
       case 'buttons.press':
         return r.pressButton(reqString(p, 'threadId'), reqString(p, 'buttonId'));
       case 'threads.send':
-        return r.send(reqString(p, 'threadId'), optString(p, 'text') ?? '', optImages(p) ?? [], { ...optAnswers(p), ...optPhoneOrigin(p), ...optTurnMode(p) });
+        return r.send(reqString(p, 'threadId'), optString(p, 'text') ?? '', optImages(p) ?? [], { ...optAnswers(p), ...optPhoneOrigin(p) });
       case 'threads.edit':
         return r.editMessage(reqString(p, 'threadId'), reqNumber(p, 'seq'), optString(p, 'text') ?? '', optImages(p) ?? [], { stopBackground: p.stopBackground === true });
       case 'threads.interrupt':
@@ -1074,12 +1073,4 @@ function optProjectIds(p: Record<string, unknown>): { projectIds?: string[] } {
   if (v === undefined || v === null) return {};
   if (!Array.isArray(v) || v.some((x) => typeof x !== 'string' || !x)) throw bad('projectIds must be a list of project ids');
   return v.length ? { projectIds: v as string[] } : {};
-}
-
-// Ask mode for the message (modes.ts); anything else is -32602. "plan"
-// from an app before Plan first took over planning reads as Ask: read-only.
-function optTurnMode(p: Record<string, unknown>): { mode?: 'ask' } {
-  if (p.mode === undefined || p.mode === null) return {};
-  if (p.mode !== 'plan' && p.mode !== 'ask') throw new RpcError(ErrorCode.badParams, 'mode must be "ask"');
-  return { mode: 'ask' };
 }

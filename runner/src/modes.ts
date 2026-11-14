@@ -1,18 +1,7 @@
-// Ask mode (docs/protocol.md, "Ask mode"): a message sent in it starts a
-// read-only turn. The agent is told what the mode means before the message,
-// and nothing it does may change files (UserInput's readOnly). Planning is
-// Plan first (permissionMode "plan"); its plans are saved as
+// Plan first (permissionMode "plan") plans are saved as
 // plans/<date>-<project>.md by Runner.savePlan, named by planPath here.
 import fs from 'node:fs';
 import path from 'node:path';
-import type { TurnMode } from './store.ts';
-
-export function modeInstructions(_mode: TurnMode): string {
-  return [
-    '[Ask mode] The user just wants an answer. Read whatever you need, but change nothing:',
-    'no file edits and no commands that change files, data or state (on Claude, shell commands and other tools that could change something are switched off for this turn). Answer the question directly.',
-  ].join(' ');
-}
 
 /** plans/2026-11-06-hello-app.md, or -2, -3 for another the same day. */
 export function planPath(cwd: string, name: string, date: Date): string {

@@ -283,41 +283,6 @@ export class ClaudeAdapter implements AgentAdapter {
 // (set by the caller), brings CLAUDE.md back without its settings (tried
 // on CLI 2.1.318, 5 Nov 2026), and the rest of the settings come in as flag
 // settings, which sit above user settings as project ones do.
-// What an Ask mode turn may use (modes.ts): Claude's tools that only read,
-// look things up or talk to Mike, and the threadbear tools that never ask
-// (NEVER_ASK_TOOLS). Everything else is refused, whatever the permission
-// mode: Bash and the other shells, every other MCP server's tools, and
-// any tool a newer CLI adds, until it's named here. Refusing only the
-// edit tools left Bash and MCP running (Wayne, 7 Nov 2026). A subagent's
-// calls come through the same hook, so it's held to the same. Skill is
-// refused too: a skill's !`command` lines run as it loads, through the
-// permission mode but never this hook, so on Full they'd run unasked
-// (tried on CLI 2.1.319, 8 Nov 2026).
-const READ_ONLY_ALLOWED = new Set([
-  'Read',
-  'Glob',
-  'Grep',
-  'LS',
-  'NotebookRead',
-  'WebFetch',
-  'WebSearch',
-  'ToolSearch',
-  'Task',
-  'Agent',
-  'TodoWrite',
-  'TodoRead',
-  'TaskCreate',
-  'TaskGet',
-  'TaskList',
-  'TaskUpdate',
-  'AskUserQuestion',
-  'ExitPlanMode',
-  'BashOutput',
-  'TaskOutput',
-  'ListMcpResourcesTool',
-  'ReadMcpResourceTool',
-]);
-
 export function untrustedSettings(cwd: string, settings: Record<string, unknown>): Pick<Options, 'settingSources' | 'settings' | 'additionalDirectories'> {
   return { settingSources: ['user'], additionalDirectories: [cwd], ...(Object.keys(settings).length ? { settings } : {}) };
 }
@@ -527,6 +492,9 @@ class ClaudeSession implements AgentSession {
       hooks: {
         Stop: [{ hooks: [(input) => this.onStop(input)] }],
         PostToolUse: [{ matcher: END_TURN_FULL_NAME, hooks: [async (input) => this.onEndTurn(input)] }],
+        // Every Edit and Write, in every mode, a sub-agent's too: where the
+        // mode it ran on is recorded, and where one that writes code is
+        // made to ask outside Full access (onEditCall).
         PreToolUse: [
           // The same hook refuses a queued call Mike denied on a card
           // (onQueuedCall), before any allow rule or Auto's classifier could
@@ -535,13 +503,10 @@ class ClaudeSession implements AgentSession {
           // ...and keeps the runner's token from a thread that isn't on Full
           // access (secrets-guard.ts).
           { matcher: [QUEUE_HOOK_MATCHER, ...SECRETS_ONLY_TOOLS].join('|'), hooks: [async (input) => this.onSecretsCall(input) ?? this.onQueuedCall(input) ?? this.onEditCall(input)] },
-          // One hook for every tool. Plan and Ask mode turns change nothing
-          // (modes.ts): PreToolUse runs whatever the permission mode, full
-          // access included, and a refusal stops the call. And a hook's ask
-          // comes before allow rules, so it's how a folder's untrusted ones
-          // stop applying once the thread leaves Full (askBeforeEveryTool),
-          // on a session that may need it.
-          { hooks: [async (input) => this.everyToolCheck(input, Boolean(opts.heldGrants))] },
+          // A hook's ask comes before allow rules, so it's how a folder's
+          // untrusted ones stop applying once the thread leaves Full
+          // (askBeforeEveryTool). Only on a session that may need it.
+          ...(opts.heldGrants ? [{ hooks: [async () => (this.askEvery ? { hookSpecificOutput: { hookEventName: 'PreToolUse' as const, permissionDecision: 'ask' as const, permissionDecisionReason: "The folder's permission rules aren't trusted for this thread." } } : {})] }] : []),
         ],
         SessionStart: [{ hooks: [async (input) => this.onCompact(input)] }],
       },
@@ -1067,30 +1032,6 @@ class ClaudeSession implements AgentSession {
     if (id !== undefined) this.printGrants.add(id);
   }
 
-  /** The turn is in Plan or Ask mode (UserInput.readOnly). */
-  private readOnly = false;
-
-  /** The read-only check, then the ask for a folder's held rules. */
-  private everyToolCheck(input: HookInput, heldGrants: boolean): Record<string, unknown> {
-    const refused = this.readOnlyCheck(input);
-    if (Object.keys(refused).length || !heldGrants || !this.askEvery) return refused;
-    return { hookSpecificOutput: { hookEventName: 'PreToolUse' as const, permissionDecision: 'ask' as const, permissionDecisionReason: "The folder's permission rules aren't trusted for this thread." } };
-  }
-
-  /** Refuses every tool but READ_ONLY_ALLOWED and the never-ask ones while the turn is read-only. */
-  private readOnlyCheck(input: HookInput): Record<string, unknown> {
-    if (!this.readOnly || input.hook_event_name !== 'PreToolUse') return {};
-    const tool = (input as { tool_name?: string }).tool_name ?? '';
-    if (READ_ONLY_ALLOWED.has(tool) || (this.deps.neverAsk?.has(tool) && !this.deps.alwaysAsk?.has(tool))) return {};
-    return {
-      hookSpecificOutput: {
-        hookEventName: 'PreToolUse',
-        permissionDecision: 'deny',
-        permissionDecisionReason: `This turn is in Ask mode, so nothing may run or change: ${tool} is off for it. Answer from what you can read (Read, Grep, Glob, the web), and if a command would help, say which one rather than running it.`,
-      },
-    };
-  }
-
   // Only for calls that were on the card: an id it never listed is ignored.
   private keepQueuedAnswers(card: WaitingCard, answers: QueuedAnswers): void {
     for (const call of card.queued) {
@@ -1101,9 +1042,6 @@ class ClaudeSession implements AgentSession {
   }
 
   send(input: UserInput): void {
-    // A Plan or Ask message makes its turn read-only until it ends (a plain
-    // one steered into it doesn't unlock it).
-    if (input.readOnly) this.readOnly = true;
     this.normalizer.sent();
     // A new message takes over from a reply owed to the last one (onCompact).
     this.owedReply = undefined;

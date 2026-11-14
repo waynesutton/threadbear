@@ -377,7 +377,6 @@ extension AppModel {
             guard let client = ready else { return }
             let account = newThreadAccountId
             var request = newThreadRequest(text: trimmed, images: draft.images)
-            request.turnMode = turnMode(for: "new")
             if let project = newThreadProjectId, projects.contains(where: { $0.id == project }) { request.projectIds = [project] }
             creatingThread = true
             Task {
@@ -396,8 +395,6 @@ extension AppModel {
                     newThreadCwd = nil
                     newThreadProjectId = nil
                     newThreadPermissionPick = nil
-                    // Plan or Ask mode carries on in the thread it started.
-                    if let mode = turnModes.removeValue(forKey: "new") { turnModes[thread.id] = mode }
                     newThreadAccount = nil
                     newThreadPool = nil
                     newThreadProvider = nil
@@ -464,8 +461,6 @@ extension AppModel {
     /// the send took from the composer, if the runner doesn't take it.
     /// With no `client` the runner is restarting: it waits for the new one.
     private func post(threadId: String, text: String, images: [ImageRef], answers: [AskAnswer], client: RPCClient?, failed: @escaping () -> Void = {}) {
-        // The composer's Plan or Ask mode goes with every message from it.
-        let mode = turnMode(for: threadId)
         let pendingId = UUID().uuidString
         // The thread's own session, open already as its composer is
         // showing; kept by the Task, so a failure finds it.
@@ -490,7 +485,7 @@ extension AppModel {
         Task {
             let send: @MainActor (RPCClient) async throws -> String? = { client in
                 session?.sendingAgain(pendingId)
-                return try await client.send(threadId: threadId, text: text, images: images, answers: answers, mode: mode)
+                return try await client.send(threadId: threadId, text: text, images: images, answers: answers)
             }
             do {
                 if let client {

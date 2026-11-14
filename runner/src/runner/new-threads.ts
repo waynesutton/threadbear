@@ -39,8 +39,6 @@ export const newThreadsPart = {
     // worktree per thread.
     worktree?: boolean;
     startedBy?: ThreadStartedBy;
-    // Its first message in Ask mode (modes.ts).
-    mode?: 'ask';
     // Started by a sandboxed thread's agent in a sandbox folder: shut in
     // one too (ThreadRecord.confined).
     confined?: boolean;

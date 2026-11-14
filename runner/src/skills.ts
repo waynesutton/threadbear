@@ -170,9 +170,8 @@ function firstLine(body: string, name: string): string {
 // grants something (`hooks`, `allowed-tools`, `mcpServers`,
 // `permissionMode`): the plugin isn't a folder Mike trusted, so a skill
 // fetched from GitHub or pasted into New Skill can't pre-approve Bash or
-// start a hook through it, in any mode, Ask included. By name in lower
-// case with `-` and `_` left out, as claude-trust.ts compares, so every
-// spelling counts.
+// start a hook through it, in any mode. By name in lower case with `-`
+// and `_` left out, as claude-trust.ts compares, so every spelling counts.
 const SKILL_KEYS_KEPT = new Set([
   'name',
   'description',

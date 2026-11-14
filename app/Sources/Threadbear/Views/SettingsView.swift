@@ -241,7 +241,7 @@ private struct GeneralSettings: View {
     @AppStorage(RailTerminal.key) private var railTerminal = false
     @AppStorage(FileEditorMode.key) private var editLikeAnEditor = true
     @AppStorage(FileAutosave.key) private var saveFilesAutomatically = true
-    @AppStorage(TurnModes.enabledKey) private var turnModesOn = true
+    @AppStorage(PlanFirstToggle.enabledKey) private var planFirstShiftTab = true
     @AppStorage(CompletionSound.enabledKey) private var dingOn = false
     @AppStorage(CompletionSound.dingKey) private var ding = CompletionSound.Ding.chime.rawValue
     @AppStorage(CompletionSound.volumeKey) private var dingVolume = CompletionSound.defaultVolume
@@ -359,12 +359,11 @@ private struct GeneralSettings: View {
                         .tip("Add a Terminal button to the rail beside Files. ⌘J works either way")
                 }
 
-                SettingsSection("Shift-Tab modes",
-                                about: "Shift-Tab in the message box steps through Plan first (the agent reads and plans, changes nothing, and puts its plan to you on a card to approve or send back; the plan is also saved in the thread's plans/ folder, named for the date and project, and opens beside the thread), Ask (nothing changes; it just answers), then off, back to the access the thread had. Off shows nothing and messages work as they always have. Turning this off takes Shift-Tab back to what it did before; Plan first stays in the access menu.",
-                                ask: "explain or change what Plan first and Ask do.") {
-                    Toggle("Use Shift-Tab for Plan first and Ask", isOn: $turnModesOn)
-                        .tip("Shift-Tab in the message box steps through Plan first and Ask")
-                        .onChange(of: turnModesOn) { _, on in if !on { app.turnModes = [:] } }
+                SettingsSection("Shift-Tab",
+                                about: "Shift-Tab in the message box turns Plan first on (the agent reads and plans, changes nothing, and puts its plan to you on a card to approve or send back; the plan is also saved in the thread's plans/ folder, named for the date and project, and opens beside the thread) and off again, back to the access the thread had. Turning this off takes Shift-Tab back to what it did before; Plan first stays in the access menu.",
+                                ask: "explain or change what Plan first does.") {
+                    Toggle("Use Shift-Tab for Plan first", isOn: $planFirstShiftTab)
+                        .tip("Shift-Tab in the message box turns Plan first on and off")
                 }
 
                 SettingsSection("Files",

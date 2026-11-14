@@ -1687,7 +1687,6 @@ export class Runner {
     if (opts.scheduledSince !== undefined) msg.scheduledSince = opts.scheduledSince;
     if (opts.answers?.length) msg.answers = opts.answers;
     if (opts.editOf) msg.editOf = opts.editOf;
-    if (opts.mode) msg.mode = opts.mode;
     rec.lastActivityAt = this.isoNow();
     if (rt.turn && !opts.queue && fromMike(text, opts) && this.switchWaiting(st)) {
       // He picked another login (another provider, usually) during this
@@ -1840,9 +1839,7 @@ export class Runner {
   // message rather than once, as he moves between the two. The transcript
   // keeps what he typed. "Phone app", not "iPhone app": the origin doesn't say
   // which, and an Android phone (android-native/, or Keith's) sends the same.
-  // `mode` "plan" is a message logged before Plan first took over planning: read-only, as Ask.
-  forAgent(msg: { text: string; origin?: MessageOrigin; mode?: TurnMode | 'plan' }, provider?: Provider, place?: { accountId: string; cwd: string }): string {
-    if (msg.mode) return `${modeInstructions('ask')}\n\n${this.forAgent({ ...msg, mode: undefined }, provider, place)}`;
+  forAgent(msg: { text: string; origin?: MessageOrigin }, provider?: Provider, place?: { accountId: string; cwd: string }): string {
     // /name for a Threadbear skill, or one the CLI finds itself in this
     // thread's folder and login (~/.claude/skills: listedSkills), made to
     // work in this thread's CLI (skill-mentions.ts).
@@ -4376,7 +4373,6 @@ export function userMessage(msg: QueuedSend): EventBody {
     ...(msg.reviewId ? { reviewId: msg.reviewId, reviewResponse: msg.reviewResponse } : {}),
     ...(msg.answers?.length ? { answers: msg.answers } : {}),
     ...(msg.editOf ? { editOf: msg.editOf } : {}),
-    ...(msg.mode ? { mode: msg.mode } : {}),
   };
 }
 

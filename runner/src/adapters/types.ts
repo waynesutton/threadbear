@@ -231,10 +231,7 @@ export interface SessionSink {
 
 // id is the runner's turnId; the CLI echoes it so its turns can be told
 // apart from ones it starts by itself.
-// readOnly: a Plan or Ask turn (modes.ts). Nothing it does may change files:
-// Claude refuses edits in a PreToolUse hook (which runs even with full
-// access), Codex runs the turn in a read-only sandbox.
-export type UserInput = { id?: string; text: string; images: ImageRef[]; readOnly?: boolean };
+export type UserInput = { id?: string; text: string; images: ImageRef[] };
 
 // Passed to SessionSink.exited when the session to resume doesn't
 // exist (never started, deleted in the CLI's own app, a moved home): the

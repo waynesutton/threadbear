@@ -529,24 +529,16 @@ Any other file you paste or drop in (a video, a PDF, a folder) goes in as
 its full path where you drop it, for the agent to open where it is.
 Nothing's copied, so a big one is fine.
 
-Shift-Tab in the message box steps through **Plan first** and **Ask**,
-then off. Plan first is the access menu's Plan first: the agent reads and
-plans, changes nothing, and puts its plan to you on a card with Go ahead
-and Send back. Threadbear also saves each plan in the thread's folder as
+Shift-Tab in the message box turns **Plan first** on and off. Plan first
+is the access menu's Plan first: the agent reads and plans, changes
+nothing, and puts its plan to you on a card with Go ahead and Send back.
+Threadbear also saves each plan in the thread's folder as
 `plans/<date>-<project>.md` (the folder's name if the thread isn't in a
 project), opens it in the panel beside the thread, and pins it in
 Highlights; a revised plan updates the same file until you say Go ahead.
-Stepping on from Plan first puts back the access the thread had, or Ask
-before edits if Threadbear can't tell what that was (after a restart). In
-Ask, the agent reads what it needs but changes nothing, whatever the access
-chip says, and just answers: on Claude, shell commands and other tools that
-could change something (another MCP server's, most of Threadbear's own,
-and skills, which can run commands as they load) are switched off for
-that turn, so it reads files and the web instead; on Codex, Threadbear's
-own tools that change something are off too; it shows as an Ask chip beside the access
-chip (click it to turn it off) and stays on for the thread until you
-change it. Off, nothing shows and messages work as always. Settings (⌘,)
-> General can turn Shift-Tab's modes off.
+Turning Plan first off puts back the access the thread had, or Ask before
+edits if Threadbear can't tell what that was (after a restart). Settings
+(⌘,) > General can give Shift-Tab back to the message box.
 
 Your messages show basic Markdown as replies do: start lines with "- " or
 "1. " for a list, and use **bold**, *italics*, `code`, [links](https://example.com),

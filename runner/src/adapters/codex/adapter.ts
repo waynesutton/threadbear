@@ -380,9 +380,6 @@ type ActiveTurn = {
   ending: boolean;
   dropped: string[]; // held messages Stop dropped
   openCommands: Set<string>;
-  // An Ask message started it or went into it: Threadbear's own tools that
-  // change something are refused until it ends (CodexTools' readOnly).
-  readOnly?: boolean;
 };
 
 type State = 'starting' | 'ready' | 'turnPending' | 'turnActive' | 'closing' | 'closed';
@@ -454,7 +451,6 @@ export class CodexSession implements AgentSession {
       requestApproval: (req) => this.sink.requestApproval(req),
       cwd: () => this.cwd,
       mode: () => this.mode,
-      readOnly: () => Boolean(this.turn?.readOnly),
       rules: () => this.rules,
       addRules: (rules) => this.addRules(rules),
     });
@@ -829,10 +825,8 @@ export class CodexSession implements AgentSession {
           this.hold(input);
           return;
         }
-        if (this.state === 'turnPending' || !turn.codexTurnId) {
-          turn.steerQueue.push(input);
-          if (input.readOnly) turn.readOnly = true;
-        } else this.steer(turn, input);
+        if (this.state === 'turnPending' || !turn.codexTurnId) turn.steerQueue.push(input);
+        else this.steer(turn, input);
         return;
       }
     }
@@ -850,8 +844,7 @@ export class CodexSession implements AgentSession {
     const params: TurnStartParams = {
       threadId: this.threadId!,
       input: inputItems(input),
-      // A Plan or Ask mode turn runs read-only, whatever the thread's mode.
-      ...(input.readOnly ? { approvalPolicy: 'never' as const, sandboxPolicy: { type: 'readOnly' as const, networkAccess: true }, approvalsReviewer: 'user' as const } : turnPolicy(this.mode)),
+      ...turnPolicy(this.mode),
       summary: 'detailed',
     };
     if (input.id) params.clientUserMessageId = input.id;
@@ -885,7 +878,6 @@ export class CodexSession implements AgentSession {
   private startTurn(input: UserInput, steerLater: UserInput[] = []): void {
     const turn = this.newTurn({ ids: input.id ? [input.id] : [], own: false });
     turn.steerQueue.push(...steerLater);
-    if (input.readOnly || steerLater.some((m) => m.readOnly)) turn.readOnly = true;
     this.turn = turn;
     this.state = 'turnPending';
     const params = this.turnParams(input);
@@ -1034,8 +1026,6 @@ export class CodexSession implements AgentSession {
   // starts the next turn as soon as this one completes, which is what
   // Claude does with a message that arrives as it finishes.
   private steer(turn: ActiveTurn, input: UserInput): void {
-    // The sandbox stays as the turn started, but the tools here stop.
-    if (input.readOnly) turn.readOnly = true;
     const done = this.proc
       .request<TurnSteerResponse>('turn/steer', {
         threadId: this.threadId!,
