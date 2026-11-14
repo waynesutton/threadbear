@@ -116,6 +116,15 @@ After({ tags: '@picture-loading' }, () => {
 Before({ tags: '@bears.tile or @bears.colour or @bears.mention or @bears.tablepage' }, () => { process.env.TB_MOCK_BEARS = '1'; });
 After({ tags: '@bears.tile or @bears.colour or @bears.mention or @bears.tablepage' }, () => { delete process.env.TB_MOCK_BEARS; });
 
+const startingCommandsDelay = process.env.THREADBEAR_MOCK_COMMANDS_DELAY_MS;
+Before({ tags: '@slash-catalog-loading' }, () => {
+  process.env.THREADBEAR_MOCK_COMMANDS_DELAY_MS = '1800';
+});
+After({ tags: '@slash-catalog-loading' }, () => {
+  if (startingCommandsDelay === undefined) delete process.env.THREADBEAR_MOCK_COMMANDS_DELAY_MS;
+  else process.env.THREADBEAR_MOCK_COMMANDS_DELAY_MS = startingCommandsDelay;
+});
+
 Before(async function (this: ThreadbearWorld, { pickle }) {
   // A scenario about paging needs a thread longer than one page of events.
   const long = pickle.tags.some((t) => t.name === '@long-thread');

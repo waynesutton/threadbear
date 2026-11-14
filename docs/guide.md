@@ -629,7 +629,8 @@ Threadbear, the CLI's, Skills, Recent), Return or Tab puts it in the box
 (Return again sends it, so a new thread never starts by surprise), and
 Esc closes the palette. The Run button sends it at once; to have Return
 do that too, turn on Settings > General > Slash commands > Return sends
-a command right away. Clicking a category shows only those;
+a command right away. While the command list is still loading, Return leaves
+your words in the box. Clicking a category shows only those;
 double-clicking a command does what Return does.
 Click the search field along the palette's top to find a skill or
 command by any word in its name or description. The arrows, Return and

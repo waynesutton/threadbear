@@ -216,7 +216,7 @@ impl Composer {
         let Some(view) = self.palette_open(&text, cx) else { return false };
         let matches = slash::matches(&view.shown, &view.query, self.palette.category, &view.recent);
         // Return with nothing to pick sends what's typed, as words.
-        if key == PaletteKey::Enter && matches.is_empty() {
+        if key == PaletteKey::Enter && matches.is_empty() && !view.loading {
             return false;
         }
         let categories: Vec<slash::Category> = slash::counts(&view.shown, &view.query, &view.recent).into_iter().map(|(c, _)| c).collect();

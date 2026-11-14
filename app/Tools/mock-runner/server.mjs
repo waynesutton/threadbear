@@ -1297,6 +1297,9 @@ async function dispatch(client, method, p) {
     case 'threads.commands': {
       // The palette's list (docs/protocol.md, "Slash commands"): Threadbear's
       // own, the CLI's, then skills, as a real Claude thread lists them.
+      // A slow catalog for the Return-while-loading scenario.
+      const commandDelay = Number(process.env.THREADBEAR_MOCK_COMMANDS_DELAY_MS ?? 0);
+      if (commandDelay > 0) await sleep(Math.min(commandDelay, 10000));
       // folders.commands is a new thread's box asking before there's a
       // thread: the same list for the folder it would start in.
       const t = method === 'folders.commands' ? { summary: { provider: 'claude', cwd: p.cwd ?? os.homedir() } } : need(p.threadId);
