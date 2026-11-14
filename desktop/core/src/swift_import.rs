@@ -132,7 +132,7 @@ pub fn settings(defaults: &BTreeMap<String, Plist>, primary_screen_height: f64) 
     }
     // "system" is what none means here.
     put("appearance", get("appearance").and_then(Plist::as_str).filter(|a| *a != "system").map(Value::from));
-    for key in ["completionSound", "askBeforeQuitting", "activityLog", "usage.showModelWeeks", "filesEditLikeAnEditor", "filesSaveAutomatically"] {
+    for key in ["completionSound", "askBeforeQuitting", "notesShown", "notesListHidden", "activityLog", "usage.showModelWeeks", "filesEditLikeAnEditor", "filesSaveAutomatically"] {
         put(key, get(key).and_then(Plist::as_bool).map(Value::from));
     }
     put("completionSoundVolume", get("completionSoundVolume").and_then(Plist::as_f64).map(Value::from));

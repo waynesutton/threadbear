@@ -169,6 +169,7 @@ pub struct Threadbear {
     /// (`showsScheduledHome` and friends), not the selected thread. Picking a
     /// thread puts the thread back.
     pub(crate) shows_home: bool,
+    pub(crate) notes: crate::notes_page::NotesPage,
     /// Back or Forward is putting a place back (`navigationPending`): the
     /// steps on the way aren't recorded.
     pub(crate) restoring_place: bool,
@@ -552,6 +553,7 @@ impl Threadbear {
             scheduled,
             schedule_editor: None,
             shows_home: false,
+            notes: crate::notes_page::NotesPage::new(),
             restoring_place: false,
             librarian: crate::librarian::LibrarianState::new(),
             looks: Default::default(),
@@ -1230,6 +1232,7 @@ impl Threadbear {
     }
 
     pub(crate) fn open(&mut self, id: String, window: &mut Window, cx: &mut Context<Self>) {
+        self.notes.open = false;
         self.open_with(id, None, window, cx);
     }
 
@@ -1617,6 +1620,7 @@ impl Threadbear {
             "cardArrived": self.composer(cx).and_then(|c| c.read(cx).card_arrival.last),
         });
         // ⌘K's box, while it's up (open_anything.rs).
+        dump["notes"] = self.notes.dump(self.settings.saved.notes_list_collapsed == Some(true), cx);
         dump["anything"] = self.open_anything_dump(cx);
         // The last time the panels moved (a panel opened or closed): where
         // each panel was and went, and whether they're still on their way.

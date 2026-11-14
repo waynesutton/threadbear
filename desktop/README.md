@@ -16,7 +16,8 @@ and the keyboard shortcuts. It starts new threads (the new-thread page, on any
 runner) and offers the slash command palette. Other runners' threads are listed
 and open through this Mac's runner.
 The pane beside the thread has Highlights, file previews, Patches and the
-folder browser.
+folder browser. Notes (⌘6) keeps private, encrypted notes in the same files
+and under the same key as the Swift app.
 
 ## How it's put together
 

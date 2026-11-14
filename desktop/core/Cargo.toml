@@ -45,6 +45,9 @@ markdown = "=1.0.0"
 # canonicalize without Windows' `\\?\` prefix; on Mac and Linux it is just
 # std::fs::canonicalize. Already in the Windows build through gpui, at this version.
 dunce = "1.0.5"
+# Notes sealed as the Swift app seals them (notes.rs): AES-256-GCM, with a
+# random nonce and key. Already in the build through rustls, at this version.
+ring = "=0.17.14"
 
 # renamex_np and renameat2 for swapping an update in at once, and O_NOFOLLOW
 # for private_file's appends.

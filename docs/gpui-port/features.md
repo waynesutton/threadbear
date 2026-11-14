@@ -546,3 +546,9 @@ Size is `none` throughout: the planning docs don't size these, and work the app 
 - `system.handover` (Seamless handover, L)
 - `juice.archiveflight` (Archive flight, M)
 - `juice.hibernateflight` (Hibernate flight, S)
+
+## Private notes
+
+| ID | Feature | What it does | GPUI route | Route | Size | Swift |
+|---|---|---|---|---|---|---|
+| `notes.edit` | Private notes | Encrypted local notes, naming, autosave and folding list | Shared Swift files with a native editor | build | M | `NotesStore`, `NotesPage`, `NoteEditor` |

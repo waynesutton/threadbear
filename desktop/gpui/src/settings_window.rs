@@ -521,6 +521,7 @@ impl SettingsWindow {
     fn render_general(&mut self, settings: Option<&RunnerSettings>, window: &mut Window, cx: &mut Context<Self>) -> Vec<AnyElement> {
         // This Mac's own, so they're here while the runner's away too.
         let mut sections = vec![self.appearance_section(cx), self.panels_section(cx), self.files_section(cx), self.slash_section(cx), self.terminal_section(cx), self.quitting_section(cx), self.look_section(cx), self.notifications_section(cx)];
+        sections.push(self.notes_section(cx));
         // The web runtime is this Mac's too (web_runtime.rs), last, so it
         // moves nothing the Swift app's General has.
         let web_runtime = section("settings-web-runtime", "Web runtime", crate::web_runtime::SETTINGS_ABOUT, "check whether it's installed and working, or why a diagram or panel isn't showing.", vec![row("Web runtime", crate::web_runtime::settings_control(cx), cx)], cx);
@@ -775,6 +776,19 @@ impl SettingsWindow {
 
     /// `QuitPrompt`'s switch: ticking Don't ask again turns it off, and this
     /// turns it back on.
+    fn notes_section(&mut self, cx: &mut Context<Self>) -> AnyElement {
+        let on = self.app.upgrade().is_none_or(|a| a.read(cx).settings.saved.show_notes != Some(false));
+        let switch = self.switch("settings-show-notes", on, "Show Notes in the activity bar", cx, |this, on, cx| {
+            this.app.update(cx, |app, cx| {
+                app.settings.saved.show_notes = Some(on);
+                if !on { app.close_notes(cx); }
+                app.save_settings_soon(cx);
+                cx.notify();
+            }).ok();
+        });
+        section("settings-notes", "Notes", "Private notes kept encrypted on this computer. Hiding Notes keeps your notes.", "change it for you.", vec![row("Show Notes", switch, cx)], cx)
+    }
+
     fn quitting_section(&mut self, cx: &mut Context<Self>) -> AnyElement {
         let on = self.app.upgrade().is_none_or(|a| a.read(cx).settings.asks_before_quitting());
         let switch = self.switch("settings-ask-before-quitting", on, "Ask to confirm when you quit Threadbear", cx, |this, on, cx| {
