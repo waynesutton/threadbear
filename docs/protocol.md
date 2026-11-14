@@ -5307,7 +5307,10 @@ is a project with `table: { bears: string[], maxTurns? }` (projects.json,
 `Project.table`), never sent to the Convex mirror. Its first folder,
 `<bears root>/../Tables/<slug>-<hex>/`, has the host's `CLAUDE.md`. Its
 brief has a `Bears:` line. A table with a `parentId` is a Part. The
-librarian is shown a table only for a thread already in it.
+librarian is shown a table only for a thread already in it. A thread in a
+bear's folder that joins a table (`changeMembership`, `Projects.onJoined`)
+seats that bear; leaving doesn't unseat it. `tables.create` sets the
+project's icon to the `person.3` symbol, as the user's.
 
 | Method | Params | Result |
 |---|---|---|

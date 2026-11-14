@@ -84,6 +84,7 @@ struct ProjectPage: View {
     @ViewBuilder
     private func info(_ threads: [ThreadSummary]) -> some View {
         PartsSection(project: project)
+        if let table = project.table { TableBearsSection(table: table) }
         TextSection(project: project, field: .goals)
         TextSection(project: project, field: .state)
         TasksSection(project: project)
@@ -948,6 +949,45 @@ struct TaskCard: View {
 
 /// Its folders: patches load from each of them. A folder shows in Finder;
 /// the minus takes it out.
+/// A table's bears (protocol "Tables"): each one's tile, name and what it
+/// does, from the bears the runner lists. A bear's thread put in the
+/// project takes a seat; `tb tables seat` changes them too.
+private struct TableBearsSection: View {
+    @Environment(AppModel.self) private var app
+    let table: ProjectTable
+    @State private var bears: [BearEntry] = BearList.bears
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: zoomed(2)) {
+            PageHeading(title: "Bears at this table") { EmptyView() }
+            ForEach(table.bears, id: \.self) { id in
+                let bear = bears.first { $0.id == id }
+                HStack(spacing: zoomed(8)) {
+                    BearTile(bear: bear?.tile ?? ThreadBear(id: id, name: id), size: zoomed(22))
+                    Text(bear?.name ?? id)
+                        .font(.system(size: TypeScale.label, weight: .medium))
+                    if let does = bear?.does {
+                        Text(does)
+                            .font(.system(size: TypeScale.detail))
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                    }
+                    Spacer(minLength: 0)
+                }
+                .padding(.vertical, zoomed(3))
+                .tip(bear.map { "\($0.name) sits at this table" } ?? "A bear this Mac doesn't list now")
+            }
+            if table.bears.isEmpty {
+                Text("No bears yet. Put a bear's thread in this project to seat it.")
+                    .font(.system(size: TypeScale.label))
+                    .foregroundStyle(Color(nsColor: Theme.faintText))
+            }
+        }
+        .onAppear { BearList.refresh?() }
+        .onReceive(NotificationCenter.default.publisher(for: BearList.changed)) { _ in bears = BearList.bears }
+    }
+}
+
 private struct FoldersSection: View {
     @Environment(AppModel.self) private var app
     let project: Project

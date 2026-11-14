@@ -483,6 +483,10 @@ Size is `none` throughout: the planning docs don't size these, and work the app 
 | `planned.exp.acpagents` | ACP agents (`acpAgents`) | OpenCode and Cursor threads | Drive every provider choice from `ProviderInfo` rather than hardcoding two, and don't copy the web's `modelLabel`. | build | none | none |
 | `planned.exp.cardreviewer` | Card reviewer (`cardReviewer`) | Opus pre-reviews Auto cards | No new UI: a transcript note says "Allowed by the reviewer". | build | none | none |
 | `planned.exp.fastmode` | Fast mode (`fastMode`) | Standard or Fast per Claude thread, `/fast` | The Speed row in `composer.modelpicker` and a chip suffix. | build | none | none |
+| `bears.tile` | Bear tiles (`bears`) | A bear's threads show its icon on its colour where a folder would be; a crown for the head bear | Draw `ThreadSummary.bear` in the sidebar row's tile (Swift: `BearTile`). | build | none | `BearTile` |
+| `bears.colour` | Bear Colour (`bears`) | Pick a bear's tile colour from its thread's menu | A Bear Colour submenu on a bear thread's row calling `bears.update { color }`, behind a busy key. | build | none | `BearColorMenu` |
+| `bears.mention` | @ bear picker (`bears`) | Typing @ lists bears from `bears.list`; picking one writes `@Name` | A list over the cursor like the / list, only for messages going to this runner, leaving modified keys to the composer. | build | none | `BearPicker` |
+| `bears.tablepage` | A table's bears (`tables`) | The table's project page lists the bears at it | A section on the project page from `Project.table` and `bears.list`. | build | none | `TableBearsSection` |
 
 ## Route counts
 

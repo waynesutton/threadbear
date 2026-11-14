@@ -297,6 +297,9 @@ export class Projects {
   // A table's bears by name, for its brief's Bears: line (set in main.ts
   // while tables are on).
   describeBears?: (ids: string[]) => string;
+  // Told after a thread joins projects, so a bear's thread put in a table
+  // seats that bear (tables.ts; set in main.ts while tables are on).
+  onJoined?: (threadId: string, cwd: string, projectIds: string[]) => void;
 
   private briefBlock(p: ProjectRecord, max: number): string {
     const parent = p.parentId ? this.items.get(p.parentId) : undefined;
@@ -587,6 +590,13 @@ export class Projects {
     if (change.by === 'agent' && joined.length) plan.push((r) => (r.projectsTold = [...new Set([...(r.projectsTold ?? []), ...joined])]));
     const thread = host.editThread(id, (r) => plan.forEach((f) => f(r)), say);
     this.log.info('thread projects changed', { threadId: id, by: change.by, joined, left });
+    if (joined.length) {
+      try {
+        this.onJoined?.(id, thread.cwd, joined);
+      } catch (e) {
+        this.log.warn('a project join hook failed', { threadId: id, error: String(e) });
+      }
+    }
     this.publish();
     return { joined, left, thread };
   }

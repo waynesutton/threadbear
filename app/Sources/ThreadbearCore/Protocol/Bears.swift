@@ -77,3 +77,23 @@ public extension RPCClient {
         return r.on ? (r.bears ?? []).filter { $0.archived != true } : []
     }
 }
+
+/// A project that's a table of bears: the ids of the bears at it, and how
+/// many bear replies each message allows (nil: the runner's default, 6).
+public struct ProjectTable: Sendable, Hashable, Decodable {
+    public var bears: [String]
+    public var maxTurns: Int?
+
+    public init(bears: [String], maxTurns: Int? = nil) {
+        self.bears = bears
+        self.maxTurns = maxTurns
+    }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        bears = c.lossyArray(String.self, forKey: .bears)
+        maxTurns = c.lenientInt(forKey: .maxTurns)
+    }
+
+    enum CodingKeys: String, CodingKey { case bears, maxTurns }
+}

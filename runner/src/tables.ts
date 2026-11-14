@@ -19,6 +19,7 @@ export const EXPERIMENT = 'tables';
 export const DEFAULT_MAX_TURNS = 6;
 export const MAX_TURNS_CAP = 20;
 export const TABLE_BEARS_MAX = 8;
+export const TABLE_ICON = 'person.3';
 
 export type ProjectTable = { bears: string[]; maxTurns?: number };
 
@@ -110,7 +111,7 @@ export class Tables {
     fs.mkdirSync(folder, { recursive: true });
     const text = hostInstructions(title);
     for (const f of ['CLAUDE.md', 'AGENTS.md']) if (!fs.existsSync(path.join(folder, f))) fs.writeFileSync(path.join(folder, f), text);
-    return this.projects.create({
+    const made = this.projects.create({
       title,
       folders: [folder.startsWith(os.homedir()) ? `~${folder.slice(os.homedir().length)}` : folder],
       goals: typeof p.goal === 'string' ? p.goal : '',
@@ -119,6 +120,10 @@ export class Tables {
       ...(p.byThread ? { byThread: p.byThread } : {}),
       table,
     });
+    // A table looks like one in every project list, whatever the
+    // librarian would pick from its folder. Its user can still change it.
+    void this.projects.chooseIcon(made.id, { symbol: TABLE_ICON }, 'mike').catch(() => undefined);
+    return made;
   }
 
   seat(idOrTitle: string, change: { add?: unknown; remove?: unknown; maxTurns?: unknown }): Project {
@@ -128,6 +133,22 @@ export class Tables {
     const bears = [...new Set([...t.table!.bears.filter((b) => !remove.includes(b)), ...add])];
     const maxTurns = change.maxTurns !== undefined ? Number(change.maxTurns) : t.table!.maxTurns;
     return this.projects.update(t.id, { table: checkTable({ bears, ...(maxTurns !== undefined ? { maxTurns } : {}) }) });
+  }
+
+  // A bear's thread joined these projects (the Projects menu, an agent's
+  // join_project): the bear takes a seat at any that are tables. Leaving
+  // doesn't unseat it, as its other threads may still be there.
+  seatFromThread(cwd: string, projectIds: string[]): string[] {
+    const bear = this.bears.forCwd(cwd);
+    if (!bear) return [];
+    const seated: string[] = [];
+    for (const id of projectIds) {
+      const t = this.list({ archived: true }).find((p) => p.id === id);
+      if (!t?.table || t.table.bears.includes(bear.id)) continue;
+      this.seat(t.id, { add: [bear.id] });
+      seated.push(t.id);
+    }
+    return seated;
   }
 
   // Takes a bear out of every table it's at (archiving or deleting it).

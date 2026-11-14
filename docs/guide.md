@@ -1073,6 +1073,11 @@ read every exchange. Each message you send allows at most 6 bear replies
 (`tb tables seat <table> --max 4` changes it). The librarian keeps a
 table's state but never files a thread into one.
 
+To seat another bear, put one of its threads in the table's project (the
+thread's Projects menu) or run `tb tables seat <table> --add Designer`.
+The table's project page lists the bears at it, with their icons, under
+Bears at this table, and new tables get a three-people icon.
+
 ## The librarian
 <!-- slug: librarian -->
 

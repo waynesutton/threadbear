@@ -48,6 +48,10 @@ Every item uses `whileBusy` and gets a tooltip. No runner change.
 - **New table**: title, goal, a multi-pick of bears, and an optional parent project, then `tables.create { title, goal, bears, parent }`.
 - No runner change.
 
+## A table's bears on its project page (in the Swift app: port it)
+
+`Project.table` is decoded in the Swift app (`ProjectTable`), and the project page has a Bears at this table section: each seated bear's tile, name and what it does, from `bears.list`. Port it to the GPUI project page. No runner change.
+
 ## The table chat
 
 A table's thread is an ordinary thread in its folder. Bear replies arrive as messages that start with `[Bear: <name> replied in thread:<id>. ...]`, followed by the reply quoted.

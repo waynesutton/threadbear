@@ -26,6 +26,13 @@ Feature: Bear tiles in the sidebar
     Then the message reads "Hey @Writer "
     And the list closes
 
+  @bears.tablepage @manual @gpui-pending
+  Scenario: A table's project page lists its bears
+    Given a table called "Head table" with Head Bear and Writer
+    When I put a Designer thread in the Head table project
+    Then Designer sits at the table
+    And the Head table project page lists Head Bear, Writer and Designer under "Bears at this table"
+
   @bears.colour @manual @gpui-pending
   Scenario: Pick a bear's colour from its thread's menu
     Given a thread in Writer's folder

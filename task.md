@@ -13,6 +13,8 @@ Nothing.
 
 ## Completed
 
+- [x] 2026-11-14 08:55 UTC Tables show their bears: a bear's thread put in a table project seats the bear (Projects.onJoined, Tables.seatFromThread), new tables get the person.3 icon, and the Swift project page has Bears at this table (ProjectTable, TableBearsSection). Also: the done card finds a fork's PR to upstream (8732a6a7). Wayne's Head table now seats Designer and its goals say Head Bear. runner/src/projects.ts, tables.ts, main.ts; app ProjectPage.swift, Project.swift, Bears.swift. Verified: tables 7, loose-ends 10; ProjectTableTests 3, BearPickerTests, TipsTests, EveryClickShowsTests.
+
 - [x] 2026-11-13 21:40 UTC Bears docs sync after the head bear, sidebar tiles and @ picker: guide, protocol, SECURITY, the bears skill and both PRDs say what shipped since 79ab733c and what was observed with a Codex Designer bear (image_gen saves without a card, Auto is Claude only, a pin card that looked missing; corrected later the same day: the card showed and Wayne answered it after the turn ended, so it isn't a bug). `tb bears access` now says Auto works like Ask on a Codex bear. runner/src/cli-bears.ts, docs, prds. Verified: bears 17 tests, typecheck.
 
 - [x] 2026-11-13 18:44 UTC @ bear picker review fixes: no list for a message going to another runner, modified keys stay the composer's, Esc and lost focus keep it shut. app/Sources/Threadbear/Views/BearPicker.swift, ComposerView.swift. Verified: BearPickerTests 5, EveryClickShowsTests, TipsTests; quick check on land (57934753).
