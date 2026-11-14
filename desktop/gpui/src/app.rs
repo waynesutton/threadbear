@@ -170,6 +170,7 @@ pub struct Threadbear {
     /// thread puts the thread back.
     pub(crate) shows_home: bool,
     pub(crate) notes: crate::notes_page::NotesPage,
+    pub(crate) skills: crate::skills_page::SkillsPage,
     /// Back or Forward is putting a place back (`navigationPending`): the
     /// steps on the way aren't recorded.
     pub(crate) restoring_place: bool,
@@ -557,6 +558,7 @@ impl Threadbear {
             schedule_editor: None,
             shows_home: false,
             notes: crate::notes_page::NotesPage::new(),
+            skills: crate::skills_page::SkillsPage::default(),
             restoring_place: false,
             librarian: crate::librarian::LibrarianState::new(),
             looks: Default::default(),
@@ -879,6 +881,7 @@ impl Threadbear {
                     self.load_prints(cx);
                     self.load_remote(cx);
                     self.load_clis(cx);
+                    self.load_skills(cx);
                     self.load_connectors(cx);
                     self.load_setup_devices(cx);
                     self.side.update(cx, |side, cx| side.connected(cx));
@@ -968,6 +971,7 @@ impl Threadbear {
                     }
                 }
                 "librarian.updated" => self.librarian.status = Some(threadbear_core::librarian::Status::decode(&params["librarian"])),
+                "skills.updated" => { self.skills.receive(&params); self.refresh_skill_commands(cx); },
                 "settings.updated" => self.runner_settings = Some(params["settings"].clone()),
                 // A login appearing or going, its models once asked, its
                 // usage; and the pools after a save: both replace `hello`'s.
@@ -1239,6 +1243,7 @@ impl Threadbear {
 
     pub(crate) fn open(&mut self, id: String, window: &mut Window, cx: &mut Context<Self>) {
         self.notes.open = false;
+        self.skills.open = false;
         self.open_with(id, None, window, cx);
     }
 
@@ -1595,6 +1600,7 @@ impl Threadbear {
         // What came across from the Swift app, while its note's up. Set
         // after, as the literal above is as long as serde_json's macro goes.
         dump["importNote"] = json!(self.import_note);
+        dump["skillsPage"] = self.skills.dump(cx);
         dump["settingsPage"] = self.settings_page.as_ref().filter(|_| self.settings_page_open).map_or(Value::Null, |view| view.read(cx).dump(cx));
         dump["looks"] = self.looks_dump();
         dump["profilePage"] = self.profile_dump();

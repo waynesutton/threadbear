@@ -300,6 +300,11 @@ impl Threadbear {
         // Connectors, Runners and Updates at the foot (activity_panels.rs),
         // each with its dot: the accent when only Mike can do something, grey
         // while something sorts itself out.
+        if self.skills.supported && self.skills.enabled {
+            let mut button = RailButton::new("rail-skills", "sparkles", "Skills", self.skills.open);
+            button.tip = self.shortcut_tip("Skills", ShortcutCommand::ShowSkills);
+            views.push(rail_button(button, |this,window,cx| { if this.skills.open {this.close_skills(window,cx)} else {this.show_skills(window,cx)} },cx));
+        }
         if self.settings.saved.show_notes != Some(false) {
             let mut button = RailButton::new("rail-notes", "doc.plaintext", "Notes", self.notes.open);
             button.tip = self.shortcut_tip("Notes", ShortcutCommand::ShowNotes);

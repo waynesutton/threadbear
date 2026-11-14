@@ -2114,14 +2114,13 @@ on your Mac (`![a chart](/path/to/chart.png)`), rather than showing a link.
 Skills give your agents extra know-how: how to draw a Mermaid diagram,
 build an isometric explainer, write in a house style. Click Skills in the
 bar on the left (under the Librarian), or press ⌘5, to see yours. The page opens over the
-main panel; its X or Esc puts you back where you were.
+main panel; Close Skills, Esc or Back puts you back where you were.
 
 To add one, paste its GitHub link in Import a skill and press Import: a
 repo (github.com/owner/repo), a folder in one, a SKILL.md, or even a
 skill's own web page if it names its GitHub repo or `npx skills add` line.
 A repo with several skills adds them all. Each is pinned to the commit it
-was imported at, so it never changes under you; Update to the Latest in
-its ... menu moves it on. Suggested lists ones worth having, such as Pele
+was imported at, so it never changes under you; Update beside the skill moves it on. Suggested lists ones worth having, such as Pele
 (Mermaid diagrams, which comes with Threadbear) and Anatomy (interactive
 drawings of how a machine works), with an Add button each. Make-print and
 bundle-report come with Threadbear too: they're how a thread builds Prints
@@ -2133,7 +2132,7 @@ it a name (its slash command: brand-voice becomes /brand-voice), say
 when agents should use it if you like (its first line is used
 otherwise), and paste or type its text: plain instructions, or a whole
 SKILL.md, which keeps its own header. Save (or ⌘Return) adds it, Always
-on, and it works like any other skill. Edit in its ... menu changes it,
+on, and it works like any other skill. Edit beside it changes it,
 name and all.
 
 A skill only brings instructions. Anything in its header that would run

@@ -1352,6 +1352,7 @@ impl Threadbear {
     pub(crate) fn new_thread(&mut self, cx: &mut Context<Self>) {
         self.notes.open = false;
         self.hide_settings_page(cx);
+        self.skills.open = false;
         self.leave_pane(cx);
         self.selected = None;
         self.shows_home = false;

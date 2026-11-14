@@ -459,6 +459,7 @@ fn step(app: &Entity<Threadbear>, cmd: &Value, window: &mut Window, cx: &mut App
             Ok(json!("ok"))
         }
         // Settings > Keyboard, as the Swift app's `shortcuts` (settings_window/keyboard.rs).
+        "skills" => app.update(cx, |app,cx|app.skills_automation(cmd,window,cx)),
         "shortcuts" => crate::settings_window::keyboard_automation(app, cmd, window, cx),
         // The sidebar's commands (sidebar.rs). Guarded ones only take the forms
         // that name a section, a row or a tip; the others fall through below.

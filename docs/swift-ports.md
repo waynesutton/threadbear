@@ -115,7 +115,7 @@ the keyboard shortcut.
 | 27 | 7ebe4e66 | Notes save (no file protection) | done |
 | 90 | f1510297 | One Settings… (already); Notes never asks for the Mac password | done |
 | 88 | 95cdefc8 | A code comment | nothing |
-| 64 | 1952b193 | Back and Forward (already); ⌘5 Skills and ⌘6 Notes | Notes done; ⌘5 left, no Skills page |
+| 64 | 1952b193 | Back and Forward (already); ⌘5 Skills and ⌘6 Notes | done: ⌘5 Skills and ⌘6 Notes; Back/Forward already present |
 
 ## Voice (skip)
 
@@ -187,10 +187,10 @@ against the GPUI app.
 | 1d47f50c | Files panel: clicking opens again | already |
 | b79385cb | Web addresses in inline code are links | to check |
 | ba5d5cfc | Standing instructions for every session | to check |
-| 58151848 | New Skill | to check |
+| 58151848 | New Skill | done: write/edit with save errors retained |
 | 52e060a3 | Files and Terminal on the rail | to check |
-| 0f5c08f0 | Notes, and Voice/skills/notes switches | done (Notes part) |
-| 3d531d54 | Skills page | to check |
+| 0f5c08f0 | Notes, and Voice/skills/notes switches | done: Notes and Skills; Voice skipped |
+| 3d531d54 | Skills page | done: shared store list, import, suggested, Always on, update/remove/source actions |
 | f9f3c8e4 | Settings over the main panel | done: default main panel, optional own window, X/Esc/Back/gear closes |
 | 1d311b94 | Your messages show basic Markdown | to check |
 | c3603b16 | The bear's chat has Voice | skip (Voice) |

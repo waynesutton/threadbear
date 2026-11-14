@@ -196,6 +196,7 @@ impl Threadbear {
             return;
         }
         self.hide_settings_page(cx);
+        self.skills.open = false;
         if self.projects.open.as_deref() != Some(id) {
             self.projects.editing = None;
         }
