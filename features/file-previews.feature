@@ -90,6 +90,19 @@ Feature: Files opened in the side pane
     Then the pane's page has the words "hero(text: string)"
     And the pane's page has the words "<h1>${text}</h1>"
 
+  # A folder on this Mac searches inside its files, skipping dependencies and
+  # build output; a hit opens its file with the words found (Wayne, 9 Nov).
+  # The Swift driver's folder search answers in its own shape.
+  @file.find @swift-pending
+  Scenario: Searching in a folder's files lists the lines, and a hit opens its file
+    When I open the thread "Rebuild the three landing pages"
+    And I open "src" in the thread's folder in the pane
+    And I search this folder's files for "words"
+    Then the folder search says "2 lines in 1 file | hero.ts:2 hero.ts:3"
+    When I open the folder search's first hit
+    Then the pane is showing the file "src/hero.ts"
+    And the find bar says "words: 1 of 2"
+
   @file.textview
   Scenario: A code file is shown as selectable, coloured text
     When I open the thread "Rebuild the three landing pages"

@@ -55,6 +55,19 @@ Then('the pane shows Highlights', async function (this: ThreadbearWorld) {
   await this.until('Highlights to be showing, with no preview over it', (d) => !previewLine(d) && pane(d)?.section === 'threadbear.highlights');
 });
 
+When('I search this folder\'s files for {string}', async function (this: ThreadbearWorld, words: string) {
+  await this.until('a folder showing', (d) => (pane(d) as { previewKind?: string } | null | undefined)?.previewKind === 'folder');
+  await this.app.do({ cmd: 'preview', search: words });
+});
+
+Then('the folder search says {string}', async function (this: ThreadbearWorld, words: string) {
+  await this.until(`the folder search saying "${words}"`, (d) => (pane(d) as { previewSearch?: string } | null | undefined)?.previewSearch === words);
+});
+
+When('I open the folder search\'s first hit', async function (this: ThreadbearWorld) {
+  await this.app.do({ cmd: 'preview', hit: 0 });
+});
+
 When('I replace every match with {string}', async function (this: ThreadbearWorld, words: string) {
   await this.app.do({ cmd: 'preview', replace: words, all: true });
 });

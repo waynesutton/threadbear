@@ -20,6 +20,7 @@ pub mod explain;
 pub mod file_identity;
 pub mod file_refs;
 pub mod find;
+pub mod folder_search;
 pub mod folders;
 pub mod hang_sample;
 pub mod hang_watch;

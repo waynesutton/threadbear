@@ -124,11 +124,14 @@ pub(crate) struct FilesState {
     /// script ("save", "discard" or "cancel"), and the file last asked about.
     pub(crate) scripted_answer: Option<String>,
     pub(crate) last_asked: Option<String>,
+    /// A folder search's hit opened: the words to find in that file once its
+    /// text is in (thread, path, words).
+    pub(crate) pending_find: Option<(String, String, String)>,
 }
 
 impl Default for FilesState {
     fn default() -> Self {
-        FilesState { open: HashMap::new(), known_folders: HashSet::new(), reading_style: None, prefs: crate::files_store::load(), last_query: String::new(), focus: None, window: None, scripted_answer: None, last_asked: None }
+        FilesState { open: HashMap::new(), known_folders: HashSet::new(), reading_style: None, prefs: crate::files_store::load(), last_query: String::new(), focus: None, window: None, scripted_answer: None, last_asked: None, pending_find: None }
     }
 }
 
@@ -877,6 +880,17 @@ impl SidePane {
         if editing {
             self.ensure_edit(thread, window, cx);
         }
+        // A folder search's hit: its words found and picked out, once the
+        // text is there to search.
+        if self.files.pending_find.as_ref().is_some_and(|(t, p, _)| t == &thread.id && p == path) {
+            let ready = self.files.open.get(&thread.id).is_some_and(|o| o.edit.is_some() || matches!(&o.body, FileBody::Text { editor: Some(_), .. } | FileBody::Markdown { .. }));
+            if ready {
+                if let Some((_, _, words)) = self.files.pending_find.take() {
+                    let id = thread.id.clone();
+                    self.find_typed(&id, &words, window, cx);
+                }
+            }
+        }
         self.files.window = Some(window.window_handle());
         let focus = self.files.focus.get_or_insert_with(|| cx.focus_handle()).clone();
         let Some(open) = self.files.open.get(&thread.id).filter(|f| f.path == path) else {
@@ -1085,6 +1099,11 @@ impl SidePane {
             Target::Folder(path) => {
                 pane.insert("previewKind".into(), json!("folder"));
                 pane.insert("previewText".into(), json!(path));
+                if let Some(thread) = self.thread(cx) {
+                    if let Some(words) = self.folder_search_words(&thread.id, path) {
+                        pane.insert("previewSearch".into(), json!(words));
+                    }
+                }
             }
             Target::File(path) => {
                 let Some(thread) = self.thread(cx) else { return };
@@ -1211,11 +1230,27 @@ pub(crate) fn preview_command(side: &Entity<SidePane>, thread: &ThreadSummary, c
             });
         }
     }
+    // A folder's search inside its files (the Swift `search`), and with
+    // `hit` (from 0) that hit opened.
+    if cmd["search"].is_string() || cmd["hit"].is_u64() {
+        let preview = side.read(cx).previews.get(&thread.id).cloned().ok_or("nothing is showing")?;
+        let Target::Folder(root) = preview.target.clone() else { return Err("no folder is showing".into()) };
+        if let Some(words) = cmd["search"].as_str() {
+            side.update(cx, |pane, cx| pane.folder_search_typed(thread, &root, words, window, cx));
+            return Ok(json!("ok searching"));
+        }
+        let index = cmd["hit"].as_u64().unwrap_or(0) as usize;
+        let opened = side.update(cx, |pane, cx| pane.folder_search_open(thread, &preview, &root, index, cx))?;
+        return Ok(json!(format!("ok opened {opened}")));
+    }
     // What the Save the changes? question gets instead of showing.
     if let Some(answer) = cmd["answer"].as_str() {
         side.update(cx, |pane, _| pane.files.scripted_answer = Some(answer.to_owned()));
     }
-    if cmd.as_object().is_some_and(|o| !o.is_empty() && o.keys().all(|k| matches!(k.as_str(), "cmd" | "editor" | "autosave" | "answer"))) {
+    // Only settings given, nothing to do with them: said done.
+    const ACTIONS: [&str; 21] = ["path", "url", "close", "back", "edit", "insert", "save", "resolve", "find", "findNext", "findPrevious", "findDone", "replace", "search", "hit", "state", "play", "clickLink", "runScripts", "copyImage", "markdownView"];
+    let settings_only = ["editor", "autosave", "answer"].iter().any(|k| !cmd[*k].is_null()) && ACTIONS.iter().all(|k| cmd[*k].is_null());
+    if settings_only {
         return Ok(json!("ok"));
     }
     // What's unsaved and what was asked.
