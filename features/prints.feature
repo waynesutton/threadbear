@@ -100,10 +100,11 @@ Feature: Prints
     When I click "Launch notes"
     Then it opens beside the thread
 
-  # The GPUI app catches the click in its web view and makes the call (the
-  # automated scenario below goes through the same handler), but nobody has
-  # clicked in a real page yet: Wayne's Mac mini has no web runtime installed.
-  @prints.todo @manual @gpui-pending
+  # Tried in the GPUI app with the web runtime on 14 Nov: a click in the page
+  # (webPanel click, a person's gesture) ticked "Write the tests" in v2 and
+  # the pane moved on. The automated scenario below goes through the same
+  # handler without the runtime.
+  @prints.todo @manual
   Scenario: Tick a todo list and move a card on a board
     Given a thread made a todo list Print "Launch checklist" and a board Print "PR board"
     When I open "Launch checklist" beside the thread and click "Write the tests"
@@ -152,8 +153,9 @@ Feature: Prints
     Then the side pane shows version 2 of "pg_launch_checklist"
     And the Print "Launch checklist" reads "Todo list · v2 · now · edited by you"
 
-  # Needs the web runtime to draw the page, and the save dialog.
-  @prints.pdf @manual @gpui-pending
+  # Needs the web runtime and the Save dialog. Tried in the GPUI app on 14 Nov
+  # through the `print` command's `pdf`: US Letter, light look.
+  @prints.pdf @manual
   Scenario: Download a Print as a PDF
     Given a Print "Launch notes" is open on a project's page
     When I choose Download as PDF from its menu and pick where

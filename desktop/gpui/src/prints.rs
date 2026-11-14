@@ -1028,7 +1028,7 @@ pub(crate) fn dump(app: &Threadbear, cx: &App) -> Value {
     })
 }
 
-/// `print`: `{ id, do: "menu" | "open" | "here" | "ask" | "edit" | "type" | "save" | "close", text?, x?, y? }`:
+/// `print`: `{ id, do: "menu" | "open" | "here" | "ask" | "edit" | "type" | "save" | "close" | "pdf" | "link", text?, x?, y?, path?, url? }`:
 /// a Print's menu opened (at x, y), its window or side pane, its sheets,
 /// and what's typed in a sheet and saved.
 #[cfg(feature = "automation")]
@@ -1071,6 +1071,17 @@ pub(crate) fn automation(app: &Entity<Threadbear>, cmd: &Value, window: &mut Win
         "here" => a.open_print_here(&id, window, cx),
         "ask" => a.open_print_sheet(&id, SheetKind::Ask, window, cx),
         "edit" => a.open_print_sheet(&id, SheetKind::Edit, window, cx),
+        // Download as PDF without the Save dialog, which a script can't
+        // answer: to `path`.
+        "pdf" => {
+            let dest = std::path::PathBuf::from(cmd["path"].as_str().unwrap_or("/tmp/print.pdf"));
+            let title = a.print(&id).map(|p| p.title.clone()).unwrap_or_default();
+            a.print_call(&id, None, "pages.get", json!({ "pageId": id }), cx, move |this, v, cx| {
+                if let Some(file) = v["file"].as_str() {
+                    this.save_print_pdf(file.to_owned(), dest, title, cx);
+                }
+            });
+        }
         "deleted" => {
             for p in a.prints.list.iter().chain(a.prints.deleted.iter()).filter(|p| p.id == id) {
                 for r in &p.projects {
