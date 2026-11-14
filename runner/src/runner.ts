@@ -4350,7 +4350,9 @@ function scheduledMessageId(threadId: string, scheduleId: string, run: string): 
 // schedule's or an agent's (another thread's, or this one's own `then`
 // from move_thread, which once stopped the turn that sent it on a move to
 // another login).
-export function fromMike(text: string, opts: SendOptions): boolean {
+// Only where it came from matters, so a log event (whose mode can be
+// "plan") passes as well as a send's options.
+export function fromMike(text: string, opts: Pick<SendOptions, 'origin'>): boolean {
   if (opts.origin && opts.origin !== 'phone') return false;
   return !sentByAgent(text);
 }
