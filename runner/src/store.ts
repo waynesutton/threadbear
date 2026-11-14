@@ -15,7 +15,7 @@ export type LabLedger = LabReviewLedger & { delivered?: number; answered?: numbe
 // A reviewer's verdict: its findings, none when nothing holds up.
 export type ReviewVerdict = { findings: Pick<ReviewFinding, 'severity' | 'claim' | 'where' | 'case'>[] };
 
-export type QueuedSend = { scheduledSince?: number; turnId: string; text: string; images: ImageRef[]; origin?: MessageOrigin; scheduleId?: string; reviewId?: string; reviewResponse?: ReviewDraft; answers?: AskAnswer[]; editOf?: number; mode?: TurnMode };
+export type QueuedSend = { retryMessageSeq?: number; scheduledSince?: number; turnId: string; text: string; images: ImageRef[]; origin?: MessageOrigin; scheduleId?: string; reviewId?: string; reviewResponse?: ReviewDraft; answers?: AskAnswer[]; editOf?: number; mode?: TurnMode };
 // Plan or Ask mode, from the composer (modes.ts): a read-only turn.
 export type TurnMode = 'ask';
 

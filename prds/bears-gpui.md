@@ -13,6 +13,8 @@ Verification and landing status live there. No new Swift UI is included.
 
 Use `memory/told.md` and `memory/tasks/` as ordinary files if the UI offers a memory view. They are agent-maintained instructions and notes, not a new database or a guarantee of model recall.
 
+Review corrections: the runner also refuses mentions that cross a sandbox boundary and waits rather than changing a routine's explicit login, pool, model or effort. Show these reasons as waiting/refused work. Retrying a late answer after a partial disk write reuses its saved message and starts the missing turn; a changed answer or note receives an error asking for the original retry.
+
 The runner side shipped on Wayne's fork on 13 Nov 2026, behind the `bears`, `webhooks`, `tables` and `bearNotes` experiments (`prds/bears-for-mike.md`). The SwiftUI app is frozen, so every piece of UI waits for the GPUI app in `desktop/`. Until then, Wayne's home patch `~/.threadbear/patches/bears.ts` gives a Bears & Tables list panel and three chips. Three pieces now exist in the SwiftUI app as well (Wayne's exception to the freeze, 13 and 14 Nov): the bear tiles and Bear Colour menu in the sidebar, the @ picker in the composer, and a table's bears on its project page. Port those three from the Swift code and `features/bears.feature` (rows `bears.tile`, `bears.colour`, `bears.mention` and `bears.tablepage` in `gpui-port/features.md`) rather than designing them again.
 
 Each item below lists the runner calls it needs. All of them exist today, so none of this needs a runner change unless it says so.

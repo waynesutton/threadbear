@@ -25,6 +25,7 @@ How Prints work today, what's missing and what's next: [Prints status](https://g
 
 ### Fixed
 
+- Shared bear workers now enforce a mention sender's sandbox boundary and preserve routines' explicit login, pool, model and effort choices. Late answers retry a partially saved turn without losing the answer or duplicating its message.
 - Network probe checks no longer fail runner updates just because a busy Mac delays test execution.
 - Runner updates run at most four unit-test files at once, reducing contention on busy machines.
 
