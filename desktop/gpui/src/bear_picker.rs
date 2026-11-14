@@ -64,6 +64,9 @@ impl Composer {
                 let bear = found[self.bear_selected.min(found.len() - 1)].clone();
                 self.pick_bear(range, bear, window, cx);
             }
+            // Slash-palette navigation keys remain the text box's here.
+            #[allow(unreachable_patterns)]
+            _ => return false,
         }
         cx.notify();
         true
@@ -74,6 +77,7 @@ impl Composer {
             s.set_selected_range(range, cx);
             s.replace(bears::mention(&bear), window, cx);
             s.focus(window, cx);
+            crate::web_panels::keyboard_to_app(window);
         });
         self.bear_selected = 0;
         cx.notify();
