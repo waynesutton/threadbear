@@ -15,6 +15,13 @@ Feature: The slash command palette
     And the palette lists "/model" first
     And the palette has the command "/code-review"
 
+  # A skill installed from the Skills page's store (Wayne, 12 Nov).
+  @composer.slash
+  Scenario: A skill from the Skills page says so
+    When I type "/shi" in the composer
+    Then the palette's pick is "/ship"
+    And the palette's details say they're from "From your Skills page"
+
   @composer.slash
   Scenario: The picked command is described in full
     When I type "/code" in the composer

@@ -1342,7 +1342,7 @@ async function dispatch(client, method, p) {
         { name: 'claude-api', description: 'Model ids, pricing, params and the Anthropic SDK.', source: 'skill' },
         { name: 'deslop', description: 'A second-pass cleanup over AI-written code using the repo style guide.', source: 'skill', scope: 'project', path: `${t.summary.cwd}/.claude/skills/deslop/SKILL.md` },
         { name: 'delegate', description: 'Get answers from other labs and models, and run consensus panels.', source: 'skill' },
-        { name: 'ship', description: 'Drive a branch to merge-ready: PR, checks, bot comments.', source: 'skill' },
+        { name: 'ship', description: 'Drive a branch to merge-ready: PR, checks, bot comments.', source: 'skill', scope: 'store' },
       ];
       return { commands: [...own, ...cli, ...skills] };
     }

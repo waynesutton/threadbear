@@ -175,6 +175,8 @@ pub fn origin(command: &SlashCommand, provider: &str) -> String {
     match command.scope.as_deref() {
         Some("user") => format!("Your {kind}"),
         Some("project") | Some("repo") => format!("This folder's {kind}"),
+        // A skill installed from the Skills page's store (Wayne, 12 Nov).
+        Some("store") => "From your Skills page".to_owned(),
         Some("plugin") => match command.plugin.as_deref() {
             Some(plugin) => format!("From the {plugin} plugin"),
             None => "From a plugin".to_owned(),
@@ -584,6 +586,8 @@ mod tests {
         assert_eq!(origin(&all[5], "claude"), "Your skill");
         assert_eq!(origin(&all[6], "claude"), "This folder's skill");
         assert_eq!(origin(&all[7], "claude"), "A skill");
+        let store = SlashCommand { scope: Some("store".into()), ..all[7].clone() };
+        assert_eq!(origin(&store, "claude"), "From your Skills page");
     }
 
     #[test]
