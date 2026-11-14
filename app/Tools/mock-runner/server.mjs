@@ -1884,6 +1884,8 @@ async function dispatch(client, method, p) {
     case 'mock.connectors': {
       // { state?, error?, services? }: replaces what connectors.status
       // answers and sends connectors.updated.
+      // { url } moves the gateway (a local one is "This Mac").
+      if (typeof p.url === 'string') connectors.url = p.url;
       connectors = { ...connectors, state: p.state ?? 'ok', services: Array.isArray(p.services) ? p.services : connectors.services, checkedAt: iso() };
       // { catalog: [...] } or { local: true }: Add a service's list, and
       // with local, Local connectors on (Blender, a local service in error

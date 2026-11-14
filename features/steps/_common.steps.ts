@@ -69,6 +69,10 @@ When("the gateway can't be reached", async function (this: ThreadbearWorld) {
   await this.app.do({ cmd: 'mock', method: 'connectors', params: { state: 'unreachable', error: 'timed out' } });
 });
 
+When('the gateway moves to this Mac', async function (this: ThreadbearWorld) {
+  await this.app.do({ cmd: 'mock', method: 'connectors', params: { state: 'ok', url: 'http://127.0.0.1:8795' } });
+});
+
 When('every service on the gateway is signed in', async function (this: ThreadbearWorld) {
   const services = [['notion', 'Notion'], ['sentry', 'Sentry'], ['cloudflare', 'Cloudflare'], ['deepwiki', 'DeepWiki']].map(([id, title]) => ({ id, title, state: 'connected' }));
   await this.app.do({ cmd: 'mock', method: 'connectors', params: { state: 'ok', services } });

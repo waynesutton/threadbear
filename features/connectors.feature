@@ -14,6 +14,13 @@ Feature: The Connectors panel
     And the Connectors panel lists "Sentry: Signed out [Connect]"
     And the Connectors panel lists "  The sign-in expired."
 
+  # What Set up makes runs on this Mac: "This Mac", not "127" (Wayne, 8 Nov).
+  @connectors.panel
+  Scenario: A gateway on this Mac is called This Mac
+    When I open the Connectors panel
+    And the gateway moves to this Mac
+    Then the Connectors panel's heading is "This Mac"
+
   @connectors.panel
   Scenario: It says when the gateway can't be reached, and catches up once it's back
     When I open the Connectors panel

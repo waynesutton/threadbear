@@ -132,6 +132,10 @@ pub fn host(s: Option<&ConnectorsStatus>) -> Option<String> {
     if host.is_empty() {
         return None;
     }
+    // A gateway on this Mac (what Set up makes) is "This Mac", not "127".
+    if host == "localhost" || host == "::1" || host.starts_with("127.") {
+        return Some("This Mac".to_owned());
+    }
     Some(host.split('.').next().unwrap_or(host).to_owned())
 }
 
@@ -309,6 +313,17 @@ mod tests {
         let odd = ConnectorService { id: "a/b c".into(), connect_url: Some("javascript:alert(1)".into()), ..Default::default() };
         assert_eq!(service_url(Some(&s), &odd).as_deref(), Some("http://localhost:7000/admin/connect/a%2Fb%20c"));
         s.url = Some("https://[::1]:8443".into());
-        assert_eq!(host(Some(&s)).as_deref(), Some("::1"));
+        assert_eq!(host(Some(&s)).as_deref(), Some("This Mac"));
+    }
+
+    #[test]
+    fn a_local_gateway_is_this_mac() {
+        let mut s = mock();
+        for url in ["http://127.0.0.1:8795", "http://localhost:8795"] {
+            s.url = Some(url.into());
+            assert_eq!(host(Some(&s)).as_deref(), Some("This Mac"), "{url}");
+        }
+        s.url = Some("https://bruce.tail.ts.net:8443".into());
+        assert_eq!(host(Some(&s)).as_deref(), Some("bruce"));
     }
 }
