@@ -34,9 +34,9 @@ app does it), **nothing** (nothing to rebuild), **skip** (Wayne said no).
 
 | # | Commit | What it does | Status |
 |---|---|---|---|
-| 62 | bd5ed3f6 | Several terminals per thread as tabs with +, ⌘-click opens links | to do |
-| 49 | d47ee37e | Links underline under the pointer; tabs rename | to do |
-| 48 | e9408139 | The terminal tab menu shows icons | to do |
+| 62 | bd5ed3f6 | Several terminals per thread as tabs with +, ⌘-click opens links | done |
+| 49 | d47ee37e | Links underline under the pointer; tabs rename | done |
+| 48 | e9408139 | The terminal tab menu shows icons | done |
 
 ## Bears
 
@@ -171,7 +171,7 @@ against the GPUI app.
 
 | Commit | What it does | Status |
 |---|---|---|
-| 4d3524c6 | Closing the Terminal no longer leaves the thread blank | to check |
+| 4d3524c6 | Closing the Terminal no longer leaves the thread blank | already |
 | 99b4038f | Panels stay inside their space in a narrow window | to check |
 | e19a3f06 | ⌘/ collapses the Threads panel | to check |
 | f248d332 | Quit asks first, with Don't ask again | to check |

@@ -291,3 +291,55 @@ Feature: The Terminal
     Given the agent's last reply in "Export last quarter's invoices as CSV" holds a bash block "make report"
     When I open the thread "Export last quarter's invoices as CSV"
     Then the reply only offers to copy "make report"
+
+  # The frozen Swift automation lacks the tab and hover commands used below.
+  @terminal.tabs @swift-pending
+  Scenario: Separate shells keep their screens when switching tabs
+    Given the thread "Rename the Settings tabs" works in a folder of its own
+    When I open the thread "Rename the Settings tabs"
+    And I press ⌘J
+    And I type "echo first-shell" and press Return in the Terminal
+    Then the Terminal shows the line "first-shell"
+    When I rename the current Terminal tab to "First"
+    And I add a Terminal tab
+    And I type "echo second-shell" and press Return in the Terminal
+    Then the Terminal shows the line "second-shell"
+    When I rename the current Terminal tab to "Second"
+    And I choose the Terminal tab "First"
+    Then the Terminal shows the line "first-shell"
+    When I choose the Terminal tab "Second"
+    And I type "exit" and press Return in the Terminal
+    Then the Terminal has 1 tab
+    And the Terminal shows the line "first-shell"
+
+  @terminal.tabs @swift-pending
+  Scenario: A tab can be renamed from its menu and closed
+    Given the thread "Rename the Settings tabs" works in a folder of its own
+    When I open the thread "Rename the Settings tabs"
+    And I press ⌘J
+    And I rename the current Terminal tab to "Dev server"
+    Then the Terminal tab menu for "Dev server" offers "Rename…" and "Use the Shell's Name"
+    When I rename the Terminal tab "Dev server" from its menu to "Server"
+    And I add a Terminal tab
+    And I rename the current Terminal tab to "Scratch"
+    And I close the Terminal tab "Scratch" from its menu
+    Then the Terminal has 1 tab
+    And the Terminal tab "Server" is selected
+
+  @terminal.linkhover @windows-pending @swift-pending
+  Scenario: Pointing at a printed web address highlights the link
+    Given the thread "Rename the Settings tabs" works in a folder of its own
+    When I open the thread "Rename the Settings tabs"
+    And I press ⌘J
+    And I type "printf 'https://example.com/terminal\n'" and press Return in the Terminal
+    Then the Terminal shows the line "https://example.com/terminal"
+    When I point at the Terminal words "https://example.com/terminal"
+    Then the Terminal highlights the web address "https://example.com/terminal"
+
+  @terminal.panel
+  Scenario: Closing the Terminal keeps the conversation visible
+    When I open the thread "Make uploads resume after a crash"
+    And I press ⌘J
+    And I press ⌘J
+    Then the Terminal is put away
+    And the transcript shows my message "Great. Clear out the old build folders too"

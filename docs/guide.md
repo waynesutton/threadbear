@@ -834,7 +834,7 @@ quit Threadbear. The Terminal is a panel like the others: drag it
 beside the thread, into a tab, or out into a window of its own.
 
 ⌘-click a web address, a file path or a labelled link printed in the
-Terminal to open it (Ctrl-click on Windows and Linux). Programs and links
+Terminal to open it (Ctrl-click on Windows and Linux). Web addresses underline under the pointer, with a tip showing how to open them. Programs and links
 that start another app ask first, as they do elsewhere in Threadbear.
 
 A shell command an agent gives you (a ```` ```bash ````, `sh`, `zsh` or
