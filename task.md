@@ -9,7 +9,7 @@ Status and gap list: prds/prints-status.md
 
 ## In Progress
 
-Nothing.
+- [ ] Build five always-on bear improvements and document the GPUI follow-through. prds/bears-always-on.md. Verification pending.
 
 ## Completed
 

@@ -8,6 +8,9 @@ How Prints work today, what's missing and what's next: [Prints status](https://g
 
 ### Added
 
+- Bears share one unattended worker across routines, webhooks and mentions, with a separate reply for each mention. Memory rules track prior reports and unfinished tasks; `tb bears refresh-rules` updates existing bears without replacing their personas.
+- Built-in Claude memory tidies use Auto after direct creation or an authorized refresh; Codex and agent-created bears keep Ask. Empty runs can request a quiet finish without hiding useful reports or unfinished work.
+- Late answers, an experiment: answering a tool card within a day of expiry resumes the work once, without replaying the call or widening access. The deliberate late-answer button remains planned for GPUI.
 - A background picture can be an animated GIF, in the main window (Settings > General > Look) and behind the Librarian, Scheduled and Projects pages. It plays, and holds still with Reduce Motion on. Swift Mac app only.
 - A project with tables among its Parts lists each table's bears on its own Project tab.
 - A table's project page lists the bears at it, a bear's thread put in a table seats that bear, and new tables get a three-people icon.

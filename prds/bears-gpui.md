@@ -1,5 +1,18 @@
 # Bears, tables and webhooks in the GPUI app
 
+## Always-on runner update (14 Nov 2026)
+
+The five runner changes are implemented in `prds/bears-always-on.md`.
+Verification and landing status live there. No new Swift UI is included.
+
+- A bear row should open its busy unattended worker and show “Folded into the running job” after a routine, webhook or mention queues there. Routine history already carries that note and thread id. The bear list does not yet expose a dedicated folded-work field; add one only when building this UI, with protocol and parity coverage.
+- Show held work with different access or a different working folder as waiting, never as a second running job. Mentions rejected on this boundary should keep the retry explanation. Each mention receives its own turn's reply.
+- Offer “Refresh memory rules” through `bears.refreshRules { bear? }`, with a busy state and tooltip explaining that personal instructions stay and built-in Claude tidies move to Auto. Do not offer it from a bear acting on itself.
+- Empty runs opt in with `end_turn quiet: true`. They archive only with no unfinished work, no user interaction and no earlier useful report. Existing archive rendering is enough; useful reports remain in the inbox.
+- With `lateAnswers` on, a deliberate “Answer late” control for expired tool cards is still to build. The runner accepts `approvals.respond` within 24 hours of expiry, once, then queues the original request and answer. It does not replay the tool or change modes. Keep full input review, remote visibility restrictions, one-click busy feedback and duplicate-answer errors. Plans, questions, secrets and start-on-another-Mac cards keep their existing controls. Do not claim this UI works merely because the runner accepts a delayed click.
+
+Use `memory/told.md` and `memory/tasks/` as ordinary files if the UI offers a memory view. They are agent-maintained instructions and notes, not a new database or a guarantee of model recall.
+
 The runner side shipped on Wayne's fork on 13 Nov 2026, behind the `bears`, `webhooks`, `tables` and `bearNotes` experiments (`prds/bears-for-mike.md`). The SwiftUI app is frozen, so every piece of UI waits for the GPUI app in `desktop/`. Until then, Wayne's home patch `~/.threadbear/patches/bears.ts` gives a Bears & Tables list panel and three chips. Three pieces now exist in the SwiftUI app as well (Wayne's exception to the freeze, 13 and 14 Nov): the bear tiles and Bear Colour menu in the sidebar, the @ picker in the composer, and a table's bears on its project page. Port those three from the Swift code and `features/bears.feature` (rows `bears.tile`, `bears.colour`, `bears.mention` and `bears.tablepage` in `gpui-port/features.md`) rather than designing them again.
 
 Each item below lists the runner calls it needs. All of them exist today, so none of this needs a runner change unless it says so.
