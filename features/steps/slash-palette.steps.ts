@@ -14,6 +14,22 @@ When('I press the down arrow', async function (this: ThreadbearWorld) {
   await this.app.do({ cmd: 'arrow', dir: 'down' });
 });
 
+When('I press the left arrow', async function (this: ThreadbearWorld) {
+  await this.app.do({ cmd: 'arrow', dir: 'left' });
+});
+
+When('I press the right arrow', async function (this: ThreadbearWorld) {
+  await this.app.do({ cmd: 'arrow', dir: 'right' });
+});
+
+Then('the palette says {string}', async function (this: ThreadbearWorld, note: string) {
+  await this.until(`the palette saying ${note}`, (d) => (d.palette as { note?: string | null } | undefined)?.note === note);
+});
+
+When('I search the palette for {string}', async function (this: ThreadbearWorld, text: string) {
+  await this.app.do({ cmd: 'palette-search', text });
+});
+
 When('I press the up arrow', async function (this: ThreadbearWorld) {
   await this.app.do({ cmd: 'arrow', dir: 'up' });
 });

@@ -121,6 +121,29 @@ Feature: The slash command palette
     And the transcript shows my message "/clear"
     And the composer is empty
 
+  # Left and right step through the categories, wrapping round (Wayne, 10
+  # Nov). The Swift app's scripted arrow only goes up and down.
+  @composer.slash.keys @swift-pending
+  Scenario: Left and right step through the palette's categories
+    When I type "/" in the composer
+    Then the palette is open on "All"
+    When I press the right arrow
+    Then the palette is open on "Threadbear"
+    When I press the left arrow
+    And I press the left arrow
+    Then the palette is open on "Skills"
+
+  # The search field along the palette's top narrows every category by name
+  # and description (Wayne, 10 Nov). Swift's field is a panel's own, which
+  # its script can't type into.
+  @composer.slash @swift-pending
+  Scenario: The palette's search narrows the commands by their description
+    When I type "/" in the composer
+    And I search the palette for "correctness"
+    Then the palette's commands are "/code-review"
+    When I search the palette for "zzz"
+    Then the palette says "Nothing matches “zzz”."
+
   @composer.slash.keys
   Scenario: Tab fills it in, for its arguments
     When I type "/cod" in the composer

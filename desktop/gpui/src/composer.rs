@@ -14,7 +14,7 @@ use crate::composer_chips::ModelPickerView;
 use crate::style;
 use crate::thread::ThreadPane;
 use gpui_kit::assets::IconName;
-use gpui_kit::component::input::{Copy, Cut, Enter, Escape, IndentInline, InlineToken, InlineTokenContext, InlineTokenHoverEvent, InputEvent, MoveDown, MoveUp, Textarea, TextareaState};
+use gpui_kit::component::input::{Copy, Cut, Enter, Escape, IndentInline, InlineToken, InlineTokenContext, InlineTokenHoverEvent, InputEvent, InputState, MoveDown, MoveLeft, MoveRight, MoveUp, Textarea, TextareaState};
 use gpui_kit::component::spinner::Spinner;
 use gpui_kit::component::{h_flex, v_flex, ActiveTheme as _, Icon, Sizable as _};
 use gpui_kit::prelude::*;
@@ -94,6 +94,8 @@ pub struct Composer {
     pub(crate) palette_asked: Option<String>,
     /// The palette's list, kept so the arrows can scroll the pick into sight.
     pub(crate) palette_scroll: ScrollHandle,
+    /// The palette's own search field (slash_palette.rs).
+    pub(crate) palette_search: Entity<InputState>,
     /// The box's width at the last paint, for the palette's columns.
     pub(crate) card_width: Rc<Cell<f32>>,
     /// The chip row's right edge and the send button's, at the last paint:
@@ -203,6 +205,12 @@ impl Composer {
             _ => {}
         });
         crate::text_services::register_text_box(&input);
+        let palette_search = cx.new(|cx| InputState::new(window, cx).placeholder("Search skills and commands"));
+        let search_sub = cx.subscribe(&palette_search, |this, _, ev: &InputEvent, cx| {
+            if matches!(ev, InputEvent::Change) {
+                this.palette_search_changed(cx);
+            }
+        });
         Composer {
             thread_id,
             client,
@@ -232,11 +240,12 @@ impl Composer {
             palette: PaletteState::default(),
             palette_asked: None,
             palette_scroll: ScrollHandle::new(),
+            palette_search,
             card_width: Rc::new(Cell::new(style::MAX_CONTENT_WIDTH)),
             controls_fit: Rc::new(Cell::new((0., 0.))),
             box_top: Rc::new(Cell::new(f32::MAX)),
             spell: Default::default(),
-            _subs: vec![sub],
+            _subs: vec![sub, search_sub],
         }
     }
 
@@ -1468,6 +1477,18 @@ impl Composer {
             }))
             .capture_action(cx.listener(|this, _: &MoveDown, window, cx| {
                 if this.palette_key(PaletteKey::Down, window, cx) {
+                    cx.stop_propagation();
+                }
+            }))
+            // Left and right in the box step through the categories; in the
+            // search field they move its cursor.
+            .capture_action(cx.listener(|this, _: &MoveLeft, window, cx| {
+                if !this.palette_search_focused(window, cx) && this.palette_key(PaletteKey::Left, window, cx) {
+                    cx.stop_propagation();
+                }
+            }))
+            .capture_action(cx.listener(|this, _: &MoveRight, window, cx| {
+                if !this.palette_search_focused(window, cx) && this.palette_key(PaletteKey::Right, window, cx) {
                     cx.stop_propagation();
                 }
             }))

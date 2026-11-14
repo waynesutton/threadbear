@@ -10,6 +10,8 @@ use crate::prefs;
 use crate::style::{self, size};
 use gpui_kit::base::TestSupportExt as _;
 use gpui_kit::component::menu::ContextMenuExt as _;
+use gpui_kit::component::input::Input;
+use gpui_kit::component::Sizable as _;
 use gpui_kit::component::{h_flex, v_flex, ActiveTheme as _};
 use gpui_kit::prelude::*;
 use gpui_kit::*;
@@ -116,7 +118,10 @@ impl Threadbear {
 
 /// What a palette shows for what's typed: read each time it's drawn.
 struct PaletteView {
+    /// What the search field leaves, the lists' commands.
     all: Vec<SlashCommand>,
+    /// Every command, so the columns hold still while searching.
+    everything: Vec<SlashCommand>,
     /// The runner hasn't answered yet for this thread.
     loading: bool,
     query: String,
@@ -200,7 +205,21 @@ impl Composer {
         let matches = slash::matches(&view.all, &view.query, self.palette.category, &view.recent);
         // Return with nothing to pick sends what's typed, as words.
         if key == PaletteKey::Enter && matches.is_empty() {
-            return false;
+            // From the search field it's the search's, not the box's words.
+            return self.palette_search_focused(window, cx);
+        }
+        if matches!(key, PaletteKey::Left | PaletteKey::Right) {
+            let categories: Vec<slash::Category> = slash::counts(&view.all, &view.query, &view.recent).into_iter().map(|(c, _)| c).collect();
+            slash::step_category(&mut self.palette, &categories, key == PaletteKey::Right);
+            cx.notify();
+            return true;
+        }
+        if key == PaletteKey::Escape {
+            self.clear_palette_search(window, cx);
+            if self.palette_search_focused(window, cx) {
+                self.focus(window, cx);
+                crate::web_panels::keyboard_to_app(window);
+            }
         }
         if let Some((command, run)) = slash::handle_key(key, &matches, &mut self.palette, &text) {
             // A skill named partway through a message isn't sent on its own,
@@ -216,6 +235,13 @@ impl Composer {
         }
         cx.notify();
         true
+    }
+
+    /// Empties the search field, as a pick or Esc does.
+    fn clear_palette_search(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        if !self.palette_search.read(cx).value().is_empty() {
+            self.palette_search.update(cx, |s, cx| s.set_value("", window, cx));
+        }
     }
 
     /// `SlashReturn.runs`: whether Return and a double-click send the picked
@@ -236,6 +262,7 @@ impl Composer {
             });
         }
         self.palette = PaletteState::default();
+        self.clear_palette_search(window, cx);
         let text = slash::fill(&command, !run);
         let current = self.input.read(cx).value().to_string();
         let start = slash::typed(&current).map_or(0, |t| t.start);
@@ -279,7 +306,9 @@ impl Composer {
             }
         }
         let can_open_files = data.away.is_none();
-        PaletteView { all, loading, query, recent, provider, current, can_open_files, home: std::env::var("HOME").unwrap_or_default(), mid_message }
+        let everything = all.clone();
+        let all = slash::searched(&everything, &self.palette.search, &recent);
+        PaletteView { all, everything, loading, query, recent, provider, current, can_open_files, home: std::env::var("HOME").unwrap_or_default(), mid_message }
     }
 
     /// The palette's layer over the box, or None while it's closed.
@@ -317,17 +346,32 @@ impl Composer {
         // not just the matches, so the columns hold still while typing
         // (SlashPalette.columnWidths).
         let categories_natural = layout.categories.unwrap_or_else(|| categories_natural_width(&view));
-        let list_natural = layout.list.unwrap_or_else(|| list_natural_width(&view.all));
+        let list_natural = layout.list.unwrap_or_else(|| list_natural_width(&view.everything));
         let (categories_width, list_width) = slash::column_widths(width, categories_natural, list_natural, layout.list.is_some(), 200., 120., 110.);
         crate::slash_resize::drawn_as((width, height), (categories_width, list_width));
         let hairline = style::hairline(cx);
         let composer = cx.entity().downgrade();
         let menu_composer = composer.clone();
-        let panel = h_flex()
+        let search = self.render_palette_search(cx);
+        let columns = h_flex()
+            .flex_1()
+            .min_h_0()
+            .w_full()
+            .items_start()
+            .rounded(px(crate::slash_resize::RADIUS))
+            .overflow_hidden()
+            .bg(cx.theme().background)
+            .border_1()
+            .border_color(hairline)
+            .child(div().flex_none().w(px(categories_width as f32)).h_full().child(categories))
+            .child(crate::slash_resize::column_rule(0, categories_width, list_width + 200., width, cx))
+            .child(div().flex_none().w(px(list_width as f32)).h_full().child(list))
+            .child(crate::slash_resize::column_rule(1, list_width, categories_width + 200., width, cx))
+            .child(div().flex_1().min_w_0().h_full().child(detail));
+        let panel = v_flex()
             .id("slash-palette")
             .relative()
             .size_full()
-            .items_start()
             .rounded(px(crate::slash_resize::RADIUS))
             .overflow_hidden()
             .bg(cx.theme().background)
@@ -336,11 +380,9 @@ impl Composer {
             .shadow_lg()
             // Keep clicks out of the transcript under it.
             .occlude()
-            .child(div().flex_none().w(px(categories_width as f32)).h_full().child(categories))
-            .child(crate::slash_resize::column_rule(0, categories_width, list_width + 200., width, cx))
-            .child(div().flex_none().w(px(list_width as f32)).h_full().child(list))
-            .child(crate::slash_resize::column_rule(1, list_width, categories_width + 200., width, cx))
-            .child(div().flex_1().min_w_0().h_full().child(detail))
+            .child(search)
+            .child(div().flex_none().h(px(1.)).w_full().bg(hairline))
+            .child(columns)
             // Its edges drag it bigger; a right-click anywhere on it puts it back.
             .children(crate::slash_resize::edges((width, height), cx))
             .context_menu(move |menu, _, _| crate::slash_resize::menu(menu_composer.clone(), menu));
@@ -362,6 +404,48 @@ impl Composer {
             .with_priority(2)
             .into_any_element(),
         )
+    }
+
+    /// Whether the palette's search field has the keys.
+    pub(crate) fn palette_search_focused(&self, window: &Window, cx: &App) -> bool {
+        self.palette_search.read(cx).focus_handle(cx).is_focused(window)
+    }
+
+    /// `PaletteSearchField`: along the palette's top, narrowing every
+    /// category by name and description. A click puts the keys in it; its
+    /// arrows, Return, Tab and Esc work the palette as the box's do (the
+    /// composer's own key handling catches them on the way down).
+    fn render_palette_search(&mut self, cx: &mut Context<Self>) -> AnyElement {
+        let muted = style::secondary_text(cx);
+        h_flex()
+            .id("slash-search")
+            .flex_none()
+            .w_full()
+            .gap(px(6.))
+            .px(px(14.))
+            .py(px(6.))
+            .items_center()
+            .text_size(px(size::LABEL + 1.))
+            .child(div().flex_none().text_color(muted).child(crate::icons::symbol("magnifyingglass").with_size(px(13.))))
+            .child(
+                div()
+                    .id("slash-search-field")
+                    .flex_1()
+                    .min_w_0()
+                    .tip("Narrows every category by name and description. Arrows move, Return picks, Esc closes")
+                    .child(Input::new(&self.palette_search).appearance(false).small().cleanable(true).pl(px(0.))),
+            )
+            .into_any_element()
+    }
+
+    /// The search field changed: the pick starts again from the top.
+    pub(crate) fn palette_search_changed(&mut self, cx: &mut Context<Self>) {
+        let search = self.palette_search.read(cx).value().to_string();
+        if search != self.palette.search {
+            self.palette.search = search;
+            self.palette.selected = None;
+            cx.notify();
+        }
     }
 
     /// The categories down the left, with their counts.
@@ -410,7 +494,9 @@ impl Composer {
             return palette_placeholder("Getting this thread's commands…".to_owned(), cx).into_any_element();
         }
         if matches.is_empty() {
-            let note = if view.query.is_empty() { "Nothing here yet.".to_owned() } else { format!("No command matches /{}. Send it and it goes to the agent as words.", view.query) };
+            let note = if !self.palette.search.trim().is_empty() {
+                format!("Nothing matches \u{201C}{}\u{201D}.", self.palette.search.trim())
+            } else if view.query.is_empty() { "Nothing here yet.".to_owned() } else { format!("No command matches /{}. Send it and it goes to the agent as words.", view.query) };
             return palette_placeholder(note, cx).into_any_element();
         }
         let selected_name = picked.map(|c| c.name.clone());
@@ -549,7 +635,8 @@ impl Composer {
         let matches = slash::matches(&view.all, &query, self.palette.category, &view.recent);
         let picked = slash::picked(&matches, &self.palette).cloned();
         let categories: Vec<Value> = slash::counts(&view.all, &query, &view.recent).into_iter().map(|(c, n)| json!({ "title": c.title(&view.provider), "count": n })).collect();
-        let note = if view.loading { Some("Getting this thread's commands…".to_owned()) } else if matches.is_empty() { Some(if query.is_empty() { "Nothing here yet.".to_owned() } else { format!("No command matches /{query}. Send it and it goes to the agent as words.") }) } else { None };
+        let search = self.palette.search.trim();
+        let note = if view.loading { Some("Getting this thread's commands…".to_owned()) } else if matches.is_empty() && !search.is_empty() { Some(format!("Nothing matches \u{201C}{search}\u{201D}.")) } else if matches.is_empty() { Some(if query.is_empty() { "Nothing here yet.".to_owned() } else { format!("No command matches /{query}. Send it and it goes to the agent as words.") }) } else { None };
         let detail = picked.as_ref().map(|c| {
             let mut buttons = if view.mid_message { vec!["Insert"] } else { vec!["Run", "Add details"] };
             if c.path.is_some() && view.can_open_files {
@@ -568,6 +655,7 @@ impl Composer {
         });
         json!({
             "query": query,
+            "search": search,
             "category": self.palette.category.title(&view.provider),
             "categories": categories,
             "commands": matches.iter().map(|c| format!("/{}", c.name)).collect::<Vec<_>>(),
@@ -620,6 +708,6 @@ fn list_natural_width(commands: &[SlashCommand]) -> f64 {
 
 /// `SlashPaletteView.categoriesWidth`: the longest title beside its count.
 fn categories_natural_width(view: &PaletteView) -> f64 {
-    let longest = slash::counts(&view.all, "", &view.recent).iter().map(|(c, n)| text_width(&c.title(&view.provider)) + text_width(&n.to_string())).fold(0., f64::max);
+    let longest = slash::counts(&view.everything, "", &view.recent).iter().map(|(c, n)| text_width(&c.title(&view.provider)) + text_width(&n.to_string())).fold(0., f64::max);
     longest + 10. * 2. + 8. * 2. + 14.
 }

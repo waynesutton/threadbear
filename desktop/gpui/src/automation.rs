@@ -598,7 +598,25 @@ fn step(app: &Entity<Threadbear>, cmd: &Value, window: &mut Window, cx: &mut App
         "arrow" => {
             // With {"settings": true} this is the Settings window's, where its
             // list of sections has the keyboard.
-            window.press(if text(cmd, "dir") == "up" { "up" } else { "down" }, cx);
+            let key = match text(cmd, "dir") {
+                "up" => "up",
+                "left" => "left",
+                "right" => "right",
+                _ => "down",
+            };
+            window.press(key, cx);
+            Ok(json!("ok"))
+        }
+        // Types into the slash palette's search field, as a click there and
+        // typing would (the GPUI app's own; Swift's field is a panel's).
+        "palette-search" => {
+            let Some(composer) = app.read(cx).composer(cx) else { return Err("no thread open".into()) };
+            let field = composer.read(cx).palette_search.clone();
+            let words = text(cmd, "text").to_owned();
+            field.update(cx, |s, cx| s.set_value(words, window, cx));
+            window.focus(&field.read(cx).focus_handle(cx), cx);
+            crate::web_panels::keyboard_to_app(window);
+            composer.update(cx, |c, cx| c.palette_search_changed(cx));
             Ok(json!("ok"))
         }
         "tab" => {
