@@ -21,6 +21,15 @@ Feature: The Connectors panel
     And the gateway moves to this Mac
     Then the Connectors panel's heading is "This Mac"
 
+  # X search is built into Threadbear, not the gateway (Wayne, 11 Nov). The
+  # Swift app's dump doesn't list its row.
+  @connectors.panel @swift-pending
+  Scenario: X search says whether an xAI key is saved, and Forget key deletes it
+    When I open the Connectors panel
+    Then the Connectors panel lists "X search: xAI key saved [Forget key]"
+    When I press "Delete the saved xAI key" in the Connectors panel
+    Then the Connectors panel lists "X search: Asks for an xAI key on the first search"
+
   @connectors.panel
   Scenario: It says when the gateway can't be reached, and catches up once it's back
     When I open the Connectors panel
