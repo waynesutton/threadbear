@@ -1260,7 +1260,8 @@ next time; Reset to the standard page clears them.
 The GPUI desktop app has the same Look switches, the same Customize panels
 for the Librarian and Scheduled pages, and the same background photo. It
 picks up what you set in the Swift app the first time it opens, and the two
-share the pictures. Three things differ there for now: there's no profile
+share the pictures. You can also drop a photo from Finder on the
+background's Picture row in Settings. Three things differ there for now: there's no profile
 page section or View profile page button, a photo has no frosted fill
 behind the cards on it (they get a near-solid one instead), and a picture
 has to be a PNG, JPEG, GIF or WebP.

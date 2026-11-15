@@ -861,6 +861,20 @@ impl SettingsWindow {
                     this.app.update(cx, |app, cx| app.set_main_background(None, cx)).ok();
                 }));
             }
+            // A photo dropped from Finder on the row does what Choose… does.
+            let drop_app = self.app.clone();
+            let accent = style::control_accent(cx);
+            let picture = div()
+                .id("settings-look-picture")
+                .rounded(px(6.))
+                .tip("Choose a photo, or drop one here from Finder")
+                .drag_over::<ExternalPaths>(move |s, _, _, _| s.border_1().border_color(accent))
+                .on_drop(move |paths: &ExternalPaths, _, cx| {
+                    if let Some(path) = paths.paths().first().cloned() {
+                        drop_app.update(cx, |app, cx| app.import_look_picture(Slot::Main, crate::looks::Kind::Background, path, cx)).ok();
+                    }
+                })
+                .child(picture);
             rows.push(row("Picture", picture, cx));
             if let Some(name) = background.as_deref().filter(|n| crate::looks::path(Some(n)).is_some()) {
                 let weak = self.app.clone();
