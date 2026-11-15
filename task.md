@@ -13,6 +13,8 @@ Status and gap list: prds/prints-status.md
 
 ## Completed
 
+- [x] 2026-11-15 04:05 UTC Update the end_turn tool-schema assertion for the new quiet field; all 90 threadbear-tools tests pass. The broader always-on bears check was interrupted after sustained high load and remains required before landing. prds/bears-always-on.md
+
 - [x] 2026-11-14 23:46 UTC Fix all three always-on bears review findings: prevent folded mentions escaping a caller's sandbox, preserve explicitly configured routine login/pool/model/effort, and recover a late answer whose message was saved before starting its turn failed. Verified: eight regression cases, 226 affected tests and runner typecheck passed. Committed separately before repeat review; not yet landed. prds/bears-always-on.md
 
 - [x] 2026-11-14 09:30 UTC A project with tables among its Parts lists each table's bears on its Project tab ("Bears at <table>"). app ProjectPage.swift, Bears.swift (ProjectTable.tables(in:)); docs, bears skill, GPUI PRD. Verified: ProjectTableTests 4, TipsTests, EveryClickShowsTests.
