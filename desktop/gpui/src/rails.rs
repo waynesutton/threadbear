@@ -339,6 +339,13 @@ impl Threadbear {
                 crate::web_panels::keyboard_to_app(window);
             }, cx));
         }
+        // Skills (skills_page.rs), while the skillsStore experiment is on.
+        // Over the main panel, as Notes is, and above it as in the Mac app.
+        if self.skills_shown() {
+            let mut button = RailButton::new("rail-skills", "sparkles", "Skills", self.skills_page.is_some());
+            button.tip = "Skills: what every thread's agent knows, on every login".into();
+            views.push(rail_button(button, |this, window, cx| this.toggle_skills(window, cx), cx));
+        }
         // Your own notes, this Mac's alone (notes_page.rs), while Settings >
         // General > Show Notes is on. A page over the main panel, as
         // Settings is, so it doesn't slide the views' lit square.

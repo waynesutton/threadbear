@@ -2161,8 +2161,9 @@ on your Mac (`![a chart](/path/to/chart.png)`), rather than showing a link.
 
 Skills give your agents extra know-how: how to draw a Mermaid diagram,
 build an isometric explainer, write in a house style. Click Skills in the
-bar on the left (under the Librarian), or press ⌘5, to see yours. The page opens over the
-main panel; its X or Esc puts you back where you were.
+bar on the left (under the Librarian), or press ⌘5 in the Mac app, to see yours. The page opens over the
+main panel; its X or Esc puts you back where you were. Skills shows only
+while the Skills store experiment is on (below).
 
 To add one, paste its GitHub link in Import a skill and press Import: a
 repo (github.com/owner/repo), a folder in one, a SKILL.md, or even a
@@ -2208,9 +2209,11 @@ opens its SKILL.md beside the thread. It works anywhere in
 the message, in Claude and Codex threads alike. A change reaches threads
 that are already running too: each gets a fresh start before its next
 message, carrying on the same conversation with the new skills. Remove
-takes a skill away everywhere. To stop giving threads any skills at all,
-turn off Use the skills store in Settings (⌘,) > General; Skills goes
-from the bar and your skills are kept for when you turn it back on.
+takes a skill away everywhere. The store is an experiment, Skills store
+in Settings (⌘,) > General > Experiments (the Mac app's Use the skills
+store switch is the same one). Turn it off to stop giving threads any
+skills at all; Skills goes from the bar in both apps and your skills are
+kept for when you turn it back on.
 
 ## Notes
 

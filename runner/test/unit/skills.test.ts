@@ -114,7 +114,9 @@ function fakeGitHub(files: Record<string, string>) {
   return { fetcher, sha, calls };
 }
 
-function store(fetcher: typeof fetch, accounts: Account[] = [], dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'tb-skills-'))) {
+// Most tests want the store on: the skillsStore experiment, in the temp home's runner.json.
+function store(fetcher: typeof fetch, accounts: Account[] = [], dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'tb-skills-')), on = true) {
+  if (on && !fs.existsSync(path.join(dataDir, 'runner.json'))) fs.writeFileSync(path.join(dataDir, 'runner.json'), JSON.stringify({ experiments: { skillsStore: true } }));
   const published: unknown[] = [];
   let refreshed = 0;
   const s = new SkillStore({ dataDir, accounts: () => accounts, publish: (n) => published.push(n), log: nullLogger, fetch: fetcher, version: '9.9.9', onChange: () => refreshed++ });
@@ -214,9 +216,19 @@ test('turning the store off takes every skill away, keeps them, and brings them 
   // Kept across a restart.
   const again = store(gh.fetcher, accounts, dataDir).s;
   assert.equal(again.list().enabled, false);
+  assert.equal(JSON.parse(fs.readFileSync(path.join(dataDir, 'runner.json'), 'utf8')).experiments.skillsStore, false);
   await again.setEnabled(true);
   assert.equal(again.plugins().length, 1);
   assert.ok(fs.lstatSync(path.join(codexHome, 'skills', 'solo')).isSymbolicLink());
+});
+
+test('with the skillsStore experiment off (a fresh copy), no thread gets a skill', async () => {
+  const gh = fakeGitHub({ 'SKILL.md': '---\nname: solo\ndescription: S\n---\n' });
+  const { s } = store(gh.fetcher, [], undefined, false);
+  assert.equal(s.list().enabled, false);
+  await s.add({ url: 'o/r' });
+  assert.deepEqual(s.plugins(), []);
+  assert.deepEqual(s.names(), []);
 });
 
 test('a skill written in the app: plain text gets a frontmatter, a pasted SKILL.md keeps its own', () => {

@@ -469,6 +469,9 @@ impl Threadbear {
         if self.notes_page.is_some() {
             return "Notes".into();
         }
+        if self.skills_page.is_some() {
+            return "Skills".into();
+        }
         if let Some(project) = self.open_project() {
             return project.title.clone();
         }
@@ -799,7 +802,7 @@ impl Threadbear {
             Command::Zoom => window.zoom_window(),
             Command::BringAllToFront => crate::window_menu::bring_all_to_front(cx),
             Command::Close => {
-                if !self.close_settings(cx) && !self.close_notes(cx) { crate::window_menu::close_window(window, cx); }
+                if !self.close_settings(cx) && !self.close_notes(cx) && !self.close_skills(cx) { crate::window_menu::close_window(window, cx); }
             },
         }
         self.sync_menus(cx);
@@ -861,6 +864,7 @@ impl Threadbear {
     pub(crate) fn set_mode(&mut self, mode: SidebarMode, cx: &mut Context<Self>) {
         self.close_settings(cx);
         self.close_notes(cx);
+        self.close_skills(cx);
         let home = mode != SidebarMode::Inbox;
         // A page of the activity bar's takes a project's page's place
         // (`showProjects`); the Inbox leaves it where it is.
@@ -928,7 +932,7 @@ impl Threadbear {
     /// Settings or Notes over the main panel: Back puts it away, and
     /// there's no Forward until it's gone.
     fn over_main_panel(&self) -> bool {
-        self.settings_window.is_some() || self.notes_page.is_some()
+        self.settings_window.is_some() || self.notes_page.is_some() || self.skills_page.is_some()
     }
 
     pub(crate) fn can_go_back(&self) -> bool {
@@ -940,7 +944,7 @@ impl Threadbear {
     }
 
     pub(crate) fn go_back(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        if self.close_settings(cx) || self.close_notes(cx) { return; }
+        if self.close_settings(cx) || self.close_notes(cx) || self.close_skills(cx) { return; }
         let threads = self.threads.keys().cloned().collect::<std::collections::HashSet<_>>();
         let projects = self.projects.list.iter().map(|p| p.id.clone()).collect::<std::collections::HashSet<_>>();
         let can_show = |p: &NavPlace| match &p.project {
@@ -1594,6 +1598,7 @@ impl Threadbear {
         let main: AnyElement = match (&self.pane, page) {
             _ if self.settings_window.is_some() => self.render_settings_page(cx),
             _ if self.notes_page.is_some() => self.render_notes_page(),
+            _ if self.skills_page.is_some() => self.render_skills_page(),
             // A project's page takes the thread's place until a thread is
             // picked again (project_page.rs).
             _ if self.open_project().is_some() => self.render_project_page(window, cx),

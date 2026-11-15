@@ -80,7 +80,7 @@ import { acquireLock } from './lock.ts';
 import { isDirectory, removeTempFiles } from './fsutil.ts';
 import { Models } from './models/index.ts';
 import { SettingsService, modelMethods, settingsMethods } from './settings.ts';
-import { SkillStore, skillMethods } from './skills.ts';
+import { SKILLS_STORE, SkillStore, skillMethods } from './skills.ts';
 import { PublicProfile, profilePageMethods } from './public-profile.ts';
 import { InstructionsStore, instructionsMethods } from './instructions.ts';
 import { ConvexSync, defaultRunnerName, ensureRunnerId, readSyncKey, WEBHOOKS_API_VERSION } from './sync.ts';
@@ -276,7 +276,10 @@ async function main(): Promise<void> {
   // links into every Codex login. publish goes through the runner once it's made.
   let publishSkills: (n: import('./runner.ts').Notification) => void = () => {};
   let refreshSkills = () => {};
-  const skills = new SkillStore({ dataDir: cfg.home, accounts: () => accounts.list(), publish: (n) => publishSkills(n), log, version: RUNNER_VERSION, onChange: () => refreshSkills() });
+  // skills.enable flips the skillsStore experiment through Settings, so its
+  // switch and settings.updated follow; `settings` is made further down.
+  let setSkillsExperiment: ((on: boolean) => void) | undefined;
+  const skills = new SkillStore({ dataDir: cfg.home, accounts: () => accounts.list(), publish: (n) => publishSkills(n), log, version: RUNNER_VERSION, onChange: () => refreshSkills(), setExperiment: (on) => setSkillsExperiment?.(on) });
   skills.sync();
   // The xSearch experiment (x-search.ts): x_search, with its key in secrets/.
   const xSearchFor = () => (experimentOn(cfg.home, 'xSearch') ? { secretsDir: paths.secrets(cfg.home) } : undefined);
@@ -409,6 +412,9 @@ async function main(): Promise<void> {
     config: cfg,
     publish: (n) => runner.publish(n),
     poolIds: () => runner.listPools().pools.map((p) => p.id),
+    onExperimentChange: (id) => {
+      if (id === SKILLS_STORE) skills.experimentChanged();
+    },
     onExperimentOff: (id) => {
       // Turning webhooks off ends every hook, not just the list.
       if (id === WEBHOOKS && syncForAgents && !syncForAgents.offReason()) {
@@ -419,6 +425,7 @@ async function main(): Promise<void> {
       syncForAgents.revokeAgentKeys().then((n) => log.info('outside agents off: revoked their keys', { n }), (e) => log.warn("outside agents off, but their keys couldn't be revoked", { error: (e as Error).message }));
     },
   });
+  setSkillsExperiment = (on) => void settings.update({ experiments: { [SKILLS_STORE]: on } });
   // Runners still finishing turns after a handover: connected before the
   // threads load, so the ones they have are left to them. Nothing after the
   // await below yields until runner.start(), so no thread can arrive first.
