@@ -89,7 +89,9 @@ impl Threadbear {
                 match result {
                     Ok(v) => this.connectors_panel.setup.agents = Some(AgentsList::decode(&v)),
                     Err(e) if e.code == -32601 => this.connectors_panel.setup.agents = None,
-                    Err(e) => this.show_error(e.message, cx),
+                    // This refresh also runs at hello: keep the last list and
+                    // log a transient outage without interrupting other work.
+                    Err(e) => threadbear_client::log::write("rpc", &format!("agents.list failed: {}", e.message)),
                 }
                 cx.notify();
             }).ok();

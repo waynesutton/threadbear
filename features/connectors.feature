@@ -109,3 +109,18 @@ Feature: The Connectors panel
     And I press "Connect Slack to Threadbear" in the Connectors panel
     Then the Connectors panel doesn't list "Make key"
     And the Connectors panel lists "Slackbot only connects to servers that sign in with OAuth or with Slack's own sign-in, through a Slack app. It can't take a key, so Threadbear can't connect to it yet."
+
+  # The Swift driver cannot inspect the new agent rows in its panel dump.
+  @connectors.panel @swift-pending
+  Scenario: A failed outside-agent refresh keeps the last list without an error banner
+    When I open the Connectors panel
+    And I press "Let Grok Bot, Notion" in the Connectors panel
+    And I press "Make a key for Grok Bot" in the Connectors panel
+    Then the Connectors panel lists "Grok Bot: Read only, reads threads it started"
+    When I press "Put the key away" in the Connectors panel
+    And the outside-agent list temporarily fails
+    And I close and reopen the Connectors panel
+    And I press "Check the gateway again now" in the Connectors panel
+    Then the app's log says "agents.list failed: Outside agents temporarily unavailable"
+    And the outside-agent refresh leaves no error banner
+    And the Connectors panel lists "Grok Bot: Read only, reads threads it started"

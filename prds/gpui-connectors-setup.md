@@ -25,3 +25,7 @@ Implemented 2026-11-14 23:55 UTC. The panel uses the existing RPCs and preserves
 Verified 1,022 core tests, the automation build, the focus guard and spec pairing. A direct run of the existing GPUI driver passed setup/catalog/custom HTTPS thread opening, Grok/Notion permissions and masked key copying, Slack's explanation, revoke and revoke all, one-time-key cleanup, hide/restore with rail filtering, and local trust/cancel/add with exact-version validation. The custom trust buttons explicitly clear their state because closing a dialog directly does not invoke its close callback.
 
 Before/after dark-mode shots and the driver script/log are retained locally in `.fixtures/connectors-port/`. Cucumber itself was not run because its packages are absent; no packages were installed. The installed app will be checked after its automatic update.
+
+## Review follow-up
+
+2026-11-15 03:56 UTC: finding 1 confirmed against Swift and reproduced with a mock `agents.list` outage. Refresh failures now log under `rpc` and preserve the previous agent list instead of showing the global error banner. Added a failure fixture and behavior scenario. Five Connectors rule tests and feature pairing pass. The old binary failed the new direct-driver regression as expected; rebuilding and rerunning it, followed by landing, waits for Mac load below 4. The earlier landing failed on unrelated runner timeouts under heavy load; main is unchanged.

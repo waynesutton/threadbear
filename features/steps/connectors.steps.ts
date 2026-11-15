@@ -21,6 +21,14 @@ When('the connector catalog offers a local server', async function (this: Thread
   await this.app.do({ cmd: 'mock', method: 'connectors', params: { local: true } });
 });
 
+When('the outside-agent list temporarily fails', async function (this: ThreadbearWorld) {
+  await this.app.do({ cmd: 'mock', method: 'connectors', params: { agentsListError: true } });
+});
+
+Then('the outside-agent refresh leaves no error banner', async function (this: ThreadbearWorld) {
+  assert.equal((await this.app.dump()).error, null);
+});
+
 Then('the connector setup thread is open', async function (this: ThreadbearWorld) {
   await this.until('the returned setup thread is open', (d) => d.selection?.id === 'demo_upload_resume');
 });

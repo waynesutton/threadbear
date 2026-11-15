@@ -393,6 +393,7 @@ let mockProfileSaves = 0;
 const MOCK_GATEWAY = 'https://bruce.example.ts.net:8443';
 let mockXSearch = { on: true, keySaved: true };
 let mockAgents = { on: true, url: 'https://demo-seal-123.convex.site/mcp', keys: [] };
+let mockAgentsListError = false;
 const MOCK_BLENDER = {
   kind: 'local', id: 'blender', title: 'Blender', blurb: 'Build and change scenes in the Blender open on this Mac',
   command: 'uvx mcp-for-blender@2.2.7', asks: ['blender__execute_blender_code'],
@@ -1555,6 +1556,7 @@ async function dispatch(client, method, p) {
     // are made up and reach nothing.
     case 'agents.list':
       if (oldRunner) throw rpcError(-32601, `Unknown method ${method}`);
+      if (mockAgentsListError) throw rpcError(-32000, 'Outside agents temporarily unavailable');
       return mockAgents;
     case 'agents.connect': {
       const name = typeof p.name === 'string' && p.name.trim() ? p.name.trim().slice(0, 60) : 'Agent';
@@ -1883,6 +1885,7 @@ async function dispatch(client, method, p) {
       return { scheduled: true, waitingFor };
     }
     case 'mock.connectors': {
+      if (typeof p.agentsListError === 'boolean') mockAgentsListError = p.agentsListError;
       // { state?, error?, services? }: replaces what connectors.status
       // answers and sends connectors.updated.
       // { url } moves the gateway (a local one is "This Mac").
