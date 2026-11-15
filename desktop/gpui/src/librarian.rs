@@ -467,6 +467,7 @@ impl Threadbear {
             "title": "Librarian",
             "status": status.map(rules::state_text),
             "poke": self.librarian_pokes.line,
+            "look": self.look_dump(crate::looks::Slot::Librarian),
             "stats": stats.iter().map(|s| json!({ "value": s.value, "label": s.label })).collect::<Vec<_>>(),
         })
     }

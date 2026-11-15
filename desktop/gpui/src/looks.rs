@@ -558,3 +558,27 @@ pub(crate) fn well(id: String, name: Option<&str>, empty: &'static str, fill: bo
         })
         .into_any_element()
 }
+
+impl Threadbear {
+    /// A customized page's look, for the dump's `homePage.look`: null while
+    /// its Customize switch is off.
+    #[cfg(feature = "automation")]
+    pub(crate) fn look_dump(&self, slot: Slot) -> serde_json::Value {
+        use serde_json::json;
+        let (on, layout, picture, background, numbers): (bool, Vec<&str>, Picture, Option<String>, Vec<String>) = match slot {
+            Slot::Librarian => {
+                let l = self.librarian_look();
+                (self.librarian_customizable(), l.layout().into_iter().map(|b| b.raw()).collect(), l.picture, l.background.clone(), l.hidden_numbers.iter().cloned().collect())
+            }
+            Slot::Scheduled => {
+                let l = self.scheduled_look();
+                (self.scheduled_customizable(), l.layout().into_iter().map(|b| b.raw()).collect(), l.picture, l.background.clone(), l.hidden_numbers.iter().cloned().collect())
+            }
+            Slot::Main => return json!({ "on": self.settings.saved.main_background_on == Some(true), "background": self.main_background() }),
+        };
+        if !on {
+            return serde_json::Value::Null;
+        }
+        json!({ "editing": self.looks.editing == Some(slot), "layout": layout, "picture": picture.raw(), "background": background, "hiddenNumbers": numbers })
+    }
+}

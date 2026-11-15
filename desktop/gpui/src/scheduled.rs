@@ -614,6 +614,7 @@ impl Threadbear {
             "title": "Scheduled",
             "status": status,
             "poke": self.scheduled.pokes.line,
+            "look": self.look_dump(crate::looks::Slot::Scheduled),
             "stats": stats.iter().map(|s| json!({ "value": s.value, "label": s.label })).collect::<Vec<_>>(),
         })
     }

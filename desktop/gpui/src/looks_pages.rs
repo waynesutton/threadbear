@@ -15,7 +15,7 @@ use crate::tips::Tip as _;
 use gpui_kit::base::TestSupportExt as _;
 use gpui_kit::component::button::{Button, ButtonVariants as _};
 use gpui_kit::component::spinner::Spinner;
-use gpui_kit::component::{h_flex, v_flex, Disableable as _, Sizable as _, StyledExt as _};
+use gpui_kit::component::{h_flex, v_flex, Sizable as _, StyledExt as _};
 use gpui_kit::prelude::*;
 use gpui_kit::*;
 // The zoom-aware px (style.rs), in place of GPUI's.
@@ -24,7 +24,7 @@ use std::collections::{HashMap, HashSet};
 use std::time::Duration;
 use threadbear_core::chrono::{Datelike as _, Local, Timelike as _};
 use threadbear_core::home::HomeStat;
-use threadbear_core::looks::{self as rules, AboutPart, Contributions, Day, LibrarianBlock, Picture, Place, ScheduledBlock};
+use threadbear_core::looks::{self as rules, AboutPart, Contributions, LibrarianBlock, Picture, Place, ScheduledBlock};
 
 /// A year of someone's GitHub contributions, as fetched (`GitHubActivity`).
 #[derive(Clone, Debug)]
