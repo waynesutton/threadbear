@@ -374,13 +374,8 @@ fn step(app: &Entity<Threadbear>, cmd: &Value, window: &mut Window, cx: &mut App
             // The Settings window's too: a section asks for what it shows as
             // it's drawn (Phone & browser's list), as the Swift one on appear,
             // and what's on screen there is read from that frame.
-            if let Some((settings, view)) = app.read(cx).settings_window.clone() {
-                settings
-                    .update(cx, |_, window, cx| {
-                        window.render_frame(cx);
-                        crate::settings_window::note_drawn(&view, window, cx);
-                    })
-                    .ok();
+            if let Some((_, view)) = app.read(cx).settings_window.clone() {
+                crate::settings_window::note_drawn(&view, window, cx);
             }
             let mut dump = app.read(cx).dump(cx);
             // Who AppKit gives the keys to: GPUI's view, or a page's.
@@ -420,11 +415,7 @@ fn step(app: &Entity<Threadbear>, cmd: &Value, window: &mut Window, cx: &mut App
         // `"close": true` closes it.
         "settings" => {
             if cmd["close"].as_bool() == Some(true) {
-                let open = app.update(cx, |t, _| t.settings_window.take());
-                if let Some((handle, _)) = open {
-                    crate::thread::set_looking(handle.window_id().as_u64(), false);
-                    handle.update(cx, |_, window, _| window.remove_window()).ok();
-                }
+                app.update(cx, |t, cx| { t.close_settings(cx); });
                 return Ok(json!("ok closed"));
             }
             let tab = match cmd["tab"].as_str() {
@@ -433,13 +424,13 @@ fn step(app: &Entity<Threadbear>, cmd: &Value, window: &mut Window, cx: &mut App
             };
             app.update(cx, |t, cx| t.open_settings(tab, cx));
             // Its sections' buttons and menus, as the Swift command takes them.
-            if let Some(done) = crate::settings_window::automation(app, cmd, cx)? {
+            if let Some(done) = crate::settings_window::automation(app, cmd, window, cx)? {
                 return Ok(done);
             }
             Ok(json!("ok"))
         }
         // Settings > Keyboard, as the Swift app's `shortcuts` (settings_window/keyboard.rs).
-        "shortcuts" => crate::settings_window::keyboard_automation(app, cmd, cx),
+        "shortcuts" => crate::settings_window::keyboard_automation(app, cmd, window, cx),
         // The sidebar's commands (sidebar.rs). Guarded ones only take the forms
         // that name a section, a row or a tip; the others fall through below.
         "hover" | "sort" | "archive-more" | "star" | "unstar" | "unarchive" | "realMenu" | "menu-popover" => crate::sidebar::automation(app, cmd, window, cx),
@@ -574,7 +565,14 @@ fn step(app: &Entity<Threadbear>, cmd: &Value, window: &mut Window, cx: &mut App
             Ok(json!("ok"))
         }
         "type" | "send" => {
-            type_in_composer(app, text(cmd, "text"), cmd["replace"].as_bool().unwrap_or(false), window, cx)?;
+            if cmd["focused"].as_bool() == Some(true) {
+                // Exercise the actual focused form field, including its
+                // change/save subscription, without reaching into its state.
+                if cmd["replace"].as_bool() == Some(true) { window.press("secondary-a", cx); }
+                window.input(text(cmd, "text"), cx);
+            } else {
+                type_in_composer(app, text(cmd, "text"), cmd["replace"].as_bool().unwrap_or(false), window, cx)?;
+            }
             if text(cmd, "cmd") == "send" {
                 window.press("enter", cx);
             }

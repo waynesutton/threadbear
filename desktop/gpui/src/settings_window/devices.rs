@@ -496,7 +496,7 @@ pub(super) fn prominent_button(id: &'static str, label: &'static str, tip: impl 
 /// code, and `revoke` (a device's name) presses that one's Revoke, each
 /// through a real click in the Settings window.
 #[cfg(feature = "automation")]
-pub(crate) fn automation(app: &Entity<Threadbear>, cmd: &Value, cx: &mut App) -> Result<Option<Value>, String> {
+pub(crate) fn automation(app: &Entity<Threadbear>, cmd: &Value, window: &mut Window, cx: &mut App) -> Result<Option<Value>, String> {
     use gpui_kit::test::{TestEventExt as _, TestQueryExt as _, TestWindowExt as _};
     let target = if cmd["pair"].as_bool() == Some(true) {
         rules::PHONE_BUTTON_TIP.to_owned()
@@ -507,22 +507,17 @@ pub(crate) fn automation(app: &Entity<Threadbear>, cmd: &Value, cx: &mut App) ->
     } else {
         return Ok(None);
     };
-    let handle = app.read(cx).settings_window.as_ref().map(|(h, _)| *h).ok_or("the Settings window isn't open")?;
-    handle
-        .update(cx, |_, window, cx| -> Result<(), String> {
-            window.render_frame(cx);
-            let found = window.elements().into_iter().filter(|e| e.visible() && e.label().is_some_and(|l| l.to_string() == target)).last().ok_or_else(|| format!("no control {target:?} in Settings"))?;
-            let at = found.visible_bounds().center();
-            window.pointer_move(at, None, cx);
-            window.pointer_down(at, MouseButton::Left, cx);
-            window.pointer_up(at, MouseButton::Left, cx);
-            // And away, as a hand would go, so the button's tip doesn't
-            // stay up over the code.
-            window.pointer_move(point(gpui_kit::px(1.), gpui_kit::px(1.)), None, cx);
-            window.render_frame(cx);
-            Ok(())
-        })
-        .map_err(|e| e.to_string())??;
+    if app.read(cx).settings_window.is_none() { return Err("Settings isn't open".into()); }
+    window.render_frame(cx);
+    let found = window.elements().into_iter().filter(|e| e.visible() && e.label().is_some_and(|l| l.to_string() == target)).last().ok_or_else(|| format!("no control {target:?} in Settings"))?;
+    let at = found.visible_bounds().center();
+    window.pointer_move(at, None, cx);
+    window.pointer_down(at, MouseButton::Left, cx);
+    window.pointer_up(at, MouseButton::Left, cx);
+    // And away, as a hand would go, so the button's tip doesn't
+    // stay up over the code.
+    window.pointer_move(point(gpui_kit::px(1.), gpui_kit::px(1.)), None, cx);
+    window.render_frame(cx);
     Ok(Some(json!("ok")))
 }
 

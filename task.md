@@ -9,9 +9,11 @@ Status and gap list: prds/prints-status.md
 
 ## In Progress
 
-Nothing.
+Nothing in progress.
 
 ## Completed
+
+- [x] 2026-11-15 05:35 UTC Embed GPUI Settings in the main window, with Back/Esc/Close, section links and sidebar navigation. Verified the original window and thread draft survive, instruction edits save on close/quit, recording stops, and General/Devices controls work. Automation build, direct GPUI driver, focus guard and spec pairing pass; landing and installed verification pending. prds/gpui-settings-in-main.md
 
 - [x] 2026-11-15 04:16 UTC Verify the reviewed Connectors build: the background-outage regression and all broader scripted Connectors flows pass against the rebuilt app. Review round 2 is clean. Landing still waits for quiet load after unrelated runner test timeouts; Cucumber dependencies remain absent.
 

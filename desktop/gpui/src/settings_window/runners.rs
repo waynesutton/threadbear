@@ -230,7 +230,7 @@ fn row(label: &'static str, control: impl IntoElement, cx: &App) -> AnyElement {
 /// picks it from the menu, as a click there does; `drag` with `onto` (names)
 /// drags one row onto another's place through real pointer events.
 #[cfg(feature = "automation")]
-pub(crate) fn automation(app: &Entity<Threadbear>, cmd: &Value, cx: &mut App) -> Result<Option<Value>, String> {
+pub(crate) fn automation(app: &Entity<Threadbear>, cmd: &Value, window: &mut Window, cx: &mut App) -> Result<Option<Value>, String> {
     use gpui_kit::test::{TestEventExt as _, TestWindowExt as _};
     if let Some(name) = cmd["defaultRunner"].as_str() {
         let runner = if name == "This Mac" { None } else { Some(app.read(cx).remote.runners.iter().find(|r| r.name == name).ok_or_else(|| format!("no runner {name}"))?.id.clone()) };
@@ -240,21 +240,16 @@ pub(crate) fn automation(app: &Entity<Threadbear>, cmd: &Value, cx: &mut App) ->
     let (Some(from), Some(onto)) = (cmd["drag"].as_str(), cmd["onto"].as_str()) else { return Ok(None) };
     let id_of = |name: &str| app.read(cx).remote.all_runners.iter().map(|r| (r.id.clone(), r.name.clone())).chain(app.read(cx).remote.runners.iter().map(|r| (r.id.clone(), r.name.clone()))).find(|(_, n)| n == name).map(|(id, _)| id).ok_or_else(|| format!("no runner {name}"));
     let (a, b) = (id_of(from)?, id_of(onto)?);
-    let handle = app.read(cx).settings_window.as_ref().map(|(h, _)| *h).ok_or("the Settings window isn't open")?;
-    handle
-        .update(cx, |_, window, cx| -> Result<(), String> {
-            window.render_frame(cx);
-            let center = |id: &str, window: &Window| window.try_find(SharedString::from(format!("settings-runner-{id}"))).and_then(|e| e.click_point()).ok_or_else(|| format!("no row for {id} on screen"));
-            let (p, q) = (center(&a, window)?, center(&b, window)?);
-            window.pointer_move(p, None, cx);
-            window.pointer_down(p, MouseButton::Left, cx);
-            for step in 1..=8 {
-                let t = step as f32 / 8.;
-                window.pointer_move(point(p.x + (q.x - p.x) * t, p.y + (q.y - p.y) * t), Some(MouseButton::Left), cx);
-            }
-            window.pointer_up(q, MouseButton::Left, cx);
-            Ok(())
-        })
-        .map_err(|e| e.to_string())??;
+    if app.read(cx).settings_window.is_none() { return Err("Settings isn't open".into()); }
+    window.render_frame(cx);
+    let center = |id: &str, window: &Window| window.try_find(SharedString::from(format!("settings-runner-{id}"))).and_then(|e| e.click_point()).ok_or_else(|| format!("no row for {id} on screen"));
+    let (p, q) = (center(&a, window)?, center(&b, window)?);
+    window.pointer_move(p, None, cx);
+    window.pointer_down(p, MouseButton::Left, cx);
+    for step in 1..=8 {
+        let t = step as f32 / 8.;
+        window.pointer_move(point(p.x + (q.x - p.x) * t, p.y + (q.y - p.y) * t), Some(MouseButton::Left), cx);
+    }
+    window.pointer_up(q, MouseButton::Left, cx);
     Ok(Some(json!("ok")))
 }

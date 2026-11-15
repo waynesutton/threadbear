@@ -6,6 +6,33 @@ Feature: Settings
   Background:
     Given the app is connected to a runner with the demo threads
 
+  @settings.window @swift-pending
+  Scenario: Settings stays inside the main window and Back restores the thread
+    When I open the thread "Make uploads resume after a crash"
+    And I type "Keep this draft" in the composer
+    And I open Settings
+    Then Settings is inside the main window
+    When I open Settings on "keyboard"
+    Then Settings is inside the main window
+    When I leave the Settings page
+    Then Settings is closed and thread "demo_upload_resume" is still open
+    And the composer says "Keep this draft"
+
+  @settings.window @swift-pending
+  Scenario: Escape leaves Settings without closing the main window
+    When I open the thread "Make uploads resume after a crash"
+    And I open Settings
+    And I press Escape
+    Then Settings is closed and thread "demo_upload_resume" is still open
+
+  @settings.window @settings.keyboard @swift-pending
+  Scenario: Escape cancels recording before leaving Settings
+    When I open Settings on "keyboard"
+    And I click the key for "archive" in Settings
+    And I press the keys "escape" in Settings
+    Then Settings isn't listening for a key
+    And Settings shows "keyboard"
+
   @settings.window
   Scenario: Settings opens on General, and another section can be picked
     When I open Settings

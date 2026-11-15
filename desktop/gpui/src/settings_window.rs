@@ -1,4 +1,4 @@
-// The Settings window (⌘,), a port of the Swift app's SettingsView: the
+// Settings in the main panel (⌘,), a port of the Swift app's SettingsView: the
 // runner's settings in the grouped form every Mac app's settings use, with a
 // sidebar like System Settings' rather than tabs, so the window keeps one
 // height and each section scrolls. All of it lives in the runner (runner.json)
@@ -94,54 +94,67 @@ impl Tab {
 const SIDEBAR_WIDTH: f32 = 215.;
 
 impl Threadbear {
-    /// ⌘, or the gear: the window, brought forward if it's open, on `tab` if
-    /// one's given (Settings › Models from the Librarian's page, say).
+    /// All entry points share the main panel. Defer creation because the
+    /// form observes and reads the app, which is borrowed by this update.
     pub(crate) fn open_settings(&mut self, tab: Option<Tab>, cx: &mut Context<Self>) {
-        if let Some((handle, view)) = self.settings_window.clone() {
-            let alive = handle
-                .update(cx, |_, window, cx| {
-                    window.activate_window();
+        let (me, handle) = (cx.entity(), self.main_window);
+        let (client, instructions) = (self.client.clone(), self.standing_instructions.clone());
+        cx.defer(move |cx| {
+            handle.update(cx, |_, window, cx| {
+                let existing = me.read(cx).settings_window.as_ref().map(|(_, view)| view.clone());
+                if let Some(view) = existing {
                     if let Some(tab) = tab {
                         view.update(cx, |v, cx| v.show(tab, window, cx));
                     }
-                })
-                .is_ok();
-            if alive {
-                return;
-            }
-            self.settings_window = None;
-        }
-        let app = cx.entity().downgrade();
-        let tab = tab.unwrap_or(Tab::General);
-        // Handed what it needs: it can't read the app while the app is the
-        // one opening it.
-        let (client, instructions) = (self.client.clone(), self.standing_instructions.clone());
-        // Opened once this update is over: `open_window` draws the window's
-        // first frame there and then, and its drawing reads the app.
-        let me = cx.entity();
-        cx.defer(move |cx| {
-            let bounds = Bounds::centered(None, size(px(880.), px(620.)), cx);
-            let opened = gpui_kit::open_window(
-                WindowOptions {
-                    window_bounds: Some(WindowBounds::Windowed(bounds)),
-                    titlebar: Some(TitlebarOptions { title: Some(tab.title().into()), appears_transparent: false, traffic_light_position: None }),
-                    window_min_size: Some(size(px(640.), px(420.))),
-                    app_id: Some("threadbear".into()),
-                    ..Default::default()
-                },
-                cx,
-                move |window, cx| cx.new(|cx| SettingsWindow::new(app, client, instructions, tab, window, cx)),
-            );
-            me.update(cx, |me, cx| match opened {
-                Ok((handle, view)) => {
-                    me.settings_window = Some((handle, view));
-                    cx.notify();
+                    return;
                 }
-                Err(e) => me.show_error(format!("Settings didn't open: {e}"), cx),
-            });
+                let app = me.downgrade();
+                let view = cx.new(|cx| SettingsWindow::new(app, client, instructions, tab.unwrap_or(Tab::General), window, cx));
+                me.update(cx, |me, cx| {
+                    me.settings_window = Some((handle, view));
+                    me.sync_menus(cx);
+                    cx.notify();
+                });
+            }).ok();
         });
-        // What's in the Instructions box, fresh each time the window opens.
         self.load_standing_instructions(cx);
+    }
+
+    /// Leave the page without changing the thread, its draft or navigation
+    /// history. Flush debounced edits before releasing the form.
+    pub(crate) fn close_settings(&mut self, cx: &mut Context<Self>) -> bool {
+        let Some((_, view)) = self.settings_window.take() else { return false };
+        view.update(cx, |view, cx| {
+            view.commit_instructions(cx);
+            view.stop_listening(cx);
+            view.devices_hidden();
+        });
+        let (window, focus) = (self.main_window, self.root_focus.clone());
+        cx.defer(move |cx| {
+            window.update(cx, |_, window, cx| {
+                if window.focused(cx).is_none() {
+                    window.focus(&focus, cx);
+                    crate::web_panels::keyboard_to_app(window);
+                }
+            }).ok();
+        });
+        self.sync_menus(cx);
+        cx.notify();
+        true
+    }
+
+    pub(crate) fn render_settings_page(&self, cx: &mut Context<Self>) -> AnyElement {
+        let Some((_, view)) = self.settings_window.as_ref() else { return div().into_any_element() };
+        let app = cx.entity().downgrade();
+        let back = crate::push_button::PushButton::new("settings-back", "Back", "Back to the previous view")
+            .render(cx, move |_, _, cx| { app.update(cx, |app, cx| app.close_settings(cx)).ok(); });
+        let header = h_flex().px(px(16.)).py(px(12.)).gap(px(12.))
+            .border_b(gpui_kit::px(0.5)).border_color(style::hairline(cx))
+            .child(back)
+            .child(div().font_weight(FontWeight::SEMIBOLD).child("Settings"));
+        v_flex().id("settings-page").size_full().key_context("SettingsPage")
+            .on_action(cx.listener(|this, _: &CloseSettings, _, cx| { this.close_settings(cx); }))
+            .child(header).child(div().flex_1().min_h_0().child(view.clone())).into_any_element()
     }
 
     /// `loadStandingInstructions`: None from a runner without them (their
@@ -206,14 +219,14 @@ pub(crate) struct SettingsWindow {
 }
 
 // Settings' sidebar keys (`onMoveCommand`).
-actions!(settings_sidebar, [PreviousSection, NextSection]);
+actions!(settings_sidebar, [PreviousSection, NextSection, CloseSettings]);
 
 const SIDEBAR_CONTEXT: &str = "SettingsSidebar";
 
 fn bind_sidebar_keys(cx: &mut App) {
     static BOUND: std::sync::Once = std::sync::Once::new();
     BOUND.call_once(|| {
-        cx.bind_keys([KeyBinding::new("up", PreviousSection, Some(SIDEBAR_CONTEXT)), KeyBinding::new("down", NextSection, Some(SIDEBAR_CONTEXT))]);
+        cx.bind_keys([KeyBinding::new("up", PreviousSection, Some(SIDEBAR_CONTEXT)), KeyBinding::new("down", NextSection, Some(SIDEBAR_CONTEXT)), KeyBinding::new("escape", CloseSettings, Some("SettingsPage"))]);
     });
 }
 
@@ -251,16 +264,20 @@ impl SettingsWindow {
                 this.stop_listening(cx);
             }
         }));
-        // Closing it saves what's typed and not yet sent (`onDisappear`).
-        let me = cx.entity().downgrade();
-        window.on_window_should_close(cx, move |window, cx| {
-            if let Some(me) = me.upgrade() {
-                me.update(cx, |this, cx| this.commit_instructions(window, cx));
+        // The page shares the main window: never replace its close/quit
+        // handler. Await any last instruction edit during app shutdown.
+        subs.push(cx.on_app_quit(|this, cx| {
+            let pending = this.instructions_save.take().is_some();
+            let text = this.instructions.read(cx).value().to_string();
+            let client = this.client.clone();
+            async move {
+                if pending {
+                    if let Err(error) = call(client, "instructions.set", json!({ "text": text })).await {
+                        eprintln!("threadbear: couldn't save instructions on quit: {}", error.message);
+                    }
+                }
             }
-            // Gone, it isn't in front, whether or not it says so first.
-            crate::thread::set_looking(crate::thread::window_key(window), false);
-            true
-        });
+        }));
         // The ding's volume: kept as it's dragged, and heard when it's let go
         // (the Swift slider's `editing` ending).
         let volume_now = app.upgrade().map_or(completion_sound::DEFAULT_VOLUME, |a| a.read(cx).settings.ding_volume());
@@ -309,15 +326,14 @@ impl SettingsWindow {
         this
     }
 
-    pub(crate) fn show(&mut self, tab: Tab, window: &mut Window, cx: &mut Context<Self>) {
+    pub(crate) fn show(&mut self, tab: Tab, _window: &mut Window, cx: &mut Context<Self>) {
         if self.tab != tab {
-            self.commit_instructions(window, cx);
+            self.commit_instructions(cx);
             // Leaving Keyboard stops listening (`onDisappear`), and coming
             // back to Phone & browser asks for the list again (`onAppear`).
             self.stop_listening(cx);
             self.devices_hidden();
             self.tab = tab;
-            window.set_window_title(tab.title());
             self.scroll.set_offset(point(gpui_kit::px(0.), gpui_kit::px(0.)));
             cx.notify();
         }
@@ -370,7 +386,7 @@ impl SettingsWindow {
     }
 
     /// Saves now if a save is waiting (`commit`).
-    fn commit_instructions(&mut self, _window: &mut Window, cx: &mut Context<Self>) {
+    fn commit_instructions(&mut self, cx: &mut Context<Self>) {
         if self.instructions_save.take().is_some() {
             self.write_instructions(cx);
         }
@@ -1254,11 +1270,11 @@ impl SettingsWindow {
 /// The automation's `settings` command's actions on the sections, as the
 /// Swift command takes them (runners.rs, devices.rs), or None for none of them.
 #[cfg(feature = "automation")]
-pub(crate) fn automation(app: &Entity<Threadbear>, cmd: &Value, cx: &mut App) -> Result<Option<Value>, String> {
-    if let Some(done) = runners::automation(app, cmd, cx)? {
+pub(crate) fn automation(app: &Entity<Threadbear>, cmd: &Value, window: &mut Window, cx: &mut App) -> Result<Option<Value>, String> {
+    if let Some(done) = runners::automation(app, cmd, window, cx)? {
         return Ok(Some(done));
     }
-    devices::automation(app, cmd, cx)
+    devices::automation(app, cmd, window, cx)
 }
 
 /// Scrolls Settings' pane so `bounds`, a control drawn out of sight in it,

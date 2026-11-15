@@ -6,6 +6,10 @@ How Prints work today, what's missing and what's next: [Prints status](https://g
 
 ## [Unreleased]
 
+### Changed
+
+- GPUI Settings opens inside the main window. Back, Esc or Close returns to the previous view with its thread draft intact.
+
 ### Added
 
 - The GPUI Connectors panel can set up a gateway, add services, connect outside agents with masked key fields, hide and restore rows, and review pinned local-server commands before adding them.

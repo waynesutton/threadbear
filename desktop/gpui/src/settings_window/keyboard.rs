@@ -464,11 +464,11 @@ fn disabled_button(id: &'static str, label: &'static str, tip: &'static str, cx:
 /// search box. Says what's listening, what the last press came to, and
 /// what's changed, as the Swift command does.
 #[cfg(feature = "automation")]
-pub(crate) fn automation(app: &Entity<Threadbear>, cmd: &Value, cx: &mut App) -> Result<Value, String> {
+pub(crate) fn automation(app: &Entity<Threadbear>, cmd: &Value, window: &mut Window, cx: &mut App) -> Result<Value, String> {
     use gpui_kit::test::{TestEventExt as _, TestQueryExt as _, TestWindowExt as _};
     use threadbear_core::keyboard::Outcome;
     use threadbear_core::shortcuts::ShortcutKey;
-    let (handle, view) = app.read(cx).settings_window.clone().ok_or("the Settings window isn't open")?;
+    let (_, view) = app.read(cx).settings_window.clone().ok_or("the Settings window isn't open")?;
     let record = cmd["record"].as_str().map(|name| ShortcutCommand::from_name(name).ok_or_else(|| format!("no command {name}"))).transpose()?;
     let bindings = app.read(cx).shortcuts.clone();
     // The keys as GPUI names them, from `press` or `post`.
@@ -504,58 +504,53 @@ pub(crate) fn automation(app: &Entity<Threadbear>, cmd: &Value, cx: &mut App) ->
         }
         _ => None,
     };
-    handle
-        .update(cx, |_, window, cx| -> Result<(), String> {
-            window.render_frame(cx);
-            // A control by its name (or the start of it), through a real click.
-            let click = |label: &str, prefix: bool, window: &mut Window, cx: &mut App| -> bool {
-                let found = window.elements().into_iter().filter(|e| e.visible() && e.label().is_some_and(|l| if prefix { l.starts_with(label) } else { l == label })).last();
-                let Some(found) = found else { return false };
-                let at = found.visible_bounds().center();
-                window.pointer_move(at, None, cx);
-                window.pointer_down(at, MouseButton::Left, cx);
-                window.pointer_up(at, MouseButton::Left, cx);
-                window.render_frame(cx);
-                true
-            };
-            if let Some(words) = cmd["search"].as_str() {
-                let search = view.read(cx).keyboard.search.clone().ok_or("the Keyboard page isn't showing")?;
-                search.update(cx, |s, cx| s.set_value(words.to_owned(), window, cx));
-                window.render_frame(cx);
+    window.render_frame(cx);
+    // A control by its name (or the start of it), through a real click.
+    let click = |label: &str, prefix: bool, window: &mut Window, cx: &mut App| -> bool {
+        let found = window.elements().into_iter().filter(|e| e.visible() && e.label().is_some_and(|l| if prefix { l.starts_with(label) } else { l == label })).last();
+        let Some(found) = found else { return false };
+        let at = found.visible_bounds().center();
+        window.pointer_move(at, None, cx);
+        window.pointer_down(at, MouseButton::Left, cx);
+        window.pointer_up(at, MouseButton::Left, cx);
+        window.render_frame(cx);
+        true
+    };
+    if let Some(words) = cmd["search"].as_str() {
+        let search = view.read(cx).keyboard.search.clone().ok_or("the Keyboard page isn't showing")?;
+        search.update(cx, |s, cx| s.set_value(words.to_owned(), window, cx));
+        window.render_frame(cx);
+    }
+    if let Some(c) = record {
+        // Scrolled out of sight, it's started as its click would.
+        if !click(&rules::cap_label(c, &bindings), false, window, cx) {
+            view.update(cx, |this, cx| this.listen_for(c, window, cx));
+        }
+    }
+    if let Some(keys) = &keys {
+        window.press(keys, cx);
+    }
+    match cmd["answer"].as_str() {
+        // Use It for This Instead's tip names the command, so it's
+        // found by the start of it.
+        Some("use") if !click("Give the key to", true, window, cx) => return Err("no question to answer".into()),
+        // With no question up, it stops listening, as the Swift
+        // command's `cancel` does.
+        Some("cancel") if !click("Leave the key as it was", false, window, cx) => view.update(cx, |this, cx| this.stop_listening(cx)),
+        Some("use" | "cancel") | None => {}
+        Some(other) => return Err(format!("answer is use or cancel, not {other}")),
+    }
+    match cmd["reset"].as_str() {
+        Some("all") if !click(rules::RESET_ALL_TIP, false, window, cx) => return Err("nothing to Reset All".into()),
+        Some("all") | None => {}
+        Some(name) => {
+            let c = ShortcutCommand::from_name(name).ok_or_else(|| format!("no command {name}"))?;
+            if !click(&format!("Reset {}", c.title()), false, window, cx) {
+                return Err(format!("{} has no Reset", c.title()));
             }
-            if let Some(c) = record {
-                // Scrolled out of sight, it's started as its click would.
-                if !click(&rules::cap_label(c, &bindings), false, window, cx) {
-                    view.update(cx, |this, cx| this.listen_for(c, window, cx));
-                }
-            }
-            if let Some(keys) = &keys {
-                window.press(keys, cx);
-            }
-            match cmd["answer"].as_str() {
-                // Use It for This Instead's tip names the command, so it's
-                // found by the start of it.
-                Some("use") if !click("Give the key to", true, window, cx) => return Err("no question to answer".into()),
-                // With no question up, it stops listening, as the Swift
-                // command's `cancel` does.
-                Some("cancel") if !click("Leave the key as it was", false, window, cx) => view.update(cx, |this, cx| this.stop_listening(cx)),
-                Some("use" | "cancel") | None => {}
-                Some(other) => return Err(format!("answer is use or cancel, not {other}")),
-            }
-            match cmd["reset"].as_str() {
-                Some("all") if !click(rules::RESET_ALL_TIP, false, window, cx) => return Err("nothing to Reset All".into()),
-                Some("all") | None => {}
-                Some(name) => {
-                    let c = ShortcutCommand::from_name(name).ok_or_else(|| format!("no command {name}"))?;
-                    if !click(&format!("Reset {}", c.title()), false, window, cx) {
-                        return Err(format!("{} has no Reset", c.title()));
-                    }
-                }
-            }
-            window.render_frame(cx);
-            Ok(())
-        })
-        .map_err(|e| e.to_string())??;
+        }
+    }
+    window.render_frame(cx);
     let recorder = view.read(cx).keyboard.recorder.clone();
     let outcome = match &recorder.outcome {
         Outcome::Waiting => "waiting".to_owned(),

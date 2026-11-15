@@ -179,7 +179,8 @@ pub struct Threadbear {
     /// The providers whose logins can run small jobs (titles, the
     /// librarian), from hello's `providers` (`ProviderInfo.smallJobs`).
     pub(crate) small_jobs: Vec<String>,
-    /// The Settings window while it's open (settings_window.rs).
+    /// Settings in the main panel. The handle is the main window; kept here
+    /// so existing scripted Settings commands still target the same form.
     pub(crate) settings_window: Option<(AnyWindowHandle, Entity<crate::settings_window::SettingsWindow>)>,
     /// The main window, for opening a thread from outside it (a
     /// notification's click).
@@ -1209,6 +1210,7 @@ impl Threadbear {
     /// `open`, with the pane of a thread brought back from a panel of its own
     /// (thread_panels.rs), which goes on reading it rather than reading it again.
     pub(crate) fn open_with(&mut self, id: String, moved: Option<Entity<ThreadPane>>, window: &mut Window, cx: &mut Context<Self>) {
+        self.close_settings(cx);
         // How it comes in (open_motion.rs): taken now, so an open that goes
         // nowhere doesn't leave it for the next one. One brought back from a
         // panel of its own was on screen a moment ago.

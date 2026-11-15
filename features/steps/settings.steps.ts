@@ -1,10 +1,25 @@
 // The Settings window (features/settings.feature).
 import { Then, When } from '@cucumber/cucumber';
+import assert from 'node:assert/strict';
 import type { ThreadbearWorld } from '../support/world.ts';
 
 /** The Settings window while it's open, from either app's dump. */
 type SettingsInfo = { tab: string; keepAwake?: boolean | null; fullSync?: boolean | null; printsWhenAsked?: boolean | null; privateFolders?: string[] | null };
 const shown = (d: unknown) => (d as { settingsWindow?: SettingsInfo | null }).settingsWindow;
+
+Then('Settings is inside the main window', async function (this: ThreadbearWorld) {
+  const main = await this.app.do({ cmd: 'window' });
+  const settings = await this.app.do({ cmd: 'window', settings: true });
+  assert.deepEqual(settings, main);
+});
+
+When('I leave the Settings page', async function (this: ThreadbearWorld) {
+  await this.app.do({ cmd: 'click', tip: 'Back to the previous view' });
+});
+
+Then('Settings is closed and thread {string} is still open', async function (this: ThreadbearWorld, id: string) {
+  await this.until('Settings closed over the same thread', (d) => !shown(d) && d.selection?.id === id);
+});
 
 When('I open Settings', async function (this: ThreadbearWorld) {
   await this.app.do({ cmd: 'settings' });

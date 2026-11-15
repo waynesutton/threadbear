@@ -191,6 +191,7 @@ impl Threadbear {
     /// The project's page in the main panel (`openProjectPage`). The sidebar
     /// stays where it is.
     pub(crate) fn open_project_page(&mut self, id: &str, cx: &mut Context<Self>) {
+        self.close_settings(cx);
         if self.project(id).is_none() {
             return;
         }

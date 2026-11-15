@@ -1,5 +1,12 @@
 # Files
 
+## GPUI Settings
+
+- `desktop/gpui/src/settings_window.rs` the main-window Settings page, section navigation and pending instruction saves.
+- `desktop/gpui/src/shell.rs` Settings hosting and Back/Close behavior.
+- `features/settings.feature` and `features/steps/settings.steps.ts` Settings window identity, navigation and control scenarios.
+- `prds/gpui-settings-in-main.md` scope and verification for embedded Settings.
+
 ## GPUI Connectors
 
 - `desktop/core/src/connectors.rs` connector status, catalog and agent types, masked form fields, local pin validation and hidden-row rules.

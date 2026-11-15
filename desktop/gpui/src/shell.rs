@@ -461,6 +461,9 @@ impl Threadbear {
 
     /// `WindowDock.title(of: .main)` and the window's own title.
     pub(crate) fn main_panel_title(&self) -> String {
+        if self.settings_window.is_some() {
+            return "Settings".into();
+        }
         if let Some(project) = self.open_project() {
             return project.title.clone();
         }
@@ -788,7 +791,9 @@ impl Threadbear {
             Command::Minimize => window.minimize_window(),
             Command::Zoom => window.zoom_window(),
             Command::BringAllToFront => crate::window_menu::bring_all_to_front(cx),
-            Command::Close => crate::window_menu::close_window(window, cx),
+            Command::Close => {
+                if !self.close_settings(cx) { crate::window_menu::close_window(window, cx); }
+            },
         }
         self.sync_menus(cx);
     }
@@ -847,6 +852,7 @@ impl Threadbear {
     /// The Scheduled, Projects and Librarian buttons open their page in the
     /// main panel too (`showSchedules`); picking a thread puts the thread back.
     pub(crate) fn set_mode(&mut self, mode: SidebarMode, cx: &mut Context<Self>) {
+        self.close_settings(cx);
         let home = mode != SidebarMode::Inbox;
         // A page of the activity bar's takes a project's page's place
         // (`showProjects`); the Inbox leaves it where it is.
@@ -912,14 +918,15 @@ impl Threadbear {
     }
 
     pub(crate) fn can_go_back(&self) -> bool {
-        self.history.can_go_back()
+        self.settings_window.is_some() || self.history.can_go_back()
     }
 
     pub(crate) fn can_go_forward(&self) -> bool {
-        self.history.can_go_forward()
+        self.settings_window.is_none() && self.history.can_go_forward()
     }
 
     pub(crate) fn go_back(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        if self.close_settings(cx) { return; }
         let threads = self.threads.keys().cloned().collect::<std::collections::HashSet<_>>();
         let projects = self.projects.list.iter().map(|p| p.id.clone()).collect::<std::collections::HashSet<_>>();
         let can_show = |p: &NavPlace| match &p.project {
@@ -932,6 +939,7 @@ impl Threadbear {
     }
 
     pub(crate) fn go_forward(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        if self.settings_window.is_some() { return; }
         let threads = self.threads.keys().cloned().collect::<std::collections::HashSet<_>>();
         let projects = self.projects.list.iter().map(|p| p.id.clone()).collect::<std::collections::HashSet<_>>();
         let can_show = |p: &NavPlace| match &p.project {
@@ -969,7 +977,12 @@ impl Threadbear {
 
     /// Where Back or Forward would go, named for its tooltip (`destination`).
     pub(crate) fn destination(&self, back: bool) -> Option<String> {
-        let place = self.history.peek(back, |p| self.can_show(p))?;
+        let place = if self.settings_window.is_some() {
+            if !back { return None; }
+            self.place()
+        } else {
+            self.history.peek(back, |p| self.can_show(p))?
+        };
         if let Some(project) = place.project.as_deref().and_then(|id| self.project(id)) {
             return Some(project.title.clone());
         }
@@ -1564,6 +1577,7 @@ impl Threadbear {
             self.opening.page_shown = None;
         }
         let main: AnyElement = match (&self.pane, page) {
+            _ if self.settings_window.is_some() => self.render_settings_page(cx),
             // A project's page takes the thread's place until a thread is
             // picked again (project_page.rs).
             _ if self.open_project().is_some() => self.render_project_page(window, cx),

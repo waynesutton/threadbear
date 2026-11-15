@@ -1465,6 +1465,13 @@ experiment off ends them all. It needs your backend's public
 
 <!-- picture: /docs-img/usage.webp alt: The Usage panel: how much of each login's limits your threads have used -->
 
+In the GPUI desktop app, the gear or ⌘, opens Settings inside the main
+window. Its section list stays beside the form. Back, Esc or ⌘W returns to
+the previous view; selecting a thread or another page also leaves Settings.
+Your thread and its draft stay where they were, and pending instruction
+edits save when you leave. While recording a keyboard shortcut, Esc cancels
+the recording first.
+
 Threadbear uses the Claude Code and Codex logins already on your Mac: the
 Claude Code login in `~/.claude` and the Codex login in `~/.codex`. It never
 reads their passwords or tokens. The account and model a thread runs on are
