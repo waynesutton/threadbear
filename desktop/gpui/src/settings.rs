@@ -140,7 +140,7 @@ pub struct Saved {
     /// `turnModesEnabled` (PlanFirstToggle): Shift-Tab turns Plan first on
     /// and off. None is on. The key is from when it stepped through Ask too.
     pub turn_modes_enabled: Option<bool>,
-    /// `notesShown` (NotesStore.shownKey): Settings > General > Show Notes,
+    /// `notesShown` (NotesStore.shownKey): Settings > Experiments > Show Notes,
     /// the bar's Notes button and ⌘6. None is on.
     pub notes_shown: Option<bool>,
     /// `notesListHidden`: the Notes page's list folded away for more room
@@ -279,7 +279,7 @@ impl Settings {
         self.saved.ask_before_quitting.unwrap_or(true)
     }
 
-    /// Settings > General > Show Notes: the bar's button and ⌘6 (notes_page.rs).
+    /// Settings > Experiments > Show Notes: the bar's button and ⌘6 (notes_page.rs).
     pub fn notes_shown(&self) -> bool {
         self.saved.notes_shown.unwrap_or(true)
     }

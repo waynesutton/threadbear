@@ -347,7 +347,7 @@ impl Threadbear {
             views.push(rail_button(button, |this, window, cx| this.toggle_skills(window, cx), cx));
         }
         // Your own notes, this Mac's alone (notes_page.rs), while Settings >
-        // General > Show Notes is on. A page over the main panel, as
+        // Experiments > Show Notes is on. A page over the main panel, as
         // Settings is, so it doesn't slide the views' lit square.
         if self.notes_shown() {
             let mut button = RailButton::new("rail-notes", "note.text", "Notes", self.notes_page.is_some());

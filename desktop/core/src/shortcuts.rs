@@ -164,7 +164,7 @@ pub enum ShortcutCommand {
     ShowHibernating,
     ShowArchived,
     /// ⌘6: your own notes over the main panel (notes_page.rs), while
-    /// Settings > General > Show Notes is on. The Swift app's key and name.
+    /// Settings > Experiments > Show Notes is on. The Swift app's key and name.
     ShowNotes,
     /// ⇧⌘[ and ⇧⌘]: a project's page tabs (Decisions, Project), as Safari's
     /// tabs go. Greyed out anywhere else.

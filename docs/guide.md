@@ -2240,8 +2240,8 @@ a key Threadbear keeps beside its other secrets (readable only by you), so
 a copy of the notes folder on its own can't be read, and they're never
 sent to the runner, an agent, your phone or the website. Opening Notes
 never asks for your Mac password. Notes are for ideas and to-dos, not
-passwords: keep those in a password manager. To hide Notes, turn off Show Notes in Settings >
-General; the notes are kept.
+passwords: keep those in a password manager. To hide Notes, turn off Show Notes under
+Experiments in Settings (⌘,); the notes are kept.
 
 The GPUI desktop app has Notes too, in the bar under the Librarian (⌘6),
 with the same notes as the Swift app. Back and ⌘W leave it as Esc does.

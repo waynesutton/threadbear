@@ -5015,8 +5015,8 @@ Fixes from Codex's review of the slice before:
 - The bar's Notes button (under the Librarian) and ⌘6 open your notes over
   the main panel, as Settings does, leaving the thread and its draft
   underneath. Esc, the X, ⌘6 again, Back, ⌘W, ⌘1 to ⌘4, a bar view, a
-  thread, a project or Settings put it away. Settings > General > Show Notes
-  hides the button and quiets ⌘6, keeping the notes.
+  thread, a project or Settings put it away. Show Notes, under Experiments in
+  Settings, hides the button and quiets ⌘6, keeping the notes.
 - Same files as the Swift app (`desktop/core/src/notes.rs`): AES-256-GCM
   through `ring`, laid out as CryptoKit's sealed box, over the Swift `Note`
   JSON. A unit test opens a note CryptoKit sealed, and CryptoKit opened one

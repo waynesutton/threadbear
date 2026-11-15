@@ -29,7 +29,7 @@ use serde_json::{json, Value};
 use std::time::Duration;
 use threadbear_core::completion_sound::{self, Ding};
 use threadbear_core::new_thread::abbreviate_home;
-use threadbear_core::runner_settings::{experiment_about, BringIn, RunnerSettings, StandingInstructions};
+use threadbear_core::runner_settings::{experiment_about, BringIn, Experiment, RunnerSettings, StandingInstructions};
 use crate::tips::Tip as _;
 
 mod devices;
@@ -560,12 +560,14 @@ impl SettingsWindow {
 
     fn render_general(&mut self, settings: Option<&RunnerSettings>, window: &mut Window, cx: &mut Context<Self>) -> Vec<AnyElement> {
         // This Mac's own, so they're here while the runner's away too.
-        let mut sections = vec![self.appearance_section(cx), self.panels_section(cx), self.notes_section(cx), self.files_section(cx), self.slash_section(cx), self.turn_modes_section(cx), self.terminal_section(cx), self.quitting_section(cx), self.look_section(cx), self.notifications_section(cx)];
+        let mut sections = vec![self.appearance_section(cx), self.panels_section(cx), self.files_section(cx), self.slash_section(cx), self.turn_modes_section(cx), self.terminal_section(cx), self.quitting_section(cx), self.look_section(cx), self.notifications_section(cx)];
         // The web runtime is this Mac's too (web_runtime.rs), last, so it
         // moves nothing the Swift app's General has.
         let web_runtime = section("settings-web-runtime", "Web runtime", crate::web_runtime::SETTINGS_ABOUT, "check whether it's installed and working, or why a diagram or panel isn't showing.", vec![row("Web runtime", crate::web_runtime::settings_control(cx), cx)], cx);
         let Some(settings) = settings else {
             sections.push(plain_note(&waiting_text(&self.app, cx), cx));
+            // Notes is this Mac's, so it's here while the runner's away too.
+            sections.push(self.experiments_section(&[], cx));
             sections.push(web_runtime);
             return sections;
         };
@@ -656,31 +658,7 @@ impl SettingsWindow {
                 cx,
             ));
         }
-        if !settings.experiments.is_empty() {
-            let rows = settings
-                .experiments
-                .iter()
-                .map(|e| {
-                    let (id, on) = (e.id.clone(), e.on);
-                    let tip = if on { format!("Turn {} off", e.name) } else { format!("Try {}", e.name) };
-                    let switch = self.switch_owned(format!("settings-experiment-{id}"), on, tip, cx, move |this, on, cx| this.update(json!({ "experiments": { id.clone(): on } }), cx));
-                    let label = h_flex()
-                        .gap(px(6.))
-                        .items_center()
-                        .child(e.name.clone())
-                        .when(!e.does.is_empty(), |s| s.child(info_tip(SharedString::from(format!("experiment-{}", e.id)), experiment_about(&e.does), cx)));
-                    row_with(label.into_any_element(), switch, cx)
-                })
-                .collect();
-            sections.push(section(
-                "settings-experiments",
-                "Experiments",
-                "New features still being tried out. Each starts off; turn one on to try it, and off again whenever you like. Once one has proved itself it becomes a standard part of Threadbear and its switch goes. The ⓘ beside each says what it does.",
-                "explain an experiment, or turn one on or off for you.",
-                rows,
-                cx,
-            ));
-        }
+        sections.push(self.experiments_section(&settings.experiments, cx));
         let version = self.app.upgrade().map(|a| a.read(cx).runner_version.clone()).unwrap_or_default();
         sections.push(section(
             "settings-runner",
@@ -825,6 +803,32 @@ impl SettingsWindow {
         )
     }
 
+    /// Experiments: Notes first, since it's kept on this Mac and the runner
+    /// doesn't list it, then the runner's experiments. Shown even while the
+    /// runner's away, so Notes stays there.
+    fn experiments_section(&mut self, experiments: &[Experiment], cx: &mut Context<Self>) -> AnyElement {
+        let mut rows = vec![self.notes_row(cx)];
+        rows.extend(experiments.iter().map(|e| {
+            let (id, on) = (e.id.clone(), e.on);
+            let tip = if on { format!("Turn {} off", e.name) } else { format!("Try {}", e.name) };
+            let switch = self.switch_owned(format!("settings-experiment-{id}"), on, tip, cx, move |this, on, cx| this.update(json!({ "experiments": { id.clone(): on } }), cx));
+            let label = h_flex()
+                .gap(px(6.))
+                .items_center()
+                .child(e.name.clone())
+                .when(!e.does.is_empty(), |s| s.child(info_tip(SharedString::from(format!("experiment-{}", e.id)), experiment_about(&e.does), cx)));
+            row_with(label.into_any_element(), switch, cx)
+        }));
+        section(
+            "settings-experiments",
+            "Experiments",
+            "New features still being tried out. Turn one on to try it, and off again whenever you like. Once one has proved itself it becomes a standard part of Threadbear and its switch goes. The ⓘ beside each says what it does.",
+            "explain an experiment, or turn one on or off for you.",
+            rows,
+            cx,
+        )
+    }
+
     /// The rail button opens the very same drawer as the Terminal shortcut.
     fn terminal_section(&mut self, cx: &mut Context<Self>) -> AnyElement {
         let on = self.app.upgrade().is_some_and(|a| a.read(cx).settings.saved.rail_terminal.unwrap_or(false));
@@ -837,23 +841,23 @@ impl SettingsWindow {
         section("settings-terminal", "Terminal", "The Terminal opens under the thread. Add a button on the right-hand rail to open that same terminal with a click.", "change how the Terminal opens or looks.", vec![row("Show Terminal on the right-hand rail", switch, cx)], cx)
     }
 
-    /// `QuitPrompt`'s switch: ticking Don't ask again turns it off, and this
-    /// turns it back on.
-    /// Show Notes (notes_page.rs): the bar's button and ⌘6. Off puts the
-    /// page away and keeps the notes.
-    fn notes_section(&mut self, cx: &mut Context<Self>) -> AnyElement {
+    /// Show Notes (notes_page.rs), as the first row of Experiments: the
+    /// bar's button and ⌘6. Off puts the page away and keeps the notes.
+    fn notes_row(&mut self, cx: &mut Context<Self>) -> AnyElement {
         let on = self.app.upgrade().is_none_or(|a| a.read(cx).notes_shown());
         let switch = self.switch("settings-show-notes", on, "Show Notes in the bar on the left", cx, |this, on, cx| {
             this.app.update(cx, |app, cx| app.set_notes_shown(on, cx)).ok();
         });
-        section(
-            "settings-notes",
-            "Notes",
-            "Notes (in the bar on the left, ⌘6) are yours alone: kept on this Mac, each encrypted with a key kept beside Threadbear's other secrets, and never sent to the runner, an agent, your phone or the website. Hiding Notes keeps them; turn it back on to see them again.",
-            "explain where your notes are kept.",
-            vec![row("Show Notes", switch, cx)],
-            cx,
-        )
+        let label = h_flex()
+            .gap(px(6.))
+            .items_center()
+            .child("Notes")
+            .child(info_tip(
+                "experiment-notes",
+                "Notes (in the bar on the left, ⌘6) are yours alone: kept on this Mac, each encrypted with a key kept beside Threadbear's other secrets, and never sent to the runner, an agent, your phone or the website. Hiding Notes keeps them; turn it back on to see them again.",
+                cx,
+            ));
+        row_with(label.into_any_element(), switch, cx)
     }
 
     /// `LookSettings`: Customize on the Librarian and Scheduled pages, and
@@ -940,6 +944,8 @@ impl SettingsWindow {
         )
     }
 
+    /// `QuitPrompt`'s switch: ticking Don't ask again turns it off, and this
+    /// turns it back on.
     fn quitting_section(&mut self, cx: &mut Context<Self>) -> AnyElement {
         let on = self.app.upgrade().is_none_or(|a| a.read(cx).settings.asks_before_quitting());
         let switch = self.switch("settings-ask-before-quitting", on, "Ask to confirm when you quit Threadbear", cx, |this, on, cx| {
