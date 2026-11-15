@@ -9,12 +9,15 @@ import { test, type TestContext } from 'node:test';
 const root = path.resolve(import.meta.dirname, '../../..');
 const helper = path.join(root, 'scripts/perf-lock.pl');
 const pause = (ms: number) => new Promise((r) => setTimeout(r, ms));
-async function until(check: () => boolean, message: string) {
-  for (let i = 0; i < 500; i++) {
+// By the clock, not a count of polls: a check host or this Mac at a load of
+// 100 can take a minute to start a perl child (15 Nov).
+async function until(check: () => boolean, message: string, ms = 180_000) {
+  const end = Date.now() + ms;
+  while (Date.now() < end) {
     if (check()) return;
     await pause(40);
   }
-  assert.fail(message);
+  if (!check()) assert.fail(message);
 }
 function host(t: TestContext) {
   const home = fs.mkdtempSync(path.join(os.tmpdir(), 'tb-perf-lock-'));

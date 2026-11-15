@@ -17,22 +17,24 @@ export type PeerDeps = {
   // Tests pass stand-ins.
   lsof?: (port: number) => Promise<number[]>;
   table?: () => Promise<{ pid: number; ppid: number; pgid?: number }[]>;
+  // How long lsof and ps get; tests on a loaded machine give them longer.
+  lookupMs?: number;
 };
 
 const LOOKUP_MS = 3000;
 
 // A slow ps mustn't hold a connection's frames back for long (rpc.ts queues them).
-function deadline<T>(p: Promise<T>): Promise<T> {
+function deadline<T>(p: Promise<T>, ms: number): Promise<T> {
   return new Promise((resolve, reject) => {
-    const t = setTimeout(() => reject(new Error('process lookup timed out')), LOOKUP_MS);
+    const t = setTimeout(() => reject(new Error('process lookup timed out')), ms);
     p.then((v) => { clearTimeout(t); resolve(v); }, (e) => { clearTimeout(t); reject(e); });
   });
 }
 
 // The processes with an established TCP connection using this port.
-function lsofPids(port: number): Promise<number[]> {
+function lsofPids(port: number, ms: number): Promise<number[]> {
   return new Promise((resolve, reject) => {
-    execFile(lsofPath(), ['-nP', `-iTCP:${port}`, '-sTCP:ESTABLISHED', '-Fp'], { timeout: LOOKUP_MS }, (err, stdout) => {
+    execFile(lsofPath(), ['-nP', `-iTCP:${port}`, '-sTCP:ESTABLISHED', '-Fp'], { timeout: ms }, (err, stdout) => {
       // lsof exits 1 when nothing matched; what it printed still counts.
       if (err && (err as { code?: unknown }).code !== 1 && !stdout) return reject(err);
       resolve([...stdout.matchAll(/^p(\d+)$/gm)].map((m) => Number(m[1])));
@@ -45,10 +47,11 @@ function lsofPids(port: number): Promise<number[]> {
 // a machine without it): then the credential presented decides.
 export async function threadOfPort(port: number, deps: PeerDeps): Promise<string | undefined> {
   try {
-    const pids = await (deps.lsof ?? lsofPids)(port);
+    const ms = deps.lookupMs ?? LOOKUP_MS;
+    const pids = await (deps.lsof ?? ((p: number) => lsofPids(p, ms)))(port);
     const peer = pids.find((p) => p !== process.pid);
     if (peer === undefined) return undefined;
-    const table = await deadline((deps.table ?? psTable)());
+    const table = await deadline((deps.table ?? psTable)(), ms);
     const parents = new Map(table.map((r) => [r.pid, r.ppid]));
     const seen = new Set<number>();
     for (let p: number | undefined = peer; p !== undefined && p > 1 && !seen.has(p); p = parents.get(p)) {
