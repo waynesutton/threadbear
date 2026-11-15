@@ -118,7 +118,7 @@ impl Threadbear {
                         Ok(c) => {
                             let file = cache_file(&user, year);
                             let _ = std::fs::create_dir_all(looks::folder());
-                            let _ = std::fs::write(file, &body);
+                            let _ = threadbear_core::private_file::write(&file, &body);
                             Fetched::Loaded(c)
                         }
                         Err(rules::ParseError::Service(m)) => Fetched::Failed(rules::github_failure(status, Some(&m), &user)),
@@ -497,6 +497,8 @@ impl Threadbear {
                             .id(SharedString::from(format!("look-{card}-day-{i}-{row}")))
                             .size(px(CELL))
                             .p(px(1.))
+                            .role(Role::Button)
+                            .aria_label(format!("{} on {}", day.count, rules::day_title(&day.date)))
                             .when(user.is_some(), |s| s.cursor_pointer())
                             .on_hover(cx.listener(move |this, on: &bool, _, cx| {
                                 if *on {

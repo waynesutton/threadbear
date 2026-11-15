@@ -439,10 +439,27 @@ enum Field {
     GitHub,
 }
 
-/// The Mac account's full name ("Wayne Sutton"), for the greeting's first
-/// suggestion. Empty when it can't be read.
+/// The account's full name ("Wayne Sutton"), for the greeting's first
+/// suggestion, from the user database's own record of it. Empty when there
+/// isn't one.
+#[cfg(unix)]
 fn full_user_name() -> String {
-    std::process::Command::new("/usr/bin/id").arg("-F").output().ok().filter(|o| o.status.success()).map(|o| String::from_utf8_lossy(&o.stdout).trim().to_owned()).unwrap_or_default()
+    // SAFETY: getpwuid returns a pointer into a static record, or null; it's
+    // read at once, on the main thread, before anything else can call it.
+    unsafe {
+        let pw = libc::getpwuid(libc::getuid());
+        if pw.is_null() || (*pw).pw_gecos.is_null() {
+            return String::new();
+        }
+        let gecos = std::ffi::CStr::from_ptr((*pw).pw_gecos).to_string_lossy();
+        // The full name is the record's first comma-separated field.
+        gecos.split(',').next().unwrap_or_default().trim().to_owned()
+    }
+}
+
+#[cfg(not(unix))]
+fn full_user_name() -> String {
+    std::env::var("USERNAME").unwrap_or_default()
 }
 
 /// A section of the panel: its heading (with more behind an ⓘ) over its

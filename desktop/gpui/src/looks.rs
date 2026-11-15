@@ -125,7 +125,7 @@ pub(crate) fn import(from: &Path, max_side: u32, prefix: &str, animated: bool) -
     std::fs::create_dir_all(&dir).map_err(|e| format!("Couldn't save the picture: {e}"))?;
     if animated && format == image::ImageFormat::Gif && gif_frames(&data) > 1 {
         let name = new_name(prefix, "gif");
-        std::fs::write(dir.join(&name), &data).map_err(|e| format!("Couldn't save the picture: {e}"))?;
+        threadbear_core::private_file::write(&dir.join(&name), &data).map_err(|e| format!("Couldn't save the picture: {e}"))?;
         return Ok(name);
     }
     let picture = image::load_from_memory_with_format(&data, format).map_err(|_| NOT_A_PICTURE.to_owned())?;
@@ -142,7 +142,7 @@ pub(crate) fn import(from: &Path, max_side: u32, prefix: &str, animated: bool) -
         ("jpg", out)
     };
     let name = new_name(prefix, ext);
-    std::fs::write(dir.join(&name), bytes).map_err(|e| format!("Couldn't save the picture: {e}"))?;
+    threadbear_core::private_file::write(&dir.join(&name), &bytes).map_err(|e| format!("Couldn't save the picture: {e}"))?;
     Ok(name)
 }
 
