@@ -14,7 +14,7 @@ use crate::file_watch::FolderWatch;
 use crate::highlights::{icon, palette, MenuItem, Palette, PanePreview, SidePane, Target, FILES};
 use crate::style;
 use crate::tips::Tip as _;
-use gpui_kit::component::spinner::Spinner;
+use crate::spinner::Spinner;
 use gpui_kit::component::{h_flex, v_flex, ActiveTheme as _, Sizable as _};
 use gpui_kit::prelude::*;
 use gpui_kit::*;
