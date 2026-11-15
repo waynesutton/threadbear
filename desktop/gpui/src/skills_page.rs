@@ -503,7 +503,7 @@ impl SkillsPage {
             .min_w_0()
             .gap(px(3.))
             .child(h_flex().gap(px(6.)).items_center().child(div().font_weight(FontWeight::SEMIBOLD).child(name.clone())).child(chip))
-            .when(!skill.description.is_empty(), |d| d.child(div().text_size(px(style::size::LABEL)).text_color(secondary).line_clamp(3).child(skill.description.clone())))
+            .when(!skill.description.is_empty(), |d| d.child(div().text_size(px(style::size::LABEL)).text_color(secondary).line_clamp(3).overflow_hidden().text_ellipsis().child(skill.description.clone())))
             .child(div().text_size(px(style::size::SMALL)).text_color(tertiary).child(skill.source_line()));
         let tip = if skill.always { format!("Agents use it whenever it fits. Turn off to use it only with /{name}") } else { format!("Only /{name} uses it. Turn on to let agents use it whenever it fits") };
         let app = self.app.clone();
@@ -607,7 +607,7 @@ impl SkillsPage {
                     .rounded(px(10.))
                     .border_1()
                     .border_color(style::primary_opacity(cx, 0.08))
-                    .child(v_flex().flex_1().min_w_0().gap(px(3.)).child(div().font_weight(FontWeight::SEMIBOLD).child(s.name.clone())).child(div().text_size(px(style::size::LABEL)).text_color(secondary).line_clamp(3).child(s.description.clone())))
+                    .child(v_flex().flex_1().min_w_0().gap(px(3.)).child(div().font_weight(FontWeight::SEMIBOLD).child(s.name.clone())).child(div().text_size(px(style::size::LABEL)).text_color(secondary).line_clamp(3).overflow_hidden().text_ellipsis().child(s.description.clone())))
                     .child(add),
             );
         }
