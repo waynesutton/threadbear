@@ -81,7 +81,9 @@ pub struct Threadbear {
     pub(crate) bound_keys: HashMap<String, shell::Command>,
     /// Whether Open Anything's keys were bound last time (`apply_shortcuts`):
     /// its experiment turned on or off binds them again (render).
-    pub(crate) bound_open_anything: bool,
+    /// The experiments with keys (`ShortcutCommand::experiment`) that were on
+    /// when the keys were bound, so turning one on or off binds them again.
+    pub(crate) bound_experiments: Vec<&'static str>,
     pub(crate) shortcuts_watch: Option<Task<()>>,
     pub(crate) shortcuts_path: Option<PathBuf>,
     /// What the menu bar says, so it's rebuilt only when that changes.
@@ -512,7 +514,7 @@ impl Threadbear {
             history: NavigationHistory::default(),
             shortcuts: ShortcutBindings::default(),
             bound_keys: HashMap::new(),
-            bound_open_anything: false,
+            bound_experiments: Vec::new(),
             shortcuts_watch: None,
             shortcuts_path: None,
             menu_signature: String::new(),
@@ -1853,8 +1855,8 @@ pub(crate) fn project_list(projects: &Value) -> Vec<(String, String, bool)> {
 impl Render for Threadbear {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         if std::mem::take(&mut self.menus_stale) {
-            // The openAnything experiment turned on or off: ⌘K and ⌘P with it.
-            if self.open_anything_on() != self.bound_open_anything {
+            // An experiment with keys turned on or off (⌘K and ⌘P, ⌘5): its keys with it.
+            if self.key_experiments_on() != self.bound_experiments {
                 self.apply_shortcuts(cx);
             }
             self.sync_menus(cx);

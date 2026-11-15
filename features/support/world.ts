@@ -137,6 +137,12 @@ Before(async function (this: ThreadbearWorld, { pickle }) {
   // and the projectDecisions experiment on in its hello.
   if (pickle.tags.some((t) => t.name === '@project-decisions')) process.env.TB_MOCK_DECISIONS = '1';
   else delete process.env.TB_MOCK_DECISIONS;
+  // The skills store: the skillsStore experiment on in the mock's hello, with its skills.
+  if (pickle.tags.some((t) => t.name === '@skills-store')) process.env.TB_MOCK_SKILLS = '1';
+  else delete process.env.TB_MOCK_SKILLS;
+  // The skills store: the skillsStore experiment on in the mock's hello.
+  if (pickle.tags.some((t) => t.name === '@skills-store')) process.env.TB_MOCK_SKILLS = '1';
+  else delete process.env.TB_MOCK_SKILLS;
   // Open Anything's experiment off: the mock's hello leaves it out.
   if (pickle.tags.some((t) => t.name === '@open-anything-off')) process.env.TB_MOCK_OPEN_ANYTHING_OFF = '1';
   else delete process.env.TB_MOCK_OPEN_ANYTHING_OFF;

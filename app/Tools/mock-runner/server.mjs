@@ -427,9 +427,10 @@ addDemoProjects();
 // The experiments the mock's hello says are on: Open Anything (⌘K) unless
 // TB_MOCK_OPEN_ANYTHING_OFF, for the spec that it's gone while off, and
 // Decisions on the Projects page with TB_MOCK_DECISIONS, and the GPUI app's
-// Voice button and Settings > Voice & Audio with TB_MOCK_VOICE.
+// Voice button and Settings > Voice & Audio with TB_MOCK_VOICE, and the
+// GPUI app's Skills (the skills store) with TB_MOCK_SKILLS.
 function mockExperiments() {
-  return [...(process.env.TB_MOCK_OPEN_ANYTHING_OFF ? [] : ['openAnything']), ...(process.env.TB_MOCK_DECISIONS ? ['projectDecisions'] : []), ...(process.env.TB_MOCK_VOICE ? ['voiceMode'] : []), ...(pagesOn() ? ['pages'] : [])];
+  return [...(process.env.TB_MOCK_OPEN_ANYTHING_OFF ? [] : ['openAnything']), ...(process.env.TB_MOCK_DECISIONS ? ['projectDecisions'] : []), ...(process.env.TB_MOCK_VOICE ? ['voiceMode'] : []), ...(pagesOn() ? ['pages'] : []), ...(process.env.TB_MOCK_SKILLS ? ['skillsStore'] : [])];
 }
 
 // Decisions on the Projects page (the projectDecisions experiment): three of
@@ -1653,7 +1654,9 @@ async function dispatch(client, method, p) {
         added = mockSkill((m[2] ?? m[4]).toLowerCase(), `Imported from ${repo}.`, { kind: 'github', repo, url: String(p.url) });
       }
       if (mockSkills.some((k) => k.name === added.name)) throw rpcError(-32602, `there's already a skill called ${added.name}: remove it first`);
+      // In name order, as the runner keeps them (skills.ts byName).
       mockSkills.push(added);
+      mockSkills.sort((a, b) => a.name.localeCompare(b.name));
       broadcast('skills.updated', { skills: mockSkills });
       return { skills: mockSkills, added: [added.name], suggested: mockSuggested() };
     }
@@ -1667,6 +1670,7 @@ async function dispatch(client, method, p) {
       k.commit = 'local-abc1234';
       k.text = String(p.text);
       if (old) { k.always = old.always; mockSkills[mockSkills.indexOf(old)] = k; } else mockSkills.push(k);
+      mockSkills.sort((a, b) => a.name.localeCompare(b.name));
       broadcast('skills.updated', { skills: mockSkills, enabled: mockSkillsOn });
       return { skills: mockSkills, saved: name };
     }

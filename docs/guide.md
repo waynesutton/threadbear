@@ -2161,7 +2161,7 @@ on your Mac (`![a chart](/path/to/chart.png)`), rather than showing a link.
 
 Skills give your agents extra know-how: how to draw a Mermaid diagram,
 build an isometric explainer, write in a house style. Click Skills in the
-bar on the left (under the Librarian), or press ⌘5 in the Mac app, to see yours. The page opens over the
+bar on the left (under the Librarian), or press ⌘5, to see yours. The page opens over the
 main panel; its X or Esc puts you back where you were. Skills shows only
 while the Skills store experiment is on (below).
 

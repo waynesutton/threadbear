@@ -13,7 +13,7 @@ Skills in the bar on the left opens the Skills page: import a skill from a GitHu
 
 ## Lives in
 
-`runner/src/skills.ts` (the store, the `threadbear` plugin and the Codex links, and `SKILLS_STORE`, which reads the experiment), the `skills.*` requests in `docs/protocol.md` ("Skills") the Skills page in `desktop/gpui/src/skills_page.rs` with its icon in the activity bar (`rails.rs`), and its rows in `desktop/core/src/skills.rs`. The Mac app's Skills page is `app/Sources/Threadbear/Views/SkillsPage.swift`; its Use the skills store switch flips this experiment through `skills.enable`. Skills you've added live in `skills/` in the runner's data folder.
+`runner/src/skills.ts` (the store, the `threadbear` plugin and the Codex links, and `SKILLS_STORE`, which reads the experiment), the `skills.*` requests in `docs/protocol.md` ("Skills") the Skills page in `desktop/gpui/src/skills_page.rs` with its icon in the activity bar (`rails.rs`) and ⌘5 (`ShowSkills` in `desktop/core/src/shortcuts.rs`, `showSkills` in shortcuts.json), `features/skills-store.feature`, and its rows in `desktop/core/src/skills.rs`. The Mac app's Skills page is `app/Sources/Threadbear/Views/SkillsPage.swift`; its Use the skills store switch flips this experiment through `skills.enable`. Skills you've added live in `skills/` in the runner's data folder.
 
 ## Taking it out
 

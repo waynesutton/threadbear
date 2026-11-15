@@ -201,7 +201,7 @@ impl SettingsWindow {
 
     /// A command whose experiment is off isn't listed (`ShortcutCommand::experiment`).
     fn listed(&self, command: ShortcutCommand, cx: &App) -> bool {
-        command.experiment().is_none() || self.app.upgrade().is_some_and(|a| a.read(cx).open_anything_on())
+        command.experiment().is_none_or(|e| self.app.upgrade().is_some_and(|a| a.read(cx).experiment_on(e)))
     }
 
     /// The whole page (`KeyboardSettings`): the search at the top, the

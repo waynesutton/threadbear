@@ -55,9 +55,7 @@ impl Threadbear {
     /// The skillsStore experiment is on for this Mac's runner. Settings'
     /// switch first, as it changes without a new hello, else hello's list.
     pub(crate) fn skills_store_on(&self) -> bool {
-        let id = skills::EXPERIMENT;
-        let switch = self.runner_settings.as_ref().and_then(|s| s["experiments"].as_array()?.iter().find(|e| e["id"] == id).map(|e| e["on"].as_bool() == Some(true)));
-        switch.unwrap_or_else(|| self.remote.experiments.iter().any(|e| e == id))
+        self.experiment_on(skills::EXPERIMENT)
     }
 
     /// The bar's button: an older runner has no store, and the experiment

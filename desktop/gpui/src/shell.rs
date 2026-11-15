@@ -293,6 +293,7 @@ actions!(
         ShowLibrarian,
         ShowHibernating,
         ShowArchived,
+        ShowSkills,
         ShowNotes,
         ShowPreviousTab,
         ShowNextTab,
@@ -382,6 +383,7 @@ commands!(
     (ShowLibrarian, ShowLibrarian, Some(ShortcutCommand::ShowLibrarian)),
     (ShowHibernating, ShowHibernating, Some(ShortcutCommand::ShowHibernating)),
     (ShowArchived, ShowArchived, Some(ShortcutCommand::ShowArchived)),
+    (ShowSkills, ShowSkills, Some(ShortcutCommand::ShowSkills)),
     (ShowNotes, ShowNotes, Some(ShortcutCommand::ShowNotes)),
     (PreviousTab, ShowPreviousTab, Some(ShortcutCommand::PreviousTab)),
     (NextTab, ShowNextTab, Some(ShortcutCommand::NextTab)),
@@ -768,6 +770,7 @@ impl Threadbear {
             }
             Command::Settings => self.open_settings(None, cx),
             // Up, or put away if it's up; nothing while Show Notes is off.
+            Command::ShowSkills => self.toggle_skills(window, cx),
             Command::ShowNotes => self.toggle_notes(window, cx),
             Command::ZoomIn => self.zoom_in(window, cx),
             Command::ZoomOut => self.zoom_out(window, cx),
@@ -1138,10 +1141,9 @@ impl Threadbear {
             desired.insert(chord.to_owned(), command);
         }
         // An experiment's keys only while it's on (`ShortcutCommand::experiment`).
-        let on = self.open_anything_on();
-        self.bound_open_anything = on;
+        self.bound_experiments = self.key_experiments_on();
         for command in Command::ALL {
-            let shortcut = command.shortcut().filter(|c| c.experiment().is_none() || on);
+            let shortcut = command.shortcut().filter(|c| c.experiment().is_none_or(|e| self.experiment_on(e)));
             if let Some(key) = shortcut.and_then(|c| self.shortcuts.key(c)) {
                 desired.insert(key.chord(macos), *command);
             }
@@ -1329,6 +1331,7 @@ impl Threadbear {
                     item("Show Scheduled", Command::ShowScheduled).enabled(self.schedules_supported),
                     item("Show Projects", Command::ShowProjects).enabled(self.projects_supported),
                     item("Show Librarian", Command::ShowLibrarian).enabled(self.projects_supported),
+                    item("Show Skills", Command::ShowSkills).enabled(self.skills_shown()),
                     item("Show Notes", Command::ShowNotes).enabled(self.notes_shown()),
                     Separator,
                     item("Show Hibernating", Command::ShowHibernating),

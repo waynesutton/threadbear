@@ -343,8 +343,9 @@ impl Threadbear {
         // Over the main panel, as Notes is, and above it as in the Mac app.
         if self.skills_shown() {
             let mut button = RailButton::new("rail-skills", "sparkles", "Skills", self.skills_page.is_some());
-            button.tip = "Skills: what every thread's agent knows, on every login".into();
-            views.push(rail_button(button, |this, window, cx| this.toggle_skills(window, cx), cx));
+            button.tip = self.shortcut_tip("Skills", ShortcutCommand::ShowSkills);
+            button.hint = self.shortcut_display(ShortcutCommand::ShowSkills);
+            views.push(rail_button(button, |this, window, cx| this.run_command(shell::Command::ShowSkills, window, cx), cx));
         }
         // Your own notes, this Mac's alone (notes_page.rs), while Settings >
         // Experiments > Show Notes is on. A page over the main panel, as
