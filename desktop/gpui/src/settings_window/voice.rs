@@ -77,11 +77,20 @@ impl SettingsWindow {
             ));
         }
         if keys.trigger == VoiceTriggerKey::Fn {
-            key_rows.push(row_with(
-                div().text_color(style::secondary_text(cx)).child("macOS also uses Fn, so a tap or double tap can open emoji. To use it for Voice alone, set Press 🌐 key to Do Nothing in System Settings > Keyboard.").into_any_element(),
-                self.button("settings-voice-keyboard", "Open Keyboard Settings", "Open System Settings > Keyboard, where Press 🌐 key to is", cx, |_, _, _| crate::voice::keys::open_keyboard_settings()),
-                cx,
-            ));
+            // The note over its button, as it's too long to share a row.
+            let open = self.button("settings-voice-keyboard", "Open Keyboard Settings", "Open System Settings > Keyboard, where Press 🌐 key to is", cx, |_, _, _| crate::voice::keys::open_keyboard_settings());
+            key_rows.push(
+                gpui_kit::component::v_flex()
+                    .px(crate::style::px(10.))
+                    .py(crate::style::px(8.))
+                    .gap(crate::style::px(8.))
+                    .items_start()
+                    .text_size(crate::style::px(13.))
+                    .line_height(crate::style::px(17.))
+                    .child(div().text_color(style::secondary_text(cx)).child("macOS also uses Fn, so a tap or double tap can open emoji. To use it for Voice alone, set Press 🌐 key to Do Nothing in System Settings > Keyboard."))
+                    .child(open)
+                    .into_any_element(),
+            );
         }
         let keys_section = section("settings-voice-keys", "Keys", "Voice's keyboard shortcuts work anywhere in Threadbear while Use Voice is on. Esc cancels what's listening, with nothing typed or sent.", "change which keys start dictation.", key_rows, cx);
 
