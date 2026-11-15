@@ -11,7 +11,7 @@ import type { Account, EffortLevel, ModelChoice, PermissionMode } from '../../pr
 import { isEffortLevel } from '../../protocol.ts';
 import type { Logger } from '../../log.ts';
 import type { ProcessRegistry } from '../../proc.ts';
-import type { AdapterOutput, AgentAdapter, AgentSession, RewindRequest, RewindResult, SessionSink, StartSessionOptions, TurnResult, UserInput } from '../types.ts';
+import type { AdapterOutput, AgentAdapter, AgentSession, LimitsCheck, RewindRequest, RewindResult, SessionSink, StartSessionOptions, TurnResult, UserInput } from '../types.ts';
 import { RewindRefusedError, SessionNotFoundError } from '../types.ts';
 import { fileContext, type NormalizerContext } from '../context.ts';
 import {
@@ -28,7 +28,7 @@ import {
 import { runsAsCodeByName } from '../../code-writes.ts';
 import { CodexApprovals } from './approvals.ts';
 import { CodexTools, dynamicToolSpecs, toolGuidance, type ToolDefinition } from './tools.ts';
-import { CodexNormalizer, limitsFromAccount } from './normalize.ts';
+import { CodexNormalizer, limitsFromAccount, limitsFromRateLimits } from './normalize.ts';
 import { placePictures } from '../../pictures.ts';
 import { parseCommand, type SlashCommand } from '../../slash-commands.ts';
 import type {
@@ -180,6 +180,19 @@ export class CodexAdapter implements AgentAdapter {
           if (!cursor) break;
         }
         return out;
+      },
+      (p, live) => this.track(p, live),
+    );
+  }
+
+  // The login's limits as Codex has them now, without a turn: no tokens.
+  async readLimits(account: Account): Promise<LimitsCheck | null> {
+    return withShortLivedProcess(
+      this.shortLived(account, `limits:${account.id}`),
+      async (p) => {
+        const r = await p.request<GetAccountRateLimitsResponse>('account/rateLimits/read', null);
+        const reading = limitsFromRateLimits(new RateLimitTracker().read(r));
+        return reading ? { reading } : null;
       },
       (p, live) => this.track(p, live),
     );

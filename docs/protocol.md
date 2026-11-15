@@ -229,6 +229,10 @@ type AccountUsage = {
   stale?: boolean       // Token Stats hasn't written for 15 minutes and
                         // there's no live reading since
   blocked?: boolean     // the provider says this login is at its limit
+  extraRoom?: boolean   // past its plan's windows but running on extra usage
+                        // or credits paid for (Claude's isUsingOverage, Codex
+                        // credits); pools take it only when no login has plan
+                        // room. Kept on this runner: not synced
   notice?: string       // Token Stats' own note ("64,390 credits · 2 limit resets available")
 }
 
@@ -1212,6 +1216,7 @@ the summary and then the reply.
 | `librarian.run` | `{ threadId?: string }` | `{ librarian: LibrarianStatus }`. Queues a look at the thread now (reason `asked`), or with no `threadId`, at every thread it has never looked at (a backfill, newest first) |
 | `librarian.update` | `{ paused?: boolean }` | `{ librarian: LibrarianStatus }` |
 | `pools.list` | `{}` | `{ pools: Pool[] }` (see Pools) |
+| `accounts.recheck` | `{ accountId }` | `{ accountId, room: boolean, extra?: true, backAt?: string, woke: number, account?: Account }`. The Usage panel's refresh: asks the login for its limits now (Codex `account/rateLimits/read`, no tokens; Claude one short Haiku reply and its `rate_limit_event`), keeps the reading, and when it has room ends the wait of every thread waiting on it, its own threads included. `extra`: the room is extra usage paid for. `backAt`: when it's back, if still out. A second call while one runs gets the same answer. `-32602` for an unknown login or a provider that can't be checked; an error when the CLI fails or says nothing. Not open to a thread below Full access |
 | `pools.save` | `{ pools: Pool[] }` | `{ pools: Pool[] }`. Replaces the whole list in `runner.json` (`builtIn` is dropped; an empty list goes back to the built-in ones). `-32602` for a duplicate id, a blank id or title, an empty `accountIds`, or an account id the runner doesn't know. A blank or non-string `icon` is dropped. Every client gets `pools.updated` |
 | `settings.get` | `{}` | `{ settings: Settings }` |
 | `settings.update` | `{ defaultCwd?, idleMinutes?, maxLiveCLIs?, followMain?, bulletReplies?, oneReply?, labReview?, keepAwake?, bringIn?, fullSync?, printsWhenAsked?, models?: { pool?: string \| null, privateFolders? }, experiments?: { [id]: boolean } }` | `{ settings: Settings }`. Saves what's given to `runner.json` and applies it straight away, except `followMain` and `fullSync` (next restart). `experiments` sets those switches under runner.json's `experiments`, keeping the rest; `Settings.experiments` lists every one as `{ id, name, does, on }`, oldest first. `defaultCwd` must be an existing folder, `idleMinutes` at least 1, `maxLiveCLIs` 1 to 20, `pool` a pool id or `null`, each `experiments` key an experiment's id; otherwise `-32602` saying which. Every client gets `settings.updated` |

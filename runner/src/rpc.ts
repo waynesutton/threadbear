@@ -887,6 +887,8 @@ export class RpcServer {
         return r.listPools();
       case 'pools.save':
         return r.savePools(p.pools);
+      case 'accounts.recheck':
+        return r.recheckLogin(reqString(p, 'accountId'));
       case 'media.import':
         return r.importMedia(reqString(p, 'path'));
       case 'panels.render':

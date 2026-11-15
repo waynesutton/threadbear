@@ -68,6 +68,9 @@ pub struct Usage {
     pub stale: bool,
     /// The provider says this login is at its limit.
     pub blocked: bool,
+    /// Past its plan's limits, but running on extra usage or credits paid
+    /// for (`extraRoom`, from runners of 14 Nov 2026).
+    pub extra_room: bool,
     /// Token Stats' own note ("64,390 credits · 2 limit resets available").
     pub notice: Option<String>,
 }
@@ -83,6 +86,7 @@ impl Usage {
             source: v["source"].as_str().unwrap_or("tokenStats").to_owned(),
             stale: v["stale"].as_bool().unwrap_or(false),
             blocked: v["blocked"].as_bool().unwrap_or(false),
+            extra_room: v["extraRoom"].as_bool().unwrap_or(false),
             notice: v["notice"].as_str().map(str::to_owned),
         })
     }
@@ -91,6 +95,30 @@ impl Usage {
 /// A login's usage, if the runner sent any it can read.
 pub fn usage(account: &Account) -> Option<Usage> {
     account.usage.as_ref().and_then(Usage::decode)
+}
+
+/// The refresh button beside a login (`accounts.recheck`): its tip, and
+/// what the check found, for the line under the login's name.
+pub const RECHECK_TIP: &str = "Check this login again, after buying more usage. Claude: one short Haiku reply. Codex: no tokens";
+
+/// What `accounts.recheck` answered, in words: "Has room again", "Has room
+/// again on extra usage, 2 threads carrying on", "Still out, back 3:40 pm".
+/// `true` with it when the login has room.
+pub fn recheck_words<Tz: TimeZone>(v: &Value, now: i64, zone: &Tz) -> (String, bool) {
+    let woke = v["woke"].as_i64().unwrap_or(0);
+    if v["room"].as_bool() == Some(true) {
+        let mut text = if v["extra"].as_bool() == Some(true) { "Has room again on extra usage".to_owned() } else { "Has room again".to_owned() };
+        match woke {
+            0 => {}
+            1 => text.push_str(", 1 thread carrying on"),
+            n => text.push_str(&format!(", {n} threads carrying on")),
+        }
+        return (text, true);
+    }
+    match v["backAt"].as_str().and_then(parse_ms) {
+        Some(at) => (format!("Still out, back {}", reset_words(at, now, zone)), false),
+        None => ("Still out".to_owned(), false),
+    }
 }
 
 /// One hour of a login's tokens (`TokenHour`).
@@ -1221,6 +1249,8 @@ pub struct LoginRow {
 pub enum LoginStatus {
     NothingKnown,
     LimitReached,
+    /// Out of plan room, carrying on on extra usage paid for.
+    ExtraUsage,
 }
 
 impl LoginStatus {
@@ -1228,6 +1258,7 @@ impl LoginStatus {
         match self {
             LoginStatus::NothingKnown => "Nothing known yet",
             LoginStatus::LimitReached => "Limit reached",
+            LoginStatus::ExtraUsage => "On extra usage",
         }
     }
 }
@@ -1292,6 +1323,7 @@ fn login_row<Tz: TimeZone>(account: &Account, notice: Option<&str>, stats: Optio
     let status = match &usage {
         None => Some(LoginStatus::NothingKnown),
         Some(u) if u.blocked => Some(LoginStatus::LimitReached),
+        Some(u) if u.extra_room && room(u).is_some_and(|r| r < 1.) => Some(LoginStatus::ExtraUsage),
         _ => None,
     };
     let mut meters = Vec::new();
@@ -2072,5 +2104,33 @@ mod tests {
         assert!(lines.contains(&"new@example.com: nothing known".to_string()));
         assert!(lines.contains(&"mike+4@example.com, limit reached: 5-hour 0%, Weekly 31%".to_string()));
         assert_eq!(lines.last().map(String::as_str), Some("Usage from Token Stats at 11:15 am"));
+    }
+
+    #[test]
+    fn recheck_words_say_what_the_check_found() {
+        let z = zone();
+        let now = z.with_ymd_and_hms(2026, 11, 14, 10, 0, 0).unwrap().timestamp_millis();
+        let back = iso_time(z.with_ymd_and_hms(2026, 11, 14, 15, 40, 0).unwrap().timestamp_millis());
+        assert_eq!(recheck_words(&json!({ "room": true, "woke": 0 }), now, &z), ("Has room again".into(), true));
+        assert_eq!(recheck_words(&json!({ "room": true, "extra": true, "woke": 2 }), now, &z), ("Has room again on extra usage, 2 threads carrying on".into(), true));
+        assert_eq!(recheck_words(&json!({ "room": true, "woke": 1 }), now, &z).0, "Has room again, 1 thread carrying on");
+        assert_eq!(recheck_words(&json!({ "room": false, "backAt": back, "woke": 0 }), now, &z), ("Still out, back 3:40 pm".into(), false));
+        assert_eq!(recheck_words(&json!({ "room": false, "woke": 0 }), now, &z), ("Still out".into(), false));
+    }
+
+    #[test]
+    fn a_login_on_extra_usage_says_so_and_a_block_still_wins() {
+        let z = zone();
+        let now = z.with_ymd_and_hms(2026, 11, 14, 10, 0, 0).unwrap().timestamp_millis();
+        let mut paid = login("claude-main", "claude", None, 0., false, None);
+        paid.usage.as_mut().unwrap()["extraRoom"] = json!(true);
+        assert!(usage(&paid).unwrap().extra_room);
+        let pools = vec![Pool { id: "claude".into(), title: "Claude".into(), account_ids: vec!["claude-main".into()], ..Default::default() }];
+        let rows = cards(&pools, &[paid.clone()], None, true, now, &z);
+        assert_eq!(rows[0].sections[0].logins[0].status, Some(LoginStatus::ExtraUsage));
+        assert_eq!(LoginStatus::ExtraUsage.words(), "On extra usage");
+        paid.usage.as_mut().unwrap()["blocked"] = json!(true);
+        let rows = cards(&pools, &[paid], None, true, now, &z);
+        assert_eq!(rows[0].sections[0].logins[0].status, Some(LoginStatus::LimitReached));
     }
 }
