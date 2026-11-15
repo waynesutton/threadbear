@@ -199,6 +199,7 @@ impl NotesPage {
                     this.show_title(window, cx);
                     if matches!(ev, InputEvent::PressEnter { .. }) {
                         this.editor.update(cx, |e, cx| e.focus(window, cx));
+                        crate::web_panels::keyboard_to_app(window);
                     }
                 }
             }),
@@ -241,6 +242,7 @@ impl NotesPage {
         });
         if self.selection.is_some() {
             self.editor.update(cx, |e, cx| e.focus(window, cx));
+            crate::web_panels::keyboard_to_app(window);
         }
         cx.notify();
     }
@@ -485,6 +487,7 @@ impl NotesPage {
                         me_r.update(cx, |this, cx| {
                             this.pick(Some(r.clone()), window, cx);
                             this.title.update(cx, |t, cx| t.focus(window, cx));
+                            crate::web_panels::keyboard_to_app(window);
                         })
                         .ok();
                     }))
