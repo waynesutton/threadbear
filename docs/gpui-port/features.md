@@ -497,6 +497,11 @@ Size is `none` throughout: the planning docs don't size these, and work the app 
 | `bears.colour` | Bear Colour (`bears`) | Pick a bear's tile colour from its thread's menu | A Bear Colour submenu on a bear thread's row calling `bears.update { color }`, behind a busy key. | build | none | `BearColorMenu` |
 | `bears.mention` | @ bear picker (`bears`) | Typing @ lists bears from `bears.list`; picking one writes `@Name` | A list over the cursor like the / list, only for messages going to this runner, leaving modified keys to the composer. | build | none | `BearPicker` |
 | `bears.tablepage` | A table's bears (`tables`) | The table's project page lists the bears at it | A section on the project page from `Project.table` and `bears.list`. | build | none | `TableBearsSection` |
+| `voice.button` | Voice button (`voiceMode`) | A microphone button beside Send, with the icon picked in Settings > Voice | `gpui/src/voice/button.rs`, drawn by the composer beside Send. | build | none | `VoiceButton`, `VoiceIcon` |
+| `voice.talk` | Talking with a thread (`voiceMode`) | What you say goes to the thread; its replies are read out by pocket-tts | `gpui/src/voice/mode.rs` with the logic in `core/src/voice.rs`; the microphone, speech recognition and playback in a Swift helper (`gpui/native/voice_helper.swift`), as SpeechAnalyzer is Swift only. | shim (macOS) | none | `VoiceMode`, `VoiceAudio`, `VoiceServer` |
+| `voice.approvals` | Spoken approvals (`voiceMode`) | A plain command's card is read out and answered with a yes or a no | `SpokenApprovals` in `core/src/voice.rs`, answering through `respond_approval`. | build | none | `SpokenApprovals`, `SpokenAnswer` |
+| `voice.keys` | Fn dictation (`voiceMode`) | Hold Fn to dictate, Shift Fn or Fn Space for hands-free, Fn Control for Command Mode | `VoiceKeyMachine` in `core/src/voice_keys.rs`; an NSEvent monitor and the text insertion in `gpui/native/voice_keys.m`. | shim (macOS) | none | `KeyDictation`, `VoiceKeyMonitor`, `VoiceKeys` |
+| `voice.settings` | Settings > Voice (`voiceMode`) | Use Voice, Command Mode, the button icon, the keys, the voice, speed, language and microphone | `gpui/src/settings_window/voice.rs`, saved in `voice.json`. | build | none | `VoiceSettings` |
 
 ## Route counts
 

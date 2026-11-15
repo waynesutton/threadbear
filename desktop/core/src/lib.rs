@@ -79,6 +79,8 @@ pub mod web_runtime;
 pub mod zoom;
 pub mod local_files;
 pub mod milestones;
+pub mod voice;
+pub mod voice_keys;
 #[cfg(windows)]
 mod local_path;
 pub use chrono;
