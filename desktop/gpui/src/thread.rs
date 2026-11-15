@@ -992,11 +992,6 @@ impl ThreadPane {
         // The runner it's shown on (null for this Mac's), so this Mac's
         // runner refuses it rather than passing it to any other (Daybreak 113).
         let mut params = json!({ "threadId": thread_id, "text": text, "runnerId": self.summary.runner_id });
-        // The box's Ask mode goes with every message from it. Read from the
-        // modes' own record, not the box: a send runs inside the box's update.
-        if crate::turn_modes::asking(&thread_id) {
-            params["mode"] = json!("ask");
-        }
         if !images.is_empty() {
             params["images"] = json!(images.iter().map(crate::composer::image_ref_json).collect::<Vec<_>>());
         }

@@ -326,8 +326,6 @@ impl Composer {
             }
             row = row.child(self.render_model_chip(&data, window, cx)).child(chip_divider(cx));
             row = row.child(self.render_permission_chip(settings.permission_mode.clone(), &composer, cx));
-            // Ask mode, only while it's on (Shift-Tab).
-            row = row.children(self.render_turn_mode_chip(cx));
         }
         row = row.child(div().flex_1());
         if let Some(meter) = data.summary.as_ref().and_then(|t| ContextMeter::new(t.context_tokens, t.context_window)) {

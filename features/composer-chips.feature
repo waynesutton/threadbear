@@ -14,20 +14,14 @@ Feature: The chips under the message box
     Then the composer's permission mode is "ask"
     And the "permission" menu shows "Ask before edits" ticked
 
-  # Shift-Tab steps the box through Plan first, Ask, then off, putting back
-  # the access it had (Wayne, 6 Nov). The Swift driver's tab has no Shift.
+  # Shift-Tab turns Plan first on, and off again back to the access the box
+  # had (PlanFirstToggle). The Swift driver's tab has no Shift.
   @composer.permission @swift-pending
-  Scenario: Shift-Tab steps through Plan first and Ask, and Ask goes with the message
+  Scenario: Shift-Tab turns Plan first on and off
     When I press Shift-Tab in the composer
     Then the composer's permission mode is "plan"
     When I press Shift-Tab in the composer
     Then the composer's permission mode is "full"
-    And the composer is in Ask mode
-    When I type "What's in here?" in the composer
-    And I press Return
-    Then the transcript shows my message "What's in here?" sent in Ask mode
-    When I press Shift-Tab in the composer
-    Then the composer isn't in Ask mode
 
   @composer.modelpicker
   Scenario: The model picker lists the models, marking the default

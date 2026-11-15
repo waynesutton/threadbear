@@ -736,27 +736,26 @@ impl SettingsWindow {
         )
     }
 
-    /// `TurnModes`: whether Shift-Tab steps through Plan first and Ask.
+    /// `PlanFirstToggle`: whether Shift-Tab turns Plan first on and off.
+    /// Its key, `turnModesEnabled`, is from when Shift-Tab also stepped
+    /// through Ask, so the setting carries over.
     fn turn_modes_section(&mut self, cx: &mut Context<Self>) -> AnyElement {
         let on = self.app.upgrade().is_none_or(|a| a.read(cx).settings.turn_modes_enabled());
-        let switch = self.switch("settings-turn-modes", on, "Shift-Tab in the message box steps through Plan first and Ask", cx, |this, on, cx| {
+        let switch = self.switch("settings-turn-modes", on, "Shift-Tab in the message box turns Plan first on and off", cx, |this, on, cx| {
             this.app
                 .update(cx, |app, cx| {
                     app.settings.saved.turn_modes_enabled = Some(on);
                     app.save_settings_soon(cx);
-                    if !on {
-                        crate::turn_modes::clear_all();
-                    }
                     cx.notify();
                 })
                 .ok();
         });
         section(
             "settings-turn-modes",
-            "Shift-Tab modes",
-            "Shift-Tab in the message box steps through Plan first (the agent reads and plans, changes nothing, and puts its plan to you on a card to approve or send back; the plan is also saved in the thread's plans/ folder and opens beside the thread), Ask (nothing changes; it just answers), then off, back to the access the thread had. Turning this off takes Shift-Tab back to what it did before; Plan first stays in the access menu.",
-            "explain or change what Plan first and Ask do.",
-            vec![row("Use Shift-Tab for Plan first and Ask", switch, cx)],
+            "Shift-Tab",
+            "Shift-Tab in the message box turns Plan first on (the agent reads and plans, changes nothing, and puts its plan to you on a card to approve or send back; the plan is also saved in the thread's plans/ folder, named for the date and project, and opens beside the thread) and off again, back to the access the thread had. Turning this off takes Shift-Tab back to what it did before; Plan first stays in the access menu.",
+            "explain or change what Plan first does.",
+            vec![row("Use Shift-Tab for Plan first", switch, cx)],
             cx,
         )
     }

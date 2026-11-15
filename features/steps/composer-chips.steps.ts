@@ -1,6 +1,6 @@
 import { Given, Then, When } from '@cucumber/cucumber';
 import assert from 'node:assert/strict';
-import { sleep, type Dump } from '../support/driver.ts';
+import { sleep } from '../support/driver.ts';
 import type { ThreadbearWorld } from '../support/world.ts';
 
 // A chip's menu as text lines: `composer-menu` gives the same list on both
@@ -12,20 +12,6 @@ async function menuLines(world: ThreadbearWorld, menu: string): Promise<string[]
 
 When('I press Shift-Tab in the composer', async function (this: ThreadbearWorld) {
   await this.app.do({ cmd: 'tab', shift: true });
-});
-
-const turnMode = (d: Dump) => (d.composer as { turnMode?: string | null }).turnMode;
-
-Then('the composer is in Ask mode', async function (this: ThreadbearWorld) {
-  await this.until('the box in Ask mode', (d) => turnMode(d) === 'ask');
-});
-
-Then('the composer isn\'t in Ask mode', async function (this: ThreadbearWorld) {
-  await this.until('the box out of Ask mode', (d) => !turnMode(d));
-});
-
-Then('the transcript shows my message {string} sent in Ask mode', async function (this: ThreadbearWorld, words: string) {
-  await this.until(`my message "${words}" in Ask mode`, (d) => d.transcript.rows.some((r) => r.kind === 'user' && r.text.startsWith(words) && (r as { mode?: string }).mode === 'ask'));
 });
 
 Then('the {string} menu shows {string} ticked', async function (this: ThreadbearWorld, menu: string, title: string) {

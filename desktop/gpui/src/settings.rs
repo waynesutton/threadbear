@@ -137,8 +137,8 @@ pub struct Saved {
     /// file. Off, it waits for ⌘S or Save, and leaving it asks. None is on.
     #[serde(rename = "filesSaveAutomatically")]
     pub files_save_automatically: Option<bool>,
-    /// `turnModesEnabled` (TurnModes): Shift-Tab steps the box through Plan
-    /// first and Ask. None is on.
+    /// `turnModesEnabled` (PlanFirstToggle): Shift-Tab turns Plan first on
+    /// and off. None is on. The key is from when it stepped through Ask too.
     pub turn_modes_enabled: Option<bool>,
     /// `notesShown` (NotesStore.shownKey): Settings > General > Show Notes,
     /// the bar's Notes button and ⌘6. None is on.
