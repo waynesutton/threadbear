@@ -82,14 +82,14 @@ fn keep(composer: &Composer, layout: PaletteLayout, save: bool, cx: &mut App) {
 }
 
 /// The palette's size in points (zoom aside): what a drag has got to, else
-/// what's kept within the window, else as wide as the box and about half the
-/// window tall (SlashPaletteCoordinator.place).
+/// what's kept within the window, else as wide as the box (480 at least) and
+/// about half the window tall (SlashPaletteCoordinator.place).
 pub(crate) fn size(layout: PaletteLayout, box_width: f64, window: Size<Pixels>, auto_height: f64) -> (f64, f64) {
     if let Some(live) = LIVE.get() {
         let (w, h) = live;
         return (PaletteLayout::width_in(w, f64::from(window.width)), PaletteLayout::height_in(h, f64::from(window.height)));
     }
-    let width = layout.width.map_or(box_width, |w| PaletteLayout::width_in(w, f64::from(window.width)));
+    let width = layout.width.map_or_else(|| PaletteLayout::auto_width(box_width, f64::from(window.width)), |w| PaletteLayout::width_in(w, f64::from(window.width)));
     let height = layout.height.map_or(auto_height, |h| PaletteLayout::height_in(h, f64::from(window.height)));
     (width, height)
 }
