@@ -296,6 +296,18 @@ no Accessibility or Input Monitoring permission and see no keys typed in
 other apps. Settings > Voice reads one macOS setting,
 `AppleFnUsageType` in `com.apple.HIToolbox` (what the 🌐 key does), to
 say when macOS uses Fn too; it never changes it.
+The GPUI app's Voice (`desktop/gpui/src/voice/`) does the same with the
+same pocket-tts, folder and Hugging Face cache, through a small helper
+program it carries inside its own binary: the first time Voice is used it
+writes it to `~/Library/Application Support/Threadbear/voice/gpui-helper-<hash>/`
+and runs it as a child of the app (so macOS asks for the microphone in the
+app's name), replacing an older build's copy. The helper stops when the app
+quits, and pocket-tts with it. Its settings are `desktop-voice.json` in the
+runner's data folder, and both write to `~/Library/Logs/Threadbear/voice.log`
+(what happened, never what was said). Its keys are an app-local key monitor
+too (`desktop/gpui/native/voice_keys.m`), and it doesn't read
+`AppleFnUsageType`: Settings > Voice & Audio says what macOS does with Fn
+in words and opens System Settings > Keyboard.
 Skills (the bar's Skills page) live in `~/Library/Application Support/Threadbear/skills/`:
 `skills.json`, each skill's files in `<name>@<commit>/` as fetched from
 GitHub (`api.github.com` to find the commit, `codeload.github.com` for the

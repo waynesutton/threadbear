@@ -65,6 +65,10 @@ cat > "$bundle/Contents/Info.plist" <<PLIST
     <key>CFBundleVersion</key><string>1</string>
     <key>LSMinimumSystemVersion</key><string>13.0</string>
     <key>NSHighResolutionCapable</key><true/>
+    <!-- Voice (desktop/gpui/src/voice/): macOS asks for the microphone in this
+         app's name, as its helper is a child of it, and won't without these. -->
+    <key>NSMicrophoneUsageDescription</key><string>Voice listens to what you say to a thread, or dictate with the Fn keys, and turns it into text on this Mac.</string>
+    <key>NSSpeechRecognitionUsageDescription</key><string>Voice turns what you say into text on this Mac.</string>
     <!-- threadbear://thread/<id> opens a thread (desktop/gpui/src/deep_links.rs),
          as the Swift app's app/Resources/Info.plist claims it too. -->
     <key>CFBundleURLTypes</key>

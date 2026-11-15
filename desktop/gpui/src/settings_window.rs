@@ -36,6 +36,7 @@ mod devices;
 mod keyboard;
 mod pools;
 mod runners;
+mod voice;
 
 /// The sections down the sidebar (`SettingsTab`).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -45,11 +46,12 @@ pub(crate) enum Tab {
     Pools,
     Runners,
     Devices,
+    Voice,
     Keyboard,
 }
 
 impl Tab {
-    pub(crate) const ALL: [Tab; 6] = [Tab::General, Tab::Models, Tab::Pools, Tab::Runners, Tab::Devices, Tab::Keyboard];
+    pub(crate) const ALL: [Tab; 7] = [Tab::General, Tab::Models, Tab::Pools, Tab::Runners, Tab::Devices, Tab::Voice, Tab::Keyboard];
 
     pub(crate) fn title(self) -> &'static str {
         match self {
@@ -58,6 +60,7 @@ impl Tab {
             Tab::Pools => "Pools",
             Tab::Runners => "Runners",
             Tab::Devices => "Phone & browser",
+            Tab::Voice => "Voice & Audio",
             Tab::Keyboard => "Keyboard",
         }
     }
@@ -69,6 +72,7 @@ impl Tab {
             Tab::Pools => "square.stack",
             Tab::Runners => "server.rack",
             Tab::Devices => "iphone",
+            Tab::Voice => "waveform",
             Tab::Keyboard => "keyboard",
         }
     }
@@ -81,6 +85,7 @@ impl Tab {
             Tab::Pools => "pools",
             Tab::Runners => "runners",
             Tab::Devices => "devices",
+            Tab::Voice => "voice",
             Tab::Keyboard => "keyboard",
         }
     }
@@ -519,7 +524,8 @@ impl SettingsWindow {
             .px(px(10.))
             .py(px(8.))
             .gap(px(2.))
-            .children(Tab::ALL.into_iter().map(|tab| {
+            // Voice & Audio only while the voiceMode experiment is on (voice/).
+            .children(Tab::ALL.into_iter().filter(|t| *t != Tab::Voice || self.app.upgrade().is_some_and(|a| crate::voice::experiment_on(a.read(cx)))).map(|tab| {
                 let on = tab == self.tab;
                 let hovered = self.hovered == Some(tab);
                 crate::highlights::tipped(h_flex().id(SharedString::from(format!("settings-tab-{}", tab.name()))).h(px(30.)).px(px(8.)).gap(px(9.)).items_center().rounded(px(7.)), tab.title())
@@ -1225,6 +1231,7 @@ impl Render for SettingsWindow {
             Tab::Pools => self.render_pools(window, cx),
             Tab::Runners => self.render_runners(window, cx),
             Tab::Devices => self.render_devices(cx),
+            Tab::Voice => self.render_voice(cx),
             Tab::Keyboard => Vec::new(),
         };
         // The last change that didn't take, under the form (`SettingsErrorRow`).

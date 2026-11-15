@@ -414,9 +414,10 @@ let connectors = {
 addDemoProjects();
 // The experiments the mock's hello says are on: Open Anything (⌘K) unless
 // TB_MOCK_OPEN_ANYTHING_OFF, for the spec that it's gone while off, and
-// Decisions on the Projects page with TB_MOCK_DECISIONS.
+// Decisions on the Projects page with TB_MOCK_DECISIONS, and the GPUI app's
+// Voice button and Settings > Voice & Audio with TB_MOCK_VOICE.
 function mockExperiments() {
-  return [...(process.env.TB_MOCK_OPEN_ANYTHING_OFF ? [] : ['openAnything']), ...(process.env.TB_MOCK_DECISIONS ? ['projectDecisions'] : [])];
+  return [...(process.env.TB_MOCK_OPEN_ANYTHING_OFF ? [] : ['openAnything']), ...(process.env.TB_MOCK_DECISIONS ? ['projectDecisions'] : []), ...(process.env.TB_MOCK_VOICE ? ['voiceMode'] : [])];
 }
 
 // Decisions on the Projects page (the projectDecisions experiment): three of

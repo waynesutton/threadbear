@@ -2807,6 +2807,16 @@ speakers you can too, as long as macOS's echo cancellation starts; when
 it won't, Voice stops listening while it speaks, so it doesn't hear
 itself.
 
+The GPUI app has Voice too, with the same experiment switch. Its
+settings are in Settings (⌘,) > Voice & Audio: Use Voice, the button's
+icon, Command Mode, the key the shortcuts use and which of them are on,
+the voice, speed, language and microphone. The bear doesn't sit over the
+message box there: the button's bars move with whoever's talking, and
+pulse while it gets ready or the thread works. If it can't start, a note
+over the button says why; click it to close it. Fn dictation works the
+same, with its pill just above the message box. Talking into a note isn't
+in the GPUI app yet.
+
 ### The bear
 
 The bear at the top right of the sidebar is a chat for anything: a quick

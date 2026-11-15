@@ -817,6 +817,7 @@ impl ThreadPane {
             if crate::reply_buttons::fold(std::slice::from_ref(&event), &self.summary.id) {
                 cx.notify();
             }
+            crate::voice::receive(&event, cx);
             let action = self.feed.receive(event);
             self.handle(action, cx);
         }

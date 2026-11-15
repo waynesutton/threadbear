@@ -1,7 +1,11 @@
 // The Mac's own video and PDF views (native/media_views.m): AVKit and PDFKit
 // are Objective-C, so their small shim is compiled here rather than written
 // as objc2 calls, as the web runtime's AppKit glue is (../web/build.rs).
+#[path = "native/voice_build.rs"]
+mod voice_build;
+
 fn main() {
+    voice_build::build();
     println!("cargo:rerun-if-changed=native/media_views.m");
     println!("cargo:rerun-if-changed=native/menu_icons.m");
     println!("cargo:rerun-if-changed=native/file_icons.m");

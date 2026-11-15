@@ -1652,6 +1652,8 @@ impl Render for Composer {
         let send_button = self.render_send_button(running, creating, cx);
         // Right-click it to send the message later (composer_send.rs).
         let send_button = self.with_send_menu(send_button, cx);
+        // Voice's microphone to its left, while Voice is on (voice/button.rs).
+        let send_button = crate::voice::button::beside_send(send_button, self.thread_id.as_deref(), &self.app, cx);
         let controls = self.render_controls(send_button, window, cx);
         // The box: the limit box and the open card, each over a line, then
         // the message.
@@ -1741,6 +1743,7 @@ impl Render for Composer {
                         }
                     }, |_, _, _, _| {}).absolute().size_full())
                     .children(palette)
+                    .children(crate::voice::button::pill(&self.app, cx))
                     // The main panel's box, for the tour's first thread.
                     .children(crate::tour::mark_composer(self.thread_id.as_deref())),
                     ),

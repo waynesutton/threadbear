@@ -132,6 +132,7 @@ mod unsent;
 mod updates_panel;
 mod usage;
 mod viewer;
+mod voice;
 mod web_panels;
 mod web_runtime;
 mod window_menu;
