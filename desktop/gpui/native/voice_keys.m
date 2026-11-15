@@ -77,6 +77,29 @@ bool tb_voice_insert(const char *utf8) {
     return true;
 }
 
+typedef char *(*tb_voice_compose_fn)(const char *words, uint32_t before, uint32_t after);
+typedef void (*tb_voice_free_fn)(char *text);
+typedef void (*tb_voice_typed_fn)(bool typed);
+
+/// Types `utf8` in on the main queue's next turn, not now: asking a GPUI text
+/// box for its cursor needs the app's state, which is locked while Rust is
+/// in the middle of an update, so asked from there it says there's no box.
+/// `compose` spaces the words from what's either side of the cursor
+/// (threadbear_core::voice::insertion); `typed` says whether it went in.
+void tb_voice_type_later(const char *utf8, tb_voice_compose_fn compose, tb_voice_free_fn free_text, tb_voice_typed_fn typed) {
+    NSString *words = [NSString stringWithUTF8String:utf8];
+    if (!words) { typed(false); return; }
+    dispatch_async(dispatch_get_main_queue(), ^{
+        uint32_t before = 0, after = 0;
+        if (!tb_voice_text_context(&before, &after)) { typed(false); return; }
+        char *text = compose(words.UTF8String, before, after);
+        if (!text) { typed(true); return; }
+        bool done = tb_voice_insert(text);
+        free_text(text);
+        typed(done);
+    });
+}
+
 /// System Settings > Keyboard, where "Press 🌐 key to" is.
 void tb_voice_open_keyboard_settings(void) {
     NSURL *url = [NSURL URLWithString:@"x-apple.systempreferences:com.apple.Keyboard-Settings.extension"];

@@ -209,6 +209,8 @@ impl Threadbear {
             self.opening.next = Some(crate::open_motion::Opening::FromNewPage { box_top });
         }
         self.consider_milestone(cx);
+        // Voice on the new-thread page carries on in it (voice/mode.rs).
+        crate::voice::thread_started(&id, cx);
         self.open(id, window, cx);
         self.apply_default_runner(cx);
         cx.notify();

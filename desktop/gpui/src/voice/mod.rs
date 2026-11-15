@@ -24,8 +24,6 @@ use std::time::Duration;
 use threadbear_core::reducer::event::Event;
 use threadbear_core::voice::VoicePrefs;
 
-pub(crate) use mode::Phase;
-
 /// The experiment's id (runner/src/experiments/voiceMode.md).
 pub(crate) const EXPERIMENT: &str = "voiceMode";
 
@@ -40,6 +38,9 @@ pub(crate) struct Voice {
     app: WeakEntity<Threadbear>,
     pub(crate) prefs: VoicePrefs,
     helper: Option<helper::Helper>,
+    /// Which helper is the current one: a late word from one that's gone
+    /// mustn't end the one started after it.
+    helper_gen: u64,
     /// Who the microphone is listening for, and the number its results come
     /// back with.
     listener: Option<(Listener, i64)>,
@@ -48,6 +49,7 @@ pub(crate) struct Voice {
     pub(crate) keys: keys::Dictation,
     /// The Mac's microphones for Settings, as uid and name, once asked for.
     pub(crate) microphones: Vec<(String, String)>,
+    mics_asked: bool,
     /// Play a Sample's progress, or why it couldn't.
     pub(crate) preview_status: Option<String>,
 }
@@ -66,7 +68,7 @@ pub(crate) fn get(app: &WeakEntity<Threadbear>, cx: &mut App) -> Entity<Voice> {
         if let Some(entity) = app.upgrade() {
             cx.observe(&entity, |voice: &mut Voice, app, cx| voice.app_changed(app, cx)).detach();
         }
-        Voice { app, prefs: load_prefs(), helper: None, listener: None, session: 0, mode: mode::ModeState::default(), keys: keys::Dictation::default(), microphones: Vec::new(), preview_status: None }
+        Voice { app, prefs: load_prefs(), helper: None, helper_gen: 0, mics_asked: false, listener: None, session: 0, mode: mode::ModeState::default(), keys: keys::Dictation::default(), microphones: Vec::new(), preview_status: None }
     });
     cx.set_global(VoiceGlobal(voice.clone()));
     keys::install(voice.downgrade(), cx);
@@ -88,6 +90,15 @@ pub(crate) fn receive(event: &Event, cx: &mut App) {
     }
     let event = event.clone();
     cx.defer(move |cx| voice.update(cx, |v, cx| v.mode_event(&event, cx)));
+}
+
+/// The new-thread page made the thread its spoken words asked for
+/// (new_thread.rs, `finish_new_thread`), before it opens: Voice carries on
+/// in that thread, and only that one.
+pub(crate) fn thread_started(id: &str, cx: &mut App) {
+    if let Some(voice) = existing(cx) {
+        voice.update(cx, |v, cx| v.mode_thread_started(id, cx));
+    }
 }
 
 /// The runner says the experiment is on: Settings' switch first, as it
@@ -133,15 +144,6 @@ impl Voice {
         self.prefs.enabled() && helper::built_in() && self.app.upgrade().is_some_and(|a| experiment_on(a.read(cx)))
     }
 
-    /// The experiment's on, whatever Use Voice says: Settings > Voice shows.
-    pub(crate) fn experiment(&self, cx: &App) -> bool {
-        self.app.upgrade().is_some_and(|a| experiment_on(a.read(cx)))
-    }
-
-    pub(crate) fn app(&self) -> WeakEntity<Threadbear> {
-        self.app.clone()
-    }
-
     pub(crate) fn set_prefs(&mut self, edit: impl FnOnce(&mut VoicePrefs), cx: &mut Context<Self>) {
         let before = self.prefs.clone();
         edit(&mut self.prefs);
@@ -176,10 +178,12 @@ impl Voice {
         if self.helper.is_none() {
             let (helper, mut rx) = helper::Helper::start()?;
             self.helper = Some(helper);
+            self.helper_gen += 1;
+            let gen = self.helper_gen;
             cx.spawn(async move |this, cx| {
                 use futures::StreamExt as _;
                 while let Some(event) = rx.next().await {
-                    if this.update(cx, |v, cx| v.from_helper(event, cx)).is_err() {
+                    if this.update(cx, |v, cx| if v.helper_gen == gen { v.from_helper(event, cx) }).is_err() {
                         break;
                     }
                 }
@@ -258,6 +262,9 @@ impl Voice {
 
     /// Settings' list of microphones, asked for when it opens.
     pub(crate) fn load_microphones(&mut self, cx: &mut Context<Self>) {
+        if std::mem::replace(&mut self.mics_asked, true) {
+            return;
+        }
         let _ = self.tell(json!({ "cmd": "microphones" }), cx);
     }
 

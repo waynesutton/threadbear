@@ -24,7 +24,7 @@ fn label(text: impl Into<SharedString>) -> AnyElement {
 impl SettingsWindow {
     pub(super) fn render_voice(&mut self, cx: &mut Context<Self>) -> Vec<AnyElement> {
         let voice = crate::voice::get(&self.app, cx);
-        if voice.read(cx).microphones.is_empty() && voice.read(cx).available(cx) {
+        if voice.read(cx).available(cx) {
             voice.update(cx, |v, cx| v.load_microphones(cx));
         }
         let v = voice.read(cx);

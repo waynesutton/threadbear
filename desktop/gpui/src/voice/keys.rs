@@ -67,11 +67,15 @@ struct Monitor {
     trigger_down: bool,
     /// Fn-Space's space was swallowed: its key repeats are too.
     swallowing_space: bool,
+    /// A text box had the cursor when the trigger went down, asked then, as
+    /// nothing in GPUI is locked inside the monitor.
+    had_text_box: bool,
     actions: Option<futures::channel::mpsc::UnboundedSender<KeyAction>>,
+    typed: Option<futures::channel::mpsc::UnboundedSender<bool>>,
 }
 
 thread_local! {
-    static MONITOR: RefCell<Monitor> = RefCell::new(Monitor { machine: VoiceKeyMachine::new(VoiceKeys::default()), active: false, trigger_down: false, swallowing_space: false, actions: None });
+    static MONITOR: RefCell<Monitor> = RefCell::new(Monitor { machine: VoiceKeyMachine::new(VoiceKeys::default()), active: false, trigger_down: false, swallowing_space: false, had_text_box: false, actions: None, typed: None });
 }
 
 #[cfg(target_os = "macos")]
@@ -79,7 +83,7 @@ extern "C" {
     fn tb_voice_keys_install(on_key: extern "C" fn(i32, u16, u64, f64, bool) -> bool, on_resign: extern "C" fn());
     fn tb_voice_uptime() -> f64;
     fn tb_voice_text_context(before: *mut u32, after: *mut u32) -> bool;
-    fn tb_voice_insert(utf8: *const std::ffi::c_char) -> bool;
+    fn tb_voice_type_later(utf8: *const std::ffi::c_char, compose: extern "C" fn(*const std::ffi::c_char, u32, u32) -> *mut std::ffi::c_char, free_text: extern "C" fn(*mut std::ffi::c_char), typed: extern "C" fn(bool));
     fn tb_voice_open_keyboard_settings();
 }
 
@@ -102,11 +106,26 @@ const FLAG_RIGHT_COMMAND: u64 = 0x10;
 
 pub(super) fn install(voice: WeakEntity<Voice>, cx: &mut App) {
     let (tx, mut rx) = futures::channel::mpsc::unbounded::<KeyAction>();
-    MONITOR.with(|m| m.borrow_mut().actions = Some(tx));
+    let (typed_tx, mut typed_rx) = futures::channel::mpsc::unbounded::<bool>();
+    MONITOR.with(|m| {
+        let mut m = m.borrow_mut();
+        m.actions = Some(tx);
+        m.typed = Some(typed_tx);
+    });
+    let answers = voice.clone();
     cx.spawn(async move |cx| {
         use futures::StreamExt as _;
         while let Some(action) = rx.next().await {
             if voice.update(cx, |v, cx| v.key_action(action, cx)).is_err() {
+                break;
+            }
+        }
+    })
+    .detach();
+    cx.spawn(async move |cx| {
+        use futures::StreamExt as _;
+        while let Some(typed) = typed_rx.next().await {
+            if answers.update(cx, |v, cx| v.dictation_typed(typed, cx)).is_err() {
                 break;
             }
         }
@@ -162,6 +181,8 @@ extern "C" fn on_key(kind: i32, code: u16, flags: u64, timestamp: f64, repeat: b
                 m.trigger_down = down;
                 if !down {
                     m.swallowing_space = false;
+                } else {
+                    m.had_text_box = has_text_box();
                 }
                 m.run(if down { KeyEvent::TriggerDown(timestamp) } else { KeyEvent::TriggerUp(timestamp) });
                 // Shift held first, then the trigger: Shift + trigger.
@@ -233,24 +254,39 @@ impl Monitor {
     }
 }
 
-/// Typing it in at the cursor: the characters either side, then the words.
-fn type_in(words: &str) -> bool {
+/// Types it in at the cursor on the main queue's next turn (voice_keys.m
+/// says why), spaced from the characters either side. Whether it went in
+/// comes back through `typed`.
+fn type_in(words: &str) {
     #[cfg(target_os = "macos")]
-    unsafe {
-        let (mut before, mut after) = (0u32, 0u32);
-        if !tb_voice_text_context(&mut before, &mut after) {
-            return false;
-        }
-        let side = |c: u32| char::from_u32(c).filter(|_| c != 0);
-        let Some(text) = insertion(words, side(before), side(after)) else { return true };
-        let Ok(text) = std::ffi::CString::new(text) else { return false };
-        tb_voice_insert(text.as_ptr())
+    {
+        let Ok(words) = std::ffi::CString::new(words) else { return };
+        unsafe { tb_voice_type_later(words.as_ptr(), compose, free_text, typed) };
     }
     #[cfg(not(target_os = "macos"))]
-    {
-        let _ = (words, insertion);
-        false
+    let _ = (words, insertion);
+}
+
+extern "C" fn compose(words: *const std::ffi::c_char, before: u32, after: u32) -> *mut std::ffi::c_char {
+    let words = unsafe { std::ffi::CStr::from_ptr(words) }.to_string_lossy();
+    let side = |c: u32| char::from_u32(c).filter(|_| c != 0);
+    insertion(&words, side(before), side(after)).and_then(|t| std::ffi::CString::new(t).ok()).map_or(std::ptr::null_mut(), std::ffi::CString::into_raw)
+}
+
+extern "C" fn free_text(text: *mut std::ffi::c_char) {
+    if !text.is_null() {
+        drop(unsafe { std::ffi::CString::from_raw(text) });
     }
+}
+
+extern "C" fn typed(done: bool) {
+    MONITOR.with(|m| {
+        if let Ok(m) = m.try_borrow() {
+            if let Some(tx) = &m.typed {
+                let _ = tx.unbounded_send(done);
+            }
+        }
+    });
 }
 
 fn has_text_box() -> bool {
@@ -317,7 +353,8 @@ impl Voice {
         let start = self.keys.start + 1;
         self.keys = Dictation { start, mode, phase: DictationPhase::Starting("Asking for the microphone…".to_owned()), ..Dictation::default() };
         // No text box with the cursor: the open thread's message box.
-        if mode != KeyMode::Command && !has_text_box() {
+        let had_box = MONITOR.with(|m| m.try_borrow().map(|m| m.had_text_box).unwrap_or(true));
+        if mode != KeyMode::Command && !had_box {
             self.focus_composer(cx);
         }
         if let Err(e) = self.listen(Listener::Keys, false, cx) {
@@ -470,11 +507,19 @@ impl Voice {
     }
 
     /// Typed in at the cursor (over a selection), as if he'd typed it.
-    fn type_dictated(&mut self, words: &str, cx: &mut Context<Self>) {
-        if !type_in(words) {
-            // `fail` needs it on; it's ended by now for a hold.
-            self.keys.phase = DictationPhase::Listening;
-            self.dictation_failed("There was no text box to type into. Click into one, then try again.", cx);
+    fn type_dictated(&mut self, words: &str, _cx: &mut Context<Self>) {
+        type_in(words);
+    }
+
+    /// Whether what was dictated went in.
+    fn dictation_typed(&mut self, typed: bool, cx: &mut Context<Self>) {
+        if typed {
+            return;
         }
+        // `failed` needs it on; it's ended by now for a hold.
+        if !self.keys.is_on() {
+            self.keys.phase = DictationPhase::Listening;
+        }
+        self.dictation_failed("There was no text box to type into. Click into one, then try again.", cx);
     }
 }

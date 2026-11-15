@@ -66,15 +66,18 @@ final class Helper {
     private func handle(_ cmd: [String: Any]) {
         switch cmd["cmd"] as? String {
         case "prepare":
+            // `start` is the app's number for the start that asked, sent
+            // back so an overtaken one's answer isn't taken for the newer.
             let language = cmd["language"] as? String ?? "english"
-            VoiceServer.shared.onStatus = { Out.send(["event": "status", "text": $0]) }
+            let start = cmd["start"] as? Int ?? 0
+            VoiceServer.shared.onStatus = { Out.send(["event": "status", "start": start, "text": $0]) }
             Task {
                 do {
                     _ = try await VoiceServer.shared.ready(language: language)
-                    Out.send(["event": "engineReady"])
+                    Out.send(["event": "engineReady", "start": start])
                 } catch is CancellationError {
                 } catch {
-                    Out.send(["event": "engineFailed", "message": error.localizedDescription])
+                    Out.send(["event": "engineFailed", "start": start, "message": error.localizedDescription])
                 }
             }
         case "listen":
@@ -143,8 +146,10 @@ final class Helper {
 
     @available(macOS 26.0, *)
     private func speak(on audio: VoiceAudio, sentences: [String], voice: String, speed: Double, language: String, id: String?) {
+        // Talked over while the engine got ready: what was stopped stays stopped.
+        let round = audio.round
         Task {
-            guard let base = try? await VoiceServer.shared.ready(language: language), self.audio === audio else { return }
+            guard let base = try? await VoiceServer.shared.ready(language: language), self.audio === audio, audio.round == round else { return }
             audio.speak(sentences, voice: voice, speed: speed, base: base, played: id.map { id in { Out.send(["event": "played", "id": id, "at": Out.now()]) } })
         }
     }
@@ -205,6 +210,7 @@ final class VoiceAudio {
     /// Goes up each time he talks over it or Voice stops: what was fetched or
     /// queued for an earlier round is dropped.
     private var speakRound = 0
+    var round: Int { speakRound }
 
     /// A result, and when (CACurrentMediaTime) the audio it counts from began.
     var onResult: ((HeardPiece, Double?) -> Void)?

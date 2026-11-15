@@ -132,7 +132,7 @@ impl Voice {
         let start = self.mode.start + 1;
         self.mode = ModeState { start, thread: Some(thread.to_owned()), started_at: Some(threadbear_core::chrono::Utc::now()), phase: Phase::Starting("Getting ready…".to_owned()), ..ModeState::default() };
         let language = self.prefs.language();
-        if let Err(e) = self.tell(json!({ "cmd": "prepare", "language": language.id }), cx) {
+        if let Err(e) = self.tell(json!({ "cmd": "prepare", "language": language.id, "start": start }), cx) {
             self.mode_failed(&e, cx);
         }
         cx.notify();
@@ -193,20 +193,10 @@ impl Voice {
         }
         let Some(thread) = self.mode.thread.clone() else { return };
         if thread == NEW_THREAD {
-            // Another thread opened before anything was said: Voice ends.
-            if !self.mode.making_thread && selected.is_some() {
+            // Another thread opened: Voice ends. The one its words made is
+            // taken on before it opens (`mode_thread_started`).
+            if selected.is_some() {
                 self.stop_mode(cx);
-                return;
-            }
-            if self.mode.making_thread {
-                if let Some(id) = selected {
-                    self.mode.making_thread = false;
-                    self.mode.thread = Some(id.clone());
-                    log(&format!("started {id} by voice"));
-                    for words in std::mem::take(&mut self.mode.waiting_words) {
-                        self.send_to_pane(&id, words, cx);
-                    }
-                }
             }
             return;
         }
@@ -215,8 +205,33 @@ impl Voice {
         }
     }
 
+    /// The thread the new-thread page made for what he said.
+    pub(super) fn mode_thread_started(&mut self, id: &str, cx: &mut Context<Self>) {
+        if !self.mode.is_on() || !self.mode.making_thread || self.mode.thread.as_deref() != Some(NEW_THREAD) {
+            return;
+        }
+        self.mode.making_thread = false;
+        self.mode.thread = Some(id.to_owned());
+        log(&format!("started {id} by voice"));
+        let words = std::mem::take(&mut self.mode.waiting_words);
+        if words.is_empty() {
+            return;
+        }
+        // Once it's open, with a pane to send through.
+        let id = id.to_owned();
+        cx.spawn(async move |this, cx| {
+            this.update(cx, |v, cx| {
+                for w in words {
+                    v.send_to_pane(&id, w, cx);
+                }
+            })
+            .ok();
+        })
+        .detach();
+    }
+
     pub(super) fn mode_engine(&mut self, event: &Value, cx: &mut Context<Self>) {
-        if !matches!(self.mode.phase, Phase::Starting(_)) {
+        if !matches!(self.mode.phase, Phase::Starting(_)) || event["start"].as_u64() != Some(self.mode.start) {
             return;
         }
         match event["event"].as_str() {
@@ -441,6 +456,7 @@ impl Voice {
         let Some(app) = self.app.upgrade() else { return };
         let window = app.read(cx).main_window;
         let start = self.mode.start;
+        let watched = app.downgrade();
         cx.defer(move |cx| {
             window
                 .update(cx, |_, window, cx| {
@@ -448,10 +464,21 @@ impl Voice {
                 })
                 .ok();
         });
-        // Nothing made in a while: say so, rather than sit on "working".
-        self.after(Duration::from_secs(60), cx, move |v, cx| {
-            if v.mode.start == start && v.mode.making_thread {
-                v.mode_failed("That thread couldn't be started. Try again, or type it.", cx);
+        // The page refused it, or the runner couldn't make it: say so, rather
+        // than sit on "working". Making it, the page says it's creating.
+        self.every(Duration::from_millis(500), cx, move |v, cx| {
+            if v.mode.start != start || !v.mode.making_thread {
+                return false;
+            }
+            let state = watched.upgrade().map(|a| { let a = a.read(cx); (a.new_thread.creating, a.new_thread.error.clone()) });
+            match state {
+                Some((true, _)) => true,
+                Some((false, error)) => {
+                    let why = error.map_or_else(|| "That thread couldn't be started. Try again, or type it.".to_owned(), |e| format!("That thread couldn't be started. {e}"));
+                    v.mode_failed(&why, cx);
+                    false
+                }
+                None => false,
             }
         });
     }
