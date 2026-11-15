@@ -156,6 +156,9 @@ pub struct Saved {
     pub scheduled_look_on: Option<bool>,
     /// `scheduledLook`: the Scheduled page's look.
     pub scheduled_look: Option<Value>,
+    /// `projectsLookOn` and `projectsLook`, the same for the Projects page.
+    pub projects_look_on: Option<bool>,
+    pub projects_look: Option<Value>,
     /// `mainBackgroundOn`: a photo behind a new thread.
     pub main_background_on: Option<bool>,
     /// `mainBackground`: its file name in the data folder's `looks/`.

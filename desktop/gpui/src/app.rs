@@ -174,10 +174,14 @@ pub struct Threadbear {
     pub(crate) restoring_place: bool,
     /// The Librarian view (librarian.rs).
     pub(crate) librarian: crate::librarian::LibrarianState,
+    /// The Look parts: Customize panels and background photos (looks.rs).
+    pub(crate) looks: crate::looks::LooksState,
+    /// The Librarian page's year calendars (look_cards.rs).
+    pub(crate) cards: crate::look_cards::CardsState,
+    /// The customized Librarian page's boxes and clock (librarian_look.rs).
+    pub(crate) librarian_look: crate::librarian_look::LibrarianLookState,
     /// What the Librarian page's picture says when it's poked.
     pub(crate) librarian_pokes: crate::home_page::Pokes,
-    /// The pages' looks and the main window's background (looks.rs).
-    pub(crate) looks: crate::looks::LooksState,
     /// The Usage panel's numbers and the honey pot (usage.rs).
     pub(crate) usage: crate::usage::UsageState,
     /// The runner's settings (`settings.get`, then `settings.updated`), as
@@ -561,8 +565,10 @@ impl Threadbear {
             shows_home: false,
             restoring_place: false,
             librarian: crate::librarian::LibrarianState::new(),
+            looks: Default::default(),
+            cards: Default::default(),
+            librarian_look: Default::default(),
             librarian_pokes: crate::home_page::Pokes::new(crate::home_page::Art::Librarian),
-            looks: crate::looks::LooksState::new(),
             usage,
             runner_settings: None,
             small_jobs: vec!["claude".into()],

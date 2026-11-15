@@ -351,14 +351,12 @@ impl Threadbear {
     /// `LibrarianHome`: the bear at its card catalogue, what it's for, what
     /// it's doing, its numbers, then its settings.
     pub(crate) fn render_librarian_home(&mut self, window: &mut Window, cx: &mut Context<Self>) -> AnyElement {
+        if self.customizable(crate::looks::Page::Librarian) {
+            return self.render_customized_librarian(window, cx);
+        }
         let status = self.librarian.status.clone();
         let threads: Vec<&threadbear_core::inbox::ThreadSummary> = self.threads.values().map(|t| &**t).collect();
         let stats = status.as_ref().map(|s| rules::stats(s, self.librarian.projects_made, &threads)).unwrap_or_default();
-        // Settings > General > Look. Off, the page is as it ships, whatever
-        // look is saved; the look is kept for when it's back on.
-        if self.librarian_customizable() {
-            return self.render_customized_librarian(&stats, window, cx);
-        }
         let mut about = v_flex().gap(px(12.)).child(home_title("Librarian", "Keeps your projects tidy as your threads go.", MORE, cx));
         if let Some(status) = &status {
             about = about.child(home_status_line(&rules::state_text(status), status.state == State::Working, cx));
@@ -467,7 +465,6 @@ impl Threadbear {
             "title": "Librarian",
             "status": status.map(rules::state_text),
             "poke": self.librarian_pokes.line,
-            "look": self.look_dump(crate::looks::Slot::Librarian),
             "stats": stats.iter().map(|s| json!({ "value": s.value, "label": s.label })).collect::<Vec<_>>(),
         })
     }

@@ -210,12 +210,12 @@ pub fn tour_state(defaults: &BTreeMap<String, Plist>) -> Map<String, Value> {
 /// are in the data folder's `looks/`, which both apps share.
 pub fn look_state(defaults: &BTreeMap<String, Plist>) -> Map<String, Value> {
     let mut out = Map::new();
-    for key in ["librarianLookOn", "scheduledLookOn", "mainBackgroundOn", "mainBackgroundEverywhere"] {
+    for key in ["librarianLookOn", "scheduledLookOn", "projectsLookOn", "mainBackgroundOn", "mainBackgroundEverywhere"] {
         if let Some(v) = defaults.get(key).and_then(Plist::as_bool) {
             out.insert(key.to_owned(), Value::from(v));
         }
     }
-    if let Some(name) = defaults.get("mainBackground").and_then(Plist::as_str).filter(|n| crate::looks::safe_name(n)) {
+    if let Some(name) = defaults.get("mainBackground").and_then(Plist::as_str).filter(|n| picture_name(n)) {
         out.insert("mainBackground".to_owned(), Value::from(name));
     }
     for key in ["mainBackgroundDim", "mainBackgroundX", "mainBackgroundY"] {
@@ -223,7 +223,7 @@ pub fn look_state(defaults: &BTreeMap<String, Plist>) -> Map<String, Value> {
             out.insert(key.to_owned(), Value::from(v.clamp(0., 1.)));
         }
     }
-    for key in ["librarianLook", "scheduledLook"] {
+    for key in ["librarianLook", "scheduledLook", "projectsLook"] {
         if let Some(Plist::Data(bytes)) = defaults.get(key) {
             if let Some(look) = serde_json::from_slice::<Value>(bytes).ok().filter(Value::is_object) {
                 out.insert(key.to_owned(), look);
@@ -231,6 +231,12 @@ pub fn look_state(defaults: &BTreeMap<String, Plist>) -> Map<String, Value> {
         }
     }
     out
+}
+
+/// A picture's name in `looks/`, never a path out of it (the app's
+/// `looks::path` refuses the same).
+fn picture_name(name: &str) -> bool {
+    !name.is_empty() && !name.contains('/') && !name.contains('\\') && name != "." && name != ".."
 }
 
 /// The note's names, in the order it says them: the same order whichever
