@@ -75,6 +75,11 @@ const ALLOWED_LINES: &[(&str, &str, usize)] = &[
     ("gpui/build.rs", "let sdk = Command::new(\"xcrun\").args([\"--sdk\", \"macosx\", \"--show-sdk-path\"]).output().expect(\"find macOS SDK\");", 1),
     ("gpui/build.rs", "let compiler = Command::new(\"xcrun\").args([\"--find\", \"swiftc\"]).output().expect(\"find swiftc\");", 1),
     ("gpui/build.rs", "let status = Command::new(&compiler).args([\"-parse-as-library\", \"-emit-object\", \"-O\", \"-import-objc-header\", \"native/text_selection.h\", \"-module-name\", \"ThreadbearTranslation\", \"-target\", &format!(\"{arch}-apple-macosx13.0\"), \"-sdk\", sdk, \"-module-cache-path\"]).arg(out.join(\"swift-modules\"))", 1),
+    // Voice (gpui/src/voice/): the build compiles its fixed Swift helper, and
+    // the app starts that helper, which it carries in its own binary and wrote
+    // to its own folder, with no arguments. No link, file or runner names either.
+    ("gpui/native/voice_build.rs", "let built = std::process::Command::new(\"xcrun\")", 1),
+    ("gpui/src/voice/helper.rs", "let mut child = Command::new(&path).stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::null()).spawn().map_err(|e| format!(\"Voice's helper didn't start: {e}\"))?;", 1),
     // Encodes the gate's checked descriptor (an application's icon is its icns file).
     ("gpui/native/file_icons.m", "int tb_file_icon_png(int fd, long long length, void **output) {", 1),
     // Reads only the system display preference. This NSWorkspace property

@@ -234,6 +234,13 @@ fn signed_as(path: &str, requirement: &str) -> Result<std::path::PathBuf, ()> {
     if signed.is_ok_and(|s| s.success()) { Ok(real) } else { Err(()) }
 }
 
+/// Settings › Voice & Audio's fixed destination: System Settings > Keyboard,
+/// where "Press 🌐 key to" is (voice/keys.rs; the Swift app's Voice keys went
+/// through OpenGate too). Nothing chooses the address.
+pub(crate) fn open_keyboard_settings(cx: &mut App) {
+    system_open("x-apple.systempreferences:com.apple.Keyboard-Settings.extension", cx);
+}
+
 /// The picture panel's fixed destination, as in Swift's ImagePanel. Nothing
 /// from a patch can choose a program or supply arguments here.
 pub(crate) fn open_simulator(cx: &mut App) {

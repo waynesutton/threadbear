@@ -84,15 +84,6 @@ extern "C" {
     fn tb_voice_uptime() -> f64;
     fn tb_voice_text_context(before: *mut u32, after: *mut u32) -> bool;
     fn tb_voice_type_later(utf8: *const std::ffi::c_char, compose: extern "C" fn(*const std::ffi::c_char, u32, u32) -> *mut std::ffi::c_char, free_text: extern "C" fn(*mut std::ffi::c_char), typed: extern "C" fn(bool));
-    fn tb_voice_open_keyboard_settings();
-}
-
-/// System Settings > Keyboard, where "Press 🌐 key to" is.
-pub(crate) fn open_keyboard_settings() {
-    #[cfg(target_os = "macos")]
-    unsafe {
-        tb_voice_open_keyboard_settings()
-    }
 }
 
 const FLAG_SHIFT: u64 = 1 << 17;

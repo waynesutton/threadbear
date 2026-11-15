@@ -5,7 +5,9 @@
 // over the message box while Fn dictation listens (KeyDictationHUD).
 use super::keys::DictationPhase;
 use super::mode::NEW_THREAD;
+use crate::a11y::A11yRole as _;
 use crate::app::Threadbear;
+use gpui_kit::base::TestSupportExt as _;
 use crate::style;
 use crate::style::px;
 use crate::tips::Tip as _;
@@ -42,11 +44,17 @@ pub(crate) fn beside_send(send: AnyElement, thread: Option<&str>, app: &WeakEnti
     let (toggle, dismiss) = (voice.clone(), voice.clone());
     let id = thread.clone();
     let button = face
+        .test_support()
+        .role(Role::Button)
+        .aria_label(if on { "End voice" } else { "Start voice" })
         .tip(if on { "End voice" } else { "Talk with this thread out loud" })
         .on_click(move |_, _, cx| toggle.update(cx, |v, cx| v.toggle_mode(&id, cx)));
     let bubble = failure.map(|message| {
         div()
             .id("composer-voice-failure")
+            .test_support()
+            .role(Role::Button)
+            .aria_label(message.clone())
             .absolute()
             .bottom(side + px(8.))
             .right(px(0.))

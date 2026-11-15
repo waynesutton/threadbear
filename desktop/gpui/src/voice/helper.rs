@@ -71,15 +71,8 @@ impl Helper {
         if std::fs::metadata(&path).is_ok_and(|m| m.len() == HELPER.len() as u64) {
             return Ok(path);
         }
-        std::fs::create_dir_all(&dir).map_err(|e| format!("Couldn't make Voice's folder: {e}"))?;
-        let part = dir.join("threadbear-voice-helper.part");
-        std::fs::write(&part, HELPER).map_err(|e| format!("Couldn't write Voice's helper: {e}"))?;
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::PermissionsExt as _;
-            std::fs::set_permissions(&part, std::fs::Permissions::from_mode(0o755)).map_err(|e| e.to_string())?;
-        }
-        std::fs::rename(&part, &path).map_err(|e| e.to_string())?;
+        // This user's only, and runnable by them alone.
+        threadbear_core::private_file::write_with_mode(&path, HELPER, 0o700).map_err(|e| format!("Couldn't write Voice's helper: {e}"))?;
         // Older builds' helpers: nothing runs them any more.
         if let Ok(entries) = std::fs::read_dir(folder()) {
             for entry in entries.flatten() {

@@ -122,11 +122,10 @@ pub(crate) fn log(line: &str) {
     use std::io::Write as _;
     let Some(home) = std::env::var_os("HOME") else { return };
     let path = std::path::PathBuf::from(home).join("Library/Logs/Threadbear/voice.log");
-    let _ = std::fs::create_dir_all(path.parent().unwrap_or(&path));
     if std::fs::metadata(&path).is_ok_and(|m| m.len() > 256_000) {
         let _ = std::fs::remove_file(&path);
     }
-    if let Ok(mut f) = std::fs::OpenOptions::new().create(true).append(true).open(&path) {
+    if let Ok(mut f) = threadbear_core::private_file::append(&path) {
         let stamp = threadbear_core::chrono::Utc::now().to_rfc3339_opts(threadbear_core::chrono::SecondsFormat::Secs, true);
         let _ = writeln!(f, "{stamp} [gpui] {line}");
     }
@@ -151,7 +150,7 @@ impl Voice {
             return;
         }
         if let Ok(bytes) = serde_json::to_vec_pretty(&self.prefs) {
-            let _ = std::fs::write(prefs_path(), bytes);
+            let _ = threadbear_core::private_file::write(&prefs_path(), &bytes);
         }
         if !self.prefs.enabled() {
             self.stop_mode(cx);

@@ -78,7 +78,7 @@ impl SettingsWindow {
         }
         if keys.trigger == VoiceTriggerKey::Fn {
             // The note over its button, as it's too long to share a row.
-            let open = self.button("settings-voice-keyboard", "Open Keyboard Settings", "Open System Settings > Keyboard, where Press 🌐 key to is", cx, |_, _, _| crate::voice::keys::open_keyboard_settings());
+            let open = self.button("settings-voice-keyboard", "Open Keyboard Settings", "Open System Settings > Keyboard, where Press 🌐 key to is", cx, |_, _, cx| crate::open_gate::open_keyboard_settings(cx));
             key_rows.push(
                 gpui_kit::component::v_flex()
                     .px(crate::style::px(10.))

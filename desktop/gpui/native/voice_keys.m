@@ -99,9 +99,3 @@ void tb_voice_type_later(const char *utf8, tb_voice_compose_fn compose, tb_voice
         typed(done);
     });
 }
-
-/// System Settings > Keyboard, where "Press 🌐 key to" is.
-void tb_voice_open_keyboard_settings(void) {
-    NSURL *url = [NSURL URLWithString:@"x-apple.systempreferences:com.apple.Keyboard-Settings.extension"];
-    if (url) [[NSWorkspace sharedWorkspace] openURL:url];
-}
