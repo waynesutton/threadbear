@@ -6,6 +6,17 @@
 - `desktop/gpui/src/notes_page.rs` the Notes page over the main panel, its editor and highlighter, the delete question and the scripted `notes` command.
 - `features/notes.feature` and `features/steps/notes.steps.ts` Notes scenarios.
 - `prds/gpui-notes.md` scope and verification for the port.
+## GPUI Voice
+
+- `desktop/core/src/voice.rs` what's heard and said: the utterance tracker, spoken text, spoken answers and approvals, the voice catalog, the button icons, saved prefs and dictated text.
+- `desktop/core/src/voice_keys.rs` the Fn key, its options and the machine that turns presses into dictation.
+- `desktop/core/tests/voice.rs` the Swift app's Voice tests, ported.
+- `desktop/gpui/src/voice/` the Voice entity (`mod.rs`), Voice mode (`mode.rs`), Fn dictation (`keys.rs`), the button and pill (`button.rs`) and the helper process (`helper.rs`).
+- `desktop/gpui/src/settings_window/voice.rs` Settings > Voice & Audio.
+- `desktop/gpui/native/voice_helper.swift` the microphone, SpeechAnalyzer, playback and pocket-tts, as a helper program the app carries.
+- `desktop/gpui/native/voice_keys.m` the app-local key monitor and typing into the focused box.
+- `desktop/gpui/native/voice_build.rs` builds both for build.rs.
+- `features/voice.feature` the Voice scenarios, checked by hand.
 
 ## GPUI Settings
 

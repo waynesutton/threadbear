@@ -193,6 +193,11 @@ impl Voice {
         }
         let Some(thread) = self.mode.thread.clone() else { return };
         if thread == NEW_THREAD {
+            // Another thread opened before anything was said: Voice ends.
+            if !self.mode.making_thread && selected.is_some() {
+                self.stop_mode(cx);
+                return;
+            }
             if self.mode.making_thread {
                 if let Some(id) = selected {
                     self.mode.making_thread = false;

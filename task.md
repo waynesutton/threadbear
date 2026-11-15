@@ -14,6 +14,7 @@ Nothing in progress.
 ## Completed
 
 - [x] 2026-11-15 06:30 UTC Port Notes to the GPUI app: the bar button and ⌘6, the page over the main panel, the same encrypted files as the Swift app, Markdown colouring, task boxes, list typing, rename and delete, and Settings > General > Show Notes. Core notes tests (including CryptoKit both ways), all core tests and the GPUI app's 96 unit tests pass; the five Notes scenarios were driven on a mock dev app in dark and light. prds/gpui-notes.md
+- [x] 2026-11-15 07:00 UTC Port Voice mode to GPUI with what it's built on, Fn dictation options and the button icons, without the bear avatar. 60 core tests pass (the Swift app's Voice tests, ported); the helper builds and lists microphones; GPUI checks clean. Real microphone and speaker test pending on Wayne's Mac.
 
 - [x] 2026-11-15 05:35 UTC Embed GPUI Settings in the main window, with Back/Esc/Close, section links and sidebar navigation. Verified the original window and thread draft survive, instruction edits save on close/quit, recording stops, and General/Devices controls work. Automation build, direct GPUI driver, focus guard and spec pairing pass; landing and installed verification pending. prds/gpui-settings-in-main.md
 
