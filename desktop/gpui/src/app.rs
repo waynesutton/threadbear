@@ -169,6 +169,7 @@ pub struct Threadbear {
     /// (`showsScheduledHome` and friends), not the selected thread. Picking a
     /// thread puts the thread back.
     pub(crate) shows_home: bool,
+    pub(crate) bear_preparing: bool,
     pub(crate) notes: crate::notes_page::NotesPage,
     pub(crate) skills: crate::skills_page::SkillsPage,
     /// Back or Forward is putting a place back (`navigationPending`): the
@@ -557,6 +558,7 @@ impl Threadbear {
             scheduled,
             schedule_editor: None,
             shows_home: false,
+            bear_preparing: false,
             notes: crate::notes_page::NotesPage::new(),
             skills: crate::skills_page::SkillsPage::default(),
             restoring_place: false,
@@ -1600,6 +1602,7 @@ impl Threadbear {
         // What came across from the Swift app, while its note's up. Set
         // after, as the literal above is as long as serde_json's macro goes.
         dump["importNote"] = json!(self.import_note);
+        dump["bearChat"] = self.bear_chat_dump();
         dump["skillsPage"] = self.skills.dump(cx);
         dump["settingsPage"] = self.settings_page.as_ref().filter(|_| self.settings_page_open).map_or(Value::Null, |view| view.read(cx).dump(cx));
         dump["looks"] = self.looks_dump();

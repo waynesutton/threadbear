@@ -560,3 +560,5 @@ Size is `none` throughout: the planning docs don't size these, and work the app 
 | ID | Feature | What it does | GPUI route | Route | Size | Swift |
 |---|---|---|---|---|---|---|
 | `skills.page` | Shared agent skills | List, import, write, edit, update and remove skills; Always on and whole-store switch | Runner skills RPCs with a native overlay form | build | M | `SkillsPage`, `SkillsModel` |
+
+| `sidebar.bearchat` | Bear chat | Sidebar mascot reopens a local personal chat, or aims a new draft at its folder; General hides the button | Ordinary local thread, private instructions written once | build | M | `BearChat`, `BearButton` |

@@ -21,6 +21,7 @@ mod automation;
 #[cfg(feature = "automation")]
 mod automation_compat;
 mod bears;
+mod bear_chat;
 mod bear_picker;
 mod chips;
 mod colour_space;

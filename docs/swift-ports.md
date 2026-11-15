@@ -194,7 +194,7 @@ against the GPUI app.
 | f9f3c8e4 | Settings over the main panel | done: default main panel, optional own window, X/Esc/Back/gear closes |
 | 1d311b94 | Your messages show basic Markdown | done: basic formatting, preserved breaks, plain fallback and skill links |
 | c3603b16 | The bear's chat has Voice | skip (Voice) |
-| 540cc171 | The bear: a chat at the top of the sidebar | to check |
+| 540cc171 | The bear: a chat at the top of the sidebar | done: text chat, local folder/memory instructions, menu and hide switch; Voice skipped |
 | 25510a20 | Voice avatar | skip (Voice) |
 | bcd71e48 | Voice approvals out loud | skip (Voice) |
 | f44b37c4 | Voice echo cancellation | skip (Voice) |

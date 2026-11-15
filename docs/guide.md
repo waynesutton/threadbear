@@ -2728,17 +2728,16 @@ itself.
 
 The bear at the top right of the sidebar is a chat for anything: a quick
 question, what to cook, planning your week, or real work. Click it to open
-your chat with it, and type, or press the microphone button beside Send
-to talk with it out loud (that works before its first message too).
-Right-click it and pick Talk Out Loud to go straight to talking. It remembers: whenever it learns something lasting about
-you, it saves it to its memory, so a new chat with it still knows you.
-Its chats are ordinary threads in `~/ThreadbearThreads/Bear`, with the
-same tools and approvals as any thread, and they show in the sidebar like
-the rest. Its instructions are `CLAUDE.md` in that folder (right-click
-the bear, Show the Bear's Folder): change them and it changes. It thinks
-while its chat is working. To hide it, turn off Show the bear in the
-sidebar in Settings (⌘,) > General; its chats, memory and Voice keep
-working.
+your newest local chat with it. If there isn't an unarchived chat, it opens
+a new draft in `~/ThreadbearThreads/Bear`. These are ordinary threads with
+the same tools and approvals as any thread. The bear remembers by saving
+lasting information to its folder's agent memory.
+
+Its instructions are `CLAUDE.md` in that folder, written only the first
+time. Right-click the bear and choose Show the Bear's Folder to edit them.
+The bear shows a spinner while preparing its folder or working on your
+chat. Settings (⌘,) > General > Bear chat can hide the button; its chats,
+memory and files stay where they are.
 
 ### Bears
 

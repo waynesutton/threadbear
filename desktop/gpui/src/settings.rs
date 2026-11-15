@@ -33,6 +33,7 @@ pub struct WindowFrame {
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", default)]
 pub struct Saved {
+    pub bear_shown: Option<bool>,
     #[serde(rename = "notesShown")]
     pub show_notes: Option<bool>,
     #[serde(rename = "notesListHidden")]
