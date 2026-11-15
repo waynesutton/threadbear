@@ -5095,3 +5095,13 @@ Fixes from Codex's review of the slice before:
   readers accept numeric strings. Unreadable event payloads log their shape
   without including the payload's private text.
 - Status-word blur and the Activity badge's entrance remain undecided.
+- Which of this fork's Swift Notes commits that rebuilds, so the Updates
+  panel's "Not in the new app yet" (runner/src/swift-changes.ts) drops them:
+  `dbf82191` and `7ebe4e66` (saving without file protection), `aba5a97e`
+  (headings in the text colour), `95cdefc8` (a comment), `ffaaf7b4` (⌘1 and
+  the bar's views leave Notes, the list toggle) and `f1510297` (one
+  Settings… menu item, and the key read from `secrets/notes-key`; moving an
+  old Keychain key there stays the Swift app's). Still listed, as each has a
+  part this app doesn't: `f6921eaa` (headings sized by level), `1952b193`
+  (⌘5 Skills), `a7c523ea` (dictating into a note) and `0f5c08f0` (Voice and
+  Skills switches, skill commands as links).
