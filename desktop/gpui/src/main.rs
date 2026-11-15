@@ -65,6 +65,9 @@ mod icons;
 mod installed;
 mod key_hints;
 mod librarian;
+mod looks;
+mod looks_editor;
+mod looks_pages;
 mod mac_switch;
 mod media_view;
 mod move_sheet;
@@ -284,6 +287,8 @@ fn main() {
         let brought = swift_import::run_once(&mut settings, cx);
         // And whether they'd seen its tour, apart (swift_import.rs).
         swift_import::tour_once(&mut settings);
+        // And its pages' looks and background, apart too (swift_import.rs).
+        swift_import::looks_once(&mut settings);
         let bounds = initial_bounds(&settings, cx);
         // Back from an update's restart made while another app was in front:
         // the window comes back behind it, not taking the keys (app_update.rs).

@@ -134,6 +134,40 @@ pub(crate) fn tour_once(settings: &mut Settings) {
     }
 }
 
+/// The Swift app's Look switches and page looks (Settings > General > Look),
+/// brought across once, apart from the rest, which came across on most Macs
+/// before this app had looks. Only what isn't set here already. The pictures
+/// they name are in the shared data folder's `looks/`, so nothing is copied.
+/// Only on the real data folder, as `tour_once`.
+pub(crate) fn looks_once(settings: &mut Settings) {
+    if settings.saved.swift_look_import.is_some() {
+        return;
+    }
+    let stand_in = std::env::var_os("THREADBEAR_SWIFT_DEFAULTS");
+    let defaults = if stand_in.is_none() && !crate::installed::on_real_data() {
+        Default::default()
+    } else {
+        match read_defaults(stand_in.as_deref()) {
+            Ok(defaults) => defaults,
+            Err(e) => {
+                eprintln!("threadbear: the Swift app's looks will be looked for again next launch: {e}");
+                return;
+            }
+        }
+    };
+    let before = settings.saved.clone();
+    let mut current = serde_json::to_value(&settings.saved).ok().and_then(|v| v.as_object().cloned()).unwrap_or_default();
+    rules::fill_missing(&mut current, rules::look_state(&defaults));
+    if let Ok(saved) = serde_json::from_value(Value::Object(current)) {
+        settings.saved = saved;
+    }
+    settings.saved.swift_look_import = Some(threadbear_core::inbox::iso_time(crate::now_ms()));
+    if let Err(e) = settings.save_checked() {
+        settings.saved = before;
+        eprintln!("threadbear: the Swift app's looks will be looked for again next launch: {e}");
+    }
+}
+
 /// Saves the record that `part` is done, before its writes: false (and the
 /// part left for next time) if the record didn't stick.
 fn record(settings: &mut Settings, part: &str, retry: &mut Option<String>) -> bool {

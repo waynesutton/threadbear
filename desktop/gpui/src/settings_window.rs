@@ -543,7 +543,7 @@ impl SettingsWindow {
 
     fn render_general(&mut self, settings: Option<&RunnerSettings>, window: &mut Window, cx: &mut Context<Self>) -> Vec<AnyElement> {
         // This Mac's own, so they're here while the runner's away too.
-        let mut sections = vec![self.appearance_section(cx), self.panels_section(cx), self.notes_section(cx), self.slash_section(cx), self.turn_modes_section(cx), self.files_section(cx), self.quitting_section(cx), self.notifications_section(cx)];
+        let mut sections = vec![self.appearance_section(cx), self.panels_section(cx), self.notes_section(cx), self.slash_section(cx), self.turn_modes_section(cx), self.files_section(cx), self.quitting_section(cx), self.look_section(cx), self.notifications_section(cx)];
         // The web runtime is this Mac's too (web_runtime.rs), last, so it
         // moves nothing the Swift app's General has.
         let web_runtime = section("settings-web-runtime", "Web runtime", crate::web_runtime::SETTINGS_ABOUT, "check whether it's installed and working, or why a diagram or panel isn't showing.", vec![row("Web runtime", crate::web_runtime::settings_control(cx), cx)], cx);
@@ -817,6 +817,76 @@ impl SettingsWindow {
             "Notes (in the bar on the left, ⌘6) are yours alone: kept on this Mac, each encrypted with a key kept beside Threadbear's other secrets, and never sent to the runner, an agent, your phone or the website. Hiding Notes keeps them; turn it back on to see them again.",
             "explain where your notes are kept.",
             vec![row("Show Notes", switch, cx)],
+            cx,
+        )
+    }
+
+    /// `LookSettings`: Customize on the Librarian and Scheduled pages, and
+    /// a photo behind the main window (looks.rs). This Mac's own.
+    fn look_section(&mut self, cx: &mut Context<Self>) -> AnyElement {
+        use crate::looks::Slot;
+        let Some(app) = self.app.upgrade() else { return div().into_any_element() };
+        let (librarian, scheduled, background_on, background, everywhere, focus, dim) = {
+            let a = app.read(cx);
+            let s = &a.settings.saved;
+            (s.librarian_look_on == Some(true), s.scheduled_look_on == Some(true), s.main_background_on == Some(true), a.main_background(), s.main_background_everywhere == Some(true), a.main_background_focus(), a.main_background_dim())
+        };
+        let switch_for = |this: &Self, id: &'static str, on: bool, tip: &'static str, slot: Slot, cx: &mut Context<Self>| {
+            this.switch(id, on, tip, cx, move |this, on, cx| {
+                this.app.update(cx, |app, cx| app.set_look_switch(slot, on, cx)).ok();
+            })
+        };
+        let mut rows = vec![
+            row("Customize the Librarian page", switch_for(self, "settings-look-librarian", librarian, "Add Customize to the Librarian page: its picture, a background, the layout, and what shows", Slot::Librarian, cx), cx),
+            row("Customize the Scheduled page", switch_for(self, "settings-look-scheduled", scheduled, "Add Customize to the Scheduled page: its picture, a background, the layout, and what shows", Slot::Scheduled, cx), cx),
+            row("Background picture in the main window", switch_for(self, "settings-look-background", background_on, "A photo or animated GIF of yours behind new threads", Slot::Main, cx), cx),
+        ];
+        if background_on {
+            let mut picture = h_flex().gap(px(8.)).items_center();
+            if let Some(file) = crate::looks::path(background.as_deref()) {
+                picture = picture.child(div().w(px(56.)).h(px(32.)).rounded(px(4.)).overflow_hidden().child(img(file).size_full().object_fit(ObjectFit::Cover)));
+            }
+            let has = background.is_some();
+            picture = picture.child(self.button(
+                "settings-look-choose",
+                if has { "Replace…" } else { "Choose…" },
+                "Pick a photo or an animated GIF from your Mac. A copy is kept, so the original can move",
+                cx,
+                |this, _, cx| {
+                    this.app.update(cx, |app, cx| app.choose_look_picture(Slot::Main, crate::looks::Kind::Background, cx)).ok();
+                },
+            ));
+            if has {
+                picture = picture.child(self.button("settings-look-remove", "Remove", "Take the background away and delete the copy", cx, |this, _, cx| {
+                    this.app.update(cx, |app, cx| app.set_main_background(None, cx)).ok();
+                }));
+            }
+            rows.push(row("Picture", picture, cx));
+            if let Some(name) = background.as_deref().filter(|n| crate::looks::path(Some(n)).is_some()) {
+                let weak = self.app.clone();
+                let set: std::rc::Rc<dyn Fn(threadbear_core::looks::BackdropFocus, &mut App)> = std::rc::Rc::new(move |focus, cx| {
+                    weak.update(cx, |app, cx| app.set_main_background_focus(focus, cx)).ok();
+                });
+                if let Some(position) = crate::looks::positioner(Slot::Main, name, focus, (240., 140.), set, cx) {
+                    rows.push(row("Position", position, cx));
+                }
+                rows.push(row("Show behind open threads too", self.switch("settings-look-everywhere", everywhere, "Off, only a new thread has it. On, every thread's transcript sits over it", cx, |this, on, cx| {
+                    this.app.update(cx, |app, cx| app.set_main_background_everywhere(on, cx)).ok();
+                }), cx));
+                let slider = app.update(cx, |app, cx| app.fade_slider(Slot::Main, dim, cx));
+                rows.push(row("Fade", div().id("settings-look-fade").test_support().a11y_role(Role::GenericContainer).aria_label("How much the window's own colour covers the photo").w(px(180.)).tip("How much the window's own colour covers the photo, so text stays easy to read").child(Slider::new(&slider).horizontal()), cx));
+            }
+            let problem = app.read(cx).looks.problem.as_ref().filter(|p| p.0 == Slot::Main).map(|p| p.2.clone());
+            if let Some(problem) = problem {
+                rows.push(plain_note(&problem, cx));
+            }
+        }
+        section(
+            "settings-look",
+            "Look",
+            "Customize the Librarian page adds Customize at the top right of the Librarian page: change or remove the bear, put a photo behind the page, move each part to the top, middle or bottom, hide parts and numbers, and show a greeting, a quote of the day, your Threadbear activity and your GitHub activity. Customize the Scheduled page does the same for the Scheduled page: its picture, a background photo, and the picture, title and numbers each at the top, middle or bottom, or hidden. Turning either off puts its page back as it ships and keeps your changes for next time. Background picture puts a photo of yours behind a new thread in the main window, or behind every thread, faded so text stays readable in light and dark. A background can be an animated GIF. Pictures are copied into Threadbear's data folder and never sent anywhere.",
+            "change the Librarian or Scheduled page, or the background, for you.",
+            rows,
             cx,
         )
     }

@@ -45,7 +45,7 @@ impl LibrarianState {
 }
 
 /// What the ⓘ beside the page's title says.
-const MORE: &str = "It files each thread in a project, writes down where the project's up to, and renames threads that have wandered off from their title. It takes a look after a thread's first message and when a turn ends, then catches up at most every 20 minutes while the thread keeps going. A catch-up after only a quick reply is skipped without asking the model. Each look is one short call to Haiku, not the model your threads use, on the Claude login with the most room in the Runs on pool, and counts towards its usage. It waits when they're all out of room, and threads in a private folder are never sent. A thread you take out of a project is never put back in it.";
+pub(crate) const MORE: &str = "It files each thread in a project, writes down where the project's up to, and renames threads that have wandered off from their title. It takes a look after a thread's first message and when a turn ends, then catches up at most every 20 minutes while the thread keeps going. A catch-up after only a quick reply is skipped without asking the model. Each look is one short call to Haiku, not the model your threads use, on the Claude login with the most room in the Runs on pool, and counts towards its usage. It waits when they're all out of room, and threads in a private folder are never sent. A thread you take out of a project is never put back in it.";
 
 /// The projects a `projects.list` answer has that the librarian made and
 /// aren't archived (`LibrarianStats`' "Projects it made").
@@ -350,10 +350,15 @@ impl Threadbear {
 
     /// `LibrarianHome`: the bear at its card catalogue, what it's for, what
     /// it's doing, its numbers, then its settings.
-    pub(crate) fn render_librarian_home(&mut self, cx: &mut Context<Self>) -> AnyElement {
+    pub(crate) fn render_librarian_home(&mut self, window: &mut Window, cx: &mut Context<Self>) -> AnyElement {
         let status = self.librarian.status.clone();
         let threads: Vec<&threadbear_core::inbox::ThreadSummary> = self.threads.values().map(|t| &**t).collect();
         let stats = status.as_ref().map(|s| rules::stats(s, self.librarian.projects_made, &threads)).unwrap_or_default();
+        // Settings > General > Look. Off, the page is as it ships, whatever
+        // look is saved; the look is kept for when it's back on.
+        if self.librarian_customizable() {
+            return self.render_customized_librarian(&stats, window, cx);
+        }
         let mut about = v_flex().gap(px(12.)).child(home_title("Librarian", "Keeps your projects tidy as your threads go.", MORE, cx));
         if let Some(status) = &status {
             about = about.child(home_status_line(&rules::state_text(status), status.state == State::Working, cx));
@@ -365,7 +370,7 @@ impl Threadbear {
     /// `LibrarianSettings`: whether it's looking at all, and which pool's
     /// Claude logins it runs on (the runner's small-jobs setting, which
     /// titles share), with the rest in Settings.
-    fn render_librarian_settings(&mut self, status: &Status, cx: &mut Context<Self>) -> AnyElement {
+    pub(crate) fn render_librarian_settings(&mut self, status: &Status, cx: &mut Context<Self>) -> AnyElement {
         let secondary = style::secondary_text(cx);
         let pausing = self.librarian.busy.contains("pause");
         let paused = status.paused;

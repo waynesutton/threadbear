@@ -1,5 +1,12 @@
 # Files
 
+## GPUI Looks
+
+- `desktop/core/src/looks.rs` the Librarian and Scheduled pages' looks in the Swift app's JSON, the background's focus and crop, the greeting, GitHub names and contributions, Threadbear activity and the quote of the day.
+- `desktop/gpui/src/looks.rs` the pictures in `looks/` (import, sizes, removal), the background photo and its Position preview, and the app's look settings.
+- `desktop/gpui/src/looks_pages.rs` the customized Librarian and Scheduled pages, the quote card and the GitHub and Threadbear activity calendars.
+- `desktop/gpui/src/looks_editor.rs` the two pages' Customize panels.
+
 ## GPUI Notes
 
 - `desktop/core/src/notes.rs` notes as the Swift app keeps them: sealing (AES-256-GCM with `ring`), names, Markdown spans, list typing and the files.

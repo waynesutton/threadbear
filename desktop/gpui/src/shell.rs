@@ -1600,10 +1600,12 @@ impl Threadbear {
             (Some(pane), None) => match self.subagent_pane.clone() {
                 // One of its sub-agents, under a bar back to the thread (`SubagentHeader`).
                 Some(sub) => v_flex().size_full().child(self.render_subagent_header(cx)).child(div().flex_1().min_h_0().child(sub)).into_any_element(),
-                None => div().size_full().child(pane.clone()).into_any_element(),
+                // Settings > General > Look's photo, with Show behind open
+                // threads too (looks.rs).
+                None => div().relative().size_full().children(self.render_main_backdrop(false, cx)).child(div().relative().size_full().child(pane.clone())).into_any_element(),
             },
-            (_, Some(SidebarMode::Scheduled)) => self.render_scheduled_home(cx),
-            (_, Some(SidebarMode::Librarian)) => self.render_librarian_home(cx),
+            (_, Some(SidebarMode::Scheduled)) => self.render_scheduled_home(window, cx),
+            (_, Some(SidebarMode::Librarian)) => self.render_librarian_home(window, cx),
             (_, Some(_)) => self.render_projects_home(window, cx),
             // Its thread is open in a panel of its own (thread_panels.rs).
             (None, None) if self.open_elsewhere(cx).is_some() => {
@@ -1611,7 +1613,14 @@ impl Threadbear {
                 self.render_open_elsewhere(id, cx)
             }
             // No thread open is the new-thread page, as in the Swift app.
-            (None, None) => self.render_new_page(window, cx),
+            (None, None) => {
+                let page = self.render_new_page(window, cx);
+                // Settings > General > Look's photo behind a new thread (looks.rs).
+                match self.render_main_backdrop(true, cx) {
+                    Some(backdrop) => div().relative().size_full().child(backdrop).child(div().relative().size_full().child(page)).into_any_element(),
+                    None => page,
+                }
+            }
         };
         let toasts = self.render_toasts(window, cx);
         div().relative().size_full().child(v_flex().size_full().child(banners).child(div().flex_1().min_h_0().child(main))).child(toasts)

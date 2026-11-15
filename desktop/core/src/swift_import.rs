@@ -204,6 +204,35 @@ pub fn tour_state(defaults: &BTreeMap<String, Plist>) -> Map<String, Value> {
     out
 }
 
+/// Settings > General > Look's switches and the pages' looks (Looks.swift),
+/// under the same keys, as this app keeps them. A look is JSON in a data
+/// value; one that isn't an object is left behind. The pictures they name
+/// are in the data folder's `looks/`, which both apps share.
+pub fn look_state(defaults: &BTreeMap<String, Plist>) -> Map<String, Value> {
+    let mut out = Map::new();
+    for key in ["librarianLookOn", "scheduledLookOn", "mainBackgroundOn", "mainBackgroundEverywhere"] {
+        if let Some(v) = defaults.get(key).and_then(Plist::as_bool) {
+            out.insert(key.to_owned(), Value::from(v));
+        }
+    }
+    if let Some(name) = defaults.get("mainBackground").and_then(Plist::as_str).filter(|n| crate::looks::safe_name(n)) {
+        out.insert("mainBackground".to_owned(), Value::from(name));
+    }
+    for key in ["mainBackgroundDim", "mainBackgroundX", "mainBackgroundY"] {
+        if let Some(v) = defaults.get(key).and_then(Plist::as_f64).filter(|v| v.is_finite()) {
+            out.insert(key.to_owned(), Value::from(v.clamp(0., 1.)));
+        }
+    }
+    for key in ["librarianLook", "scheduledLook"] {
+        if let Some(Plist::Data(bytes)) = defaults.get(key) {
+            if let Some(look) = serde_json::from_slice::<Value>(bytes).ok().filter(Value::is_object) {
+                out.insert(key.to_owned(), look);
+            }
+        }
+    }
+    out
+}
+
 /// The note's names, in the order it says them: the same order whichever
 /// order the keys came in (serde_json's maps keep insertion order in the app,
 /// where GPUI turns that on, and sort their keys in core's own tests).
@@ -342,6 +371,22 @@ mod tests {
             Some(Plist::Dict(d)) => d,
             other => panic!("not a dict: {other:?}"),
         }
+    }
+
+    #[test]
+    fn the_looks_come_across_with_their_pictures_names() {
+        let mut d = BTreeMap::new();
+        d.insert("librarianLookOn".to_owned(), Plist::Bool(true));
+        d.insert("mainBackground".to_owned(), Plist::String("window-1a2b.jpg".into()));
+        d.insert("mainBackgroundDim".to_owned(), Plist::Real(0.4));
+        d.insert("mainBackgroundX".to_owned(), Plist::Integer(2));
+        d.insert("librarianLook".to_owned(), Plist::Data(br#"{"picture":"none","quoteShown":true}"#.to_vec()));
+        d.insert("scheduledLook".to_owned(), Plist::Data(b"not json".to_vec()));
+        let got = look_state(&d);
+        assert_eq!(Value::Object(got), json!({ "librarianLookOn": true, "mainBackground": "window-1a2b.jpg", "mainBackgroundDim": 0.4, "mainBackgroundX": 1.0, "librarianLook": { "picture": "none", "quoteShown": true } }));
+        let mut path = BTreeMap::new();
+        path.insert("mainBackground".to_owned(), Plist::String("../escape.jpg".into()));
+        assert!(look_state(&path).is_empty());
     }
 
     #[test]

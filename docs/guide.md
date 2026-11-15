@@ -1257,6 +1257,14 @@ GitHub. It's fetched from the GitHub Contributions API
 the switch off puts the page back as it ships and keeps your changes for
 next time; Reset to the standard page clears them.
 
+The GPUI desktop app has the same Look switches, the same Customize panels
+for the Librarian and Scheduled pages, and the same background photo. It
+picks up what you set in the Swift app the first time it opens, and the two
+share the pictures. Three things differ there for now: there's no profile
+page section or View profile page button, a photo has no frosted fill
+behind the cards on it (they get a near-solid one instead), and a picture
+has to be a PNG, JPEG, GIF or WebP.
+
 The bottom of the Customize panel makes you a public profile page on your
 own Threadbear site, at `https://<your deployment>.convex.site/profile`.
 Your site is yours alone, so there's no user name to pick, and your Convex

@@ -546,7 +546,7 @@ impl Threadbear {
 
     /// `ScheduledHome`: what clicking Scheduled in the activity bar shows in
     /// the main panel, beside the sidebar's list.
-    pub(crate) fn render_scheduled_home(&mut self, cx: &mut Context<Self>) -> AnyElement {
+    pub(crate) fn render_scheduled_home(&mut self, window: &mut Window, cx: &mut Context<Self>) -> AnyElement {
         let now = now_ms();
         let local = Local::now();
         let next = rules::next(&self.scheduled.list);
@@ -556,6 +556,10 @@ impl Threadbear {
             .gap(px(12.))
             .child(home_title("Scheduled", "Messages that send themselves later, once or on repeat.", SCHEDULED_MORE, cx))
             .child(home_status_line(&status, next.is_some(), cx));
+        // Settings > General > Look, as the Librarian page.
+        if self.scheduled_customizable() {
+            return self.render_customized_scheduled(about.into_any_element(), &stats, window, cx);
+        }
         self.render_home_page(Art::Scheduled, about.into_any_element(), &stats, None, cx)
     }
 

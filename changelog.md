@@ -12,6 +12,7 @@ How Prints work today, what's missing and what's next: [Prints status](https://g
 
 ### Added
 
+- Customize in the GPUI app: Settings > General > Look turns on Customize for the Librarian and Scheduled pages and a background photo behind the main window, as in the Swift app. The Librarian panel has the greeting, your picture or none, a background photo you drag into place and fade, the quote of the day, the layout, the title parts, the numbers, and the GitHub and Threadbear activity calendars. What you set in the Swift app comes across the first time, with its pictures.
 - Notes in the GPUI app: the bar's Notes button and ⌘6 open your notes over the main window, the same encrypted notes the Swift app keeps. New Note, rename, delete, coloured Markdown, task boxes you tick with a click, and lists that carry on when you press Return. Settings > General > Show Notes hides them and keeps them.
 - Voice in the GPUI app, behind the voiceMode experiment: a microphone button beside Send to talk with a thread out loud and hear its replies, spoken yes or no for plain command cards, hold Fn (or Shift Fn, Fn Space, Fn Control) to dictate into any text box, and Settings > Voice & Audio for the icon, keys, voice, speed, language and microphone. No bear avatar.
 - The GPUI Connectors panel can set up a gateway, add services, connect outside agents with masked key fields, hide and restore rows, and review pinned local-server commands before adding them.

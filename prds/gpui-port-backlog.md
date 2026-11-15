@@ -45,10 +45,10 @@ All of these are app-only: settings in UserDefaults, pictures in `<dataDir>/look
 
 | Feature | Swift files | Runner API or keys | In GPUI | Spec | Size | Notes |
 |---|---|---|---|---|---|---|
-| Customize the Librarian page: picture, background, layout, GitHub and Threadbear activity, quote of the day, greeting by the clock | `Views/LibrarianLookEditor.swift`, `LookEditorSections.swift`, `LibrarianHome.swift`, `Looks.swift`, `GitHubActivityCard.swift`, `ThreadbearActivityCard.swift`, `Support/Quotes.swift` | none (GitHub read by the app) | no | no | L | |
-| Customize the Scheduled page | `ScheduledLookEditor.swift`, `Support/ScheduledLook.swift` | none | no | no | M | |
+| Customize the Librarian page: picture, background, layout, GitHub and Threadbear activity, quote of the day, greeting by the clock | `Views/LibrarianLookEditor.swift`, `LookEditorSections.swift`, `LibrarianHome.swift`, `Looks.swift`, `GitHubActivityCard.swift`, `ThreadbearActivityCard.swift`, `Support/Quotes.swift` | none (GitHub read by the app) | yes, 15 Nov | no | L | `looks_pages.rs`, `looks_editor.rs`; no profile page section yet |
+| Customize the Scheduled page | `ScheduledLookEditor.swift`, `Support/ScheduledLook.swift` | none | yes, 15 Nov | no | M | |
 | Customize the Projects page | `ProjectsLookEditor.swift`, `Support/ProjectsLook.swift` | none | no | no | M | |
-| Main window background photo, dragged to show another part | `Looks.swift`, `SettingsView` | none | no | no | M | |
+| Main window background photo, dragged to show another part | `Looks.swift`, `SettingsView` | none | yes, 15 Nov | no | M | `looks.rs`; Swift looks come across once (`looks_once`) |
 
 ### Pages
 

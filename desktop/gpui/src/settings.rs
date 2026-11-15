@@ -143,6 +143,32 @@ pub struct Saved {
     /// `notesListHidden`: the Notes page's list folded away for more room
     /// to write, kept across launches. None is showing.
     pub notes_list_hidden: Option<bool>,
+    /// Settings > General > Look (looks.rs), under the Swift app's keys
+    /// (Looks.swift), each off until turned on. `librarianLookOn`:
+    /// Customize on the Librarian page.
+    pub librarian_look_on: Option<bool>,
+    /// `librarianLook`: the Librarian page's look, in the Swift app's JSON.
+    pub librarian_look: Option<Value>,
+    /// `scheduledLookOn`: Customize on the Scheduled page.
+    pub scheduled_look_on: Option<bool>,
+    /// `scheduledLook`: the Scheduled page's look.
+    pub scheduled_look: Option<Value>,
+    /// `mainBackgroundOn`: a photo behind a new thread.
+    pub main_background_on: Option<bool>,
+    /// `mainBackground`: its file name in the data folder's `looks/`.
+    pub main_background: Option<String>,
+    /// `mainBackgroundDim`: how much of the window's colour lies over it.
+    pub main_background_dim: Option<f64>,
+    /// `mainBackgroundX` and `mainBackgroundY`: where the photo sits when
+    /// cropped. None is bottom centre.
+    pub main_background_x: Option<f64>,
+    pub main_background_y: Option<f64>,
+    /// `mainBackgroundEverywhere`: behind open threads too.
+    pub main_background_everywhere: Option<bool>,
+    /// When the Swift app's looks were brought across (swift_import.rs,
+    /// `looks_once`): once, apart from the rest, which had already come
+    /// across on most Macs before this app had looks.
+    pub swift_look_import: Option<String>,
 }
 
 /// The settings file: where it is and what's in it. Reading is at launch only;
