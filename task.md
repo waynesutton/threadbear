@@ -13,6 +13,8 @@ Status and gap list: prds/prints-status.md
 
 ## Completed
 
+- [x] 2026-11-15 04:22 UTC Collect the bears research links in prds/bears-resources.md, separating user-supplied references from supporting documentation and recording what each informed. Verified against the original planning thread, build history and saved plans; local document links checked.
+
 - [x] 2026-11-15 04:05 UTC Update the end_turn tool-schema assertion for the new quiet field; all 90 threadbear-tools tests pass. The broader always-on bears check was interrupted after sustained high load and remains required before landing. prds/bears-always-on.md
 
 - [x] 2026-11-14 23:46 UTC Fix all three always-on bears review findings: prevent folded mentions escaping a caller's sandbox, preserve explicitly configured routine login/pool/model/effort, and recover a late answer whose message was saved before starting its turn failed. Verified: eight regression cases, 226 affected tests and runner typecheck passed. Committed separately before repeat review; not yet landed. prds/bears-always-on.md

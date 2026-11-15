@@ -10,6 +10,7 @@
 - `runner/test/unit/late-answers.test.ts` expiry, partial-start retries, replay prevention, restart and pending-card isolation.
 - `runner/test/unit/bears-always-on.test.ts` integrated routine, webhook and mention routing with replies matched to queued turns.
 - `prds/bears-always-on.md` the five runner improvements, safeguards and verification status.
+- `prds/bears-resources.md` source links supplied for bears, what they informed, and supporting implementation references.
 - `runner/src/tables.ts` tables as marked projects, their host folder and the `tables.*` RPCs.
 - `runner/src/webhooks.ts` webhook runs on the runner, its hook registry and the `webhooks.*` RPCs.
 - `runner/src/cli-bears.ts` `tb bears`, `tb tables` and `tb webhooks`, and the note that Auto works like Ask on a Codex bear.
