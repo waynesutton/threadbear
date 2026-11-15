@@ -158,7 +158,7 @@ impl Threadbear {
             .border_b(gpui_kit::px(0.5)).border_color(style::hairline(cx))
             .child(back)
             .child(div().font_weight(FontWeight::SEMIBOLD).child("Settings"));
-        v_flex().id("settings-page").size_full().key_context("SettingsPage")
+        v_flex().id("settings-page").test_support().size_full().key_context("SettingsPage")
             .on_action(cx.listener(|this, _: &CloseSettings, _, cx| { this.close_settings(cx); }))
             .child(header).child(div().flex_1().min_h_0().child(view.clone())).into_any_element()
     }
@@ -329,6 +329,13 @@ impl SettingsWindow {
         window.focus(&this.sidebar_focus, cx);
         crate::web_panels::keyboard_to_app(window);
         this.follow_saved_instructions(instructions_now, window, cx);
+        let draft = this.app.upgrade().and_then(|app| app.read(cx).instructions_draft.clone());
+        if let Some(draft) = draft {
+            this.filling = true;
+            this.instructions.update(cx, |input, cx| input.set_value(draft, window, cx));
+            this.filling = false;
+            this.schedule_instructions_save(cx);
+        }
         this
     }
 
@@ -373,7 +380,7 @@ impl SettingsWindow {
         self.reviewed = None;
         let typed = self.instructions.read(cx).value().to_string();
         let first = self.instructions_base.is_none();
-        if first || (self.instructions_save.is_none() && typed.trim() != saved.text.trim()) {
+        if first || (typed.trim() == self.instructions_base.as_deref().unwrap_or_default().trim() && typed.trim() != saved.text.trim()) {
             self.filling = true;
             self.instructions.update(cx, |s, cx| s.set_value(saved.text.clone(), window, cx));
             self.filling = false;
@@ -384,6 +391,9 @@ impl SettingsWindow {
     /// A second after typing stops, what's typed is saved.
     fn schedule_instructions_save(&mut self, cx: &mut Context<Self>) {
         self.instructions_status = None;
+        let typed = self.instructions.read(cx).value().to_string();
+        let dirty = typed.trim() != self.instructions_base.as_deref().unwrap_or_default().trim();
+        self.app.update(cx, |app, _| app.instructions_draft = dirty.then_some(typed)).ok();
         self.instructions_save = Some(cx.spawn(async move |this, cx| {
             cx.background_executor().timer(Duration::from_secs(1)).await;
             this.update(cx, |this, cx| this.write_instructions(cx)).ok();
@@ -406,28 +416,34 @@ impl SettingsWindow {
             return;
         }
         let Some(client) = self.client(cx) else { return };
+        // The app owns recovery and errors: this form may be dropped before
+        // the runner answers, for example when a thread is chosen immediately.
+        let app = self.app.clone();
         cx.spawn(async move |this, cx| {
             let res = call(client, "instructions.set", json!({ "text": wanted })).await;
+            app.update(cx, |app, cx| {
+                match &res {
+                    Ok(v) => {
+                        app.standing_instructions = Some(StandingInstructions::decode(&v["instructions"]));
+                        if app.instructions_draft.as_deref() == Some(wanted.as_str()) {
+                            app.instructions_draft = None;
+                        }
+                    }
+                    Err(e) => app.show_error(format!("Couldn't save instructions: {}. Reopen Settings to retry. Your edit is kept until you quit.", e.message), cx),
+                }
+                cx.notify();
+            }).ok();
             this.update(cx, |this, cx| {
                 match res {
                     Ok(v) => {
-                        let now = StandingInstructions::decode(&v["instructions"]);
                         this.instructions_status = Some(if wanted.trim().is_empty() { "Cleared".into() } else { "Saved".into() });
-                        this.instructions_base = Some(now.text.clone());
-                        if let Some(app) = this.app.upgrade() {
-                            app.update(cx, |app, cx| {
-                                app.standing_instructions = Some(now);
-                                cx.notify();
-                            });
-                        }
+                        this.instructions_base = Some(StandingInstructions::decode(&v["instructions"]).text);
                     }
                     Err(e) => this.instructions_status = Some(e.message),
                 }
                 cx.notify();
-            })
-            .ok();
-        })
-        .detach();
+            }).ok();
+        }).detach();
     }
 
     /// Use These or Clear on a file changed outside Settings: sends the words
@@ -1359,6 +1375,8 @@ impl SettingsWindow {
         let settings = self.app.upgrade().and_then(|a| a.read(cx).runner_settings.as_ref().map(RunnerSettings::decode));
         json!({
             "tab": self.tab.name(),
+            "instructions": self.instructions.read(cx).value().to_string(),
+            "instructionsStatus": self.instructions_status,
             "appearance": style::appearance().name(),
             "defaultFolder": settings.as_ref().map(|s| s.default_cwd.clone()),
             "keepAwake": settings.as_ref().and_then(|s| s.keep_awake),

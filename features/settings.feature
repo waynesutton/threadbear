@@ -33,6 +33,17 @@ Feature: Settings
     Then Settings isn't listening for a key
     And Settings shows "keyboard"
 
+  @settings.general @swift-pending
+  Scenario: A failed Instructions save survives leaving Settings
+    When I open Settings
+    And the next Instructions save will fail
+    And I replace Instructions with "Keep this instruction" and immediately leave Settings
+    Then the Instructions save failure is shown in the main window
+    And an automatic update waits for the Instructions edit
+    When I open Settings
+    Then Instructions still says "Keep this instruction"
+    And the Instructions edit is saved after retrying
+
   @settings.window
   Scenario: Settings opens on General, and another section can be picked
     When I open Settings

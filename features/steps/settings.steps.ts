@@ -4,13 +4,14 @@ import assert from 'node:assert/strict';
 import type { ThreadbearWorld } from '../support/world.ts';
 
 /** The Settings window while it's open, from either app's dump. */
-type SettingsInfo = { tab: string; keepAwake?: boolean | null; fullSync?: boolean | null; printsWhenAsked?: boolean | null; privateFolders?: string[] | null };
+type SettingsInfo = { tab: string; instructions?: string; instructionsStatus?: string; keepAwake?: boolean | null; fullSync?: boolean | null; printsWhenAsked?: boolean | null; privateFolders?: string[] | null };
 const shown = (d: unknown) => (d as { settingsWindow?: SettingsInfo | null }).settingsWindow;
 
 Then('Settings is inside the main window', async function (this: ThreadbearWorld) {
   const main = await this.app.do({ cmd: 'window' });
   const settings = await this.app.do({ cmd: 'window', settings: true });
   assert.deepEqual(settings, main);
+  await this.until('Settings page drawn inside the main window', (d) => (d as { settingsPageDrawn?: boolean }).settingsPageDrawn === true);
 });
 
 When('I leave the Settings page', async function (this: ThreadbearWorld) {
@@ -78,4 +79,31 @@ Then('Settings lists no private folders', async function (this: ThreadbearWorld)
 // Where the keyboard is in the Settings window: its list of sections, as it opens.
 When('I press the {word} arrow in Settings', async function (this: ThreadbearWorld, dir: string) {
   await this.app.do({ cmd: 'arrow', dir, settings: true });
+});
+
+When('the next Instructions save will fail', async function (this: ThreadbearWorld) {
+  await this.app.do({ cmd: 'mock', method: 'instructions', params: { failNext: true } });
+});
+
+When('I replace Instructions with {string} and immediately leave Settings', async function (this: ThreadbearWorld, text: string) {
+  await this.app.do({ cmd: 'click', tip: "What every thread's agent should always keep in mind", settings: true });
+  await this.app.do({ cmd: 'type', focused: true, replace: true, text });
+  await this.app.do({ cmd: 'settings', close: true });
+});
+
+Then('the Instructions save failure is shown in the main window', async function (this: ThreadbearWorld) {
+  await this.until('Instructions save error after closing Settings', (d) => !shown(d) && d.error?.includes("Couldn't save instructions"));
+});
+
+Then('Instructions still says {string}', async function (this: ThreadbearWorld, text: string) {
+  await this.until('the unsaved Instructions restored', (d) => shown(d)?.instructions === text);
+});
+
+Then('the Instructions edit is saved after retrying', async function (this: ThreadbearWorld) {
+  await this.until('Instructions saved', (d) => shown(d)?.instructionsStatus === 'Saved');
+});
+
+Then('an automatic update waits for the Instructions edit', async function (this: ThreadbearWorld) {
+  const state = JSON.parse(await this.app.do({ cmd: 'updates', restartCheck: true })) as { hasDrafts: boolean };
+  assert.equal(state.hasDrafts, true);
 });

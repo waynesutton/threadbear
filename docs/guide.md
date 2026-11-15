@@ -1696,6 +1696,9 @@ keep in mind: who you are, how you like things written, what you build
 with. Every new session gets it, on every login, Claude and Codex alike,
 and a chat that's already going hears a change before your next message,
 with a line in the thread saying so. It saves as you type; empty is none.
+If a save fails, the GPUI app shows the error and keeps your edit while the
+app stays open. Reopen Settings to restore it and retry. Automatic updates
+wait until the edit is saved.
 A login's own `CLAUDE.md` or `AGENTS.md` still applies, and is the place
 for what's particular to that login or provider: this box is for what goes
 for all of them, without keeping several files in step.

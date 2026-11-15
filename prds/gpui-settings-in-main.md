@@ -43,3 +43,29 @@ Dark-mode screenshots were inspected. Evidence is private in
 The focus guard, feature pairing and step syntax checks pass. Cucumber is not
 installed here, so its scenarios were not run; equivalent direct-driver flows
 were run without installing packages. Landing and installed verification remain.
+
+## Review follow-up, 2026-11-15 UTC
+
+Preserve failed Instructions edits in the app while it remains open and show
+the failure even after Settings closes. Reopening Settings restores the edit
+and retries it. Automatic restarts wait while this in-memory draft exists.
+The page must follow runner changes only when its text is
+clean. Strengthen the embedding regression with rendered page visibility in
+the actual main window, rather than comparing two aliases of its handle.
+Add a mock save rejection, reproduce the lost-error case before the fix, and
+exercise failure, reopen, retry and clean external updates with the GPUI driver.
+
+## Review verification, 2026-11-15T07:28:00Z
+
+The old binary failed the save-error regression. The rebuilt binary passes:
+error visible after closing Settings, failed text restored and retried,
+automatic restart held until saved, clean runner updates followed, failed
+text kept through unrelated app refreshes, and actual Settings page drawn
+only while open. The broader navigation, draft, recorder, General and Devices
+flows and instruction saves on close/quit pass too.
+
+Evidence: `.fixtures/settings-main/review-before.log`, `review-build.log`,
+`review-after.log` and `review-broad.log`. Focus guard, feature pairing,
+step/mock syntax and diff checks pass. Cucumber remains absent and unrun.
+Full landing check is deferred while Mac load exceeds 100; installed follow-up
+will follow landing. No package installs, live settings edits or push.

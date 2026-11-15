@@ -9,9 +9,11 @@ Status and gap list: prds/prints-status.md
 
 ## In Progress
 
-Nothing in progress.
+- [ ] Land verified Settings review fixes when the Mac is quiet, then verify the installed update.
 
 ## Completed
+
+- [x] 2026-11-15 07:28 UTC Fix both Settings review findings: preserve failed Instructions edits for retry, surface errors after the page closes, hold automatic updates while unsaved, and inspect the rendered main-window page in the spec. Automation build, failure/recovery/update-hold and broad navigation/save driver checks, focus guard, spec pairing and syntax checks pass. Full landing check waits for quiet Mac load. prds/gpui-settings-in-main.md
 
 - [x] 2026-11-15 06:30 UTC Port Notes to the GPUI app: the bar button and ⌘6, the page over the main panel, the same encrypted files as the Swift app, Markdown colouring, task boxes, list typing, rename and delete, and Settings > General > Show Notes. Core notes tests (including CryptoKit both ways), all core tests and the GPUI app's 96 unit tests pass; the five Notes scenarios were driven on a mock dev app in dark and light. prds/gpui-notes.md
 - [x] 2026-11-15 07:00 UTC Port Voice mode to GPUI with what it's built on, Fn dictation options and the button icons, without the bear avatar. 60 core tests pass (the Swift app's Voice tests, ported); the helper builds and lists microphones; GPUI checks clean. Real microphone and speaker test pending on Wayne's Mac.

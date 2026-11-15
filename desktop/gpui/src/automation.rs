@@ -392,6 +392,9 @@ fn step(app: &Entity<Threadbear>, cmd: &Value, window: &mut Window, cx: &mut App
                 crate::settings_window::note_drawn(&view, window, cx);
             }
             let mut dump = app.read(cx).dump(cx);
+            // Inspect the actual frame, independently of Settings' stored handle.
+            dump["settingsPageDrawn"] = json!(window.window_handle() == app.read(cx).main_window
+                && window.try_find("settings-page").is_some_and(|page| page.visible()));
             // Who AppKit gives the keys to: GPUI's view, or a page's.
             dump["keyboard"] = crate::web_panels::keyboard_dump(window);
             // Whether the Threads panel has the keyboard (its arrows and Esc).

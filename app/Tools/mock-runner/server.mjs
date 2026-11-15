@@ -322,6 +322,7 @@ const devicesRefusal = () => {
 };
 
 let mockInstructions = { text: '' };
+let instructionsFailNext = false;
 const settings = {
   defaultCwd: defaults.cwd, idleMinutes: 30, maxLiveCLIs: 6, followMain: true, bulletReplies: true, oneReply: true, labReview: true, keepAwake: true, fullSync: false, printsWhenAsked: false,
   models: {
@@ -1674,7 +1675,14 @@ async function dispatch(client, method, p) {
     }
     case 'instructions.get':
       return { instructions: mockInstructions };
+    case 'mock.instructions':
+      instructionsFailNext = p.failNext === true;
+      return {};
     case 'instructions.set':
+      if (instructionsFailNext) {
+        instructionsFailNext = false;
+        throw rpcError(-32000, 'Instructions save rejected by the mock runner.');
+      }
       mockInstructions = { text: p.text.trim() ? p.text.trim() + '\n' : '' };
       broadcast('instructions.updated', { instructions: mockInstructions });
       return { instructions: mockInstructions };

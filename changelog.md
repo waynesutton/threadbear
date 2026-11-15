@@ -30,6 +30,8 @@ How Prints work today, what's missing and what's next: [Prints status](https://g
 
 ### Fixed
 
+- Failed Instructions saves remain visible after leaving GPUI Settings, keep the edit for retry while the app is open, and hold automatic restarts until saved.
+
 - A temporary outside-agent list failure in the GPUI app keeps the last list and logs the error without repeatedly showing a banner.
 - Network probe checks no longer fail runner updates just because a busy Mac delays test execution.
 - Runner updates run at most four unit-test files at once, reducing contention on busy machines.

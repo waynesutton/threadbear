@@ -245,6 +245,8 @@ pub struct Threadbear {
     pub(crate) settings_unsupported: bool,
     /// Standing instructions (`instructions.get`), None from a runner without them.
     pub(crate) standing_instructions: Option<threadbear_core::runner_settings::StandingInstructions>,
+    /// Unsaved Instructions survive closing Settings while the app is open.
+    pub(crate) instructions_draft: Option<String>,
     /// The runner's version, from hello (`runnerVersion`).
     pub(crate) runner_version: String,
     /// This copy checks for Mike's releases (hello's `updates.upstream`, on
@@ -574,6 +576,7 @@ impl Threadbear {
             settings_error: None,
             settings_unsupported: false,
             standing_instructions: None,
+            instructions_draft: None,
             runner_version: String::new(),
             upstream_on: false,
             projects_supported: false,

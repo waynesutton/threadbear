@@ -27,6 +27,9 @@
 
 ## GPUI Settings
 
+- `desktop/gpui/src/app_update.rs` holds automatic restarts while an Instructions edit is unsaved.
+- `app/Tools/mock-runner/server.mjs` includes one-shot Instructions save rejection for the Settings regression.
+
 - `desktop/gpui/src/settings_window.rs` the main-window Settings page, section navigation and pending instruction saves.
 - `desktop/gpui/src/shell.rs` Settings hosting and Back/Close behavior.
 - `features/settings.feature` and `features/steps/settings.steps.ts` Settings window identity, navigation and control scenarios.

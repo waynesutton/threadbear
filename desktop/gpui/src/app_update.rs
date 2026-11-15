@@ -574,7 +574,7 @@ impl Threadbear {
     /// under the first two (`hasDrafts`), as Mike may be halfway through.
     fn has_unsent_words(&self, cx: &App) -> bool {
         let boxes = self.composers.values().chain(self.new_thread.composer.iter());
-        boxes.into_iter().any(|c| c.read(cx).holds_anything(cx)) || self.schedule_editor.is_some() || crate::unsent::any(cx)
+        boxes.into_iter().any(|c| c.read(cx).holds_anything(cx)) || self.schedule_editor.is_some() || self.instructions_draft.is_some() || crate::unsent::any(cx)
     }
 
     /// Something of the app's own under way that a restart would cut off: a
@@ -611,6 +611,9 @@ impl Threadbear {
         }
         if self.schedule_editor.is_some() {
             return s("the schedule you're editing is saved or closed");
+        }
+        if self.instructions_draft.is_some() {
+            return s("your Instructions edit is saved in Settings");
         }
         if let Some(field) = crate::unsent::first(cx) {
             return format!("what you're typing in {field} is sent, saved or cleared");
@@ -769,7 +772,7 @@ impl Threadbear {
     /// to Update he chose, which never waited for these.
     pub(crate) fn handover_held(&self, windows: WindowsNow, cx: &App) -> bool {
         let copying = self.composers.values().chain(self.new_thread.composer.iter()).any(|c| c.read(cx).copying_picture(cx));
-        self.updater.auto_restart && (windows.held || windows.other_window_input || copying || self.under_way(cx) || self.schedule_editor.is_some() || crate::unsent::any(cx))
+        self.updater.auto_restart && (windows.held || windows.other_window_input || copying || self.under_way(cx) || self.schedule_editor.is_some() || self.instructions_draft.is_some() || crate::unsent::any(cx))
     }
 
     /// What a restart leaves for the next launch: the list and the thread
