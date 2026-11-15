@@ -14,6 +14,11 @@ import type { Account } from './protocol.ts';
 import { ErrorCode, RpcError } from './protocol.ts';
 import type { Notification } from './runner.ts';
 import type { Logger } from './log.ts';
+import { readRunnerJson, writeRunnerJson } from './config.ts';
+import { experimentOn } from './experiments.ts';
+
+/** The experiment that turns the store on (experiments/skillsStore.md). */
+export const SKILLS_STORE = 'skillsStore';
 
 export type SkillSource =
   | { kind: 'github'; repo: string; ref?: string; path?: string; url: string }
@@ -267,19 +272,25 @@ type Deps = {
   version?: string;
   /** After any change threads would see: the runner gives live CLIs a fresh start before their next message. */
   onChange?: () => void;
+  /**
+   * Flips the skillsStore experiment, so Settings hears of it. The runner
+   * passes settings.update; without one (tests) runner.json is written here.
+   * Either way `experimentChanged` is how the store learns it.
+   */
+  setExperiment?: (on: boolean) => void;
 };
 
 export class SkillStore {
   private deps: Deps;
   private skills: Skill[] = [];
-  /** Off: no thread gets any of them, and no Codex login has the links (Settings > General). */
-  private enabled = true;
+  /** Off: no thread gets any of them, and no Codex login has the links (the skillsStore experiment). */
+  private enabled = false;
   private busy: Promise<unknown> = Promise.resolve();
 
   constructor(deps: Deps) {
     this.deps = deps;
     this.skills = this.readList();
-    this.enabled = this.readEnabled();
+    this.enabled = experimentOn(this.deps.dataDir, SKILLS_STORE);
   }
 
   get root(): string {
@@ -304,15 +315,26 @@ export class SkillStore {
     return { skills: this.skills.map((s) => ({ ...s })).sort(byName), suggested: this.suggested(), enabled: this.enabled };
   }
 
-  /** Turns the whole store on or off for every thread. */
+  /** Turns the whole store on or off for every thread, through the skillsStore experiment. */
   setEnabled(on: boolean): Promise<{ skills: Skill[]; suggested: SuggestedSkill[]; enabled: boolean }> {
     return this.serial(async () => {
-      if (this.enabled !== on) {
-        this.enabled = on;
-        this.changed();
+      if (this.deps.setExperiment) this.deps.setExperiment(on);
+      else {
+        const json = readRunnerJson(this.deps.dataDir);
+        json.experiments = { ...json.experiments, [SKILLS_STORE]: on };
+        writeRunnerJson(this.deps.dataDir, json);
       }
+      this.experimentChanged();
       return this.list();
     });
+  }
+
+  /** The experiment may have moved (Settings, skills.enable, a hand edit picked up at sync): follow it. */
+  experimentChanged(): void {
+    const on = experimentOn(this.deps.dataDir, SKILLS_STORE);
+    if (this.enabled === on) return;
+    this.enabled = on;
+    this.changed();
   }
 
   suggested(): SuggestedSkill[] {
@@ -328,6 +350,7 @@ export class SkillStore {
 
   /** Puts the plugin and the Codex links back as the list says (at start, and when logins change). */
   sync(): void {
+    this.enabled = experimentOn(this.deps.dataDir, SKILLS_STORE);
     try {
       this.writePlugin();
       this.linkCodex();
@@ -546,18 +569,11 @@ export class SkillStore {
     }
   }
 
-  private readEnabled(): boolean {
-    try {
-      return JSON.parse(fs.readFileSync(path.join(this.root, 'skills.json'), 'utf8')).enabled !== false;
-    } catch {
-      return true;
-    }
-  }
 
   private writeList(): void {
     fs.mkdirSync(this.root, { recursive: true });
     const file = path.join(this.root, 'skills.json');
-    fs.writeFileSync(`${file}.tmp`, JSON.stringify({ enabled: this.enabled, skills: this.skills }, null, 2) + '\n');
+    fs.writeFileSync(`${file}.tmp`, JSON.stringify({ skills: this.skills }, null, 2) + '\n');
     fs.renameSync(`${file}.tmp`, file);
   }
 

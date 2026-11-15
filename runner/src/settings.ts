@@ -75,10 +75,13 @@ export class SettingsService {
   // Told of each experiment this update turned off (outside agents' keys
   // are revoked when theirs goes off).
   private onExperimentOff?: (id: string) => void;
+  // Told of each experiment this update turned on or off.
+  private onExperimentChange?: (id: string, on: boolean) => void;
 
-  constructor(opts: { config: Config; publish: (n: Notification) => void; poolIds?: () => string[]; experiments?: readonly Experiment[]; onExperimentOff?: (id: string) => void }) {
+  constructor(opts: { config: Config; publish: (n: Notification) => void; poolIds?: () => string[]; experiments?: readonly Experiment[]; onExperimentOff?: (id: string) => void; onExperimentChange?: (id: string, on: boolean) => void }) {
     this.cfg = opts.config;
     this.onExperimentOff = opts.onExperimentOff;
+    this.onExperimentChange = opts.onExperimentChange;
     this.experimentList = opts.experiments ?? EXPERIMENTS;
     this.poolIds = opts.poolIds;
     this.publish = opts.publish;
@@ -167,6 +170,7 @@ export class SettingsService {
     const wasOn = Object.fromEntries(Object.keys(u.experiments ?? {}).map((id) => [id, experimentOn(this.cfg.home, id, this.experimentList)]));
     writeRunnerJson(this.cfg.home, json);
     for (const [id, on] of Object.entries(u.experiments ?? {})) if (!on && wasOn[id]) this.onExperimentOff?.(id);
+    for (const [id, on] of Object.entries(u.experiments ?? {})) if (on !== wasOn[id]) this.onExperimentChange?.(id, on);
     return this.changed();
   }
 
