@@ -257,7 +257,10 @@ open in Chrome through [BrowserBear](https://github.com/mikecann/browserbear)
 (say, a sign-in page it wants you to use), the click brings the agent's tab
 into your Chrome window rather than opening a second one. A link to a file
 without its whole path (`shorts-plan/candidates.md`) is looked for from the
-thread's folder, as a path in a reply's code is. On the phone and the web,
+thread's folder, as a path in a reply's code is. Web addresses written in
+inline code are links too, still drawn as code: `github.com/owner/repo`
+opens as HTTPS. Common web endings count without a scheme; file names
+such as `readme.md` stay files. On the phone and the web,
 links to files on the Mac only say so. A link that isn't a web page (one
 that would open Slack, System Settings or another app) asks before it opens,
 naming the app, on the Mac and the phone, and so does a file that isn't a

@@ -679,7 +679,7 @@ impl DockView {
             .min_w(px(0.))
             .overflow_hidden()
             .opacity(if lifted { 0.18 } else { 1. })
-            .child(content)
+            .child(div().w_full().min_w(px(160.)).h_full().child(content))
             // A plain bubble listener, the lowest priority: any drag the
             // panel's own content handles (it stops the press) wins, so only
             // a held press on its background moves the panel.

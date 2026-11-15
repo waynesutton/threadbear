@@ -14,6 +14,14 @@ rebuild, gets the trailer on a bookkeeping commit so it leaves the panel.
 Status: **to do**, **doing**, **done** (landed), **already** (the GPUI
 app does it), **nothing** (nothing to rebuild), **skip** (Wayne said no).
 
+
+Final audit (14 Nov 2026): 125 changes accounted for: 71 rebuilt, 23 already
+present, 12 with nothing to rebuild, and 19 Voice/Connectors changes skipped.
+The last two gaps were web addresses in inline code and the content floor
+inside narrow dock slots. Existing collapse, project New Thread, Settings
+and link behavior were checked with their GPUI scenarios. The instructions
+editor and delivery were checked against their 18 runner tests.
+
 ## Small changes
 
 | # | Commit | What it does | Status |
@@ -176,19 +184,19 @@ against the GPUI app.
 | Commit | What it does | Status |
 |---|---|---|
 | 4d3524c6 | Closing the Terminal no longer leaves the thread blank | already |
-| 99b4038f | Panels stay inside their space in a narrow window | to check |
-| e19a3f06 | ⌘/ collapses the Threads panel | to check |
-| f248d332 | Quit asks first, with Don't ask again | to check |
-| 5e6c8146 | Attach Image takes Markdown files | to check |
-| 30fe46cd | Question card descriptions wrap | to check |
+| 99b4038f | Panels stay inside their space in a narrow window | done: clipped dock cells, 160-point content floor and opaque rails |
+| e19a3f06 | ⌘/ collapses the Threads panel | already: CollapseThreads on ⌘/, menu and persistent folded state |
+| f248d332 | Quit asks first, with Don't ask again | already: native quit prompt, Don't ask again and General switch |
+| 5e6c8146 | Attach Image takes Markdown files | already: both picture pickers accept all files; take_paths_in inserts Markdown paths |
+| 30fe46cd | Question card descriptions wrap | already: question descriptions use wrapping text without truncation |
 | bf73c636 | Markdown files open drawn, Preview / Markdown menu | already |
-| ed662aab | Settings > General > Experiments switches | to check |
-| b4370100 | New Thread on a project's page starts in the project | to check |
+| ed662aab | Settings > General > Experiments switches | already: General experiment switches use settings.update |
+| b4370100 | New Thread on a project's page starts in the project | already: new_thread_in_project sets project and first folder; UI scenario passes |
 | 1d47f50c | Files panel: clicking opens again | already |
-| b79385cb | Web addresses in inline code are links | to check |
-| ba5d5cfc | Standing instructions for every session | to check |
+| b79385cb | Web addresses in inline code are links | done: inline-code web links, common domains, file-path priority, fenced code unchanged |
+| ba5d5cfc | Standing instructions for every session | already: General instructions editor and runner standing-instruction delivery |
 | 58151848 | New Skill | done: write/edit with save errors retained |
-| 52e060a3 | Files and Terminal on the rail | to check |
+| 52e060a3 | Files and Terminal on the rail | done: Files rail; optional Terminal rail opens the same drawer |
 | 0f5c08f0 | Notes, and Voice/skills/notes switches | done: Notes and Skills; Voice skipped |
 | 3d531d54 | Skills page | done: shared store list, import, suggested, Always on, update/remove/source actions |
 | f9f3c8e4 | Settings over the main panel | done: default main panel, optional own window, X/Esc/Back/gear closes |
@@ -199,4 +207,4 @@ against the GPUI app.
 | bcd71e48 | Voice approvals out loud | skip (Voice) |
 | f44b37c4 | Voice echo cancellation | skip (Voice) |
 | c2af85a6 | Voice mode | skip (Voice) |
-| 57a73caf | Appearance picker for Threadbear alone | to check |
+| 57a73caf | Appearance picker for Threadbear alone | already: app-only Appearance picker with System/Light/Dark choices |

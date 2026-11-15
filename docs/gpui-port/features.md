@@ -59,7 +59,7 @@ It comes from reading code, not from running anything, so "(unverified)" means n
 
 | ID | Feature | What it does | How in GPUI | Route | Size | Swift |
 |---|---|---|---|---|---|---|
-| `dock.layout` | Layout tree | Splits and tab groups, tidied and saved | Port the pure tree and its tests into the BearDock crate, with old saved layouts still loading. | build | M | `DockLayout` |
+| `dock.layout` | Layout tree | Splits and tab groups, tidied and saved; content keeps a 160-point floor and clips inside narrow slots | Port the pure tree and its tests into the BearDock crate, with old saved layouts still loading. | build | M | `DockLayout` |
 | `dock.bars` | Panel bars and tabs | Title, tabs, × to close, buttons | Drawn in the BearDock crate. | build | M | `DockView` |
 | `dock.drag` | Panel drag | Title or tab drags now, elsewhere after a 350 ms hold, shrunken ghost, dashed hole, Esc | GPUI mouse events in the BearDock crate, keeping the press rules and springs with `with_spring`. | build | L | `DockController`, `DragOverlay` |
 | `dock.drop` | Drop targets | Tab slot, side split, compass (arrows, tab, Swap, Window), window edge | Port the hit-test order and draw the targets in the crate. | build | M | `DockController`, `DragOverlay` |
@@ -191,7 +191,7 @@ It comes from reading code, not from running anything, so "(unverified)" means n
 
 | ID | Feature | What it does | How in GPUI | Route | Size | Swift |
 |---|---|---|---|---|---|---|
-| `rich.inline` | Inline Markdown | Bold, italic, strike, inline code pills, bare URLs; user messages preserve typed line breaks | `TextView` (unverified that its inline code can match our pill). | kit | M | `MarkdownRenderer`, `TextKit` |
+| `rich.inline` | Inline Markdown | Bold, italic, strike, inline code pills, bare and inline-code URLs; user messages preserve typed line breaks | `TextView` (unverified that its inline code can match our pill). | kit | M | `MarkdownRenderer`, `TextKit` |
 | `rich.blocks` | Headings, lists, quotes | Block styles and list markers | `TextView`, styled through the theme. | kit | M | `MarkdownRenderer` |
 | `rich.codebox` | Code boxes | Rounded box behind code | `TextView` code blocks, with long ones capped and scrolled inside as Ghostex does. | kit | S | `MarkdownRenderer`, `TextKit` |
 | `rich.table` | Tables | Natural widths, scales down to fit | TextView with our opt-in natural-width style; wide tables still fit or scroll inside the column. | kit | M | `MarkdownRenderer` (`renderTable`) |

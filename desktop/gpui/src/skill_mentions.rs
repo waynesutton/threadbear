@@ -47,6 +47,7 @@ impl ThreadPane {
         let linked = skill_mentions::linked_markdown_text(text, &mentions);
         let source = threadbear_core::user_markdown::prepare(&linked)
             .or_else(|| (!mentions.is_empty()).then_some(linked))?;
+        let source = crate::rows::markdown::link_code_paths(&source);
         let doc = self.markdown_state(&format!("user-skills-{id}"), &source, cx);
         let style = self.reading_style(cx).with_foreground(style::label_text(cx)).with_paragraph_gap(gpui_kit::rems(0.));
         Some(self.linked_text(&doc, id, cx).style(style).into_any_element())
