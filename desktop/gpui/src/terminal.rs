@@ -5,9 +5,11 @@
 // in Terminal; terminal_element.rs draws it, and the rules with no window in
 // them (the keys, the folder, putting a command) are threadbear_core::terminal.
 //
-// Each thread has a shell of its own, started in the thread's folder (its
-// worktree when it has one) and kept running while you look at other threads,
-// so switching back finds it as you left it. A thread on another machine gets
+// Each thread has shells of its own, as tabs along the top of the panel (+
+// for another, ✕ to close one, double-click or right-click to rename one),
+// started in the thread's folder (its worktree when it has one) and kept
+// running while you look at other threads, so switching back finds them as
+// you left them. `exit` in one of several closes its tab. A thread on another machine gets
 // a shell on this Mac in your home folder, with a line saying so, as its folder
 // isn't here; with no thread open it's a shell in your home folder too.
 //
@@ -21,7 +23,6 @@ use crate::app::Threadbear;
 use crate::style::{self, px};
 use crate::terminal_element::TerminalElement;
 use crate::tips::Tip as _;
-use gpui_kit::component::menu::ContextMenuExt as _;
 use alacritty_terminal::event::{Event as TermEvent, EventListener, WindowSize};
 use alacritty_terminal::event_loop::{EventLoop, EventLoopSender, Msg};
 use alacritty_terminal::grid::{Dimensions, Scroll};
@@ -31,6 +32,8 @@ use alacritty_terminal::sync::FairMutex;
 use alacritty_terminal::term::{Config, Term, TermMode};
 use alacritty_terminal::tty;
 use alacritty_terminal::vte::ansi::{CursorShape, CursorStyle};
+use gpui_kit::component::input::{Input, InputEvent as FieldEvent, InputState};
+use gpui_kit::component::menu::{ContextMenuExt as _, PopupMenuItem};
 use gpui_kit::component::{h_flex, v_flex, ActiveTheme as _, Sizable as _};
 use gpui_kit::prelude::*;
 use gpui_kit::*;
@@ -90,7 +93,7 @@ fn terminals(cx: &App) -> Option<Entity<Terminals>> {
 /// keyboard focus must suppress an older reply selection in text services.
 /// This only reads existing focus handles; it never starts a shell.
 pub(crate) fn has_focus(window: &Window, cx: &App) -> bool {
-    terminals(cx).is_some_and(|terminals| terminals.read(cx).sessions.values().any(|session| session.read(cx).focus.is_focused(window)))
+    terminals(cx).is_some_and(|terminals| terminals.read(cx).all().any(|session| session.read(cx).focus.is_focused(window)))
 }
 
 /// Whether any shell has something an update's restart would lose, as
@@ -98,7 +101,7 @@ pub(crate) fn has_focus(window: &Window, cx: &App) -> bool {
 /// prompt (core's `holds_a_restart`). Asked once a second (app_update.rs).
 pub(crate) fn holds_a_restart(cx: &App) -> bool {
     let Some(terminals) = terminals(cx) else { return false };
-    terminals.read(cx).tabs.values().flatten().any(|s| {
+    terminals.read(cx).all().any(|s| {
         let s = s.read(cx);
         rules::holds_a_restart(s.running(), s.shell_alone_in_front(), &s.line)
     })
@@ -204,7 +207,7 @@ pub(crate) fn thread_deleted(id: &str, cx: &mut App) {
 /// thread is archived there goes too (`stopAll(except:)`, `stopArchived`).
 pub(crate) fn list_loaded(threads: &HashMap<String, std::sync::Arc<threadbear_core::inbox::ThreadSummary>>, cx: &mut App) {
     let Some(terminals) = terminals(cx) else { return };
-    let keys: Vec<TerminalKey> = terminals.read(cx).tabs.keys().cloned().collect();
+    let keys: Vec<TerminalKey> = terminals.read(cx).sessions.keys().cloned().collect();
     let keeping: HashSet<&str> = threads.keys().map(String::as_str).collect();
     let mut going = rules::gone(&keys, &keeping);
     going.extend(rules::archived(&keys, threads));
@@ -280,16 +283,41 @@ pub(crate) fn put_in_terminal(app: &mut Threadbear, block: ShellBlock, block_thr
 
 // ---------------------------------------------------------------- the panel
 
+/// A thread's shells, as tabs along the top of the panel (`TerminalTab`s),
+/// one of them showing. Never empty: a thread with none has no entry.
+struct Tabs {
+    shells: Vec<Tab>,
+    current: usize,
+}
+
+struct Tab {
+    session: Entity<Session>,
+    _ended: Subscription,
+}
+
+impl Tabs {
+    fn current(&self) -> &Entity<Session> {
+        &self.shells[self.current.min(self.shells.len() - 1)].session
+    }
+
+    fn index_of(&self, id: EntityId) -> Option<usize> {
+        self.shells.iter().position(|t| t.session.entity_id() == id)
+    }
+}
+
+/// A tab being renamed: its field, in place of its title.
+struct Renaming {
+    session: EntityId,
+    field: Entity<InputState>,
+    _sub: Subscription,
+}
+
 /// Every shell the app has, by thread (`Terminals`), and the panel that shows
 /// the open thread's.
 pub(crate) struct Terminals {
     pub(crate) app: WeakEntity<Threadbear>,
-    /// Each key's showing shell: one of its tabs.
-    sessions: HashMap<TerminalKey, Entity<Session>>,
-    /// Every shell each key has, in tab order (the + adds one).
-    tabs: HashMap<TerminalKey, Vec<Entity<Session>>>,
-    /// The tab being renamed, with its field.
-    renaming: Option<(Entity<Session>, Entity<gpui_kit::component::input::InputState>)>,
+    sessions: HashMap<TerminalKey, Tabs>,
+    renaming: Option<Renaming>,
     /// The open thread's shell, as of the app's last change.
     pub(crate) target: Target,
     /// What the target was worked out from (the open thread, its folder, and
@@ -324,13 +352,14 @@ impl Terminals {
             {
                 // Those still being ended after their thread went too: the
                 // thread that would finish them goes with the app.
-                let mut shells: Vec<(i32, Born)> = this.tabs.values().flatten().filter_map(|s| s.read(cx).process()).collect();
+                let mut shells: Vec<(i32, Born)> = this.all().filter_map(|s| s.read(cx).process()).collect();
                 shells.extend(ENDING.lock().unwrap_or_else(|e| e.into_inner()).iter().copied());
                 end_shells_now(&shells);
             }
             #[cfg(not(unix))]
             {
-                let closing: Vec<_> = this.tabs.values().flatten().map(|s| s.update(cx, |s, _| { s.shut_down(); s.shared.clone() })).collect();
+                let all: Vec<Entity<Session>> = this.all().cloned().collect();
+                let closing: Vec<_> = all.iter().map(|s| s.update(cx, |s, _| { s.shut_down(); s.shared.clone() })).collect();
                 // GPUI gives returned quit futures only 200ms. Like the Unix
                 // branch, finish closing here before returning that future.
                 let deadline = Instant::now() + Duration::from_secs(5);
@@ -341,7 +370,7 @@ impl Terminals {
             async {}
         });
         let home = crate::files::home_dir();
-        Terminals { app: app.downgrade(), sessions: HashMap::new(), tabs: HashMap::new(), renaming: None, target: Target { key: TerminalKey::Home, cwd: home, note: None }, seen: None, putting: HashSet::new(), last_size: None, _subs: vec![watching, quitting] }
+        Terminals { app: app.downgrade(), sessions: HashMap::new(), renaming: None, target: Target { key: TerminalKey::Home, cwd: home, note: None }, seen: None, putting: HashSet::new(), last_size: None, _subs: vec![watching, quitting] }
     }
 
     fn set_target(&mut self, target: Target, cx: &mut Context<Self>) {
@@ -351,105 +380,152 @@ impl Terminals {
         }
     }
 
-    /// The target's shell, starting one if it has none (`Terminals.open`).
+    /// Every shell, in every thread's tabs.
+    fn all(&self) -> impl Iterator<Item = &Entity<Session>> {
+        self.sessions.values().flat_map(|tabs| tabs.shells.iter().map(|t| &t.session))
+    }
+
+    /// The tab showing for a thread, if it has any.
+    fn current(&self, key: &TerminalKey) -> Option<&Entity<Session>> {
+        self.sessions.get(key).map(Tabs::current)
+    }
+
+    /// The target's showing shell, starting one if it has none (`Terminals.open`).
     fn open(&mut self, target: &Target, cx: &mut Context<Self>) -> Entity<Session> {
-        if let Some(session) = self.sessions.get(&target.key) {
+        if let Some(session) = self.current(&target.key) {
             return session.clone();
         }
         self.add(target, cx)
     }
 
-    /// Another shell for the target, in a tab of its own, showing: the tabs'
-    /// +, and the first one `open` starts.
+    /// A new shell in a tab of its own, after the others, and shown (+).
     fn add(&mut self, target: &Target, cx: &mut Context<Self>) -> Entity<Session> {
-        let size = self.last_size.unwrap_or_default();
-        // The lowest number no open tab has, as Terminal.app's windows do.
-        let taken: HashSet<usize> = self.tabs.get(&target.key).into_iter().flatten().map(|s| s.read(cx).number).collect();
-        let number = (1..).find(|n| !taken.contains(n)).unwrap_or(1);
-        // Its own view: what it prints redraws it, not the panel round it.
-        let session = cx.new(|cx| {
-            let mut s = Session::start(target.clone(), size, cx);
-            s.number = number;
-            s
-        });
-        self.tabs.entry(target.key.clone()).or_default().push(session.clone());
-        self.sessions.insert(target.key.clone(), session.clone());
+        let taken: Vec<usize> = self.sessions.get(&target.key).map(|t| t.shells.iter().map(|s| s.session.read(cx).number).collect()).unwrap_or_default();
+        let tab = self.make(target, rules::next_tab_number(&taken), None, cx);
+        let session = tab.session.clone();
+        let tabs = self.sessions.entry(target.key.clone()).or_insert_with(|| Tabs { shells: Vec::new(), current: 0 });
+        tabs.shells.push(tab);
+        tabs.current = tabs.shells.len() - 1;
         cx.notify();
         session
     }
 
-    /// Shows one of the key's tabs.
-    fn select(&mut self, key: &TerminalKey, session: &Entity<Session>, window: &mut Window, cx: &mut Context<Self>) {
-        if !self.tabs.get(key).is_some_and(|l| l.contains(session)) {
-            return;
-        }
-        self.sessions.insert(key.clone(), session.clone());
-        self.focus(session, window, cx);
+    fn make(&mut self, target: &Target, number: usize, name: Option<String>, cx: &mut Context<Self>) -> Tab {
+        let size = self.last_size.unwrap_or_default();
+        // Its own view: what it prints redraws it, not the panel round it.
+        let session = cx.new(|cx| Session::start(target.clone(), number, name, size, cx));
+        let ended = cx.subscribe(&session, |this: &mut Terminals, session, _: &ShellEnded, cx| this.ended(session.entity_id(), cx));
+        Tab { session, _ended: ended }
+    }
+
+    /// Shows a thread's tab and gives it the keyboard.
+    fn select(&mut self, key: &TerminalKey, id: EntityId, window: &mut Window, cx: &mut Context<Self>) {
+        let Some(tabs) = self.sessions.get_mut(key) else { return };
+        let Some(ix) = tabs.index_of(id) else { return };
+        tabs.current = ix;
+        let session = tabs.current().clone();
+        self.focus(&session, window, cx);
         cx.notify();
     }
 
-    /// Closes one tab and ends its shell; the tab beside it shows.
-    fn close_tab(&mut self, key: &TerminalKey, session: &Entity<Session>, cx: &mut Context<Self>) {
-        let Some(list) = self.tabs.get_mut(key) else { return };
-        let Some(at) = list.iter().position(|s| s == session) else { return };
-        list.remove(at);
-        session.update(cx, |s, _| s.shut_down());
-        if self.renaming.as_ref().is_some_and(|(s, _)| s == session) {
-            self.renaming = None;
+    /// ✕ or Close Terminal: the tab goes and its shell ends.
+    fn close(&mut self, key: &TerminalKey, id: EntityId, window: &mut Window, cx: &mut Context<Self>) {
+        if let Some(session) = self.remove_tab(key, id, cx) {
+            session.update(cx, |s, _| s.shut_down());
         }
-        if list.is_empty() {
-            self.tabs.remove(key);
+        if let Some(session) = self.current(key).cloned() {
+            self.focus(&session, window, cx);
+        }
+    }
+
+    /// Takes a tab out, showing the one that took its place (the next, or
+    /// the one before when it was last), as Terminal.app's tabs do.
+    fn remove_tab(&mut self, key: &TerminalKey, id: EntityId, cx: &mut Context<Self>) -> Option<Entity<Session>> {
+        let tabs = self.sessions.get_mut(key)?;
+        let ix = tabs.index_of(id)?;
+        let tab = tabs.shells.remove(ix);
+        if tabs.current > ix {
+            tabs.current -= 1;
+        }
+        tabs.current = tabs.current.min(tabs.shells.len().saturating_sub(1));
+        if tabs.shells.is_empty() {
             self.sessions.remove(key);
             self.putting.remove(key);
-        } else if self.sessions.get(key) == Some(session) {
-            let next = list[at.min(list.len() - 1)].clone();
-            self.sessions.insert(key.clone(), next);
+        }
+        if self.renaming.as_ref().is_some_and(|r| r.session == id) {
+            self.renaming = None;
         }
         cx.notify();
+        Some(tab.session)
     }
 
-    /// `exit` in one of several: its tab goes, as Terminal.app's do. The
-    /// last one stays, saying it has exited, with New Shell.
-    fn tab_exited(&mut self, key: &TerminalKey, session: &Entity<Session>, cx: &mut Context<Self>) {
-        if self.tabs.get(key).is_some_and(|l| l.len() > 1) {
-            self.close_tab(key, session, cx);
+    /// A shell ended by itself (`exit`): one of several closes its tab, and
+    /// the last stays, saying so, with New Shell.
+    fn ended(&mut self, id: EntityId, cx: &mut Context<Self>) {
+        let Some(key) = self.sessions.iter().find(|(_, tabs)| tabs.index_of(id).is_some()).map(|(k, _)| k.clone()) else { return };
+        if self.sessions.get(&key).is_some_and(|tabs| tabs.shells.len() > 1) {
+            self.remove_tab(&key, id, cx);
         }
     }
 
-    /// The tab's name field, over its title (double-click or Rename…).
-    fn start_renaming(&mut self, session: &Entity<Session>, window: &mut Window, cx: &mut Context<Self>) {
+    /// A fresh shell in the showing tab's place, keeping its number and name.
+    fn replace_current(&mut self, key: &TerminalKey, cx: &mut Context<Self>) -> Option<Entity<Session>> {
+        let old = self.current(key)?.clone();
+        let (target, number, name) = {
+            let s = old.read(cx);
+            (s.target.clone(), s.number, s.name.clone())
+        };
+        old.update(cx, |s, _| s.shut_down());
+        let tab = self.make(&target, number, name, cx);
+        let session = tab.session.clone();
+        let tabs = self.sessions.get_mut(key)?;
+        let ix = tabs.current.min(tabs.shells.len() - 1);
+        tabs.shells[ix] = tab;
+        cx.notify();
+        Some(session)
+    }
+
+    /// Double-click or Rename…: the tab's title becomes a field.
+    fn start_rename(&mut self, key: &TerminalKey, id: EntityId, window: &mut Window, cx: &mut Context<Self>) {
+        self.select(key, id, window, cx);
+        let Some(session) = self.find(id) else { return };
         let title = session.read(cx).tab_title();
-        let field = cx.new(|cx| gpui_kit::component::input::InputState::new(window, cx).placeholder("Name").default_value(title));
-        let tab = session.clone();
-        cx.subscribe_in(&field, window, move |this: &mut Self, field, ev: &gpui_kit::component::input::InputEvent, window, cx| match ev {
-            gpui_kit::component::input::InputEvent::PressEnter { .. } | gpui_kit::component::input::InputEvent::Blur => {
-                let typed = field.read(cx).value().to_string();
-                this.finish_renaming(&tab, Some(typed), window, cx);
-            }
+        let field = cx.new(|cx| InputState::new(window, cx).placeholder("Name").default_value(title));
+        field.update(cx, |s, cx| s.select_all(window, cx));
+        let sub = cx.subscribe(&field, |this: &mut Terminals, _, ev: &FieldEvent, cx| match ev {
+            FieldEvent::PressEnter { .. } | FieldEvent::Blur => this.finish_rename(true, cx),
             _ => {}
-        })
-        .detach();
-        field.update(cx, |f, cx| {
-            f.focus(window, cx);
-            crate::web_panels::keyboard_to_app(window);
-            f.select_all(window, cx);
         });
-        self.renaming = Some((session.clone(), field));
+        let handle = field.read(cx).focus_handle(cx);
+        window.focus(&handle, cx);
+        crate::web_panels::keyboard_to_app(window);
+        self.renaming = Some(Renaming { session: id, field, _sub: sub });
         cx.notify();
     }
 
-    /// Return or leaving the field keeps the name (empty: the shell's own);
-    /// Escape (`None`) leaves it as it was.
-    fn finish_renaming(&mut self, session: &Entity<Session>, typed: Option<String>, window: &mut Window, cx: &mut Context<Self>) {
-        if !self.renaming.as_ref().is_some_and(|(s, _)| s == session) {
-            return;
+    /// Return or clicking away keeps the name, Escape leaves it; an empty
+    /// one goes back to the shell's own.
+    fn finish_rename(&mut self, keep: bool, cx: &mut Context<Self>) {
+        let Some(renaming) = self.renaming.take() else { return };
+        if keep {
+            let name = rules::tab_name(&renaming.field.read(cx).value());
+            self.set_name(renaming.session, name, cx);
         }
-        self.renaming = None;
-        if let Some(typed) = typed {
-            session.update(cx, |s, _| s.name = rules::tab_name(&typed));
-        }
-        self.focus(session, window, cx);
         cx.notify();
+    }
+
+    fn set_name(&mut self, id: EntityId, name: Option<String>, cx: &mut Context<Self>) {
+        if let Some(session) = self.find(id) {
+            session.update(cx, |s, cx| {
+                s.name = name;
+                cx.notify();
+            });
+            cx.notify();
+        }
+    }
+
+    fn find(&self, id: EntityId) -> Option<Entity<Session>> {
+        self.all().find(|s| s.entity_id() == id).cloned()
     }
 
     fn focus(&self, session: &Entity<Session>, window: &mut Window, cx: &mut App) {
@@ -461,44 +537,18 @@ impl Terminals {
     /// Ends a thread's shell (it was archived or deleted). Never the shared
     /// home shell, whatever a thread is called: its key is its own.
     fn stop(&mut self, key: &TerminalKey, cx: &mut Context<Self>) {
-        self.sessions.remove(key);
-        if let Some(list) = self.tabs.remove(key) {
-            for session in list {
-                session.update(cx, |s, _| s.shut_down());
+        if let Some(tabs) = self.sessions.remove(key) {
+            for tab in tabs.shells {
+                tab.session.update(cx, |s, _| s.shut_down());
             }
             self.putting.remove(key);
             cx.notify();
         }
     }
 
-    /// The showing tab's shell, ended and taken out of its place, for a new
-    /// one to go in the same place (New Shell, a command for an exited one).
-    fn replace_showing(&mut self, key: &TerminalKey, target: &Target, cx: &mut Context<Self>) -> Option<Entity<Session>> {
-        let old = self.sessions.remove(key)?;
-        let number = old.read(cx).number;
-        let name = old.read(cx).name.clone();
-        old.update(cx, |s, _| s.shut_down());
-        let size = self.last_size.unwrap_or_default();
-        let session = cx.new(|cx| {
-            let mut s = Session::start(target.clone(), size, cx);
-            s.number = number;
-            s.name = name;
-            s
-        });
-        let list = self.tabs.entry(key.clone()).or_default();
-        match list.iter().position(|s| *s == old) {
-            Some(at) => list[at] = session.clone(),
-            None => list.push(session.clone()),
-        }
-        self.sessions.insert(key.clone(), session.clone());
-        cx.notify();
-        Some(session)
-    }
-
     /// A new shell in place of one that has exited (New Shell).
     fn restart(&mut self, key: &TerminalKey, window: &mut Window, cx: &mut Context<Self>) {
-        let Some(target) = self.sessions.get(key).map(|s| s.read(cx).target.clone()) else { return };
-        if let Some(session) = self.replace_showing(key, &target, cx) {
+        if let Some(session) = self.replace_current(key, cx) {
             self.focus(&session, window, cx);
         }
     }
@@ -510,10 +560,12 @@ impl Terminals {
         if !self.putting.insert(target.key.clone()) {
             return Task::ready(None);
         }
-        if self.sessions.get(&target.key).is_some_and(|s| s.read(cx).exited) {
-            self.replace_showing(&target.key, &target, cx);
-        }
-        let session = self.open(&target, cx);
+        // Into the showing tab, a fresh shell if that one has exited.
+        let session = match self.current(&target.key) {
+            Some(s) if s.read(cx).exited => self.replace_current(&target.key, cx),
+            _ => None,
+        };
+        let session = session.unwrap_or_else(|| self.open(&target, cx));
         self.focus(&session, window, cx);
         let key = target.key.clone();
         cx.spawn(async move |this, cx| {
@@ -543,7 +595,7 @@ impl Terminals {
 impl Render for Terminals {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let target = self.target.clone();
-        let session = self.sessions.get(&target.key).cloned();
+        let session = self.current(&target.key).cloned();
         let folder = threadbear_core::new_thread::abbreviate_home(&target.cwd, &crate::files::home_dir());
         let mut panel = v_flex().id("terminal-panel").size_full();
         if let Some(note) = target.note.clone() {
@@ -608,142 +660,158 @@ impl Render for Terminals {
 }
 
 impl Terminals {
-    /// `TerminalTabStrip`: a tab per shell, ✕ to close one (while there are
-    /// several), + for another.
-    fn render_tabs(&mut self, target: &Target, folder: &str, cx: &mut Context<Self>) -> AnyElement {
-        let list = self.tabs.get(&target.key).cloned().unwrap_or_default();
-        let showing = self.sessions.get(&target.key).cloned();
-        let closable = list.len() > 1;
-        let (fg, secondary) = (style::label_text(cx), style::secondary_text(cx));
-        let (fill, hover) = (style::primary_opacity(cx, 0.1), style::primary_opacity(cx, 0.05));
-        let mut row = h_flex().id("terminal-tabs").flex_1().min_w_0().gap(px(2.)).px(px(6.)).overflow_x_scroll();
-        for (i, tab) in list.iter().enumerate() {
-            let selected = Some(tab) == showing.as_ref();
-            let (title, exited) = {
-                let s = tab.read(cx);
-                (s.tab_title(), s.exited)
-            };
-            let key = target.key.clone();
-            let renaming = self.renaming.as_ref().filter(|(s, _)| s == tab).map(|(_, f)| f.clone());
-            let label: AnyElement = match renaming {
-                Some(field) => div()
-                    .id("terminal-tab-name")
-                    .w(px(120.))
-                    .capture_key_down(cx.listener({
-                        let tab = tab.clone();
-                        move |this, ev: &KeyDownEvent, window, cx| {
-                            if ev.keystroke.key == "escape" {
-                                this.finish_renaming(&tab, None, window, cx);
-                                cx.stop_propagation();
-                            }
-                        }
-                    }))
-                    .tip("Press Return to keep the name, Escape to leave it. Empty goes back to the shell's own")
-                    .child(gpui_kit::component::input::Input::new(&field).appearance(false).small().pl(px(0.)).text_size(px(11.5)))
-                    .into_any_element(),
-                None => div().max_w(px(140.)).truncate().text_size(px(11.5)).when(selected, |s| s.font_weight(FontWeight::MEDIUM)).text_color(if selected { fg } else { secondary }).child(title.clone()).into_any_element(),
-            };
-            let group = SharedString::from(format!("terminal-tab-{i}"));
-            let mut el = h_flex()
-                .id(SharedString::from(format!("terminal-tab-{i}")))
+    /// The tabs above the terminal (`TerminalTabStrip`): one per shell, ✕ to
+    /// close one, + for another, then a line under them.
+    fn render_tabs(&self, target: &Target, folder: &str, cx: &mut Context<Self>) -> AnyElement {
+        let Some(tabs) = self.sessions.get(&target.key) else { return div().into_any_element() };
+        let closable = tabs.shells.len() > 1;
+        let current = tabs.current.min(tabs.shells.len() - 1);
+        let buttons: Vec<AnyElement> = tabs.shells.iter().enumerate().map(|(ix, tab)| self.render_tab(&target.key, ix, &tab.session, ix == current, closable, cx)).collect();
+        let add_target = target.clone();
+        let hover = style::hover_fill(cx);
+        let add = crate::highlights::tipped(
+            div().id("terminal-add-tab").flex_none().size(px(22.)).flex().items_center().justify_center().rounded(px(5.)).cursor_pointer().hover(move |s| s.bg(hover)),
+            format!("Open another terminal in {folder}"),
+        )
+        .on_click(cx.listener(move |this, _: &ClickEvent, window, cx| {
+            if this.target.key != add_target.key {
+                return;
+            }
+            let session = this.add(&add_target, cx);
+            this.focus(&session, window, cx);
+        }))
+        .child(crate::icons::symbol("plus").with_size(px(12.)).text_color(style::secondary_text(cx)));
+        v_flex()
+            .flex_none()
+            .w_full()
+            .child(
+                h_flex()
+                    .h(px(30.))
+                    .px(px(6.))
+                    .gap(px(2.))
+                    .items_center()
+                    .child(h_flex().id("terminal-tabs").flex_1().min_w_0().gap(px(2.)).items_center().overflow_x_scroll().children(buttons))
+                    .child(add),
+            )
+            .child(div().h(px(1.)).w_full().bg(style::hairline(cx)))
+            .into_any_element()
+    }
+
+    /// One tab (`TerminalTabButton`): click shows it, double-click or its
+    /// right-click menu's Rename… names it, ✕ closes it.
+    fn render_tab(&self, key: &TerminalKey, ix: usize, session: &Entity<Session>, selected: bool, closable: bool, cx: &mut Context<Self>) -> AnyElement {
+        let id = session.entity_id();
+        let s = session.read(cx);
+        let title = s.tab_title();
+        let named = s.name.is_some();
+        let tip = if s.exited { "This shell has ended".to_owned() } else { format!("Switch to {title}. Double-click to rename it") };
+        let secondary = style::secondary_text(cx);
+        let group: SharedString = format!("terminal-tab-{ix}").into();
+        let label = match self.renaming.as_ref().filter(|r| r.session == id) {
+            Some(renaming) => div()
+                .id("terminal-tab-name")
+                .w(px(120.))
+                .font_weight(FontWeight::MEDIUM)
+                .text_size(px(style::size::SMALL + 0.5))
+                .capture_key_down(cx.listener(|this, ev: &KeyDownEvent, _, cx| {
+                    if ev.keystroke.key == "escape" {
+                        this.finish_rename(false, cx);
+                        cx.stop_propagation();
+                    }
+                }))
+                .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
+                .tip("Press Return to keep the name, Escape to leave it. Empty goes back to the shell's own")
+                .child(Input::new(&renaming.field).appearance(false).small().pl(px(0.)))
+                .into_any_element(),
+            None => div()
+                .max_w(px(140.))
+                .truncate()
+                .text_size(px(style::size::SMALL + 0.5))
+                .when(selected, |d| d.font_weight(FontWeight::MEDIUM))
+                .text_color(if selected { cx.theme().foreground } else { secondary })
+                .child(title.clone())
+                .into_any_element(),
+        };
+        let close = closable.then(|| {
+            let (key, hover) = (key.clone(), style::hover_fill(cx));
+            crate::highlights::tipped(
+                div().id(("terminal-tab-close", ix)).flex_none().size(px(14.)).flex().items_center().justify_center().rounded(px(3.)).hover(move |s| s.bg(hover)).when(!selected, |d| d.invisible().group_hover(group.clone(), |s| s.visible())),
+                format!("Close {title} and end its shell"),
+            )
+            .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
+            .on_click(cx.listener(move |this, _: &ClickEvent, window, cx| {
+                cx.stop_propagation();
+                this.close(&key, id, window, cx);
+            }))
+            .child(crate::icons::symbol("xmark").with_size(px(8.5)).text_color(secondary))
+        });
+        let fill = if selected { style::primary_opacity(cx, 0.1) } else { gpui_kit::transparent_black() };
+        let hover = style::primary_opacity(cx, if selected { 0.1 } else { 0.05 });
+        let click_key = key.clone();
+        // A tab to VoiceOver, its tip its label (the automation finds it by that).
+        let tab = crate::highlights::tipped_as(
+            div()
+                .id(("terminal-tab", ix))
                 .group(group.clone())
-                .test_support()
-                .role(Role::Tab)
-                .aria_label(SharedString::from(title.clone()))
-                .aria_selected(selected)
                 .flex_none()
                 .h(px(22.))
                 .pl(px(8.))
                 .pr(px(if closable { 4. } else { 8. }))
-                .gap(px(4.))
-                .items_center()
-                .rounded(px(5.))
-                .when(selected, |s| s.bg(fill))
-                .when(!selected, |s| s.hover(move |s| s.bg(hover)))
-                .cursor_pointer()
-                .tip(if exited { "This shell has ended".to_owned() } else { format!("Switch to {title}. Double-click to rename it") })
-                .child(label);
-            if closable {
-                let (key, tab2) = (key.clone(), tab.clone());
-                el = el.child(
-                    div()
-                        .id(SharedString::from(format!("terminal-tab-close-{i}")))
-                        .test_support()
-                        .role(Role::Button)
-                        .aria_label(SharedString::from(format!("Close {title}")))
-                        .size(px(14.))
-                        .flex()
-                        .items_center()
-                        .justify_center()
-                        .text_color(secondary)
-                        .when(!selected, |s| s.invisible().group_hover(group.clone(), |s| s.visible()))
-                        .tip("Close this terminal and end its shell")
-                        .on_click(cx.listener(move |this, _: &ClickEvent, _, cx| {
-                            cx.stop_propagation();
-                            this.close_tab(&key, &tab2, cx);
-                        }))
-                        .child(crate::icons::symbol("xmark").with_size(px(9.))),
-                );
-            }
-            let (pick_key, pick) = (target.key.clone(), tab.clone());
-            el = el.on_click(cx.listener(move |this, ev: &ClickEvent, window, cx| {
-                // Picked at once; a second click names it.
-                this.select(&pick_key, &pick, window, cx);
-                if ev.click_count() >= 2 {
-                    this.start_renaming(&pick, window, cx);
-                }
-            }));
-            let (menu_key, menu_tab, named) = (target.key.clone(), tab.clone(), tab.read(cx).name.is_some());
-            let terminals = cx.entity().downgrade();
-            let el = el.context_menu(move |menu, _, _| {
-                use gpui_kit::component::menu::PopupMenuItem;
-                let (t1, t2, t3) = (terminals.clone(), terminals.clone(), terminals.clone());
-                let (s1, s2, s3) = (menu_tab.clone(), menu_tab.clone(), menu_tab.clone());
-                let key = menu_key.clone();
-                let mut menu = menu.item(PopupMenuItem::new("Rename…").icon(crate::icons::symbol("pencil")).on_click(move |_, window, cx| {
-                    t1.update(cx, |t, cx| t.start_renaming(&s1, window, cx)).ok();
-                }));
-                if named {
-                    menu = menu.item(PopupMenuItem::new("Use the Shell's Name").icon(crate::icons::symbol("arrow.uturn.backward")).on_click(move |_, _, cx| {
-                        s2.update(cx, |s, cx| {
-                            s.name = None;
-                            cx.notify();
-                        });
-                        t2.update(cx, |_, cx| cx.notify()).ok();
-                    }));
-                }
-                if closable {
-                    menu = menu.separator().item(PopupMenuItem::new("Close Terminal").icon(crate::icons::symbol("xmark")).on_click(move |_, _, cx| {
-                        t3.update(cx, |t, cx| t.close_tab(&key, &s3, cx)).ok();
-                    }));
-                }
-                menu
-            });
-            row = row.child(el);
-        }
-        let add_target = target.clone();
-        let plus = crate::highlights::tipped(
-            div()
-                .id("terminal-tab-add")
-                .flex_none()
-                .size(px(22.))
-                .mr(px(6.))
                 .flex()
                 .items_center()
-                .justify_center()
+                .gap(px(4.))
                 .rounded(px(5.))
-                .cursor_pointer()
+                .bg(fill)
                 .hover(move |s| s.bg(hover))
-                .text_color(secondary)
-                .child(crate::icons::symbol("plus").with_size(px(12.))),
-            format!("Open another terminal in {folder}"),
+                .cursor_pointer(),
+            tip,
+            gpui_kit::Role::Tab,
         )
-        .on_click(cx.listener(move |this, _: &ClickEvent, window, cx| {
-            let session = this.add(&add_target, cx);
-            this.focus(&session, window, cx);
-        }));
-        h_flex().id("terminal-tab-strip").flex_none().w_full().h(px(30.)).items_center().child(row).child(plus).into_any_element()
+        .on_click(cx.listener(move |this, ev: &ClickEvent, window, cx| {
+            if ev.click_count() >= 2 {
+                this.start_rename(&click_key, id, window, cx);
+            } else {
+                this.select(&click_key, id, window, cx);
+            }
+        }))
+        .child(label)
+        .children(close);
+        let (weak, menu_key) = (cx.entity().downgrade(), key.clone());
+        div()
+            .id(("terminal-tab-menu", ix))
+            .flex_none()
+            .child(tab)
+            .context_menu(move |menu, _, _| tab_menu(menu, weak.clone(), menu_key.clone(), id, named, closable))
+            .into_any_element()
     }
+}
+
+/// A tab's right-click menu, with icons as every right-click menu has.
+fn tab_menu(menu: gpui_kit::component::menu::PopupMenu, terminals: WeakEntity<Terminals>, key: TerminalKey, id: EntityId, named: bool, closable: bool) -> gpui_kit::component::menu::PopupMenu {
+    let act = |f: fn(&mut Terminals, &TerminalKey, EntityId, &mut Window, &mut Context<Terminals>)| {
+        let (terminals, key) = (terminals.clone(), key.clone());
+        move |_: &ClickEvent, window: &mut Window, cx: &mut App| {
+            if let Some(t) = terminals.upgrade() {
+                t.update(cx, |t, cx| f(t, &key, id, window, cx));
+            }
+        }
+    };
+    let mut menu = menu.item(PopupMenuItem::new("Rename…").icon(crate::icons::symbol("pencil")).on_click(act(|t, key, id, window, cx| {
+        // After the menu has gone, so its closing doesn't take the field's keyboard.
+        let key = key.clone();
+        cx.spawn_in(window, async move |this, cx| {
+            let _ = this.update_in(cx, |t, window, cx| t.start_rename(&key, id, window, cx));
+        })
+        .detach();
+        let _ = t;
+    })));
+    if named {
+        menu = menu.item(PopupMenuItem::new("Use the Shell's Name").icon(crate::icons::symbol("arrow.uturn.backward")).on_click(act(|t, _, id, _, cx| t.set_name(id, None, cx))));
+    }
+    if closable {
+        menu = menu.separator().item(PopupMenuItem::new("Close Terminal").icon(crate::icons::symbol("xmark")).on_click(act(|t, key, id, window, cx| t.close(key, id, window, cx))));
+    }
+    menu
 }
 
 // ---------------------------------------------------------------- one shell
@@ -779,14 +847,6 @@ impl GridSize {
     fn window_size(self) -> WindowSize {
         WindowSize { num_lines: self.rows, num_cols: self.cols, cell_width: self.cell_width.round() as u16, cell_height: self.cell_height.round() as u16 }
     }
-}
-
-/// A link under the pointer: its address, and each screen row's columns it
-/// covers (a wrapped address covers more than one).
-#[derive(Clone, Debug, PartialEq)]
-pub(crate) struct Hover {
-    pub(crate) url: String,
-    pub(crate) cells: Vec<(usize, std::ops::Range<usize>)>,
 }
 
 /// Where the grid was last drawn, for turning the pointer into a cell.
@@ -868,9 +928,28 @@ impl EventListener for Listener {
     }
 }
 
-/// One shell in one pty (`TerminalSession`).
+/// A shell ended by itself (`exit`), for its tab to close.
+pub(crate) struct ShellEnded;
+
+/// The link under the pointer, underlined: the screen rows it's on, with the
+/// columns it covers in each, and where it goes.
+#[derive(Clone, Debug, PartialEq)]
+pub(crate) struct Hover {
+    pub(crate) cells: Vec<(usize, std::ops::Range<usize>)>,
+    pub(crate) url: String,
+}
+
+/// One shell in one pty (`TerminalSession`), and its tab.
 pub(crate) struct Session {
     pub(crate) target: Target,
+    /// Its tab's number, the lowest free when it started ("Terminal 2").
+    pub(crate) number: usize,
+    /// A name given it (double-click or Rename…), over the shell's own.
+    pub(crate) name: Option<String>,
+    /// The web address under the pointer, and the cell the pointer was last
+    /// over, to look again when the screen changes under it.
+    pub(crate) hover: Option<Hover>,
+    pointer: Option<(usize, usize)>,
     pub(crate) term: Arc<FairMutex<Term<Listener>>>,
     shared: Arc<Shared>,
     /// The shell's process, which leads its own session, and when it
@@ -893,13 +972,6 @@ pub(crate) struct Session {
     pub(crate) focus: FocusHandle,
     pub(crate) size: GridSize,
     pub(crate) drawn_at: Option<DrawnAt>,
-    /// Its tab's number among the key's tabs ("Terminal 2"), and a name
-    /// given it over the shell's own (double-click or Rename…).
-    pub(crate) number: usize,
-    pub(crate) name: Option<String>,
-    /// The web address under the pointer, underlined, with the cells it
-    /// covers on screen (`showHover`).
-    pub(crate) hover: Option<Hover>,
     /// It had the keyboard when it was last drawn.
     pub(crate) focused: bool,
     /// An input method's text still being composed (a Japanese word, an
@@ -925,7 +997,7 @@ enum Drag {
 }
 
 impl Session {
-    fn start(target: Target, size: GridSize, cx: &mut Context<Self>) -> Self {
+    fn start(target: Target, number: usize, name: Option<String>, size: GridSize, cx: &mut Context<Self>) -> Self {
         let (notes, mut incoming) = tokio::sync::mpsc::unbounded_channel();
         let shared = Arc::new(Shared {
             dirty: AtomicBool::new(false), exited: AtomicBool::new(false),
@@ -966,6 +1038,10 @@ impl Session {
         });
         let mut session = Session {
             target,
+            number,
+            name,
+            hover: None,
+            pointer: None,
             term,
             shared,
             pid: None,
@@ -981,9 +1057,6 @@ impl Session {
             focus: cx.focus_handle(),
             size,
             drawn_at: None,
-            number: 1,
-            name: None,
-            hover: None,
             focused: false,
             marked: String::new(),
             scroll_rest: 0.,
@@ -1047,16 +1120,20 @@ impl Session {
 
     fn heard(&mut self, note: Note, cx: &mut Context<Self>) {
         match note {
-            Note::Wakeup => self.shared.dirty.store(false, Ordering::Release),
+            Note::Wakeup => {
+                self.shared.dirty.store(false, Ordering::Release);
+                // What's under the pointer may have changed.
+                if let Some((col, row)) = self.pointer {
+                    self.hover = self.hover_at(col, row);
+                }
+            }
             Note::Exited => {
+                let first = !self.exited;
                 self.exited = true;
-                // One of several tabs: it goes (`onExit`).
-                let (me, key) = (cx.entity(), self.target.key.clone());
-                cx.defer(move |cx| {
-                    if let Some(terminals) = terminals(cx) {
-                        terminals.update(cx, |t, cx| t.tab_exited(&key, &me, cx));
-                    }
-                });
+                self.hover = None;
+                if first {
+                    cx.emit(ShellEnded);
+                }
                 #[cfg(unix)]
                 {
                     self.pty = None;
@@ -1071,6 +1148,11 @@ impl Session {
             }
         }
         cx.notify();
+    }
+
+    /// Its tab's title: a name given it, the shell's own, or its number.
+    pub(crate) fn tab_title(&self) -> String {
+        rules::tab_title(self.name.as_deref(), &self.title, self.number)
     }
 
     fn sender(&self) -> Option<&EventLoopSender> {
@@ -1456,11 +1538,11 @@ impl Session {
     /// The scan follows soft-wrapped lines, capped so a very long line can
     /// never make a click stall the app.
     fn link_at(&self, col: usize, row: usize) -> Option<String> {
-        self.link_and_cells_at(col, row).map(|(link, _)| link)
+        self.link_span_at(col, row).map(|(link, _)| link)
     }
 
-    /// `link_at`, with the screen cells the link covers.
-    fn link_and_cells_at(&self, col: usize, row: usize) -> Option<(String, Vec<(usize, std::ops::Range<usize>)>)> {
+    /// `link_at`, with the screen rows and columns the link covers.
+    fn link_span_at(&self, col: usize, row: usize) -> Option<(String, Vec<(usize, std::ops::Range<usize>)>)> {
         use alacritty_terminal::term::cell::Flags;
         let term = self.term.lock();
         let grid = term.grid();
@@ -1470,17 +1552,29 @@ impl Session {
         // inspect its cells under this one lock, so it stays the same row.
         let point = GridPoint::new(GridLine(row as i32 - grid.display_offset() as i32), Column(col));
         let cell = &grid[point];
-        if let Some(link) = cell.hyperlink() {
-            return (link.uri().len() <= 4096).then(|| (link.uri().to_owned(), vec![(row, col..col + 1)]));
-        }
         let offset = grid.display_offset() as i32;
+        if let Some(link) = cell.hyperlink() {
+            if link.uri().len() > 4096 {
+                return None;
+            }
+            // Along the row while the cells carry the same link.
+            let same = |c: usize| grid[point.line][Column(c)].hyperlink().as_ref() == Some(&link);
+            let (mut start, mut end) = (col, col + 1);
+            while start > 0 && same(start - 1) {
+                start -= 1;
+            }
+            while end < cols && same(end) {
+                end += 1;
+            }
+            return Some((link.uri().to_owned(), vec![(row, start..end)]));
+        }
         let mut first = point.line;
         while first > grid.topmost_line() && ((point.line.0 - first.0 + 2) as usize) * cols <= 4096 && grid[GridLine(first.0 - 1)][Column(cols - 1)].flags.contains(Flags::WRAPLINE) {
             first = GridLine(first.0 - 1);
         }
         let mut chars = Vec::new();
-        // Each char's screen row and column, for the underline.
-        let mut places: Vec<(i32, usize)> = Vec::new();
+        // Where each character is: its line and its cell.
+        let mut at = Vec::new();
         let mut clicked = None;
         let mut line = first;
         loop {
@@ -1492,42 +1586,51 @@ impl Session {
                     continue;
                 }
                 chars.push(cell.c);
-                places.push((line.0 + offset, column));
+                at.push((line.0, column));
                 for c in cell.zerowidth().into_iter().flatten() {
                     chars.push(*c);
-                    places.push((line.0 + offset, column));
+                    at.push((line.0, column));
                 }
                 if chars.len() > 4096 { return None; }
             }
             if line >= grid.bottommost_line() || !grid[line][Column(cols - 1)].flags.contains(Flags::WRAPLINE) { break; }
             line = GridLine(line.0 + 1);
         }
-        let (first, last) = rules::link_span(&chars, clicked?)?;
+        let span = rules::link_word_span(&chars, clicked?)?;
+        let link: String = chars[span.clone()].iter().collect();
+        // The cells it covers, a run per screen row (a wide character's
+        // spacer included), leaving out rows scrolled out of sight.
         let mut cells: Vec<(usize, std::ops::Range<usize>)> = Vec::new();
-        for &(screen_row, column) in &places[first..last] {
-            if screen_row < 0 {
+        for &(line, column) in &at[span] {
+            let Ok(screen_row) = usize::try_from(line + offset) else { continue };
+            if screen_row >= term.screen_lines() {
                 continue;
             }
+            let wide = grid[GridLine(line)][Column(column)].flags.contains(Flags::WIDE_CHAR);
+            let end = column + if wide { 2 } else { 1 };
             match cells.last_mut() {
-                Some((r, cols)) if *r == screen_row as usize => cols.end = column + 1,
-                _ => cells.push((screen_row as usize, column..column + 1)),
+                Some((r, run)) if *r == screen_row => run.end = run.end.max(end),
+                _ => cells.push((screen_row, column..end)),
             }
         }
-        Some((chars[first..last].iter().collect(), cells))
+        Some((link, cells))
     }
 
-    /// The web address under a cell, to underline (`linkSpan`).
+    /// The web address under a cell, for the underline.
     fn hover_at(&self, col: usize, row: usize) -> Option<Hover> {
-        let (link, cells) = self.link_and_cells_at(col, row)?;
-        let home = crate::files::home_dir();
-        let target = rules::link_target(&link, &self.target.cwd, &home, |_| false)?;
-        rules::underlines(&target).then(|| Hover { url: link, cells })
+        let (url, cells) = self.link_span_at(col, row)?;
+        rules::underlines(&url).then_some(Hover { cells, url })
     }
 
-    /// The pointer moved with no button down: underline the link under it,
-    /// or take the underline away.
-    fn update_hover(&mut self, position: Point<Pixels>, cx: &mut Context<Self>) {
-        let hover = if self.exited { None } else { self.cell_at(position, false).and_then(|(col, row, _)| self.hover_at(col, row)) };
+    /// The pointer moved over the window: the link under it, if any, is
+    /// underlined, only once the cell it's over changes.
+    fn follow_pointer(&mut self, position: Point<Pixels>, cx: &mut Context<Self>) {
+        let cell = if self.exited { None } else { self.cell_at(position, false).map(|(col, row, _)| (col, row)) };
+        if cell == self.pointer {
+            return;
+        }
+        self.pointer = cell;
+        let hover = cell.and_then(|(col, row)| self.hover_at(col, row));
         if hover != self.hover {
             self.hover = hover;
             cx.notify();
@@ -1602,9 +1705,7 @@ impl Session {
 
     pub(crate) fn mouse_moved(&mut self, event: &MouseMoveEvent, cx: &mut Context<Self>) {
         let Some(drag) = self.dragging else {
-            if event.pressed_button.is_none() {
-                self.update_hover(event.position, cx);
-            }
+            self.follow_pointer(event.position, cx);
             return;
         };
         if event.pressed_button.is_none() {
@@ -1680,18 +1781,15 @@ impl Session {
             self.write(arrow.repeat(lines.unsigned_abs().min(20) as usize).into_bytes());
         } else {
             self.term.lock().scroll_display(Scroll::Delta(lines));
+            if let Some((col, row)) = self.pointer {
+                self.hover = self.hover_at(col, row);
+            }
             cx.notify();
         }
         cx.stop_propagation();
     }
 
     // ---- For the automation ----
-
-    /// What its tab says: the name given it, the shell's title, or
-    /// "Terminal 2".
-    pub(crate) fn tab_title(&self) -> String {
-        rules::tab_title(self.name.as_deref(), &self.title, self.number)
-    }
 
     fn summary(&self) -> String {
         format!("{} {} in {}", self.target.key, if self.exited { "exited" } else { "running" }, self.target.cwd)
@@ -1718,6 +1816,8 @@ fn system_hostname() -> String {
 
 #[cfg(not(any(unix, windows)))]
 fn system_hostname() -> String { String::new() }
+
+impl EventEmitter<ShellEnded> for Session {}
 
 impl Focusable for Session {
     fn focus_handle(&self, _cx: &App) -> FocusHandle {
@@ -1746,23 +1846,26 @@ impl Render for Session {
             // A little in from the panel's edges, on the terminal's own
             // background (TerminalHost.Container.inset).
             .child(div().size_full().px(px(10.)).py(px(6.)).child(TerminalElement::new(me, focused, self.blink_shown)));
-        // The link under the pointer: underlined in the text's colour, with a
-        // pointing hand and a tip, and ⌘-click opens it.
-        if let (Some(hover), Some(at)) = (self.hover.clone(), self.drawn_at) {
-            let ink = colours.foreground_hsla();
-            for (row, cols) in &hover.cells {
+        if let (Some(hover), Some(at)) = (&self.hover, self.drawn_at) {
+            // Over the link's first cells, for its tip; the terminal still
+            // takes the click (it doesn't block the pointer).
+            if let Some((row, cols)) = hover.cells.first() {
+                let tip = format!("⌘-click to open {}", hover.url);
+                let tip = if cfg!(target_os = "macos") { tip } else { tip.replacen("⌘-click", "Ctrl-click", 1) };
                 view = view.child(
-                    div()
-                        .absolute()
-                        .left(px(10.) + at.cell_width * cols.start as f32)
-                        .top(px(6.) + at.cell_height * (*row as f32 + 1.) - gpui_kit::px(2.))
-                        .w(at.cell_width * (cols.end - cols.start) as f32)
-                        .h(gpui_kit::px(1.))
-                        .bg(ink),
+                    crate::highlights::tipped_as(
+                        div()
+                            .id("terminal-link")
+                            .absolute()
+                            .left(px(10.) + at.cell_width * cols.start as f32)
+                            .top(px(6.) + at.cell_height * *row as f32)
+                            .w(at.cell_width * cols.len() as f32)
+                            .h(at.cell_height),
+                        tip,
+                        gpui_kit::Role::Link,
+                    ),
                 );
             }
-            let key = if cfg!(target_os = "macos") { "⌘" } else { "Ctrl" };
-            view = crate::tips::Tip::tip(view.cursor(gpui_kit::CursorStyle::PointingHand), format!("{key}-click to open {}", hover.url));
         }
         if self.waiting_for_return() {
             // Over whatever's in the terminal's top corner.
@@ -1887,8 +1990,13 @@ pub(crate) fn dump(app: &Threadbear, cx: &App) -> Value {
     let Some(terminals) = terminals(cx) else { return Value::Null };
     let t = terminals.read(cx);
     let target = target_of(app);
-    let session = t.sessions.get(&target.key).map(|s| s.read(cx));
-    let mut shells: Vec<String> = t.tabs.values().flatten().map(|s| s.read(cx).summary()).collect();
+    let session = t.current(&target.key).map(|s| s.read(cx));
+    let mut shells: Vec<String> = t.all().map(|s| s.read(cx).summary()).collect();
+    let tabs: Vec<Value> = t.sessions.get(&target.key).map(|tabs| {
+        let current = tabs.current();
+        tabs.shells.iter().map(|tab| json!({ "title": tab.session.read(cx).tab_title(), "current": &tab.session == current })).collect()
+    }).unwrap_or_default();
+    let renaming = t.renaming.as_ref().map(|r| r.field.read(cx).value().to_string());
     shells.sort();
     json!({
         "shown": app.dock.read(cx).controller.is_showing(crate::shell::TERMINAL),
@@ -1901,12 +2009,11 @@ pub(crate) fn dump(app: &Threadbear, cx: &App) -> Value {
         "cols": session.map(|s| s.size.cols),
         "rows": session.map(|s| s.size.rows),
         "screen": session.map(|s| s.screen_lines()),
-        "hovering": session.and_then(|s| s.hover.as_ref().map(|h| h.url.clone())),
         "lines": session.map(|s| s.screen_text_lines()),
         "shells": shells,
-        // The open thread's tabs as they read, and which shows.
-        "tabs": t.tabs.get(&target.key).map(|l| l.iter().map(|s| s.read(cx).tab_title()).collect::<Vec<_>>()).unwrap_or_default(),
-        "tab": t.tabs.get(&target.key).and_then(|l| t.sessions.get(&target.key).and_then(|s| l.iter().position(|x| x == s))),
+        "tabs": tabs,
+        "renaming": renaming,
+        "hoveredLink": session.and_then(|s| s.hover.as_ref().map(|h| h.url.clone())),
     })
 }
 
@@ -2064,11 +2171,16 @@ fn end_shells_now(shells: &[(i32, Born)]) {
 /// shell block's play icon does, `{"scroll": -5}` turns the wheel over the
 /// terminal (back is up, so negative), `{"select": "all"}`, `{"copy": true}`
 /// and `{"paste": "text"}` are ⌘A, ⌘C and ⌘V through its keys, `{"commit":
-/// "text"}` is an input method's text all at once, and `{"wait": ms}` waits
-/// after. Each answers with what the dump's `terminal` says.
+/// "text"}` is an input method's text all at once, `{"tab": "Terminal 2"}`
+/// clicks a tab (`"clicks": 2` to rename it, then `{"name": "Dev server"}`
+/// types its name and Return, or `"key": "escape"`), `{"new": true}` is the
+/// tabs' + and `{"rename": "server"}` names the showing tab at once (the
+/// Swift driver's two), `{"hover": "words"}`
+/// points at words on the screen, and `{"wait": ms}` waits after. Each
+/// answers with what the dump's `terminal` says.
 #[cfg(feature = "automation")]
 pub(crate) fn automation(app: &Entity<Threadbear>, cmd: &Value, window: &mut Window, cx: &mut App) -> Result<Value, String> {
-    use gpui_kit::test::TestWindowExt as _;
+    use gpui_kit::test::{TestEventExt as _, TestQueryExt as _, TestWindowExt as _};
     let terminals = terminals(cx).ok_or("no terminals")?;
     if cmd["toggle"].as_bool() == Some(true) {
         app.update(cx, |a, cx| toggle(a, window, cx));
@@ -2078,6 +2190,12 @@ pub(crate) fn automation(app: &Entity<Threadbear>, cmd: &Value, window: &mut Win
     }
     let target = target_of(app.read(cx));
     terminals.update(cx, |t, cx| t.set_target(target.clone(), cx));
+    // `{"new": true}` is the tabs' +, as the Swift driver's: another shell
+    // in the same folder, showing.
+    if cmd["new"].as_bool() == Some(true) {
+        let session = terminals.update(cx, |t, cx| t.add(&target, cx));
+        terminals.update(cx, |t, cx| t.focus(&session, window, cx));
+    }
     if let Some(text) = cmd["type"].as_str() {
         let session = terminals.update(cx, |t, cx| t.open(&target, cx));
         let text = text.to_owned();
@@ -2105,36 +2223,48 @@ pub(crate) fn automation(app: &Entity<Threadbear>, cmd: &Value, window: &mut Win
             window.press(key, cx);
         }
     }
-    // The tabs (the Swift `new`, `rename`): `new` adds one, `select` and
-    // `close` take a tab's place from 0, `rename` names the showing one
-    // ("" for the shell's own).
-    if cmd["new"].as_bool() == Some(true) {
-        let session = terminals.update(cx, |t, cx| t.add(&target, cx));
-        terminals.update(cx, |t, cx| t.focus(&session, window, cx));
-    }
-    if let Some(at) = cmd["select"].as_u64() {
-        let tab = terminals.read(cx).tabs.get(&target.key).and_then(|l| l.get(at as usize)).cloned().ok_or("no such tab")?;
-        terminals.update(cx, |t, cx| t.select(&target.key, &tab, window, cx));
-    }
-    if let Some(at) = cmd["close"].as_u64() {
-        let tab = terminals.read(cx).tabs.get(&target.key).and_then(|l| l.get(at as usize)).cloned().ok_or("no such tab")?;
-        terminals.update(cx, |t, cx| t.close_tab(&target.key, &tab, cx));
-    }
-    if let Some(name) = cmd["rename"].as_str() {
-        let tab = terminals.read(cx).sessions.get(&target.key).cloned().ok_or("no shell")?;
-        tab.update(cx, |s, cx| {
-            s.name = rules::tab_name(name);
-            cx.notify();
-        });
-        terminals.update(cx, |_, cx| cx.notify());
-    }
     // What a shell block's play icon does, the copy when the shell's busy
     // included (shell_blocks.rs).
     if let Some(command) = cmd["put"].as_str() {
         let id = app.read(cx).selected.clone().unwrap_or_default();
         crate::shell_blocks::put(command, &id, window, cx);
     }
-    let session = terminals.read(cx).sessions.get(&target.key).cloned();
+    // A tab by its title, through a real click (two for `"clicks": 2`,
+    // which renames it), and `{"name": "..."}` typed into the rename
+    // field with Return.
+    if let Some(title) = cmd["tab"].as_str() {
+        window.render_frame(cx);
+        let tip = format!("Switch to {title}.");
+        let found = window.elements().into_iter().find(|e| e.visible() && e.label().is_some_and(|l| l.starts_with(&tip)));
+        let at = found.ok_or_else(|| format!("no tab called {title:?}"))?.visible_bounds().center();
+        window.pointer_move(at, None, cx);
+        for click_count in 1..=cmd["clicks"].as_u64().unwrap_or(1).clamp(1, 2) as usize {
+            let modifiers = window.modifiers();
+            window.dispatch_event(MouseDownEvent { button: MouseButton::Left, position: at, modifiers, click_count, first_mouse: false }.to_platform_input(), cx);
+            window.render_frame(cx);
+            window.dispatch_event(MouseUpEvent { button: MouseButton::Left, position: at, modifiers, click_count }.to_platform_input(), cx);
+            window.render_frame(cx);
+        }
+    }
+    if let Some(name) = cmd["name"].as_str() {
+        window.render_frame(cx);
+        if terminals.read(cx).renaming.is_none() {
+            return Err("no tab is being renamed".into());
+        }
+        if !name.is_empty() {
+            window.input(name, cx);
+        } else {
+            window.press("backspace", cx);
+        }
+        window.press(cmd["key"].as_str().unwrap_or("enter"), cx);
+    }
+    // `{"rename": "server"}` names the showing tab straight off, as the
+    // Swift driver's ("" for the shell's own).
+    if let Some(name) = cmd["rename"].as_str() {
+        let id = terminals.read(cx).current(&target.key).map(|s| s.entity_id()).ok_or("no shell")?;
+        terminals.update(cx, |t, cx| t.set_name(id, rules::tab_name(name), cx));
+    }
+    let session = terminals.read(cx).current(&target.key).cloned();
     if let Some(session) = &session {
         window.render_frame(cx);
         let handle = session.read(cx).focus.clone();
@@ -2167,15 +2297,15 @@ pub(crate) fn automation(app: &Entity<Threadbear>, cmd: &Value, window: &mut Win
             window.dispatch_event(event.to_platform_input(), cx);
         }
     }
-    // The pointer over a link, as a move there would (the Swift `hover`).
+    // The pointer moved over words on the screen, as a person points at a link.
     if let Some(words) = cmd["hover"].as_str() {
         window.render_frame(cx);
         let session = session.as_ref().ok_or("no shell")?;
         let s = session.read(cx);
         let at = s.drawn_at.ok_or("the terminal hasn't been drawn")?;
-        let (row, col) = s.screen_lines().iter().enumerate().rev().find_map(|(r, line)| line.find(words).map(|i| (r, line[..i].chars().count()))).ok_or("that link isn't visible")?;
+        let (row, col) = s.screen_lines().iter().enumerate().rev().find_map(|(r, line)| line.find(words).map(|i| (r, line[..i].chars().count()))).ok_or("those words aren't visible")?;
         let position = point(at.origin.x + at.cell_width * (col as f32 + 0.5), at.origin.y + at.cell_height * (row as f32 + 0.5));
-        window.dispatch_event(MouseMoveEvent { position, pressed_button: None, modifiers: Modifiers::default() }.to_platform_input(), cx);
+        window.pointer_move(position, None, cx);
     }
     if let Some(words) = cmd["follow"].as_str() {
         window.render_frame(cx);
@@ -2190,4 +2320,53 @@ pub(crate) fn automation(app: &Entity<Threadbear>, cmd: &Value, window: &mut Win
     }
     window.render_frame(cx);
     Ok(dump(app.read(cx), cx))
+}
+
+/// The automation's `terminal-menu`: a right-click on a tab (`tab`, its
+/// title) through real events, then, once the kit has built the menu, its
+/// items read back, or one pressed with `click`.
+#[cfg(feature = "automation")]
+pub(crate) async fn menu_command(window: AnyWindowHandle, cmd: &Value, cx: &mut AsyncApp) -> Result<Value, String> {
+    use gpui_kit::test::{TestEventExt as _, TestQueryExt as _, TestWindowExt as _};
+    let title = cmd["tab"].as_str().ok_or("terminal-menu needs tab")?.to_owned();
+    cx.update_window(window, |_, window, cx| {
+        crate::thread::scripted_input(|| {
+            window.render_frame(cx);
+            let tip = format!("Switch to {title}.");
+            let found = window.elements().into_iter().find(|e| e.visible() && e.label().is_some_and(|l| l.starts_with(&tip)));
+            let Some(tab) = found else { return Err(format!("no tab called {title:?}")) };
+            let at = tab.visible_bounds().center();
+            window.pointer_move(at, None, cx);
+            window.pointer_down(at, MouseButton::Right, cx);
+            window.pointer_up(at, MouseButton::Right, cx);
+            Ok(())
+        })
+    })
+    .map_err(|e| e.to_string())??;
+    cx.background_executor().timer(Duration::from_millis(150)).await;
+    let items = cx
+        .update_window(window, |_, window, cx| {
+            window.render_frame(cx);
+            crate::reply_links::open_menu_items(window, 0)
+        })
+        .map_err(|e| e.to_string())?;
+    if let Some(click) = cmd["click"].as_str() {
+        let Some((_, item)) = items.iter().find(|(t, _)| t == click) else { return Err(format!("no item {click} in {items:?}")) };
+        let at = item.center();
+        cx.update_window(window, |_, window, cx| {
+            crate::thread::scripted_input(|| {
+                window.pointer_move(at, None, cx);
+                window.pointer_down(at, MouseButton::Left, cx);
+                window.pointer_up(at, MouseButton::Left, cx);
+            })
+        })
+        .map_err(|e| e.to_string())?;
+        cx.background_executor().timer(Duration::from_millis(100)).await;
+        return Ok(json!("ok"));
+    }
+    let titles: Vec<&str> = items.iter().map(|(t, _)| t.as_str()).collect();
+    if !titles.is_empty() && cmd["keep"].as_bool() != Some(true) {
+        cx.update_window(window, |_, window, cx| window.press("escape", cx)).map_err(|e| e.to_string())?;
+    }
+    Ok(json!(format!("ok {}", serde_json::to_string(&titles).unwrap_or_default())))
 }

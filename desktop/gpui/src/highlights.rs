@@ -75,11 +75,22 @@ pub(crate) struct PanePreview {
     pub memory: FolderMemory,
     /// A text file with its own text up, raw (the Markdown menu's Markdown).
     pub editing: bool,
+    /// Opened from a folder's search: the line to go to and the words to
+    /// find there, once the file's in (`PanePreview.hit`).
+    pub hit: Option<SearchHit>,
+}
+
+/// A line a folder's search found (folder_search_view.rs).
+#[derive(Clone, Debug, PartialEq)]
+pub(crate) struct SearchHit {
+    /// From 1.
+    pub line: usize,
+    pub query: String,
 }
 
 impl PanePreview {
     pub(crate) fn new(target: Target, title: String, from: String) -> Self {
-        PanePreview { target, title, from, opened: 0, back: vec![], memory: Default::default(), editing: false }
+        PanePreview { target, title, from, opened: 0, back: vec![], memory: Default::default(), editing: false, hit: None }
     }
 
     pub(crate) fn file_path(&self) -> Option<&str> {
@@ -242,12 +253,17 @@ pub(crate) struct SidePane {
     pub(crate) highlights_unsupported: bool,
     wanted: HashMap<String, u64>,
     answered: HashMap<String, u64>,
-    fetching: HashSet<String>,
+    pub(crate) fetching: HashSet<String>,
     /// Folded headings, for every thread (`collapsedHighlights`).
     pub(crate) collapsed: HashSet<String>,
     /// The chosen section per thread (`panelChoice`).
     pub(crate) chosen: HashMap<String, String>,
     pub(crate) previews: HashMap<String, PanePreview>,
+    /// Files left open under other sections, per thread then section, with
+    /// what was read of them (and any typing): a file opened from Files stays
+    /// open while Highlights is looked at, and is there again, where it was
+    /// left, when Files comes back (`parkedPreviews`, Wayne's 3708b1c7).
+    pub(crate) parked: HashMap<String, HashMap<String, (PanePreview, Option<crate::files::OpenFile>)>>,
     /// Each thread's section and open file as last left, saved across
     /// launches (pane_store.rs): a file comes back the first time its
     /// thread shows after a restart.
@@ -299,6 +315,7 @@ impl SidePane {
             collapsed: crate::highlights_store::load_collapsed(),
             chosen: HashMap::new(),
             previews: HashMap::new(),
+            parked: HashMap::new(),
             places: crate::pane_store::load(),
             restored: HashSet::new(),
             flags: HashMap::new(),
@@ -572,20 +589,50 @@ impl SidePane {
 
     /// Shows a section (`choosePanel`), closing a preview over another one.
     pub(crate) fn choose_section(&mut self, thread_id: &str, id: &str, cx: &mut Context<Self>) {
-        if self.previews.get(thread_id).is_some_and(|p| p.from != id) && self.must_ask_to_leave(thread_id, cx) {
-            let (t, s) = (thread_id.to_owned(), id.to_owned());
-            self.ask_to_leave(thread_id, move |this, cx| this.choose_section(&t, &s, cx), cx);
-            return;
-        }
         if self.previews.get(thread_id).is_some_and(|p| p.from != id) {
+            let (again_thread, again_id) = (thread_id.to_owned(), id.to_owned());
+            if !self.may_leave_file(thread_id, move |this, cx| this.choose_section(&again_thread, &again_id, cx), cx) {
+                return;
+            }
             self.leave_edit(thread_id, cx);
-            self.previews.remove(thread_id);
+            self.park_preview(thread_id);
         }
+        // One put aside for this section comes back.
+        self.unpark_preview(thread_id, id, cx);
         self.chosen.insert(thread_id.to_owned(), id.to_owned());
         self.remember(thread_id);
         self.menu = None;
         self.section_shown(id, thread_id, cx);
         cx.notify();
+    }
+
+    /// The thread's preview put aside for its section, with its file as read
+    /// and worked on, rather than closed (`bringPreview`).
+    fn park_preview(&mut self, thread_id: &str) {
+        let Some(preview) = self.previews.remove(thread_id) else { return };
+        let file = self.files.open.remove(thread_id).filter(|f| preview.file_path() == Some(f.path.as_str()));
+        self.parked.entry(thread_id.to_owned()).or_default().insert(preview.from.clone(), (preview, file));
+    }
+
+    /// The preview put aside for `section`, back over it as it was left: a
+    /// file being worked on is checked against the disk, and one read here
+    /// is read again if it changed meanwhile.
+    fn unpark_preview(&mut self, thread_id: &str, section: &str, cx: &mut Context<Self>) {
+        if self.previews.contains_key(thread_id) {
+            return;
+        }
+        let Some((preview, file)) = self.parked.get_mut(thread_id).and_then(|m| m.remove(section)) else { return };
+        let editing = file.as_ref().is_some_and(|f| f.edit.is_some());
+        if let Some(file) = file {
+            self.files.open.insert(thread_id.to_owned(), file);
+        }
+        self.previews.insert(thread_id.to_owned(), preview);
+        if editing {
+            self.check_edit(thread_id, cx);
+        }
+        if let Some(thread) = self.thread(cx).filter(|t| t.id == thread_id) {
+            self.begin_preview(&thread, cx);
+        }
     }
 
     /// Saves where `thread_id`'s pane is, if that changed (pane_store.rs).
@@ -713,10 +760,14 @@ impl SidePane {
     }
 
     pub(crate) fn show_preview(&mut self, mut preview: PanePreview, thread_id: &str, cx: &mut Context<Self>) {
-        if self.must_ask_to_leave(thread_id, cx) {
-            let id = thread_id.to_owned();
-            self.ask_to_leave(thread_id, move |this, cx| this.show_preview(preview, &id, cx), cx);
-            return;
+        // Another file, or none: one with changes not saved is saved first,
+        // or asked about while autosave is off (`mayLeaveFile`).
+        let same_file = preview.file_path().is_some() && self.previews.get(thread_id).and_then(|p| p.file_path()) == preview.file_path();
+        if !same_file {
+            let (again, again_id) = (preview.clone(), thread_id.to_owned());
+            if !self.may_leave_file(thread_id, move |this, cx| this.show_preview(again, &again_id, cx), cx) {
+                return;
+            }
         }
         // It takes an explanation's place, as a preview of its own would.
         self.stop_explaining(thread_id);
@@ -724,16 +775,22 @@ impl SidePane {
         self.leave_edit(thread_id, cx);
         preview.opened = self.previews.get(thread_id).map_or(0, |p| p.opened) + 1;
         // A Markdown file opens as its bar's menu last left it, on this
-        // runner's machine (`MarkdownView.opensRaw`).
+        // runner's machine (`MarkdownView.opensRaw`); any other text file
+        // ready to type in, while Edit files like an editor is on.
         let here = self.thread(cx).is_some_and(|t| t.id == thread_id && !t.is_remote());
+        let editor_mode = self.file_modes(cx).0;
         if let Some(path) = preview.file_path() {
-            // Edit files like an editor: a text file opens ready to type in
-            // (a page is drawn, never typed in). Whether it's text is the
-            // pane's to find once it's read: anything else shows as it would.
-            let page = matches!(core::extension(path).as_str(), "html" | "htm");
-            preview.editing = here && ((self.edits_like_an_editor(cx) && !page) || threadbear_core::text_file::MarkdownView::opens_raw(path, self.files.prefs.markdown_view));
+            let raw = if core::is_markdown(path) { threadbear_core::text_file::MarkdownView::opens_raw(path, self.files.prefs.markdown_view) } else { editor_mode && crate::files::opens_ready_to_type(path) };
+            preview.editing = here && raw;
         }
         self.chosen.entry(thread_id.to_owned()).or_insert_with(|| preview.from.clone());
+        // One open over another section is put aside, not lost.
+        if self.previews.get(thread_id).is_some_and(|current| current.from != preview.from) {
+            self.park_preview(thread_id);
+        }
+        if let Some(parked) = self.parked.get_mut(thread_id) {
+            parked.remove(&preview.from);
+        }
         self.previews.insert(thread_id.to_owned(), preview);
         self.remember(thread_id);
         self.menu = None;
@@ -743,15 +800,38 @@ impl SidePane {
         cx.notify();
     }
 
+    /// A Print shown in a pane moves on to its new version as it's saved
+    /// (`pages.updated`), unless an older one was opened on purpose
+    /// (`followPageVersions`, threadbear_core::prints::newer_file). The
+    /// pane keeps its place in Back and is read again.
+    pub(crate) fn follow_print_versions(&mut self, before: &[threadbear_core::prints::Page], after: &[threadbear_core::prints::Page], cx: &mut Context<Self>) {
+        let mut moved = Vec::new();
+        for (thread_id, preview) in self.previews.iter_mut() {
+            let Some(newer) = preview.file_path().and_then(|path| threadbear_core::prints::newer_file(path, before, after)) else { continue };
+            preview.target = Target::File(newer);
+            preview.opened += 1;
+            moved.push(thread_id.clone());
+        }
+        if moved.is_empty() {
+            return;
+        }
+        for thread_id in &moved {
+            self.remember(thread_id);
+        }
+        if let Some(thread) = self.thread(cx).filter(|t| moved.contains(&t.id)) {
+            self.begin_preview(&thread, cx);
+        }
+        cx.notify();
+    }
+
     /// Back: through the folders and files Mike came through in the browser,
     /// then out to the section (`previewBack`).
     pub(crate) fn preview_back(&mut self, thread_id: &str, cx: &mut Context<Self>) {
-        let Some(current) = self.previews.get(thread_id).cloned() else { return };
-        if self.must_ask_to_leave(thread_id, cx) {
-            let id = thread_id.to_owned();
-            self.ask_to_leave(thread_id, move |this, cx| this.preview_back(&id, cx), cx);
+        let again = thread_id.to_owned();
+        if !self.may_leave_file(thread_id, move |this, cx| this.preview_back(&again, cx), cx) {
             return;
         }
+        let Some(current) = self.previews.get(thread_id).cloned() else { return };
         self.leave_edit(thread_id, cx);
         match current.back.split_last() {
             None => {
@@ -772,9 +852,8 @@ impl SidePane {
     }
 
     pub(crate) fn close_preview(&mut self, thread_id: &str, cx: &mut Context<Self>) {
-        if self.must_ask_to_leave(thread_id, cx) {
-            let id = thread_id.to_owned();
-            self.ask_to_leave(thread_id, move |this, cx| this.close_preview(&id, cx), cx);
+        let again = thread_id.to_owned();
+        if !self.may_leave_file(thread_id, move |this, cx| this.close_preview(&again, cx), cx) {
             return;
         }
         self.leave_edit(thread_id, cx);
@@ -1699,17 +1778,9 @@ impl SidePane {
             let thread_id = thread.id.clone();
             let back_to = preview.back.last().map_or_else(|| self.section_title(thread, &preview.from), |b| b.title.clone());
             row = row.child(self.header_button("hl-back", "chevron.left", format!("Back to {back_to}"), p, cx, move |this, cx| this.preview_back(&thread_id.clone(), cx)));
-            // A dot while anything typed isn't in the file yet (`EditedFiles`).
-            let unsaved = self.files.open.get(&thread.id).and_then(|o| o.edit.as_ref()).is_some_and(|e| e.editor_mode && e.session.drafted());
-            row = row.child(
-                h_flex()
-                    .flex_1()
-                    .min_w_0()
-                    .gap(px(6.))
-                    .items_center()
-                    .when(unsaved, |s| s.child(crate::highlights::tipped_as(div().id("hl-unsaved").flex_none().size(px(7.)).rounded_full().bg(p.accent), "Not saved yet", gpui_kit::Role::Image)))
-                    .child(div().min_w_0().truncate().text_size(px(style::size::LABEL)).font_semibold().child(preview.title.clone())),
-            );
+            // A dot while it has typing that isn't in the file yet (WindowDock's title).
+            let title = if preview.file_path().is_some() && self.file_unsaved(&thread.id) { format!("\u{25cf} {}", preview.title) } else { preview.title.clone() };
+            row = row.child(div().flex_1().min_w_0().truncate().text_size(px(style::size::LABEL)).font_semibold().child(title));
             row = row.child(self.preview_buttons(preview, thread, p, cx));
         } else {
             row = row.child(div().flex_1().min_w_0().truncate().text_size(px(style::size::LABEL)).font_semibold().child(self.section_title(thread, section)));
@@ -1934,6 +2005,9 @@ impl SidePane {
         pane.insert("section".into(), json!(section));
         if let Some(folder) = self.folder_summary(thread, cx) {
             pane.insert("folder".into(), json!(folder));
+        }
+        if let Some(search) = self.current_folder_key(thread).and_then(|key| self.search_dump(&key)) {
+            pane.insert("folderSearch".into(), search);
         }
         // An explanation, as the Swift dump has it.
         if self.explaining(&thread.id) {

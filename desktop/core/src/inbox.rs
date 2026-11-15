@@ -179,6 +179,10 @@ pub struct ThreadSummary {
     /// `ThreadSummary.runnerId`), and `remote::summary` sets it.
     #[serde(skip)]
     pub runner_id: Option<String>,
+    /// The bear whose folder it's in, for the sidebar's tile (protocol
+    /// "Bears"). None for any other thread, and from a runner without bears.
+    #[serde(default, deserialize_with = "crate::wire::field")]
+    pub bear: Option<crate::bears::ThreadBear>,
     /// A panel the agent asked to show Mike, waiting for him to look at the
     /// thread (panel_requests.rs).
     #[serde(default, deserialize_with = "crate::wire::field")]

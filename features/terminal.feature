@@ -26,34 +26,6 @@ Feature: The Terminal
     When I follow the Terminal link "https://example.com/terminal"
     Then "https://example.com/terminal" was opened through the app
 
-  # Several shells per thread as tabs, with + and ✕, a name of your own, and
-  # exit closing one of several (Wayne, 8 Nov). The Swift driver's terminal
-  # command answers in its own shape.
-  @terminal.panel @windows-pending @swift-pending
-  Scenario: The + opens another terminal as a tab, which can be renamed, and exit closes it
-    Given the thread "Rename the Settings tabs" works in a folder of its own
-    When I open the thread "Rename the Settings tabs"
-    And I press ⌘J
-    Then the Terminal has 1 tab
-    When I open another terminal
-    Then the Terminal has 2 tabs, the second showing
-    When I name the showing terminal "server"
-    Then the Terminal's tabs end with "server"
-    When I type "exit" and press Return in the Terminal
-    Then the Terminal has 1 tab
-
-  # Pointing at a web address underlines it, with a pointing hand and a tip
-  # (Wayne, 8 Nov). The Swift driver's hover answers differently.
-  @terminal.panel @windows-pending @swift-pending
-  Scenario: Pointing at a printed web address underlines it
-    Given the thread "Rename the Settings tabs" works in a folder of its own
-    When I open the thread "Rename the Settings tabs"
-    And I press ⌘J
-    And I type "printf 'https://example.com/terminal\n'" and press Return in the Terminal
-    Then the Terminal shows the line "https://example.com/terminal"
-    When I point at "https://example.com/terminal" in the Terminal
-    Then the Terminal underlines the link "https://example.com/terminal"
-
   @terminal.panel @windows-pending @swift-pending
   Scenario: A labelled Terminal hyperlink follows its address
     Given the thread "Rename the Settings tabs" works in a folder of its own
@@ -319,3 +291,73 @@ Feature: The Terminal
     Given the agent's last reply in "Export last quarter's invoices as CSV" holds a bash block "make report"
     When I open the thread "Export last quarter's invoices as CSV"
     Then the reply only offers to copy "make report"
+
+  # The frozen Swift automation lacks the tab and hover commands used below.
+  @terminal.tabs @swift-pending
+  Scenario: Separate shells keep their screens when switching tabs
+    Given the thread "Rename the Settings tabs" works in a folder of its own
+    When I open the thread "Rename the Settings tabs"
+    And I press ⌘J
+    And I type "echo first-shell" and press Return in the Terminal
+    Then the Terminal shows the line "first-shell"
+    When I rename the current Terminal tab to "First"
+    And I add a Terminal tab
+    And I type "echo second-shell" and press Return in the Terminal
+    Then the Terminal shows the line "second-shell"
+    When I rename the current Terminal tab to "Second"
+    And I choose the Terminal tab "First"
+    Then the Terminal shows the line "first-shell"
+    When I choose the Terminal tab "Second"
+    And I type "exit" and press Return in the Terminal
+    Then the Terminal has 1 tab
+    And the Terminal shows the line "first-shell"
+
+  @terminal.tabs @swift-pending
+  Scenario: A tab can be renamed from its menu and closed
+    Given the thread "Rename the Settings tabs" works in a folder of its own
+    When I open the thread "Rename the Settings tabs"
+    And I press ⌘J
+    And I rename the current Terminal tab to "Dev server"
+    Then the Terminal tab menu for "Dev server" offers "Rename…" and "Use the Shell's Name"
+    When I rename the Terminal tab "Dev server" from its menu to "Server"
+    And I add a Terminal tab
+    And I rename the current Terminal tab to "Scratch"
+    And I close the Terminal tab "Scratch" from its menu
+    Then the Terminal has 1 tab
+    And the Terminal tab "Server" is selected
+
+  @terminal.linkhover @windows-pending @swift-pending
+  Scenario: Pointing at a printed web address highlights the link
+    Given the thread "Rename the Settings tabs" works in a folder of its own
+    When I open the thread "Rename the Settings tabs"
+    And I press ⌘J
+    And I type "printf 'https://example.com/terminal\n'" and press Return in the Terminal
+    Then the Terminal shows the line "https://example.com/terminal"
+    When I point at the Terminal words "https://example.com/terminal"
+    Then the Terminal highlights the web address "https://example.com/terminal"
+
+  @terminal.panel
+  Scenario: Closing the Terminal keeps the conversation visible
+    When I open the thread "Make uploads resume after a crash"
+    And I press ⌘J
+    And I press ⌘J
+    Then the Terminal is put away
+    And the transcript shows my message "Great. Clear out the old build folders too"
+
+  @terminal.panel @rail.right
+  Scenario: The optional rail button opens the same terminal as the keyboard
+    Given the thread "Rename the Settings tabs" works in a folder of its own
+    When I open the thread "Rename the Settings tabs"
+    Then the right rail has no "Terminal" button
+    When I open Settings on "general"
+    And I press "Add a Terminal button to the rail" in Settings
+    And I close the slash settings window
+    Then the right rail has a "Terminal" button
+    When I click "Terminal" in the right rail
+    Then the Terminal is showing a shell in the thread's folder
+    And the "Terminal" button in the right rail is lit
+    When I type "printf 'rail-kept-shell\n'" and press Return in the Terminal
+    Then the Terminal shows the line "rail-kept-shell"
+    When I press ⌘J
+    And I click "Terminal" in the right rail
+    Then the Terminal shows the line "rail-kept-shell"

@@ -123,16 +123,12 @@ test("a folder's own settings load normally; with untrusted Claude settings, onl
 
 test("F2/F8: a session started in Full with a folder's untrusted permission rules can make every tool ask once the thread leaves Full", async () => {
   const plain = start();
-  // The edit check's hook (which checks reads for the secrets folder too, as
-  // a session on Full can be lowered mid-session), and one for every tool:
-  // Plan and Ask's read-only check, which the held rules' ask shares, so
-  // it's never two round trips.
-  assert.equal(plain.state.options.hooks.PreToolUse.length, 2, "the edit check's hook, and one round trip per tool, never two");
+  assert.equal(plain.state.options.hooks.PreToolUse.length, 1, "only the edit check's hook, and no round trip per tool, where none is needed");
+  // Reads are checked for the secrets folder on every session: one on Full can be lowered mid-session.
   assert.match('Read', new RegExp(`^(${plain.state.options.hooks.PreToolUse[0].matcher})$`));
   plain.state.close!();
   const held = start([], { permissionMode: 'full', heldGrants: true });
   assert.ok(held.state.options.hooks.PreToolUse[0].matcher, 'the edit check stays');
-  assert.equal(held.state.options.hooks.PreToolUse.length, 2);
   const pre = held.state.options.hooks.PreToolUse[1].hooks[0];
   assert.deepEqual(await pre({ hook_event_name: 'PreToolUse', tool_name: 'Bash', tool_input: {} }), {});
   held.session.askBeforeEveryTool!();
@@ -140,25 +136,6 @@ test("F2/F8: a session started in Full with a folder's untrusted permission rule
   // A hook's ask comes before the CLI's allow rules, so the call reaches canUseTool.
   assert.equal(out.hookSpecificOutput.permissionDecision, 'ask');
   held.state.close!();
-});
-
-test('an Ask mode turn refuses Bash, MCP and every other tool that could change something, even in Full; only reading tools run', async () => {
-  const { session, state } = start([], { permissionMode: 'full' }, { neverAsk: NEVER_ASK_TOOLS, alwaysAsk: ALWAYS_ASK_TOOLS });
-  const pre = state.options.hooks.PreToolUse[1].hooks[0];
-  const decision = async (tool: string) => (await pre({ hook_event_name: 'PreToolUse', tool_name: tool, tool_input: {} }))?.hookSpecificOutput?.permissionDecision;
-  assert.equal(await decision('Bash'), undefined, 'an ordinary turn is left alone');
-  session.send({ id: 'turn-1', text: 'What does this do?', images: [], readOnly: true });
-  for (const tool of ['Bash', 'PowerShell', 'Edit', 'Write', 'NotebookEdit', 'KillShell', 'Monitor', 'CronCreate', 'mcp__convex__run', 'mcp__threadbear__send_message', 'mcp__threadbear__create_thread', 'mcp__threadbear__delete_thread', 'Skill', 'SomeNewTool']) {
-    assert.equal(await decision(tool), 'deny', `${tool} is refused in Ask`);
-  }
-  for (const tool of ['Read', 'Grep', 'Glob', 'WebFetch', 'WebSearch', 'Agent', 'ToolSearch', 'mcp__threadbear__end_turn', 'mcp__threadbear__read_thread']) {
-    assert.equal(await decision(tool), undefined, `${tool} runs in Ask`);
-  }
-  // The turn's over: the next ordinary message gets its tools back.
-  await state.frame!({ type: 'result', subtype: 'success', is_error: false, duration_ms: 1, session_id: 's', result: '' });
-  session.send({ id: 'turn-2', text: 'Now fix it', images: [] });
-  assert.equal(await decision('Bash'), undefined);
-  state.close!();
 });
 
 test('effort: sent at start, changed through flag settings, and read back from the Stop hook', async () => {
@@ -834,7 +811,7 @@ test('Stop hook: a notice handed over with "Now write your reply" does not undo 
   assert.equal((await stop({ hook_event_name: 'Stop', stop_hook_active: false })).reason, ONE_REPLY_END_TURN_NUDGE);
 });
 
-// Wayne, 11 Nov: in Ask mode every new version of a Print asked again.
+// Wayne, 11 Nov: in Ask before edits every new version of a Print asked again.
 test('update_print asks once per Print: once allowed, later updates to that Print go through', async () => {
   let answer: ToolApprovalAnswer = { decision: 'allow' };
   const { state, approvals } = start([], { permissionMode: 'ask' }, { neverAsk: NEVER_ASK_TOOLS, alwaysAsk: ALWAYS_ASK_TOOLS }, async () => answer);

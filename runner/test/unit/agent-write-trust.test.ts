@@ -689,8 +689,10 @@ test('a login with no settings.json yet: writing one is code, and a saved edit r
   put(path.join(login, '.claude.json'), '{}');
   const h = makeHarness(home, {}, {
     accounts: new FakeAccounts([...ACCOUNTS, { id: 'claude-9', provider: 'claude', title: 'nine', configDir: login }]),
-    panelsRoot: os.homedir(),
-    patchTrust: new PatchTrust({ file: path.join(home, 'patch-trust.json'), claudeHome: os.homedir() }),
+    // A home of its own: the real ~/.threadbear/patches may hold a patch
+    // Threadbear can't follow, which makes every edit "can't tell".
+    panelsRoot: tmpDir(),
+    patchTrust: new PatchTrust({ file: path.join(home, 'patch-trust.json'), claudeHome: tmpDir() }),
   });
   const { thread } = h.runner.create({ text: 'hi', accountId: 'claude-3', cwd: project, permissionMode: 'ask' });
   await settle(h, thread.id);

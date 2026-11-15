@@ -12,8 +12,8 @@
 // THREADBEAR_SYNC=off turns it off whatever runner.json says, which
 // check.sh sets so no test runner ever writes to the real project.
 import { agentOf, type AgentFrom } from './outside-agents.ts';
-import { webhookOf, type HookFrom, type HookInfo, type HookTarget } from './webhooks.ts';
 import { wellFormedJson } from './well-formed-json.ts';
+import { webhookOf, type HookFrom, type HookInfo, type HookTarget } from './webhooks.ts';
 import { moveInfoFrom, type MoveInfo, type MovePreview, type MoveRow, type MovesBackend } from './moves.ts';
 import { START_CARD } from './cross-runner.ts';
 import { asPushFailing, pushFailingText, type PushFailing } from './push-failing.ts';
@@ -147,14 +147,14 @@ export const BACKEND_API_VERSION = 81;
 // From this one a message row can be a login's note (role "note"): a thread
 // that moved to another login or is waiting for room says so on another Mac.
 export const LOGIN_NOTES_API_VERSION = 78;
-// sync:publishPrint and sync:unpublishPrint (Prints can be published).
-// This copy's: 73, then 77, moved to 80 as Mike's releases took 73 to 79
-// (12 and 14 Nov 2026).
-export const PRINTS_API_VERSION = 80;
-// webhooks:* and the /hook/ route (this copy's, experiment webhooks): 78,
-// moved to 81 when Mike's release took 78 (14 Nov 2026).
-export const WEBHOOKS_API_VERSION = 81;
 const HELD_NOTES = 200;
+// webhooks:* and the /hook/ route (this copy's, experiment webhooks; 78
+// here until Mike's release took 77 to 79).
+export const WEBHOOKS_API_VERSION = 81;
+// sync:publishPrint and sync:unpublishPrint (Prints can be published).
+// 73, then 77, in this copy before Mike's releases took 73 to 79 (12 and
+// 14 Nov 2026).
+export const PRINTS_API_VERSION = 80;
 // From this one sync:sharedThreads lists a runner's rows shared by link, which
 // it checks against its own threads on every start and every
 // SHARE_RECONCILE_MS (reconcileShares).
@@ -1814,7 +1814,7 @@ export class ConvexSync {
     await this.backend('mutation', 'sync:setRunnerOrder', { key: this.deps.key, runnerIds });
   }
 
-  /** Prints can be published: sync is on and the backend is API 77 or later. */
+  /** Prints can be published: sync is on and the backend is API 80 or later. */
   printsProblem(): string | undefined {
     if (this.off) return 'Publishing needs your Convex backend, which is off on this runner.';
     if ((this.backendApiVersion ?? 0) < PRINTS_API_VERSION) return 'The backend is too old to publish a print: it deploys with the runner\'s next update, so try again in a few minutes.';

@@ -51,11 +51,6 @@ export const DEFAULT_CLI_UPDATES: CliUpdatesConfig = { claude: 'auto', codex: 'a
 // never touch ~/Library/Application Support/Threadbear.
 export type Config = {
   home: string; // data dir
-  // A profile's runner (runner.json's profile): its own Convex CLI login
-  // (the CLI run with HOME at convexCliHome) and its own main Claude and
-  // Codex logins, never the Mac's ~/.convex, ~/.claude or ~/.codex.
-  profile?: ProfileInfo;
-  convexCliHome?: string;
   // Account discovery uses the environment loadConfig was given, which may
   // differ from this process's (a test or an embedded runner).
   userHome: string;
@@ -167,14 +162,8 @@ export type Config = {
   connectorsRefused?: string;
 };
 
-// A profile (docs/guide.md, "Profiles"): one whole Threadbear setup on
-// this Mac, such as Work beside Personal, with its own runner, data folder,
-// Convex deployment and logins. The first setup has none and is Personal.
-export type ProfileInfo = { id: string; name: string };
-
 export type RunnerJson = {
   port?: number;
-  profile?: ProfileInfo;
   defaults?: {
     cwd?: string;
     accountId?: string;
@@ -433,12 +422,8 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env, opts: { readOnl
   const codexPath = nonEmpty(env.THREADBEAR_CODEX_PATH) ?? nonEmpty(json.codexPath);
   const models = providerMap(json.defaults?.models, nonEmpty);
   const efforts = providerMap(json.defaults?.efforts, (v) => (isEffortLevel(v) ? v : undefined));
-  const profile = profileFrom(json.profile);
-  // A profile keeps its logins in its own folder (profiles.ts, profileDirs).
-  const own = profile ? profileDirs(home) : undefined;
   return {
     home,
-    ...(profile && own ? { profile, convexCliHome: own.convexCliHome } : {}),
     userHome,
     pathEnv: env.PATH ?? '',
     port,
@@ -456,10 +441,10 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env, opts: { readOnl
       ...(efforts ? { efforts } : {}),
       ...((m) => (m ? { permissionMode: m } : {}))(defaultModeOf(json.defaults?.permissionMode)),
     },
-    claudeMainDir: expand(env.THREADBEAR_CLAUDE_MAIN_DIR || own?.claudeMainDir || '~/.claude'),
-    claudeMainJson: expand(env.THREADBEAR_CLAUDE_MAIN_JSON || own?.claudeMainJson || '~/.claude.json'),
+    claudeMainDir: expand(env.THREADBEAR_CLAUDE_MAIN_DIR || '~/.claude'),
+    claudeMainJson: expand(env.THREADBEAR_CLAUDE_MAIN_JSON || '~/.claude.json'),
     tokenStatsAccountsDir: expand(
-      env.THREADBEAR_ACCOUNTS_DIR || own?.tokenStatsAccountsDir || '~/Library/Application Support/Token Stats/Accounts',
+      env.THREADBEAR_ACCOUNTS_DIR || '~/Library/Application Support/Token Stats/Accounts',
     ),
     accountsDir: path.join(home, 'accounts'),
     followMain: env.THREADBEAR_FOLLOW_MAIN ? env.THREADBEAR_FOLLOW_MAIN !== '0' : json.followMain !== false,
@@ -478,7 +463,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env, opts: { readOnl
     ...(nonEmpty(json.cursorPath) ? { cursorPath: expand(nonEmpty(json.cursorPath)!) } : {}),
     ...(nonEmpty(json.opencodePath) ? { opencodePath: expand(nonEmpty(json.opencodePath)!) } : {}),
     codexArgs: Array.isArray(json.codexArgs) ? json.codexArgs.filter((a): a is string => typeof a === 'string') : [],
-    codexMainDir: expand(env.THREADBEAR_CODEX_MAIN_DIR || own?.codexMainDir || '~/.codex'),
+    codexMainDir: expand(env.THREADBEAR_CODEX_MAIN_DIR || '~/.codex'),
     tokenStatsLimitsFile: expand(
       env.THREADBEAR_TOKEN_STATS_LIMITS || '~/Library/Application Support/Token Stats/limits.json',
     ),
@@ -641,32 +626,4 @@ export function ensureHome(home: string): void {
 
 export function readToken(home: string): string {
   return fs.readFileSync(paths.token(home), 'utf8').trim();
-}
-
-// A profile's id and name from runner.json, when both are there.
-export function profileFrom(v: unknown): ProfileInfo | undefined {
-  if (!v || typeof v !== 'object') return undefined;
-  const { id, name } = v as Record<string, unknown>;
-  if (typeof id !== 'string' || !/^[a-z0-9][a-z0-9-]{0,39}$/.test(id) || typeof name !== 'string' || !name.trim()) return undefined;
-  return { id, name: name.trim().slice(0, 40) };
-}
-
-// Where a profile's own logins live, inside its data folder.
-export function profileDirs(home: string) {
-  const own = path.join(home, 'logins');
-  return {
-    convexCliHome: path.join(own, 'convex'),
-    claudeMainDir: path.join(own, 'claude-main'),
-    claudeMainJson: path.join(own, 'claude-main.json'),
-    codexMainDir: path.join(own, 'codex-main'),
-    tokenStatsAccountsDir: path.join(own, 'token-stats'),
-  };
-}
-
-// What a profile's agents are told with their standing instructions: which
-// profile this is, and to keep its work inside it (Work code never pushed
-// to a personal repo). Nothing for the first setup, which has no profile.
-export function profileLine(profile: ProfileInfo | undefined): string {
-  if (!profile) return '';
-  return `[Threadbear profile] This runner is the "${profile.name}" profile on this Mac, with its own Convex backend and its own Claude, Codex and Convex logins, separate from any other Threadbear profile here. Keep this profile's work inside it: don't copy its code, data or secrets to another profile's repos, accounts or services unless the user asks.`;
 }

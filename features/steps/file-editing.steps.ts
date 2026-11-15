@@ -17,6 +17,8 @@ Then('the pane\'s file can be edited', async function (this: ThreadbearWorld) {
   await this.until('the bar to offer the pencil', (d) => pane(d)?.previewMode === 'reading');
 });
 
+// A file opens ready to type in unless Edit files like an editor is off:
+// then the pencil.
 When('I start editing the pane\'s file', async function (this: ThreadbearWorld) {
   // Like an editor (the default), it opened ready to type in already.
   const d = await this.until('the bar to offer the pencil, or the file being edited', (x) => (pane(x)?.previewMode === 'reading' || editing(x)) && x);
@@ -37,6 +39,8 @@ When('I type {string} at the end of the pane\'s file, without waiting', async fu
   await this.app.do({ cmd: 'preview', insert: text, wait: false });
 });
 
+// Settings > General > Files, set from the script without opening Settings
+// (the Swift app's `editor` and `autosave`).
 When('I turn on Edit files like an editor', async function (this: ThreadbearWorld) {
   await this.app.do({ cmd: 'preview', editor: true });
 });
@@ -49,18 +53,17 @@ When('I turn off Save files automatically', async function (this: ThreadbearWorl
   await this.app.do({ cmd: 'preview', autosave: false });
 });
 
+// "save", "discard" or "cancel", for the next time leaving a file asks.
 When('I\'d answer {string} to saving the changes', async function (this: ThreadbearWorld, answer: string) {
-  await this.app.do({ cmd: 'preview', answer });
+  await this.app.do({ cmd: 'preview', leaveAnswer: answer });
 });
 
-const unsaved = (d: Parameters<typeof pane>[0]) => (pane(d) as { previewUnsaved?: boolean } | null | undefined)?.previewUnsaved;
-
 Then('the pane\'s file isn\'t saved yet', async function (this: ThreadbearWorld) {
-  await this.until('the file marked unsaved', (d) => unsaved(d) === true);
+  await this.until('the file marked unsaved', (d) => pane(d)?.previewUnsaved === true);
 });
 
 Then('the pane\'s file is saved', async function (this: ThreadbearWorld) {
-  await this.until('the file marked saved', (d) => unsaved(d) === false);
+  await this.until('the file marked saved', (d) => pane(d)?.previewUnsaved === false);
 });
 
 Then('the file {string} on disk doesn\'t end with {string}', async function (this: ThreadbearWorld, relative: string, words: string) {
@@ -68,14 +71,8 @@ Then('the file {string} on disk doesn\'t end with {string}', async function (thi
   if (fs.readFileSync(file, 'utf8').trimEnd().endsWith(words)) throw new Error(`${relative} ends with "${words}"`);
 });
 
-const status = (d: Parameters<typeof pane>[0]) => (pane(d) as { previewStatus?: string | null } | null | undefined)?.previewStatus;
-
-Then('the pane\'s status bar says {string}', async function (this: ThreadbearWorld, words: string) {
-  await this.until(`the status bar saying "${words}"`, (d) => status(d) === words);
-});
-
 Then('the pane\'s status bar ends {string}', async function (this: ThreadbearWorld, words: string) {
-  await this.until(`the status bar ending "${words}"`, (d) => status(d)?.endsWith(words));
+  await this.until(`the status bar ending "${words}"`, (d) => pane(d)?.previewStatus?.endsWith(words));
 });
 
 When('I save the pane\'s file', async function (this: ThreadbearWorld) {
@@ -109,4 +106,55 @@ When('I take the file\'s side in the pane', async function (this: ThreadbearWorl
 
 Then('the pane\'s file reads {string}', async function (this: ThreadbearWorld, words: string) {
   await this.until(`the editor to read "${words}"`, (d) => pane(d)?.previewText?.trim() === words);
+});
+
+// The bar under the text (`EditorStatusBar`): where the cursor is, and
+// whether what's typed is in the file yet. Both parts are matched.
+Then('the pane\'s status bar says {string}', async function (this: ThreadbearWorld, words: string) {
+  await this.until(`the status bar to say "${words}"`, (d) => pane(d)?.previewStatus?.includes(words));
+});
+
+Then('the pane\'s file is marked unsaved', async function (this: ThreadbearWorld) {
+  await this.until('the dot by the file\'s name', (d) => pane(d)?.previewUnsaved === true);
+});
+
+Then('the pane\'s file isn\'t marked unsaved', async function (this: ThreadbearWorld) {
+  await this.until('no dot by the file\'s name', (d) => pane(d)?.previewUnsaved === false);
+});
+
+// A moment longer than autosave would take, then still as it was.
+Then('the file {string} on disk still ends with {string}', async function (this: ThreadbearWorld, relative: string, words: string) {
+  const file = path.join(await threadFolder(this), relative);
+  await new Promise((r) => setTimeout(r, 1800));
+  const text = fs.readFileSync(file, 'utf8').trimEnd();
+  if (!text.endsWith(words)) throw new Error(`${relative} ends ${JSON.stringify(text.slice(-40))}`);
+});
+
+// Save, Don't Save or Cancel, given before Back, as a scripted app can't
+// click an alert (the Swift app's `scriptedAnswer`).
+When('I press Back in the pane, answering {string}', async function (this: ThreadbearWorld, answer: string) {
+  const name = { 'Save': 'save', 'Don\'t Save': 'discard', 'Cancel': 'cancel' }[answer];
+  if (!name) throw new Error(`answer must be Save, Don't Save or Cancel, not ${answer}`);
+  await this.app.do({ cmd: 'preview', leaveAnswer: name });
+  await this.app.do({ cmd: 'preview', back: true });
+});
+
+// Find and replace, while the file's being edited (⌥⌘F): the bar's Replace
+// row with its own words, then Replace and All.
+When('I find {string} in the pane\'s file, to replace with {string}', async function (this: ThreadbearWorld, words: string, replacement: string) {
+  await this.until('the file being edited', (d) => editing(d) && pane(d)?.previewText);
+  await this.app.do({ cmd: 'preview', find: words, replaceWith: replacement });
+});
+
+When('I replace the match in the pane\'s file', async function (this: ThreadbearWorld) {
+  await this.app.do({ cmd: 'preview', replace: true });
+});
+
+When('I replace every match in the pane\'s file', async function (this: ThreadbearWorld) {
+  await this.app.do({ cmd: 'preview', replaceAll: true });
+});
+
+Then('the file {string} on disk has the words {string}', async function (this: ThreadbearWorld, relative: string, words: string) {
+  const file = path.join(await threadFolder(this), relative);
+  await this.until(`${relative} on disk to have "${words}"`, () => fs.readFileSync(file, 'utf8').includes(words));
 });

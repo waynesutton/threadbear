@@ -64,6 +64,14 @@ pub struct Saved {
     pub completion_sound_volume: Option<f64>,
     /// `askBeforeQuitting` (QuitPrompt): None is yes.
     pub ask_before_quitting: Option<bool>,
+    /// `slashReturnRuns` (SlashReturn): Return in the slash palette sends
+    /// the command at once. None is no: Return puts it in the box, and the
+    /// next Return sends it (Wayne, 11 Nov).
+    pub slash_return_runs: Option<bool>,
+    /// Use the full palette for skills named inside a message (default on).
+    pub inline_skill_palette: Option<bool>,
+    /// An optional rail button for the existing Terminal drawer, off by default.
+    pub rail_terminal: Option<bool>,
     /// `activityLog` (ActivityRecorder): Settings > General's Keep an
     /// activity log (activity.rs). Off until it's turned on.
     pub activity_log: Option<bool>,
@@ -117,11 +125,6 @@ pub struct Saved {
     /// 13 Nov). A panel with its title hidden moves from its background
     /// either way. The GPUI app's own.
     pub panel_background_drag: Option<bool>,
-    /// `slashReturnRuns` (SlashReturn): Settings > General's Return sends a
-    /// command right away. None is off: Return (and a double-click) puts the
-    /// picked command in the box and the next Return sends it, so a new
-    /// thread's box doesn't start a thread by surprise (Wayne, 11 Nov).
-    pub slash_return_runs: Option<bool>,
     /// `filesEditLikeAnEditor` (FileEditorMode): Settings > General > Files'
     /// Edit files like an editor. A text file opens in the pane ready to
     /// type in, with a status bar, and what's typed waits for ⌘S, Save or
@@ -260,7 +263,7 @@ impl Settings {
         self.saved.slash_return_runs.unwrap_or(false)
     }
 
-    pub fn edits_like_an_editor(&self) -> bool {
+    pub fn edits_files_like_an_editor(&self) -> bool {
         self.saved.files_edit_like_an_editor.unwrap_or(true)
     }
 

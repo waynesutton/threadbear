@@ -603,30 +603,11 @@ fn orange(cx: &App) -> Hsla {
 /// full size, and under it the picture or the source.
 fn rich_box(block: &RichBlock, window: &mut Window, cx: &mut App) -> AnyElement {
     let Some(store) = store(cx) else { return div().child(block.source.clone()).into_any_element() };
-    let zoom = style::zoom_percent();
-    let key = block.key(zoom);
-    let (state, shows_source, copied, asked) = {
+    let (shows_source, copied) = {
         let s = store.read(cx);
-        (s.state(block, zoom).cloned(), s.shows_source(block), s.just_copied(block), s.asked.contains(&key))
+        (s.shows_source(block), s.just_copied(block))
     };
-    if state.is_none() && !asked {
-        // Looked for after this frame: a box only asks as it's drawn.
-        let (store, block) = (store.clone(), block.clone());
-        cx.defer(move |cx| store.update(cx, |s, cx| s.want(block, zoom, cx)));
-    }
-    let pictures = match (&state, shows_source) {
-        (Some(Drawing::Drawn { .. }), false) => store.update(cx, |s, cx| s.pictures(&key, cx)),
-        _ => None,
-    };
-    // Only as many as the frame's budget holds (`hand_out`); the rest show
-    // their source this frame.
-    let pictures = pictures.filter(|pair| store.update(cx, |s, _| s.hand_out(&key, pair)));
-    // The frame's end, once a frame has handed any out.
-    let hook = store.update(cx, |s, _| !s.in_frame.is_empty() && !std::mem::replace(&mut s.frame_hooked, true));
-    if hook {
-        let store = store.clone();
-        window.on_next_frame(move |_, cx| store.update(cx, |s, cx| s.end_frame(cx)));
-    }
+    let (state, pictures) = wanted(&store, block, !shows_source, window, cx);
     let (fill, edge, hairline, secondary) = (style::code_background(cx), style::card_border(cx), style::hairline(cx), style::secondary_label(cx));
     let id = block.id.clone();
     let header = h_flex()
@@ -648,16 +629,7 @@ fn rich_box(block: &RichBlock, window: &mut Window, cx: &mut App) -> AnyElement 
             move |window, cx| crate::rich_window::open(&block, window, cx)
         }));
     let body = match (&state, pictures) {
-        (Some(Drawing::Drawn { width, height, clipped }), Some((dark_picture, light_picture))) => {
-            let picture = if dark(cx) { dark_picture } else { light_picture };
-            // Its texture, once decoded, for `release` to drop.
-            if !store.read(cx).textures.contains_key(&picture.id()) {
-                if let Some(texture) = picture.clone().get_render_image(window, cx) {
-                    store.update(cx, |s, _| s.textures.insert(picture.id(), texture));
-                }
-            }
-            picture_body(block, (*width, *height), *clipped, picture, cx)
-        }
+        (Some(Drawing::Drawn { width, height, clipped }), Some(picture)) => picture_body(block, (*width, *height), *clipped, picture, cx),
         _ => source_body(block, &state, cx),
     };
     v_flex()
@@ -675,6 +647,46 @@ fn rich_box(block: &RichBlock, window: &mut Window, cx: &mut App) -> AnyElement 
         .child(div().h(gpui_kit::px(0.5)).w_full().bg(hairline))
         .child(body)
         .into_any_element()
+}
+
+/// A block's drawing as far as it's got, asked for if it hasn't been, and
+/// with `picture` its picture for this appearance once it's drawn and fits in
+/// the frame's budget (`hand_out`; one over it shows its source this frame).
+/// The Print cards in a reply draw their pictures through this too (prints.rs).
+pub(crate) fn wanted(store: &Entity<RichStore>, block: &RichBlock, picture: bool, window: &mut Window, cx: &mut App) -> (Option<Drawing>, Option<Arc<Image>>) {
+    let zoom = style::zoom_percent();
+    let key = block.key(zoom);
+    let (state, asked) = {
+        let s = store.read(cx);
+        (s.state(block, zoom).cloned(), s.asked.contains(&key))
+    };
+    if state.is_none() && !asked {
+        // Looked for after this frame: a box only asks as it's drawn.
+        let (store, block) = (store.clone(), block.clone());
+        cx.defer(move |cx| store.update(cx, |s, cx| s.want(block, zoom, cx)));
+    }
+    let pictures = match (&state, picture) {
+        (Some(Drawing::Drawn { .. }), true) => store.update(cx, |s, cx| s.pictures(&key, cx)),
+        _ => None,
+    };
+    let pictures = pictures.filter(|pair| store.update(cx, |s, _| s.hand_out(&key, pair)));
+    // The frame's end, once a frame has handed any out.
+    let hook = store.update(cx, |s, _| !s.in_frame.is_empty() && !std::mem::replace(&mut s.frame_hooked, true));
+    if hook {
+        let store = store.clone();
+        window.on_next_frame(move |_, cx| store.update(cx, |s, cx| s.end_frame(cx)));
+    }
+    let picture = pictures.map(|(dark_picture, light_picture)| {
+        let picture = if dark(cx) { dark_picture } else { light_picture };
+        // Its texture, once decoded, for `release` to drop.
+        if !store.read(cx).textures.contains_key(&picture.id()) {
+            if let Some(texture) = picture.clone().get_render_image(window, cx) {
+                store.update(cx, |s, _| s.textures.insert(picture.id(), texture));
+            }
+        }
+        picture
+    });
+    (state, picture)
 }
 
 /// The Diagram (or Preview) / Source switch.

@@ -10,7 +10,7 @@ import { readShareImage } from './share-images.ts';
 import { CallerGate } from './rpc-gate.ts';
 import { threadOfPort } from './peer.ts';
 import { threadKey as makeThreadKey } from './rpc-auth.ts';
-import { loadConfig, ensureHome, readToken, paths, recordListening, defaultHome, profileLine, readRunnerJson, writeRunnerJson, DEFAULT_CWD, RUNNER_VERSION, RunnerJsonError } from './config.ts';
+import { loadConfig, ensureHome, readToken, paths, recordListening, defaultHome, DEFAULT_CWD, RUNNER_VERSION, RunnerJsonError, readRunnerJson, writeRunnerJson } from './config.ts';
 import { configureGitPanel, gitPanelSettings, handleGitPanel } from './git-panel.ts';
 import { startHousekeeping } from './housekeeping.ts';
 import { RELEASE, markConfigStop, markGoodLater, onSupervisorGone, ownCheckout, readRelease, readState, requestHandover, supervised, takeRollbackNotice, tellLaunchListening } from './release.ts';
@@ -81,10 +81,7 @@ import { isDirectory, removeTempFiles } from './fsutil.ts';
 import { Models } from './models/index.ts';
 import { SettingsService, modelMethods, settingsMethods } from './settings.ts';
 import { SkillStore, skillMethods } from './skills.ts';
-import { ProfileJobs, profileMethods } from './profiles.ts';
 import { PublicProfile, profilePageMethods } from './public-profile.ts';
-import { spawn as spawnProcess } from 'node:child_process';
-import net from 'node:net';
 import { InstructionsStore, instructionsMethods } from './instructions.ts';
 import { ConvexSync, defaultRunnerName, ensureRunnerId, readSyncKey, WEBHOOKS_API_VERSION } from './sync.ts';
 import { pushFailingText } from './push-failing.ts';
@@ -375,8 +372,7 @@ async function main(): Promise<void> {
       },
       set: (on) => void settings.update({ fullSync: on }),
     }),
-    // A profile's runner says which profile it is first (config.ts, profileLine).
-    standingInstructions: () => [profileLine(cfg.profile), instructions.given()].filter(Boolean).join('\n\n'),
+    standingInstructions: () => instructions.given(),
     skillNames: () => skills.names(),
     projects,
     atMac: () => atMac,
@@ -691,6 +687,9 @@ async function main(): Promise<void> {
     if (scheduler.list(id).some((sc) => sc.threadId === id && !sc.finishedAt && sc.check)) leftBehind.push("its schedules' shell checks");
     return { ...info, leftBehind };
   };
+  // Made further down, once there's a runner to start its thread on; the
+  // backend's remote-runner updates reach it through this (convex-use.ts).
+  let fullSyncOfferRef: FullSyncOffer | undefined;
   // Webhook runs (webhooks.ts): a bear that's away holds its deliveries,
   // run once it's back (checked each minute).
   const webhooksOn = () => experimentOn(cfg.home, WEBHOOKS);
@@ -712,9 +711,6 @@ async function main(): Promise<void> {
       log.warn("held webhook deliveries couldn't run", { error: (e as Error).message });
     }
   }, 60_000).unref();
-  // Made further down, once there's a runner to start its thread on; the
-  // backend's remote-runner updates reach it through this (convex-use.ts).
-  let fullSyncOfferRef: FullSyncOffer | undefined;
   const sync = new ConvexSync({
     config: { ...cfg.sync, runnerId: syncRunnerId, icon: runnerIcon },
     use: new ConvexUseTally({ home: cfg.home }),
@@ -1062,26 +1058,6 @@ async function main(): Promise<void> {
   updaterReady = true;
 
   runner.attachClis(updates);
-  // Settings > Profiles (profiles.ts): this Mac's profiles, made and removed
-  // from whichever runner the app is on. A profile's setup runs from the
-  // checkout this runner was built from.
-  const profileJobs = new ProfileJobs({
-    checkout: () => ownCheckout(),
-    spawn: (cmd, args, opts) => spawnProcess(cmd, args, { ...opts, stdio: ['ignore', 'pipe', 'pipe'] }),
-    reachable: (port) =>
-      new Promise((resolve) => {
-        const socket = net.connect({ host: '127.0.0.1', port }, () => {
-          socket.destroy();
-          resolve(true);
-        });
-        socket.on('error', () => resolve(false));
-        socket.setTimeout(500, () => {
-          socket.destroy();
-          resolve(false);
-        });
-      }),
-    changed: () => {},
-  });
   // Refresh and Edit with agent (pages.ts): to the thread that made the
   // page, queued behind its turn, or a new thread in the page's project.
   const askAboutPage: PageAsk = (page, text) => {
@@ -1095,7 +1071,7 @@ async function main(): Promise<void> {
       return { threadId: t.thread.id, started: true };
     }
   };
-  const methods = { ...profileMethods(profileJobs), ...profilePageMethods(publicProfile), ...restartMethods(restarter), ...scheduleMethods(scheduler), ...projectMethods(projects), ...pageMethods(pagesFor, askAboutPage, printPublisher), ...drainProjectMethods(projects), ...librarianMethods(librarian), ...connectorsMethods(connectors, { on: () => experimentOn(cfg.home, 'connectorsSetup'), start: (r) => startOwnThread(runner, r, undefined), open: openThread, local: () => experimentOn(cfg.home, 'localConnectors'), findLauncher: (l) => findLauncher(l) }), ...settingsMethods(settings), ...skillMethods(skills), ...instructionsMethods(instructions), ...modelMethods(models), ...devicesMethods(sync, (kind) => fullSyncOffer.trigger(kind)), ...agentsMethods(sync, () => experimentOn(cfg.home, OUTSIDE_AGENTS)), ...tablesMethods({ tables: () => tables, on: tablesOn }), ...bearsMethods({ bears, on: bearsOn, mention: (p) => mentions.ask(p), unseat: (id) => tables.unseatEverywhere(id), touch: () => runner.touchThreads(runner.list(['inbox', 'snoozed', 'archived']).filter((t) => bears.forCwd(t.cwd)).map((t) => t.id)), cwdOf: (id) => (runner.has(id) ? runner.get(id).cwd : undefined), revokeHooks: (folder) => (webhooksOn() ? revokeHooksFor(sync, folder) : Promise.resolve(0)) }), ...webhooksMethods({ backend: sync, registry: hookRegistry, on: webhooksOn, runnerId: syncRunnerId, needApi: WEBHOOKS_API_VERSION, modeOf: (id) => (runner.has(id) ? runner.get(id).permissionMode : undefined), bearFolder: (b) => { if (!bearsOn()) return undefined; try { return bears.get(b, { faces: false }).folder; } catch { return undefined; } } }), ...xSearchMethods({ on: () => experimentOn(cfg.home, 'xSearch'), secretsDir: paths.secrets(cfg.home) }), ...usageStatsMethods({ tally, history: usageHistory, clock: realClock }) };
+  const methods = { ...profilePageMethods(publicProfile), ...restartMethods(restarter), ...scheduleMethods(scheduler), ...projectMethods(projects), ...pageMethods(pagesFor, askAboutPage, printPublisher), ...drainProjectMethods(projects), ...librarianMethods(librarian), ...connectorsMethods(connectors, { on: () => experimentOn(cfg.home, 'connectorsSetup'), start: (r) => startOwnThread(runner, r, undefined), open: openThread, local: () => experimentOn(cfg.home, 'localConnectors'), findLauncher: (l) => findLauncher(l) }), ...settingsMethods(settings), ...skillMethods(skills), ...instructionsMethods(instructions), ...modelMethods(models), ...devicesMethods(sync, (kind) => fullSyncOffer.trigger(kind)), ...agentsMethods(sync, () => experimentOn(cfg.home, OUTSIDE_AGENTS)), ...tablesMethods({ tables: () => tables, on: tablesOn }), ...bearsMethods({ bears, on: bearsOn, mention: (p) => mentions.ask(p), unseat: (id) => tables.unseatEverywhere(id), touch: () => runner.touchThreads(runner.list(['inbox', 'snoozed', 'archived']).filter((t) => bears.forCwd(t.cwd)).map((t) => t.id)), cwdOf: (id) => (runner.has(id) ? runner.get(id).cwd : undefined), revokeHooks: (folder) => (webhooksOn() ? revokeHooksFor(sync, folder) : Promise.resolve(0)) }), ...webhooksMethods({ backend: sync, registry: hookRegistry, on: webhooksOn, runnerId: syncRunnerId, needApi: WEBHOOKS_API_VERSION, modeOf: (id) => (runner.has(id) ? runner.get(id).permissionMode : undefined), bearFolder: (b) => { if (!bearsOn()) return undefined; try { return bears.get(b, { faces: false }).folder; } catch { return undefined; } } }), ...xSearchMethods({ on: () => experimentOn(cfg.home, 'xSearch'), secretsDir: paths.secrets(cfg.home) }), ...usageStatsMethods({ tally, history: usageHistory, clock: realClock }) };
   // runner.status carries the CLI statuses too (protocol, "runner.status").
   const restartStatus = methods['runner.status'];
   methods['runner.status'] = (p) => {

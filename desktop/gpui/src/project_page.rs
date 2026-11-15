@@ -46,6 +46,7 @@ impl Threadbear {
         if let Some(parts) = self.render_parts_section(&project, cx) {
             column = column.child(parts);
         }
+        column = column.children(self.render_table_bears(&project, cx));
         column = column
             .child(self.render_text_section(&project, TextField::Goals, window, cx))
             .child(self.render_text_section(&project, TextField::State, window, cx))

@@ -6,6 +6,12 @@
 // pictures are copied into the data folder's `looks/`, which the Swift app
 // uses too, scaled down, so moving or deleting the original doesn't break
 // the page; replacing or removing one deletes its copy.
+//
+// Two Swift fixes have nothing to port here: the panel reads the saved look
+// on every change rather than a copy that catches up a redraw later (a
+// SwiftUI binding race that lost your own picture, 5b2e6d8e), and a clipped
+// photo taking clicks above its box (79084074). GPUI draws what's held, and a
+// picture with no handlers takes no clicks.
 use crate::a11y::A11yRole as _;
 use crate::app::Threadbear;
 use crate::style;
@@ -178,12 +184,14 @@ pub(crate) fn backdrop(slot: Slot, name: Option<&str>, dim: f64, focus: Backdrop
     let veil = cx.theme().background.opacity(dim.clamp(0., 1.) as f32);
     // Real pixels, not zoomed: the frame is worked out from the drawn size.
     let p = |v: f64| gpui_kit::px(v as f32);
+    // Named for scripts and VoiceOver; with no handlers it takes no clicks.
+    let label = if slot == Slot::Main { "Window background photo" } else { "Page background photo" };
     Some(
         div()
             .absolute()
             .inset_0()
             .overflow_hidden()
-            .child(img(file).absolute().left(p(x)).top(p(y)).w(p(w)).h(p(h)))
+            .child(div().id(SharedString::from(format!("look-background-image-{slot:?}"))).test_support().a11y_role(Role::Image).aria_label(label).absolute().left(p(x)).top(p(y)).w(p(w)).h(p(h)).child(img(file).size_full().object_fit(ObjectFit::Fill)))
             .child(div().absolute().inset_0().bg(veil))
             .child(
                 canvas(
@@ -580,5 +588,114 @@ impl Threadbear {
             return serde_json::Value::Null;
         }
         json!({ "editing": self.looks.editing == Some(slot), "layout": layout, "picture": picture.raw(), "background": background, "hiddenNumbers": numbers })
+    }
+}
+
+/// The slot a script names: "librarian", "scheduled" or "main".
+#[cfg(feature = "automation")]
+fn slot_named(name: &str) -> Option<Slot> {
+    match name {
+        "librarian" => Some(Slot::Librarian),
+        "scheduled" => Some(Slot::Scheduled),
+        "main" => Some(Slot::Main),
+        _ => None,
+    }
+}
+
+#[cfg(feature = "automation")]
+fn slot_name(slot: Slot) -> &'static str {
+    match slot {
+        Slot::Librarian => "librarian",
+        Slot::Scheduled => "scheduled",
+        Slot::Main => "main",
+    }
+}
+
+impl Threadbear {
+    /// The Look parts in the dump's `looks`: which pages are customizable,
+    /// each look as kept (the Librarian's with what its greeting and quote
+    /// say now), the panel that's open, and the main window's photo. The
+    /// page itself as drawn is each page's `homePage.look` (`look_dump`).
+    #[cfg(feature = "automation")]
+    pub(crate) fn looks_dump(&self) -> serde_json::Value {
+        use threadbear_core::chrono::{Local, Timelike as _};
+        use threadbear_core::looks::LibrarianBlock;
+        let librarian = self.librarian_look();
+        let day = rules::quote_day(crate::now_ms(), &Local);
+        let s = &self.settings.saved;
+        serde_json::json!({
+            "on": { "librarian": self.librarian_customizable(), "scheduled": self.scheduled_customizable() },
+            "editing": self.looks.editing.map(slot_name),
+            "librarian": {
+                "parts": librarian.layout().into_iter().map(|b| b.raw()).collect::<Vec<_>>(),
+                "greeting": librarian.shows(LibrarianBlock::Greeting).then(|| rules::greeting(Local::now().hour(), &librarian.greeting_name)),
+                "quote": librarian.shows(LibrarianBlock::Quote).then(|| rules::pick_quote(&day, librarian.quote_skips_on(&day)).map(|q| q.text)).flatten(),
+                "picture": librarian.picture.raw(),
+                "background": librarian.background.clone(),
+                "look": librarian.save(),
+            },
+            "scheduled": self.scheduled_look().save(),
+            "main": { "on": s.main_background_on == Some(true), "file": self.main_background(), "everywhere": s.main_background_everywhere == Some(true) },
+            "problem": self.looks.problem.as_ref().map(|(slot, kind, text)| serde_json::json!({ "slot": slot_name(*slot), "kind": if *kind == Kind::Background { "background" } else { "picture" }, "text": text })),
+        })
+    }
+}
+
+/// The scripted app's `look`: a page made customizable or not (`on`; for
+/// `page` "main", or `mainOn`, the window's photo), its panel opened or
+/// closed (`customize`), a picture used as if chosen or dropped (`picture`,
+/// `background`: a file's path), or the look's fields set (`set`, merged
+/// into its saved JSON, the Swift app's keys).
+#[cfg(feature = "automation")]
+pub(crate) fn automation(app: &Entity<Threadbear>, cmd: &serde_json::Value, cx: &mut App) -> Result<serde_json::Value, String> {
+    let name = cmd["page"].as_str().unwrap_or("librarian");
+    let slot = slot_named(name).ok_or_else(|| format!("page must be librarian, scheduled or main, not {name:?}"))?;
+    app.update(cx, |t, cx| {
+        if let Some(on) = cmd["on"].as_bool() {
+            t.set_look_switch(slot, on, cx);
+        }
+        if let Some(on) = cmd["mainOn"].as_bool() {
+            t.set_look_switch(Slot::Main, on, cx);
+        }
+        if let (Some(open), false) = (cmd["customize"].as_bool(), slot == Slot::Main) {
+            t.looks.editing = open.then_some(slot);
+        }
+        if let Some(path) = cmd["picture"].as_str() {
+            t.import_look_picture(slot, Kind::Picture, PathBuf::from(path), cx);
+        }
+        if let Some(path) = cmd["background"].as_str() {
+            t.import_look_picture(slot, Kind::Background, PathBuf::from(path), cx);
+        }
+        if let Some(set) = cmd["set"].as_object() {
+            let merge = |mut v: serde_json::Value| {
+                for (k, val) in set {
+                    v[k] = val.clone();
+                }
+                v
+            };
+            match slot {
+                Slot::Librarian => t.set_librarian_look(LibrarianLook::load(Some(&merge(t.librarian_look().save()))), cx),
+                Slot::Scheduled => t.set_scheduled_look(ScheduledLook::load(Some(&merge(t.scheduled_look().save()))), cx),
+                Slot::Main => {}
+            }
+            // A Fade slider made before shows the old value otherwise.
+            t.forget_fade(slot);
+        }
+        cx.notify();
+    });
+    Ok(serde_json::Value::from("ok"))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::path;
+
+    #[test]
+    fn a_name_never_leaves_the_folder() {
+        assert!(path(None).is_none());
+        assert!(path(Some("")).is_none());
+        assert!(path(Some("../x.png")).is_none());
+        assert!(path(Some("a/b.png")).is_none());
+        assert!(path(Some("..")).is_none());
     }
 }

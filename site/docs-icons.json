@@ -24,8 +24,7 @@
   "open-anything": "lightning",
   "files-and-terminal": "terminal-window",
   "git": "git-fork",
-  "prints": "book-open",
-  "profiles": "user-circle",
-  "skills": "code",
+  "prints": "code",
+  "skills": "cursor-click",
   "notes": "copy"
 }

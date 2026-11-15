@@ -16,7 +16,7 @@
 // them (`file.htmlpreview`, `file.runthem`: web_panels.rs `local_page`).
 use crate::spinner::Spinner;
 use crate::file_edit::{FileEdit, SaveFile};
-use crate::file_find::{FindBar, FindNext, FindPrevious};
+use crate::file_find::{FindBar, FindNext, FindPrevious, FindReplace};
 use crate::file_watch::FolderWatch;
 use crate::files_store::FilePrefs;
 use crate::highlights::{palette, Palette, PanePreview, SidePane, Target, FILES};
@@ -116,23 +116,22 @@ pub(crate) struct FilesState {
     /// What was last looked for, which the next ⌘F starts with, as AppKit's
     /// find pasteboard has it.
     pub(crate) last_query: String,
+    /// The search box over each folder shown, by its view's key
+    /// (folder_search_view.rs).
+    pub(crate) searches: HashMap<String, crate::folder_search_view::SearchBox>,
     /// The file's own focus, so ⌘F reaches the pane with nothing in it picked.
     pub(crate) focus: Option<FocusHandle>,
     /// The window the pane draws in, for putting a file's text in its editor
     /// after a save or a check that came later.
     pub(crate) window: Option<AnyWindowHandle>,
-    /// What the Save the changes? question gets instead of showing, for a
-    /// script ("save", "discard" or "cancel"), and the file last asked about.
-    pub(crate) scripted_answer: Option<String>,
-    pub(crate) last_asked: Option<String>,
-    /// A folder search's hit opened: the words to find in that file once its
-    /// text is in (thread, path, words).
-    pub(crate) pending_find: Option<(String, String, String)>,
+    /// A script's answer to Save, Don't Save or Cancel, for the next time
+    /// leaving a file asks (`EditedFiles.scriptedAnswer`).
+    pub(crate) leave_answer: Option<crate::file_edit::LeaveAnswer>,
 }
 
 impl Default for FilesState {
     fn default() -> Self {
-        FilesState { open: HashMap::new(), known_folders: HashSet::new(), reading_style: None, prefs: crate::files_store::load(), last_query: String::new(), focus: None, window: None, scripted_answer: None, last_asked: None, pending_find: None }
+        FilesState { open: HashMap::new(), known_folders: HashSet::new(), reading_style: None, prefs: crate::files_store::load(), last_query: String::new(), searches: HashMap::new(), focus: None, window: None, leave_answer: None }
     }
 }
 
@@ -507,6 +506,16 @@ impl SidePane {
         self.read_file(&thread, path, opened, cx);
     }
 
+    /// A file put aside under another section changed: read again when it's
+    /// back (`unpark_preview`).
+    pub(crate) fn parked_file_changed(&mut self, thread_id: &str, path: &str) {
+        for (_, file) in self.parked.get_mut(thread_id).into_iter().flat_map(|m| m.values_mut()) {
+            if let Some(file) = file.as_mut().filter(|f| f.path == path) {
+                file.changed_away = true;
+            }
+        }
+    }
+
     /// Asks the runner for the file's bytes.
     fn read_file(&mut self, thread: &ThreadSummary, path: String, opened: u64, cx: &mut Context<Self>) {
         let keep_previous = self.files.open.get(&thread.id).is_some_and(|f| f.path == path);
@@ -648,11 +657,14 @@ impl SidePane {
         let file = std::path::Path::new(path).file_name().map(|n| n.to_owned());
         let folder = std::path::Path::new(path).parent()?.to_string_lossy().into_owned();
         let id = thread_id.to_owned();
+        let whole = path.to_owned();
         let mut watch = FolderWatch::new(cx, move |this: &mut SidePane, _, paths, cx| {
             if !paths.iter().any(|p| p.file_name() == file.as_deref()) {
                 return;
             }
-            let Some(open) = this.files.open.get_mut(&id).filter(|o| o.edit.is_none()) else { return };
+            // Put aside under another section: read when it's back.
+            this.parked_file_changed(&id, &whole);
+            let Some(open) = this.files.open.get_mut(&id).filter(|o| o.edit.is_none() && o.path == whole) else { return };
             // One read after the burst: a newer change puts the read off.
             let later = id.clone();
             open._reread = Some(cx.spawn(async move |this, cx| {
@@ -725,15 +737,24 @@ impl SidePane {
                 row = row.child(self.markdown_menu(preview.editing, p, cx));
             } else {
                 let (editing, id) = (preview.editing, thread.id.clone());
-                let like_an_editor = self.edits_like_an_editor(cx);
-                let (symbol, tip) = match (editing, like_an_editor) {
-                    (true, true) => ("eye", words::EDITOR_DONE_TIP),
+                // Edit files like an editor reads with the eye, and ⌘S saves.
+                let editor_mode = self.file_modes(cx).0;
+                let (symbol, tip) = match (editing, editor_mode) {
+                    (true, true) => ("eye", "Stop editing and read it. What you typed is saved."),
                     (true, false) => ("checkmark", words::DONE_TIP),
-                    (false, true) => ("pencil", words::EDITOR_EDIT_TIP),
+                    (false, true) => ("pencil", "Edit the file here. ⌘S saves."),
                     (false, false) => ("pencil", words::EDIT_TIP),
                 };
                 row = row.child(self.header_button("hl-edit", symbol, tip.to_owned(), p, cx, move |this, cx| this.request_editing(&id, !editing, cx)));
             }
+        }
+        // Find in a text file: the find bar over it, with Replace while it's
+        // being edited.
+        let finds = preview.file_path().is_some() && self.files.open.get(&thread.id).is_some_and(|o| matches!(o.body, FileBody::Markdown { .. } | FileBody::Text { .. }) || o.edit.is_some());
+        if finds {
+            let id = thread.id.clone();
+            let tip = if preview.editing { "Find and replace in this file (\u{2318}F)" } else { "Find in this file (\u{2318}F)" };
+            row = row.child(self.header_button("hl-find", "magnifyingglass", tip.to_owned(), p, cx, move |this, cx| this.request_find(&id, cx)));
         }
         if let Some(path) = preview.file_path().filter(|_| !thread.is_remote()).map(str::to_owned) {
             let reveal_path = path.clone();
@@ -772,6 +793,15 @@ impl SidePane {
         crate::files_store::save(&self.files.prefs);
         let Some(thread) = self.thread(cx) else { return };
         self.set_preview_editing(&thread, view == MarkdownView::Markdown, window, cx);
+    }
+
+    /// The bar's magnifier: the find bar, once there's a window to hand.
+    fn request_find(&mut self, thread_id: &str, cx: &mut Context<Self>) {
+        let Some(handle) = self.files.window else { return };
+        let (side, id) = (cx.entity().downgrade(), thread_id.to_owned());
+        cx.defer(move |cx| {
+            let _ = handle.update(cx, |_, window, cx| side.update(cx, |this, cx| this.open_find(&id, window, cx)));
+        });
     }
 
     /// The pencil or Done, from the bar, where there's no window to hand:
@@ -840,7 +870,7 @@ impl SidePane {
         }
         let path = open.path.clone();
         let language = core::code_language(&path).filter(|_| open.size < HIGHLIGHT_LIMIT as i64);
-        let editor_mode = self.edits_like_an_editor(cx);
+        let editor_mode = self.file_modes(cx).0;
         let edit = FileEdit::open(&thread.id, &path, language, editor_mode, window, cx);
         if let Some(open) = self.files.open.get_mut(&thread.id) {
             open.edit = Some(edit);
@@ -881,18 +911,15 @@ impl SidePane {
         if editing {
             self.ensure_edit(thread, window, cx);
         }
-        // A folder search's hit: its words found and picked out, once the
-        // text is there to search.
-        if self.files.pending_find.as_ref().is_some_and(|(t, p, _)| t == &thread.id && p == path) {
-            let ready = self.files.open.get(&thread.id).is_some_and(|o| o.edit.is_some() || matches!(&o.body, FileBody::Text { editor: Some(_), .. } | FileBody::Markdown { .. }));
-            if ready {
-                if let Some((_, _, words)) = self.files.pending_find.take() {
-                    let id = thread.id.clone();
-                    self.find_typed(&id, &words, window, cx);
+        self.files.window = Some(window.window_handle());
+        // Opened from a folder's search: at its line, with its words found.
+        if let Some(hit) = self.previews.get(&thread.id).and_then(|p| p.hit.clone()) {
+            if self.find_hit(&thread.id, hit.line, &hit.query, window, cx) {
+                if let Some(preview) = self.previews.get_mut(&thread.id) {
+                    preview.hit = None;
                 }
             }
         }
-        self.files.window = Some(window.window_handle());
         let focus = self.files.focus.get_or_insert_with(|| cx.focus_handle()).clone();
         let Some(open) = self.files.open.get(&thread.id).filter(|f| f.path == path) else {
             return div().size_full().into_any_element();
@@ -1036,14 +1063,12 @@ impl SidePane {
     /// ⌘S to save what's typed now rather than after the pause.
     fn file_keys(&self, el: Stateful<Div>, thread_id: &str, cx: &mut Context<Self>) -> Stateful<Div> {
         let (find, next, previous, save) = (thread_id.to_owned(), thread_id.to_owned(), thread_id.to_owned(), thread_id.to_owned());
+        let replace = thread_id.to_owned();
         el.key_context(crate::file_find::CONTEXT)
             .on_action(cx.listener(move |this, _: &gpui_kit::component::input::Search, window, cx| this.open_find(&find, window, cx)))
+            .on_action(cx.listener(move |this, _: &FindReplace, window, cx| this.open_find_replace(&replace, window, cx)))
             .on_action(cx.listener(move |this, _: &FindNext, window, cx| this.find_again(&next, false, window, cx)))
             .on_action(cx.listener(move |this, _: &FindPrevious, window, cx| this.find_again(&previous, true, window, cx)))
-            .on_action(cx.listener({
-                let id = thread_id.to_owned();
-                move |this, _: &crate::file_find::FindReplace, window, cx| this.open_replace(&id, window, cx)
-            }))
             .on_action(cx.listener(move |this, _: &SaveFile, window, cx| {
                 // Only while it's being worked on, as the Swift app's ⌘S.
                 if this.files.open.get(&save).is_some_and(|o| o.edit.as_ref().is_some_and(|e| e.session.takes_typing())) {
@@ -1100,11 +1125,6 @@ impl SidePane {
             Target::Folder(path) => {
                 pane.insert("previewKind".into(), json!("folder"));
                 pane.insert("previewText".into(), json!(path));
-                if let Some(thread) = self.thread(cx) {
-                    if let Some(words) = self.folder_search_words(&thread.id, path) {
-                        pane.insert("previewSearch".into(), json!(words));
-                    }
-                }
             }
             Target::File(path) => {
                 let Some(thread) = self.thread(cx) else { return };
@@ -1124,13 +1144,14 @@ impl SidePane {
                     pane.insert("previewMode".into(), json!(mode));
                 }
                 if let Some(edit) = open.edit.as_ref().filter(|_| preview.editing) {
+                    // The bar under the text, and the dot by the file's name.
+                    if edit.editor_mode && edit.session.takes_typing() {
+                        let (line, column) = edit.cursor(cx);
+                        pane.insert("previewStatus".into(), json!(format!("Line {line}, Column {column} \u{b7} {}", edit.state_words(self.file_modes(cx).1))));
+                    }
+                    pane.insert("previewUnsaved".into(), json!(edit.dirty));
                     pane.insert("previewKind".into(), json!(if core::is_markdown(path) || core::code_language(path).is_none() { "text" } else { "code" }));
                     pane.insert("previewText".into(), json!(edit.editor.read(cx).value().chars().take(4000).collect::<String>()));
-                    pane.insert("previewUnsaved".into(), json!(edit.session.drafted()));
-                    if edit.editor_mode && edit.session.takes_typing() {
-                        let place = edit.editor.read(cx).cursor_position();
-                        pane.insert("previewStatus".into(), json!(words::status(place.line, place.character, edit.session.drafted())));
-                    }
                     let note = if edit.session.conflict.is_some() { Some(threadbear_core::text_file::words::CONFLICT.to_owned()) } else { edit.session.note.clone() };
                     if let Some(note) = note {
                         pane.insert("previewNote".into(), json!(note));
@@ -1231,34 +1252,11 @@ pub(crate) fn preview_command(side: &Entity<SidePane>, thread: &ThreadSummary, c
             });
         }
     }
-    // A folder's search inside its files (the Swift `search`), and with
-    // `hit` (from 0) that hit opened.
-    if cmd["search"].is_string() || cmd["hit"].is_u64() {
-        let preview = side.read(cx).previews.get(&thread.id).cloned().ok_or("nothing is showing")?;
-        let Target::Folder(root) = preview.target.clone() else { return Err("no folder is showing".into()) };
-        if let Some(words) = cmd["search"].as_str() {
-            side.update(cx, |pane, cx| pane.folder_search_typed(thread, &root, words, window, cx));
-            return Ok(json!("ok searching"));
-        }
-        let index = cmd["hit"].as_u64().unwrap_or(0) as usize;
-        let opened = side.update(cx, |pane, cx| pane.folder_search_open(thread, &preview, &root, index, cx))?;
-        return Ok(json!(format!("ok opened {opened}")));
-    }
-    // What the Save the changes? question gets instead of showing.
-    if let Some(answer) = cmd["answer"].as_str() {
-        side.update(cx, |pane, _| pane.files.scripted_answer = Some(answer.to_owned()));
-    }
     // Only settings given, nothing to do with them: said done.
-    const ACTIONS: [&str; 21] = ["path", "url", "close", "back", "edit", "insert", "save", "resolve", "find", "findNext", "findPrevious", "findDone", "replace", "search", "hit", "state", "play", "clickLink", "runScripts", "copyImage", "markdownView"];
-    let settings_only = ["editor", "autosave", "answer"].iter().any(|k| !cmd[*k].is_null()) && ACTIONS.iter().all(|k| cmd[*k].is_null());
+    const ACTIONS: [&str; 21] = ["path", "url", "close", "back", "edit", "insert", "save", "resolve", "find", "findNext", "findPrevious", "findDone", "replace", "replaceWith", "replaceAll", "leaveAnswer", "play", "clickLink", "runScripts", "copyImage", "markdownView"];
+    let settings_only = ["editor", "autosave"].iter().any(|k| !cmd[*k].is_null()) && ACTIONS.iter().all(|k| cmd[*k].is_null());
     if settings_only {
         return Ok(json!("ok"));
-    }
-    // What's unsaved and what was asked.
-    if cmd["state"].as_bool() == Some(true) {
-        let pane = side.read(cx);
-        let unsaved = pane.files.open.get(&thread.id).and_then(|o| o.edit.as_ref().filter(|e| e.session.drafted()).map(|_| o.path.clone()));
-        return Ok(json!(format!("ok unsaved {:?}, asked {:?}", unsaved, pane.files.last_asked)));
     }
     if cmd["play"].as_bool() == Some(true) {
         // The film's play button, for a picture of it playing.
@@ -1286,6 +1284,12 @@ pub(crate) fn preview_command(side: &Entity<SidePane>, thread: &ThreadSummary, c
     if cmd["copyImage"].as_bool() == Some(true) {
         let format = side.update(cx, |pane, cx| pane.copy_open_picture(cx)).ok_or("no picture is showing")?;
         return Ok(json!(format!("ok copied {format}")));
+    }
+    if let Some(name) = cmd["leaveAnswer"].as_str() {
+        // Save, Don't Save or Cancel, for the next time leaving a file asks.
+        let answer = crate::file_edit::LeaveAnswer::from_name(name).ok_or("leaveAnswer is save, discard or cancel")?;
+        side.update(cx, |pane, _| pane.files.leave_answer = Some(answer));
+        return Ok(json!(format!("ok will answer {name}")));
     }
     let id = thread.id.clone();
     // How the editor and the file on disk end, as the Swift app answers.
@@ -1338,7 +1342,7 @@ pub(crate) fn preview_command(side: &Entity<SidePane>, thread: &ThreadSummary, c
         let shown = side.read(cx).previews.get(&id).map_or_else(|| "no preview".to_owned(), |p| format!("showing {}", p.title));
         return Ok(json!(format!("ok {shown}")));
     }
-    if ["find", "findNext", "findPrevious", "findDone", "replace"].iter().any(|k| !cmd[*k].is_null()) {
+    if ["find", "findNext", "findPrevious", "findDone", "replace", "replaceAll"].iter().any(|k| !cmd[*k].is_null()) {
         let id = thread.id.clone();
         let showing = side.read(cx).files.open.get(&id).is_some_and(|o| matches!(o.body, FileBody::Markdown { .. } | FileBody::Text { .. }) || o.edit.is_some());
         if !showing {
@@ -1347,6 +1351,15 @@ pub(crate) fn preview_command(side: &Entity<SidePane>, thread: &ThreadSummary, c
         side.update(cx, |pane, cx| {
             if let Some(query) = cmd["find"].as_str() {
                 pane.find_typed(&id, query, window, cx);
+            }
+            if let Some(with) = cmd["replaceWith"].as_str() {
+                pane.replace_typed(&id, with, window, cx);
+            }
+            if cmd["replace"].as_bool() == Some(true) {
+                pane.replace_matches(&id, false, window, cx);
+            }
+            if cmd["replaceAll"].as_bool() == Some(true) {
+                pane.replace_matches(&id, true, window, cx);
             }
             if cmd["findNext"].as_bool() == Some(true) {
                 pane.find_again(&id, false, window, cx);
@@ -1357,11 +1370,8 @@ pub(crate) fn preview_command(side: &Entity<SidePane>, thread: &ThreadSummary, c
             // `"replace": "words"` types them in the replace field and presses
             // Replace (`"all": true`, All).
             if let Some(with) = cmd["replace"].as_str() {
-                if let Some(bar) = pane.files.open.get(&id).and_then(|o| o.find.as_ref()) {
-                    let field = bar.replacement.clone();
-                    field.update(cx, |s, cx| s.set_value(with.to_owned(), window, cx));
-                }
-                pane.replace_match(&id, cmd["all"].as_bool() == Some(true), window, cx);
+                pane.replace_typed(&id, with, window, cx);
+                pane.replace_matches(&id, cmd["all"].as_bool() == Some(true), window, cx);
             }
             if cmd["findDone"].as_bool() == Some(true) {
                 pane.close_find(&id, window, cx);
@@ -1393,6 +1403,14 @@ pub(crate) fn preview_command(side: &Entity<SidePane>, thread: &ThreadSummary, c
     }
     let shown = side.read(cx).previews.get(&thread.id).map_or_else(|| "no preview".to_owned(), |p| format!("showing {}", p.title));
     Ok(json!(format!("ok {shown}")))
+}
+
+/// Whether a file opens ready to type in with Edit files like an editor on:
+/// text the pane shows as text, not Markdown (its own menu says) or a page
+/// (`TextFileView.shows`, `PreviewRules.viewer != .web`). One that turns out
+/// too big or cut off is only read: its bar has no pencil either.
+pub(crate) fn opens_ready_to_type(path: &str) -> bool {
+    core::viewer_for_path(path) == Viewer::Text && !core::is_markdown(path) && media_kind(path).is_none()
 }
 
 /// The Files panel has no preview stored: its section shows the thread's folder.

@@ -57,37 +57,6 @@ When('I press ⌘J', async function (this: ThreadbearWorld) {
   await this.app.do({ cmd: 'menu-key', key: 'j', modifiers: ['cmd'] });
 });
 
-type Tabs = { tabs?: string[]; tab?: number | null };
-const tabs = (d: Dump) => (d.terminal as Tabs | undefined);
-
-Then('the Terminal has {int} tab(s)', async function (this: ThreadbearWorld, count: number) {
-  await this.until(`${count} Terminal tabs`, (d) => tabs(d)?.tabs?.length === count);
-});
-
-Then('the Terminal has {int} tabs, the second showing', async function (this: ThreadbearWorld, count: number) {
-  await this.until(`${count} Terminal tabs, the second showing`, (d) => tabs(d)?.tabs?.length === count && tabs(d)?.tab === 1);
-});
-
-When('I open another terminal', async function (this: ThreadbearWorld) {
-  await this.app.do({ cmd: 'terminal', new: true });
-});
-
-When('I name the showing terminal {string}', async function (this: ThreadbearWorld, name: string) {
-  await this.app.do({ cmd: 'terminal', rename: name });
-});
-
-Then('the Terminal\'s tabs end with {string}', async function (this: ThreadbearWorld, name: string) {
-  await this.until(`the last tab called ${name}`, (d) => tabs(d)?.tabs?.at(-1) === name);
-});
-
-When('I point at {string} in the Terminal', async function (this: ThreadbearWorld, words: string) {
-  await this.app.do({ cmd: 'terminal', hover: words });
-});
-
-Then('the Terminal underlines the link {string}', async function (this: ThreadbearWorld, url: string) {
-  await this.until(`the Terminal underlining ${url}`, (d) => (d.terminal as { hovering?: string | null } | undefined)?.hovering === url);
-});
-
 When('I follow the Terminal link {string}', async function (this: ThreadbearWorld, words: string) {
   await this.app.do({ cmd: 'terminal', follow: words });
 });
@@ -377,4 +346,46 @@ When('the Terminal prints a link to a program in its folder', async function (th
 
 Then("the Terminal link's program did not run", async function (this: ThreadbearWorld) {
   assert.ok(!fs.existsSync(path.join(openFolder(this, await this.app.dump()), 'link-ran')));
+});
+
+When('I add a Terminal tab', async function (this: ThreadbearWorld) {
+  await this.app.do({ cmd: 'click', tipPrefix: 'Open another terminal in' });
+});
+When('I choose the Terminal tab {string}', async function (this: ThreadbearWorld, tab: string) {
+  await this.app.do({ cmd: 'terminal', tab });
+});
+When('I rename the current Terminal tab to {string}', async function (this: ThreadbearWorld, name: string) {
+  const d = await this.app.dump();
+  const tab = d.terminal?.tabs?.find(t => t.current)?.title;
+  assert.ok(tab);
+  await this.app.do({ cmd: 'terminal', tab, clicks: 2 });
+  await this.app.do({ cmd: 'terminal', name });
+  await this.until('renamed tab', d => d.terminal?.tabs?.some(t => t.title === name && t.current));
+});
+Then('the Terminal has {int} tab', async function (this: ThreadbearWorld, count: number) {
+  await this.until('tab count', d => d.terminal?.tabs?.length === count);
+});
+Then('the Terminal tab {string} is selected', async function (this: ThreadbearWorld, title: string) {
+  await this.until('selected tab', d => d.terminal?.tabs?.some(t => t.title === title && t.current));
+});
+Then('the Terminal tab menu for {string} offers {string} and {string}', async function (this: ThreadbearWorld, tab: string, first: string, second: string) {
+  const result = JSON.stringify(await this.app.do({ cmd: 'terminal-menu', tab }));
+  assert.ok(result.includes(first), result);
+  assert.ok(result.includes(second), result);
+});
+When('I close the Terminal tab {string} from its menu', async function (this: ThreadbearWorld, tab: string) {
+  await this.app.do({ cmd: 'terminal-menu', tab, click: 'Close Terminal' });
+});
+When('I point at the Terminal words {string}', async function (this: ThreadbearWorld, hover: string) {
+  await this.app.do({ cmd: 'terminal', hover });
+});
+Then('the Terminal highlights the web address {string}', async function (this: ThreadbearWorld, url: string) {
+  await this.until('hovered link', d => d.terminal?.hoveredLink === url);
+});
+
+When('I rename the Terminal tab {string} from its menu to {string}', async function (this: ThreadbearWorld, tab: string, name: string) {
+  await this.app.do({ cmd: 'terminal-menu', tab, click: 'Rename…' });
+  await this.until('rename field', d => d.terminal?.renaming != null);
+  await this.app.do({ cmd: 'terminal', name });
+  await this.until('renamed tab', d => d.terminal?.tabs?.some(t => t.title === name && t.current));
 });

@@ -791,36 +791,15 @@ pub fn local_file_url(link: &str, hostname: &str) -> Option<String> {
     (!host.is_empty() && host.eq_ignore_ascii_case(hostname)).then(|| format!("file://{}", &rest[host.len()..]))
 }
 
-/// What a terminal's tab says (`tabTitle`): the name given it, else the
-/// shell's own title, else "Terminal 2" by its number.
-pub fn tab_title(name: Option<&str>, title: &str, number: usize) -> String {
-    if let Some(name) = name {
-        return name.to_owned();
-    }
-    let own = title.trim();
-    if own.is_empty() {
-        format!("Terminal {number}")
-    } else {
-        own.to_owned()
-    }
-}
-
-/// A name typed for a tab: trimmed, 60 characters at most; empty goes back
-/// to the shell's own.
-pub fn tab_name(typed: &str) -> Option<String> {
-    let name = typed.trim();
-    (!name.is_empty()).then(|| name.chars().take(60).collect())
-}
-
 /// The printed address/path under a terminal cell. OSC 8 links use their
 /// explicit URI instead; this is for ordinary build output and shell text.
 pub fn link_word(chars: &[char], at: usize) -> Option<String> {
-    link_span(chars, at).map(|(first, last)| chars[first..last].iter().collect())
+    link_word_span(chars, at).map(|span| chars[span].iter().collect())
 }
 
-/// Where `link_word`'s word starts and ends in `chars`, end not included:
-/// the cells to underline under the pointer.
-pub fn link_span(chars: &[char], at: usize) -> Option<(usize, usize)> {
+/// Where `link_word` finds its word: the characters it covers, so the
+/// Terminal can underline the link under the pointer.
+pub fn link_word_span(chars: &[char], at: usize) -> Option<std::ops::Range<usize>> {
     let boundary = |c: char| c.is_whitespace() || "\"'<>`".contains(c) || c.is_control();
     if at >= chars.len() || boundary(chars[at]) { return None; }
     let mut first = at;
@@ -833,15 +812,37 @@ pub fn link_span(chars: &[char], at: usize) -> Option<(usize, usize)> {
         let unmatched = [(')', '('), (']', '['), ('}', '{')].iter().any(|(close, open)| tail == *close && chars[first..last].iter().filter(|c| **c == *close).count() > chars[first..last].iter().filter(|c| **c == *open).count());
         if first < last && (".,;!".contains(tail) || unmatched) { last -= 1; } else { break; }
     }
-    (first <= at && at < last && last - first <= 4096).then_some((first, last))
+    (first <= at && at < last && last - first <= 4096).then_some(first..last)
 }
 
-/// Whether the pointer over a link underlines it, with a pointing hand and a
-/// tip: a web address, as the Swift terminal's `LinkPolicy.web`. A file's
-/// path still opens on ⌘-click, but isn't marked, as nearly any word could be
-/// one.
-pub fn underlines(link: &Link) -> bool {
-    matches!(link, Link::Url(url) if url.get(..7).is_some_and(|s| s.eq_ignore_ascii_case("http://")) || url.get(..8).is_some_and(|s| s.eq_ignore_ascii_case("https://")))
+/// Whether the pointer over a link underlines it: a web address, as only
+/// those are what the underline promises (TerminalPanel.swift's `webLink`).
+/// Paths and other links still open with ⌘-click, through the open gate.
+pub fn underlines(link: &str) -> bool {
+    ["http://", "https://"].iter().any(|scheme| link.get(..scheme.len()).is_some_and(|s| s.eq_ignore_ascii_case(scheme)) && link.len() > scheme.len())
+}
+
+/// A Terminal tab's title (`TerminalTab.title`): the name you gave it, or
+/// the one the shell gave itself, or "Terminal 2" by its number.
+pub fn tab_title(name: Option<&str>, shell_title: &str, number: usize) -> String {
+    if let Some(name) = name {
+        return name.to_owned();
+    }
+    let own = shell_title.trim();
+    if own.is_empty() { format!("Terminal {number}") } else { own.to_owned() }
+}
+
+/// A name typed for a tab: trimmed and at most 60 characters, and none at
+/// all when it's empty, which goes back to the shell's own.
+pub fn tab_name(typed: &str) -> Option<String> {
+    let name = typed.trim();
+    (!name.is_empty()).then(|| name.chars().take(60).collect())
+}
+
+/// The number for a new tab: the lowest one no open tab has, as
+/// Terminal.app numbers its windows.
+pub fn next_tab_number(taken: &[usize]) -> usize {
+    (1..).find(|n| !taken.contains(n)).unwrap_or(1)
 }
 
 pub fn link_target(link: &str, folder: &str, home: &str, exists: impl Fn(&str) -> bool) -> Option<Link> {
@@ -1298,22 +1299,39 @@ mod tests {
     #[test]
     fn printed_terminal_links_keep_url_punctuation_and_file_positions() {
         let word = |line: &str, at| link_word(&line.chars().collect::<Vec<_>>(), at);
-        let chars: Vec<char> = "see https://example.com/a, ok".chars().collect();
-        assert_eq!(link_span(&chars, 6), Some((4, 25)), "the trailing comma isn't the link's");
-        assert!(underlines(&Link::Url("https://example.com".into())));
-        assert_eq!(tab_title(None, "  ", 2), "Terminal 2");
-        assert_eq!(tab_title(None, "vim notes.md", 2), "vim notes.md");
-        assert_eq!(tab_title(Some("server"), "zsh", 1), "server");
-        assert_eq!(tab_name("  "), None);
-        assert_eq!(tab_name(&"x".repeat(80)).map(|n| n.len()), Some(60));
-        assert!(!underlines(&Link::File("/tmp/a".into())));
-        assert!(!underlines(&Link::Url("mailto:a@b.c".into())));
         assert_eq!(word("see (https://example.com/a(b)).", 12).as_deref(), Some("https://example.com/a(b)"));
         assert_eq!(word("error: src/main.rs:12:4", 12).as_deref(), Some("src/main.rs:12:4"));
         assert_eq!(word("雪 https://example.com", 8).as_deref(), Some("https://example.com"));
         assert_eq!(word("https://example.com foo", 19), None);
         assert_eq!(word("[x]", 0), None);
         assert_eq!(word("()", 1), None);
+    }
+
+    #[test]
+    fn a_link_under_the_pointer_knows_its_cells() {
+        let span = |line: &str, at| link_word_span(&line.chars().collect::<Vec<_>>(), at);
+        assert_eq!(span("open http://localhost:5173/ now", 9), Some(5..27));
+        assert_eq!(span("open http://localhost:5173/ now", 2), Some(0..4));
+        assert_eq!(span("open http://localhost:5173/ now", 4), None);
+        assert_eq!(span("see https://example.com/a, ok", 6), Some(4..25), "the trailing comma isn't the link's");
+        assert!(underlines("http://localhost:5173/"));
+        assert!(underlines("HTTPS://example.com"));
+        assert!(!underlines("src/main.rs:12"));
+        assert!(!underlines("file:///tmp/a"));
+        assert!(!underlines("https://"));
+    }
+
+    #[test]
+    fn terminal_tabs_are_named_and_numbered() {
+        assert_eq!(tab_title(None, "", 2), "Terminal 2");
+        assert_eq!(tab_title(None, "  vim notes.md ", 1), "vim notes.md");
+        assert_eq!(tab_title(Some("Dev server"), "zsh", 1), "Dev server");
+        assert_eq!(tab_name("  Dev server "), Some("Dev server".to_owned()));
+        assert_eq!(tab_name("   "), None);
+        assert_eq!(tab_name(&"x".repeat(80)).map(|n| n.len()), Some(60));
+        assert_eq!(next_tab_number(&[]), 1);
+        assert_eq!(next_tab_number(&[1, 2]), 3);
+        assert_eq!(next_tab_number(&[1, 3]), 2);
     }
 
     #[test]

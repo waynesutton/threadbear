@@ -188,3 +188,13 @@ Then('the palette fits between the window\'s top and the box', async function (t
   assert.ok(boxTop < sendY, `the box's top was measured at ${boxTop}, under its Send button at ${sendY}`);
   assert.ok(height <= boxTop - 16 + 1, `the palette is ${height} tall with ${boxTop - 16} of room over the box`);
 });
+
+When('I close the slash settings window', async function (this: ThreadbearWorld) {
+  await this.app.do({ cmd: 'settings', close: true });
+});
+
+// The small list at the cursor for a /skill mid-message (the dump's
+// `palette.compact`), picked in Settings instead of the palette.
+Then('the compact skill list is showing', async function (this: ThreadbearWorld) {
+  await this.until('the compact skill list', (d) => (d.palette as { compact?: boolean } | null)?.compact === true);
+});

@@ -44,10 +44,6 @@ impl Colours {
         rgb_hsla(self.background)
     }
 
-    pub(crate) fn foreground_hsla(&self) -> Hsla {
-        rgb_hsla(self.foreground)
-    }
-
     /// A numbered colour, or the terminal's own (256 the text, 257 the
     /// background), for a program that asks (OSC 4, 10 and 11).
     pub(crate) fn indexed(&self, index: usize) -> Rgb8 {
@@ -188,6 +184,8 @@ pub(crate) struct Prepainted {
     marked: Option<(Bounds<Pixels>, ShapedLine)>,
     hitbox: Hitbox,
     cell_height: Pixels,
+    /// The line under the link the pointer is over, if it's over one.
+    link: Vec<Bounds<Pixels>>,
 }
 
 /// Cells in a row that draw alike, as one piece of text.
@@ -260,6 +258,11 @@ impl Element for TerminalElement {
 
         let session = self.session.read(cx);
         let marked = session.marked.clone();
+        // A pixel high, a pixel above the cell's foot, as the Swift app's.
+        let link: Vec<Bounds<Pixels>> = session.hover.iter().flat_map(|h| h.cells.iter()).map(|(row, cols)| {
+            let rect = cell_rect(cols.start, *row, cols.len());
+            Bounds { origin: point(rect.origin.x, rect.origin.y + rect.size.height - gpui_kit::px(2.)), size: size(rect.size.width, gpui_kit::px(1.)) }
+        }).collect();
         let term = session.term.lock();
         let content = term.renderable_content();
         let offset = content.display_offset as i32;
@@ -378,7 +381,7 @@ impl Element for TerminalElement {
             let rect = cell_rect(cursor_cell.0, cursor_cell.1, 1);
             (Bounds { origin: rect.origin, size: size(shaped.width.max(rect.size.width), rect.size.height) }, shaped)
         });
-        Prepainted { backgrounds, lines, cursor: cursor_look, marked, hitbox, cell_height: gpui_kit::px(ch) }
+        Prepainted { backgrounds, lines, cursor: cursor_look, marked, hitbox, cell_height: gpui_kit::px(ch), link }
     }
 
     fn paint(&mut self, _id: Option<&GlobalElementId>, _inspector: Option<&InspectorElementId>, bounds: Bounds<Pixels>, _: &mut (), p: &mut Prepainted, window: &mut Window, cx: &mut App) {
@@ -395,6 +398,10 @@ impl Element for TerminalElement {
                 Some(CursorLook::Bar(rect, colour)) => window.paint_quad(fill(*rect, *colour)),
                 Some(CursorLook::Block) | None => {}
             }
+            let link_colour = crate::style::link_text(cx);
+            for rect in &p.link {
+                window.paint_quad(fill(*rect, link_colour));
+            }
             if let Some((rect, line)) = &p.marked {
                 window.paint_quad(fill(*rect, background));
                 let _ = line.paint(rect.origin, p.cell_height, TextAlign::Left, None, window, cx);
@@ -403,7 +410,9 @@ impl Element for TerminalElement {
 
         let focus = self.session.read(cx).focus.clone();
         window.handle_input(&focus, ElementInputHandler::new(bounds, self.session.clone()), cx);
-        window.set_cursor_style(CursorStyle::IBeam, &p.hitbox);
+        // A pointing hand over a link, as there's only a link under it while
+        // the pointer is over one.
+        window.set_cursor_style(if p.link.is_empty() { CursorStyle::IBeam } else { CursorStyle::PointingHand }, &p.hitbox);
 
         let (session, hitbox) = (self.session.clone(), p.hitbox.clone());
         window.on_mouse_event(move |event: &MouseDownEvent, phase, window, cx| {

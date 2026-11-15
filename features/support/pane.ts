@@ -22,6 +22,12 @@ export type Pane = {
   /** What the bar offers: "preview" or "markdown" (a Markdown file's menu), "reading" or "editing" (the pencil and Done). */
   previewMode?: string | null;
   folder?: string | null;
+  /** The bar under a file being edited: "Line 3, Column 7 · Edited". */
+  previewStatus?: string | null;
+  /** Typing in the file that isn't saved yet (the dot by its name). */
+  previewUnsaved?: boolean | null;
+  /** The search over a folder: its words and what it found. */
+  folderSearch?: { query: string; summary: string; hits: string[] } | null;
 };
 
 type WithPane = Dump & { panels?: { preview?: string | null; highlights?: string | null; fetchingHighlights?: boolean; pane?: Pane | null; items?: { id: string; title: string; kind: string; active: boolean }[] } | null };

@@ -122,7 +122,7 @@ struct ComposerView: View {
                 pictures: ComposerTextView.Pictures(allowed: { !moving }, importOne: { await importPicture($0) }),
                 handle: handle,
                 onEscape: { cancelEdit() },
-                onShiftTab: { app.cycleTurnMode(draftKey) },
+                onShiftTab: { app.togglePlanFirst(draftKey) },
                 onPaletteKey: { paletteKey($0, text: draft.wrappedValue.text) },
                 editable: !locked,
                 bearsHere: thread.map { !$0.isRemote } ?? (app.newThreadRunnerId == nil)
@@ -721,7 +721,7 @@ struct ComposerTextField: NSViewRepresentable {
     var handle: ComposerHandle?
     /// Esc: true if it did something (left an edit).
     var onEscape: () -> Bool = { false }
-    /// Shift-Tab: the next of Plan and Ask mode (AppModel.cycleTurnMode); false leaves it to the text box.
+    /// Shift-Tab: Plan first on or off (AppModel.togglePlanFirst); false leaves it to the text box.
     var onShiftTab: () -> Bool = { false }
     /// The slash command palette's keys, first: true if it took the key.
     var onPaletteKey: (PaletteKey) -> Bool = { _ in false }
@@ -1348,7 +1348,7 @@ final class ComposerTextView: NSTextView {
         insertText(edit.text, replacementRange: edit.range)
     }
 
-    /// Shift-Tab steps through Plan and Ask mode, as in Claude Code.
+    /// Shift-Tab turns Plan first on or off, as in Claude Code.
     override func insertBacktab(_ sender: Any?) {
         if onShiftTab?() == true { return }
         super.insertBacktab(sender)

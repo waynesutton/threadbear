@@ -124,6 +124,9 @@ pub struct Threadbear {
     /// What clicks from a menu are doing, by their key, newest last, and
     /// what's just been done, for the banner (`busyNotes`, `doneNote`).
     pub(crate) busy_notes: Vec<(String, String)>,
+    /// The bears this Mac's runner lists, for the @ list and a table's page
+    /// (bears.rs).
+    pub(crate) bear_list: crate::bears::BearList,
     pub(crate) done_note: Option<String>,
     pub(crate) done_task: Option<Task<()>>,
     /// CLI updates that failed and were dismissed from the banner, by
@@ -388,6 +391,8 @@ impl Threadbear {
         cx.set_global(crate::reply_buttons::PressHook(Rc::new(move |thread: String, id: String, window: &mut Window, cx: &mut App| {
             press_app.update(cx, |this, cx| this.press_reply_button(thread, id, window, cx)).ok();
         })));
+        // The Print cards in replies (prints.rs), which open in this app's side pane.
+        crate::prints::init(app.clone(), cx);
         let dock = cx.new(|_| {
             let mut model = DockModel::new(layout);
             let app = app.clone();
@@ -525,6 +530,7 @@ impl Threadbear {
             error_message: None,
             connection_error: None,
             busy_notes: Vec::new(),
+            bear_list: Default::default(),
             done_note: None,
             done_task: None,
             dismissed_cli_failures: HashSet::new(),
@@ -752,6 +758,14 @@ impl Threadbear {
                     return;
                 }
             }
+            // Still fetching: what's in Highlights now may be a fetch that
+            // left before the pin, so it waits for the one asked for above. A
+            // saved plan's note comes just before its pin, and its fetch came
+            // back first, so the plan never opened (Wayne's d28e38f4).
+            if item.is_none() && self.side.read(cx).fetching.contains(&thread.id) {
+                self.panel_gate.release(&request.id);
+                return;
+            }
             self.show_requested(&RequestedPanel::Section(requests::HIGHLIGHTS.to_owned()), &RequestedPlace::Usual, &thread, cx);
             // Only the pane: an agent showing a file never starts its app.
             // One unpinned since still opens Highlights.
@@ -839,6 +853,7 @@ impl Threadbear {
                 if let Status::Connected { hello, .. } = &status {
                     self.logins = RunnerLogins::from_hello(hello);
                     self.remote.experiments = hello["experiments"].as_array().into_iter().flatten().filter_map(|e| e.as_str().map(str::to_owned)).collect();
+                    crate::prints::connected(self.client.clone(), &self.remote.experiments, cx);
                     self.runner_version = hello["runnerVersion"].as_str().unwrap_or("").to_owned();
                     self.upstream_on = hello["updates"]["upstream"]["state"].as_str().is_some_and(|s| s != "off");
                     self.upstream_checkout = hello["updates"]["upstream"]["checkout"].as_str().filter(|c| !c.is_empty()).map(str::to_owned);
@@ -969,6 +984,12 @@ impl Threadbear {
                 }
                 "librarian.updated" => self.librarian.status = Some(threadbear_core::librarian::Status::decode(&params["librarian"])),
                 "settings.updated" => self.runner_settings = Some(params["settings"].clone()),
+                // Every Print card shows the newest, and a pane showing one follows it.
+                // Deferred: the side pane reads the app, which this is inside.
+                "pages.updated" => {
+                    let (params, side) = (params.clone(), self.side.clone());
+                    cx.defer(move |cx| crate::prints::updated(&params, &side, cx));
+                }
                 // A login appearing or going, its models once asked, its
                 // usage; and the pools after a save: both replace `hello`'s.
                 "accounts.updated" => self.logins.set_accounts(&params["accounts"]),
@@ -1602,6 +1623,7 @@ impl Threadbear {
         dump["importNote"] = json!(self.import_note);
         // Notes (notes_page.rs). `notes` above is the Swift dump's, the list's errors.
         dump["notesPage"] = self.notes_dump(cx);
+        dump["looks"] = self.looks_dump();
         // Panels pinned to their threads (pinned_panels.rs).
         dump["pinnedPanels"] = self.pinned_panels_dump(cx);
         // The tour or a page's intro on show, and Finish setting up (tour.rs, setup_panel.rs).
@@ -1666,6 +1688,7 @@ impl Threadbear {
         });
         if let Some(composer) = composer {
             let data = composer.chip_data(cx);
+            out["skills"] = composer.skill_mentions_dump(cx);
             if let Some(t) = &data.summary {
                 out["cwd"] = json!(t.cwd);
                 out["account"] = json!(t.account_id);

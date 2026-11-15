@@ -33,7 +33,8 @@ impl PushButton {
         self
     }
 
-    /// Greyed, and not taking clicks, as SwiftUI's `.disabled`.
+    /// Greyed, and not taking clicks, as SwiftUI's `.disabled`: there's
+    /// nothing for it to do now.
     pub(crate) fn disabled(mut self, disabled: bool) -> Self {
         self.disabled = disabled;
         self
@@ -70,7 +71,11 @@ impl PushButton {
         // way, and twice that while it's pressed.
         let ink = if dark { 1. } else { 0. };
         let filled = base.bg(hsla(0., 0., ink, 0.08)).active(move |s| s.bg(hsla(0., 0., ink, 0.16)));
-        let button = filled.when(busy, |s| s.opacity(0.6).child(Spinner::new().color(label).with_size(px(11.)))).when(disabled, |s| s.opacity(0.45)).when(!busy && !disabled, |s| s.on_click(on_click)).child(self.label);
+        let button = filled
+            .when(busy, |s| s.opacity(0.6).child(Spinner::new().color(label).with_size(px(11.))))
+            .when(disabled, |s| s.opacity(0.45))
+            .when(!busy && !disabled, |s| s.on_click(on_click))
+            .child(self.label);
         crate::highlights::tipped(button, self.tip).into_any_element()
     }
 }

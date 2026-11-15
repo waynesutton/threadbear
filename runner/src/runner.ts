@@ -2,9 +2,8 @@
 // release and snoozes. Providers plug in through AgentAdapter; the WebSocket
 // server in rpc.ts is a thin layer over the public methods here.
 import { isPublishCommand, siteUrls, SITE_LINK_TITLE } from './site-links.ts';
-import { modeInstructions, planDocument, planPath } from './modes.ts';
+import { planDocument, planPath } from './modes.ts';
 import { withSkillMentions } from './skill-mentions.ts';
-import type { TurnMode } from './store.ts';
 import type { ReinstallStatus } from './reinstall.ts';
 import { RELEASE } from './release.ts';
 import type { UserInput } from './adapters/types.ts';
@@ -828,9 +827,9 @@ export class Runner {
     this.openUrl = deps.openUrl ?? openInBrowser;
     this.convexKeys = new ConvexKeys(
       path.join(paths.secrets(deps.config.home), 'convex-panels'),
-      deps.convexKeyRun ?? ((command, cwd) => runCommand(command, { cwd, env: { ...process.env, ...(deps.config.convexCliHome ? { HOME: deps.config.convexCliHome } : {}) }, shell: this.actionShell, timeoutMs: 120_000 })),
+      deps.convexKeyRun ?? ((command, cwd) => runCommand(command, { cwd, env: { ...process.env }, shell: this.actionShell, timeoutMs: 120_000 })),
       undefined,
-      { ...(deps.config.convexCliHome ? { cliHome: deps.config.convexCliHome } : {}), ...deps.convexKeyOptions },
+      deps.convexKeyOptions,
     );
     this.secrets = new SecretStore(paths.secrets(deps.config.home), () => this.clock.now());
     this.models = deps.models;
@@ -1709,7 +1708,6 @@ export class Runner {
     if (opts.scheduledSince !== undefined) msg.scheduledSince = opts.scheduledSince;
     if (opts.answers?.length) msg.answers = opts.answers;
     if (opts.editOf) msg.editOf = opts.editOf;
-    if (opts.mode) msg.mode = opts.mode;
     rec.lastActivityAt = this.isoNow();
     if (rt.turn && !opts.queue && fromMike(text, opts) && this.switchWaiting(st)) {
       // He picked another login (another provider, usually) during this
@@ -1834,7 +1832,7 @@ export class Runner {
     // messages as were sent into it (Codex review).
     turn.dispatched = true;
     if (!turn.deliveryKnown) turn.foreignOutput = false;
-    this.sendWithInstructionsNews(st, { ...this.withInterruptedMessages(st, msg, this.forAgent(msg, st.rec.provider, st.rec)), ...(msg.mode ? { readOnly: true } : {}) });
+    this.sendWithInstructionsNews(st, this.withInterruptedMessages(st, msg, this.forAgent(msg, st.rec.provider, st.rec)));
   }
 
   // A turn that had its end_turn, opened again once the agent has read a
@@ -1862,9 +1860,7 @@ export class Runner {
   // message rather than once, as he moves between the two. The transcript
   // keeps what he typed. "Phone app", not "iPhone app": the origin doesn't say
   // which, and an Android phone (android-native/, or Keith's) sends the same.
-  // `mode` "plan" is a message logged before Plan first took over planning: read-only, as Ask.
-  forAgent(msg: { text: string; origin?: MessageOrigin; mode?: TurnMode | 'plan' }, provider?: Provider, place?: { accountId: string; cwd: string }): string {
-    if (msg.mode) return `${modeInstructions('ask')}\n\n${this.forAgent({ ...msg, mode: undefined }, provider, place)}`;
+  forAgent(msg: { text: string; origin?: MessageOrigin }, provider?: Provider, place?: { accountId: string; cwd: string }): string {
     // /name for a Threadbear skill, or one the CLI finds itself in this
     // thread's folder and login (~/.claude/skills: listedSkills), made to
     // work in this thread's CLI (skill-mentions.ts).
@@ -2084,11 +2080,9 @@ export class Runner {
       delete rec.moved;
     }
     // Kept for the next message when this one is a command, as the news is.
-    // Plan or Ask mode (modes.ts): this message's turn is read-only.
-    const readOnly = msg.mode ? { readOnly: true } : {};
     if (rt.turn) rt.turn.dispatched = true;
-    if (command) rt.session!.send({ ...input, text, ...readOnly });
-    else this.sendWithInstructionsNews(st, { ...input, text, ...readOnly });
+    if (command) rt.session!.send({ ...input, text });
+    else this.sendWithInstructionsNews(st, { ...input, text });
     if (msg.reviewId && !rec.reviewDeliveries?.includes(msg.reviewId)) {
       (rec.reviewDeliveries ??= []).push(msg.reviewId);
       // A persisted transcript row is not proof of dispatch: both initial
@@ -4346,7 +4340,7 @@ export function stoppedWorkMessage(what: string[], last: boolean): string {
   ].join('\n');
 }
 
-export type SendOptions = { origin?: MessageOrigin; scheduleId?: string; queue?: boolean; answers?: AskAnswer[]; editOf?: number; messageId?: string; scheduledSince?: number; mode?: TurnMode };
+export type SendOptions = { origin?: MessageOrigin; scheduleId?: string; queue?: boolean; answers?: AskAnswer[]; editOf?: number; messageId?: string; scheduledSince?: number };
 
 // A UUID-shaped id in the existing message/turn field, so it survives every
 // runner handover and crash without adding metadata for clients to mirror.
@@ -4405,7 +4399,6 @@ export function userMessage(msg: QueuedSend): EventBody {
     ...(msg.reviewId ? { reviewId: msg.reviewId, reviewResponse: msg.reviewResponse } : {}),
     ...(msg.answers?.length ? { answers: msg.answers } : {}),
     ...(msg.editOf ? { editOf: msg.editOf } : {}),
-    ...(msg.mode ? { mode: msg.mode } : {}),
   };
 }
 

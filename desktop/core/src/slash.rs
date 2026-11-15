@@ -425,9 +425,9 @@ pub enum PaletteKey {
     Tab,
     Enter,
     Escape,
-    /// Left and right step through the categories (All, Threadbear, the
-    /// CLI's, Skills, Recent), so the keyboard reaches them too (Wayne,
-    /// 10 Nov). `step_category` moves them; `handle_key` leaves them.
+    /// Left and Right step through the categories (All, Threadbear, the
+    /// CLI's, Skills, Recent), wrapping round, so the keyboard reaches them
+    /// too (Wayne, 10 Nov).
     Left,
     Right,
 }
@@ -441,8 +441,8 @@ pub struct PaletteState {
     pub selected: Option<String>,
     pub closed_at: Option<String>,
     /// What's typed in the palette's own search field: narrows every
-    /// category on top of what's typed after the slash, matching names and
-    /// descriptions.
+    /// category on top of what's typed after the slash, by name and
+    /// description.
     pub search: String,
 }
 
@@ -457,24 +457,21 @@ pub fn searched(commands: &[SlashCommand], search: &str, recent: &[String]) -> V
     }
 }
 
-/// Left or Right: the next category along, wrapping round, with nothing
-/// picked in it yet. Nothing when there are no categories.
-pub fn step_category(state: &mut PaletteState, categories: &[Category], forward: bool) {
-    if categories.is_empty() {
-        return;
-    }
-    let at = categories.iter().position(|c| *c == state.category).unwrap_or(0);
-    let step = if forward { 1 } else { categories.len() - 1 };
-    state.category = categories[(at + step) % categories.len()];
-    state.selected = None;
-}
-
 /// What a palette key does (`SlashPaletteView.handle`): moves the pick, or
 /// gives the command to fill in (Tab) or run (Return). `None`: nothing more
 /// to do, the state changed or the key wasn't one that picks.
-pub fn handle_key(key: PaletteKey, matches: &[SlashCommand], state: &mut PaletteState, text: &str) -> Option<(SlashCommand, bool)> {
+pub fn handle_key(key: PaletteKey, matches: &[SlashCommand], categories: &[Category], state: &mut PaletteState, text: &str) -> Option<(SlashCommand, bool)> {
     let index = matches.iter().position(|c| Some(c.name.as_str()) == state.selected.as_deref()).unwrap_or(0);
     match key {
+        PaletteKey::Left | PaletteKey::Right => {
+            if !categories.is_empty() {
+                let at = categories.iter().position(|c| *c == state.category).unwrap_or(0);
+                let step = if key == PaletteKey::Right { 1 } else { categories.len() - 1 };
+                state.category = categories[(at + step) % categories.len()];
+                state.selected = None;
+            }
+            None
+        }
         PaletteKey::Up => {
             if !matches.is_empty() {
                 state.selected = Some(matches[index.saturating_sub(1)].name.clone());
@@ -492,7 +489,6 @@ pub fn handle_key(key: PaletteKey, matches: &[SlashCommand], state: &mut Palette
             state.search.clear();
             None
         }
-        PaletteKey::Left | PaletteKey::Right => None,
         PaletteKey::Tab | PaletteKey::Enter => matches.get(index).map(|c| (c.clone(), key == PaletteKey::Enter)),
     }
 }
@@ -616,21 +612,10 @@ mod tests {
     }
 
     #[test]
-    fn the_search_narrows_every_category_and_the_arrows_step_through_them() {
+    fn the_search_matches_names_and_descriptions_in_any_case() {
         let all = commands();
-        assert_eq!(searched(&all, "  ", &[]).len(), all.len());
         let found = searched(&all, "CLEAR", &[]);
         assert!(!found.is_empty() && found.iter().all(|c| c.name.contains("clear") || c.description.as_deref().is_some_and(|d| d.to_lowercase().contains("clear"))));
-        let cats = [Category::All, Category::Cli, Category::Skills];
-        let mut state = PaletteState { selected: Some("x".into()), ..Default::default() };
-        step_category(&mut state, &cats, true);
-        assert_eq!((state.category, state.selected.as_deref()), (Category::Cli, None));
-        step_category(&mut state, &cats, false);
-        step_category(&mut state, &cats, false);
-        assert_eq!(state.category, Category::Skills, "wraps round");
-        state.search = "re".into();
-        handle_key(PaletteKey::Escape, &all, &mut state, "/");
-        assert!(state.search.is_empty(), "Esc clears the search");
     }
 
     #[test]
@@ -685,12 +670,12 @@ mod tests {
         let all = commands();
         let list = matches(&all, "", Category::All, &[]);
         let mut state = PaletteState::default();
-        assert_eq!(handle_key(PaletteKey::Down, &list, &mut state, "/"), None);
+        assert_eq!(handle_key(PaletteKey::Down, &list, &[], &mut state, "/"), None);
         assert_eq!(state.selected.as_deref(), Some("clear"));
-        assert_eq!(handle_key(PaletteKey::Up, &list, &mut state, "/"), None);
+        assert_eq!(handle_key(PaletteKey::Up, &list, &[], &mut state, "/"), None);
         assert_eq!(state.selected.as_deref(), Some("model"));
         // Already at the top.
-        assert_eq!(handle_key(PaletteKey::Up, &list, &mut state, "/"), None);
+        assert_eq!(handle_key(PaletteKey::Up, &list, &[], &mut state, "/"), None);
         assert_eq!(state.selected.as_deref(), Some("model"));
     }
 
@@ -699,17 +684,42 @@ mod tests {
         let all = commands();
         let list = matches(&all, "cl", Category::All, &[]);
         let mut state = PaletteState::default();
-        let (cmd, run) = handle_key(PaletteKey::Tab, &list, &mut state, "/cl").unwrap();
+        let (cmd, run) = handle_key(PaletteKey::Tab, &list, &[], &mut state, "/cl").unwrap();
         assert_eq!((cmd.name.as_str(), run), ("clear", false));
-        let (cmd, run) = handle_key(PaletteKey::Enter, &list, &mut state, "/cl").unwrap();
+        let (cmd, run) = handle_key(PaletteKey::Enter, &list, &[], &mut state, "/cl").unwrap();
         assert_eq!((cmd.name.as_str(), run), ("clear", true));
+    }
+
+    #[test]
+    fn left_and_right_step_through_the_categories_and_wrap() {
+        let list = matches(&commands(), "", Category::All, &[]);
+        let cats = [Category::All, Category::Threadbear, Category::Skills];
+        let mut state = PaletteState { selected: Some("clear".to_owned()), ..Default::default() };
+        assert_eq!(handle_key(PaletteKey::Right, &list, &cats, &mut state, "/"), None);
+        assert_eq!((state.category, state.selected.as_deref()), (Category::Threadbear, None));
+        handle_key(PaletteKey::Right, &list, &cats, &mut state, "/");
+        handle_key(PaletteKey::Right, &list, &cats, &mut state, "/");
+        assert_eq!(state.category, Category::All);
+        handle_key(PaletteKey::Left, &list, &cats, &mut state, "/");
+        assert_eq!(state.category, Category::Skills);
+    }
+
+    #[test]
+    fn the_search_narrows_by_name_and_description_and_esc_clears_it() {
+        let all = commands();
+        assert_eq!(searched(&all, "  ", &[]).len(), all.len());
+        let found = searched(&all, "cl", &[]);
+        assert!(!found.is_empty() && found.len() < all.len());
+        let mut state = PaletteState { search: "cl".to_owned(), ..Default::default() };
+        handle_key(PaletteKey::Escape, &found, &[], &mut state, "/");
+        assert_eq!(state.search, "");
     }
 
     #[test]
     fn escape_closes_it_at_this_text() {
         let list = matches(&commands(), "", Category::All, &[]);
         let mut state = PaletteState::default();
-        assert_eq!(handle_key(PaletteKey::Escape, &list, &mut state, "/mo"), None);
+        assert_eq!(handle_key(PaletteKey::Escape, &list, &[], &mut state, "/mo"), None);
         assert_eq!(state.closed_at.as_deref(), Some("/mo"));
     }
 

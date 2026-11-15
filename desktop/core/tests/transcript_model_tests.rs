@@ -34,6 +34,25 @@ fn testBasicTurnBecomesRows() {
     assert_eq!(model.last_seq(), 7);
 }
 
+/// The saved plan's note links the file, so it stays out where it can be
+/// clicked, while a plain note folds into the work (`LinkedNoteTests`).
+#[test]
+fn testANoteWithALinkIsNeverFoldedAway() {
+    let model = from_events(vec![
+        event(1, "turn.started", json!({"turnId": "t1"})),
+        user(2, "Plan the footer"),
+        call_titled(3, "c1", "ls"),
+        result_text(4, "c1", "ok"),
+        event(5, "system.note", json!({"text": "Resumed session"})),
+        text(6, "m1", "Here's the plan."),
+        event(7, "system.note", json!({"text": "Saved the plan in [plans/a.md](</tmp/plans/a.md>)."})),
+        done(8),
+    ]);
+    assert_eq!(ids(&model), ["u:2", "g:t:c1", "a:m1", "n:7", "f:t1"]);
+    assert!(RowContent::Note("Saved the plan in [plans/a.md](</tmp/plans/a.md>).".into()).is_linked_note());
+    assert!(!RowContent::Note("Resumed session".into()).is_linked_note());
+}
+
 /// "Woke up after hibernating for 2 days." is what Mike opened the thread
 /// to read, so it has a row of its own under the turn before.
 #[test]
@@ -54,25 +73,6 @@ fn testAWakeNoteStaysOutOfTheGroupAbove() {
         assert!(RowContent::Note(note.to_owned()).is_wake_note(), "{note}");
     }
     assert!(!RowContent::Note("Put in Threadbear".to_owned()).is_wake_note());
-}
-
-/// The saved plan's "Saved the plan to [plans/…](path)" is something to
-/// click, so it stays out of the folded work (Wayne, 5 Nov).
-#[test]
-fn testALinkedNoteStaysOutOfTheFoldedWork() {
-    let model = from_events(vec![
-        event(1, "turn.started", json!({"turnId": "t1"})),
-        user(2, "Plan the retry"),
-        call_titled(3, "c1", "ls src"),
-        result_text(4, "c1", "upload.ts"),
-        event(5, "system.note", json!({"text": "Saved the plan to [plans/a.md](</tmp/plans/a.md>)."})),
-        text(6, "m1", "Here's the plan."),
-        done(7),
-    ]);
-    let shown = ids(&model);
-    assert!(shown.contains(&"n:5".to_owned()), "{shown:?}");
-    assert!(RowContent::Note("Saved the plan to [plans/a.md](</tmp/plans/a.md>).".to_owned()).is_linked_note());
-    assert!(!RowContent::Note("Resumed session".to_owned()).is_linked_note());
 }
 
 /// The summary's background work is the last row while no turn runs: it
@@ -324,6 +324,11 @@ fn testPendingApprovalIds() {
     assert_eq!(model.pending_approval_ids(), ["ap2"]);
     model.apply(vec![event(5, "approval.resolved", json!({"approvalId": "ap2", "decision": "deny"}))]);
     assert_eq!(model.pending_approval_ids(), Vec::<String>::new());
+    model.apply(vec![
+        event(6, "approval.requested", json!({"approvalId": "start", "name": "threadbear.start_thread", "title": "Start a thread", "input": {}, "options": ["allow", "deny"]})),
+        event(7, "approval.requested", json!({"approvalId": "normal", "name": "Bash", "title": "pwd", "input": {}, "options": ["allow", "deny"]})),
+    ]);
+    assert_eq!(model.approval_for_return(&answering(&[])).as_deref(), Some("normal"));
 }
 
 #[test]

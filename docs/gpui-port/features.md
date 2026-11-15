@@ -170,6 +170,7 @@ It comes from reading code, not from running anything, so "(unverified)" means n
 | `transcript.secret` | Secret card | Masked field, Save securely, Decline, settles to a line | `Input` in a masked mode (unverified that the mode exists) on a drawn card. | kit | M | `Cells` (`SecretRowCell`, `SecretField`) |
 | `transcript.review` | Review card | Compact card to reopen a review | Drawn. | build | S | `ReviewRowCell` |
 | `transcript.plan` | Plan card | Go ahead, Send back, expand, becomes a checklist | Drawn card. | build | M | `Cells` (`PlanCardCell`) |
+| `transcript.savedplan` | Saved plan | A Plan first plan the runner saved opens in the side pane, and the note under the reply links it | The runner pins it with `show`; a note with a Markdown link stays out of the folded work and draws its link. | build | S | `RowRenderer`, `TranscriptReducer` (`isWork`) |
 | `transcript.plansteps` | Plan steps row | Agent's step list | Drawn. | build | S | `RowRenderer` (`planSteps`) |
 | `transcript.turnfooter` | Turn footer | End-of-turn line from outcome, duration, cost and usage | Drawn. | build | S | `RowRenderer`, `Event` |
 | `transcript.note` | Note row | Quiet system line, folds into groups. GPUI only: a login's move or wait ("Moved to ...", "Carrying on at ...") stays on show, in place of the limit's error | Drawn. | build | S | `RowRenderer` |
@@ -198,6 +199,7 @@ It comes from reading code, not from running anything, so "(unverified)" means n
 | `rich.mermaid` | Mermaid diagrams | Drawn with Pele in the app's colours, disk cached | Run `pele.js` in the web runtime and cache the picture on disk, showing the source when the runtime isn't installed; offscreen capture from CEF is (unverified). | web | L | `RichBlocks`, `RichRenderer`, `pele.js` |
 | `prints.diagram` | Diagram Prints | Mermaid source editing, saved versions, restore and project assignment | Reuse the Print store protocol and the rich preview; source editor and Print menus remain pending in GPUI. | web | M | `Pages`, `PageSheets`, `PageCardCell`, `EditDocSheet` |
 | `prints.whenasked` | Prints only when asked | Settings switch; an unasked `create_print` waits on an approval card | The runner does the asking, so GPUI needs only the switch in its Settings and the existing approval card. | runner | S | `SettingsView`, `RunnerSettings` |
+| `prints.card` | Print card in a reply | A ```print block drawn as the Print: a picture of its top, title, kind, version and age, Open and Refresh; it moves to each new version | A block plugin in the reply's text (`prints.rs`), its picture drawn by the web runtime as an html block is, the store fed by `pages.list` and `pages.updated`. The ⋯ menu is `prints.menu`. | runner | M | `PageCards`, `PageCardCell`, `PageFence` |
 | `prints.pane` | Prints in the side pane | A reply's Print card opens in the thread's side pane, which follows new versions | Open the Print's newest file in the GPUI side pane and swap it when `pages.updated` brings a newer version of the one shown. | runner | S | `openPageHere`, `followPageVersions`, `PagePath` |
 | `prints.list` | Prints in Highlights and on the rail | Highlights' Prints section and the rail's Prints list, each with its projects | Read `pages.list`; a Highlights section and a built-in rail panel listing rows that open in the side pane. | runner | S | `PrintRows`, `PrintRow`, `PrintsList` |
 | `prints.todo` | Todo lists and boards | Click to tick an item or move a card; each click a new version | Catch `threadbear-print:` links in the Print's web view and call `pages.toggleItem` or `pages.moveCard`; the page itself is static. | runner | S | `PrintLink`, `handlePrintLink`, `WebPanelPool` |
@@ -336,6 +338,7 @@ It comes from reading code, not from running anything, so "(unverified)" means n
 | `folder.pathbar` | Path bar | Breadcrumbs, ... menu | Drawn, with a gpui-kit menu. | build | S | `FolderBrowser` (`FolderPathBar`) |
 | `folder.keys` | Finder keys | Space Quick Look, ⌘↑, ⌘⇧., back | Key handling, with Space opening `file.quicklook`'s viewer. | build | S | `FolderBrowser` |
 | `folder.menu` | Folder menu | Open, Reveal, Copy paths, view, Sort, hidden | gpui-kit menu, with Open and Reveal going through the open gate. | kit | S | `FolderBrowser` |
+| `folder.search` | Search in a folder | A box over a folder on this Mac finds lines inside its files, skipping dependencies, build output, big files and anything that isn't text; a line opens the file there with its words found, and Back comes back to the results | `threadbear_core::folder_search` off the main thread, drawn list. | build | M | `FolderSearchView`, `FolderSearch` |
 | `folder.remote` | Remote folders | Other Macs' folders, no thumbnails | Port the listing logic. | build | M | `RemoteFiles`, `FolderListing` |
 | `folder.filespanel` | Files panel | Thread's folder from the rail | Reuses the folder list. | build | S | `PanelsView` |
 
@@ -347,6 +350,8 @@ It comes from reading code, not from running anything, so "(unverified)" means n
 | `cards.run` | Run on the card | Taken out 14 Nov 2026: the runAsks experiment was turned off and removed | Not ported: the Swift app's is frozen and the runner no longer offers it. | drop | none | `RowRenderer` (`appendRun`), `AppModel+ThreadActions` (`pressRunButton`) |
 | `terminal.putcommand` | Put a command in the Terminal | Play icon on a shell block types it at the prompt, never presses Return, replaces its own unrun command, copies instead if the shell is busy | Icons on the code block, then the terminal's own paste. | build | S | `ShellBlockIcons`, `ShellBlock`, `TerminalPanel` (`Terminals.put`) |
 | `terminal.lifecycle` | Shell lifecycle | Starts on request, stops on archive or quit | Unix pty on macOS and Linux, ConPTY on Windows. | shim | M | `TerminalPanel` (`Terminals`) |
+| `terminal.tabs` | Terminal tabs | Add, switch, rename and close shells in a thread | Tabs above the emulator, keeping each shell alive. | build | M | `TerminalTabStrip`, `TerminalTabButton` |
+| `terminal.linkhover` | Terminal link hover | Underline web addresses under the pointer with an opening tip | Grid spans and the terminal pointer. | build | S | `ThreadTerminalView` |
 
 ## 14. Projects, Librarian, Schedules, Usage, Runners, Connectors, Updates
 
@@ -361,6 +366,7 @@ It comes from reading code, not from running anything, so "(unverified)" means n
 | `projects.icon` | Project icon | Choose or librarian's | GPUI path prompt, with Reveal going through the open gate. | kit | S | `ProjectPage`, `ProjectIconView` |
 | `projects.tasks` | Tasks board page | Status columns from Notion | Drawn columns. | build | M | `ProjectPage` (`TasksSection`) |
 | `projects.newthread` | New thread in project | "In" chip | Drawn chip. | build | S | `DetailView` (`NewThreadProjectChip`) |
+| `librarian.customize` | Customize Librarian | Picture, background, layout, greeting, quote and activity | Shared look models and native Customize panel. | build | M | `LibrarianLookEditor`, `CustomizedLibrarianPage` |
 | `librarian.page` | Librarian page | Picture, tiles, Look at threads, Runs on | Drawn. | build | S | `LibrarianHome`, `HomePage` |
 | `looks.librarian` | Customize the Librarian page | Settings > General > Look's switch, then Customize: greeting, picture, background with Position and Fade, quote of the day, layout, title parts, numbers, GitHub and Threadbear activity | Drawn page and panel (`looks_pages.rs`, `looks_editor.rs`); looks kept in the Swift app's JSON. No profile page section yet. | build | L | `LibrarianHome`, `LibrarianLookEditor`, `LookEditorSections`, `Looks` |
 | `looks.scheduled` | Customize the Scheduled page | Picture, background, top, middle or bottom for each part, numbers | Drawn, sharing the Librarian's Picture and Background sections. | build | M | `ScheduledHome`, `ScheduledLookEditor` |

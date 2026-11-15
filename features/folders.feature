@@ -108,3 +108,23 @@ Feature: A folder in the side pane
     Then the path bar's … menu starts with the folder above the first one it shows
     When I pick the last folder in the path bar's … menu
     Then the pane is browsing that folder
+
+  @folder.search
+  Scenario: The folder's search box finds lines inside its files, and a line opens the file there
+    Given the thread's folder is showing in the pane for "Rebuild the three landing pages"
+    When I search the folder for "export function hero"
+    Then the folder search says "1 match in 1 file"
+    And the folder search lists "src/hero.ts:2"
+    When I open the folder search's match in "src/hero.ts" at line 2
+    Then the pane is showing the file "src/hero.ts"
+    And the find bar says "export function hero: 1 of 1"
+    When I press Back in the pane
+    Then the folder search says "1 match in 1 file"
+
+  @folder.search
+  Scenario: Clearing the folder's search box lists the folder again
+    Given the thread's folder is showing in the pane for "Rebuild the three landing pages"
+    When I search the folder for "Could not resolve"
+    Then the folder search lists "logs/docs-build.txt:1"
+    When I search the folder for ""
+    Then the folder lists "docs, logs" first

@@ -12,9 +12,6 @@ export type ToolGateDeps = {
   cwd(): string;
   // The thread's permission mode now (not the turn's).
   mode(): PermissionMode;
-  // The running turn is an Ask one: only the tools that read or never ask
-  // run, whatever the mode (docs/protocol.md, "Ask mode").
-  readOnly?(): boolean;
   // "Always allow" rules: a tool's full name, as for Claude.
   rules(): Iterable<string>;
   addRules(rules: string[]): void;
@@ -34,10 +31,6 @@ export async function gateThreadbearTool(deps: ToolGateDeps, call: ToolGateCall)
   const alwaysAsk = ALWAYS_ASK_TOOLS.has(fullName);
   const readOnly = NEVER_ASK_TOOLS.has(fullName) || call.readOnlyHint === true;
   const allowed = !alwaysAsk && [...deps.rules()].includes(fullName);
-  if (!readOnly && deps.readOnly?.()) {
-    const name = fullName.replace(/^mcp__[^_]+__/, '');
-    return { allowed: false, message: `This turn is in Ask mode, so nothing may change: ${name} is off for it. Answer from what you can read, and say what you'd do rather than doing it.` };
-  }
   if (!alwaysAsk && (deps.mode() === 'full' || readOnly || allowed)) return { allowed: true };
   // All of it or nothing: an allow runs the whole of what it allowed, so a
   // card cut short would approve words nobody saw.

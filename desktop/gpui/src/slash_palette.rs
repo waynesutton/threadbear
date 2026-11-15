@@ -10,7 +10,7 @@ use crate::prefs;
 use crate::style::{self, size};
 use gpui_kit::base::TestSupportExt as _;
 use gpui_kit::component::menu::ContextMenuExt as _;
-use gpui_kit::component::input::Input;
+use gpui_kit::component::input::{Escape, IndentInline, Input, MoveDown, MoveUp};
 use gpui_kit::component::Sizable as _;
 use gpui_kit::component::{h_flex, v_flex, ActiveTheme as _};
 use gpui_kit::prelude::*;
@@ -55,6 +55,14 @@ impl Threadbear {
                         this.slash.commands.entry(thread_id.clone()).or_default();
                     }
                 }
+                // The composer and pane draw by themselves: tell them the
+                // list is here, so an open palette fills in at once.
+                let pane = this.pane.clone();
+                let composer = pane.as_ref().map(|p| p.read(cx).composer.clone()).or_else(|| this.new_thread.composer.clone());
+                cx.defer(move |cx| {
+                    if let Some(composer) = composer { composer.update(cx, |_, cx| cx.notify()); }
+                    if let Some(pane) = pane { pane.update(cx, |_, cx| cx.notify()); }
+                });
                 cx.notify();
             })
             .ok();
@@ -108,6 +116,14 @@ impl Threadbear {
                         this.slash.commands.entry(key.clone()).or_default();
                     }
                 }
+                // The composer and pane draw by themselves: tell them the
+                // list is here, so an open palette fills in at once.
+                let pane = this.pane.clone();
+                let composer = pane.as_ref().map(|p| p.read(cx).composer.clone()).or_else(|| this.new_thread.composer.clone());
+                cx.defer(move |cx| {
+                    if let Some(composer) = composer { composer.update(cx, |_, cx| cx.notify()); }
+                    if let Some(pane) = pane { pane.update(cx, |_, cx| cx.notify()); }
+                });
                 cx.notify();
             })
             .ok();
@@ -174,7 +190,7 @@ impl Composer {
 
     /// Where the palette's list is kept: the thread's id, or for a new
     /// thread its runner, login and folder's (`paletteListKey`).
-    fn palette_list_key(&self, cx: &App) -> String {
+    pub(crate) fn palette_list_key(&self, cx: &App) -> String {
         match (&self.thread_id, self.app.upgrade()) {
             (Some(id), _) => id.clone(),
             (None, Some(app)) => app.read(cx).new_thread_commands_key(),
@@ -219,12 +235,6 @@ impl Composer {
             // From the search field it's the search's, not the box's words.
             return self.palette_search_focused(window, cx);
         }
-        if matches!(key, PaletteKey::Left | PaletteKey::Right) {
-            let categories: Vec<slash::Category> = slash::counts(&view.all, &view.query, &view.recent).into_iter().map(|(c, _)| c).collect();
-            slash::step_category(&mut self.palette, &categories, key == PaletteKey::Right);
-            cx.notify();
-            return true;
-        }
         if key == PaletteKey::Escape {
             self.clear_palette_search(window, cx);
             if self.palette_search_focused(window, cx) {
@@ -232,7 +242,9 @@ impl Composer {
                 crate::web_panels::keyboard_to_app(window);
             }
         }
-        if let Some((command, run)) = slash::handle_key(key, &matches, &mut self.palette, &text) {
+        // Left and Right step through the categories listed now.
+        let categories: Vec<slash::Category> = slash::counts(&view.all, &view.query, &view.recent).into_iter().map(|(c, _)| c).collect();
+        if let Some((command, run)) = slash::handle_key(key, &matches, &categories, &mut self.palette, &text) {
             // A skill named partway through a message isn't sent on its own,
             // and Return only fills it in unless Settings says it sends.
             let runs = self.slash_return_runs(cx);
@@ -338,6 +350,11 @@ impl Composer {
         let view = self.palette_open(&text, cx)?;
         let matches = slash::matches(&view.all, &view.query, self.palette.category, &view.recent);
         let picked = slash::picked(&matches, &self.palette).cloned();
+        // A /skill partway through a message, with the small list picked in
+        // Settings: that instead of the palette, never both.
+        if self.compact_skills(&view, cx) {
+            return Some(self.render_compact_skills(&matches, picked.as_ref(), cx));
+        }
         let categories = self.render_palette_categories(&view, cx);
         let list = self.render_palette_list(&view, &matches, picked.as_ref(), cx);
         let detail = self.render_palette_detail(&view, picked.as_ref(), cx);
@@ -370,11 +387,6 @@ impl Composer {
             .min_h_0()
             .w_full()
             .items_start()
-            .rounded(px(crate::slash_resize::RADIUS))
-            .overflow_hidden()
-            .bg(cx.theme().background)
-            .border_1()
-            .border_color(hairline)
             .child(div().flex_none().w(px(categories_width as f32)).h_full().child(categories))
             .child(crate::slash_resize::column_rule(0, categories_width, list_width + 200., width, cx))
             .child(div().flex_none().w(px(list_width as f32)).h_full().child(list))
@@ -418,6 +430,59 @@ impl Composer {
         )
     }
 
+    /// Whether a /skill partway through a message gets the small list at
+    /// the cursor rather than the palette (Settings > General > Slash
+    /// commands, `SlashListChoice`; the palette unless it's turned off).
+    fn compact_skills(&self, view: &PaletteView, cx: &App) -> bool {
+        view.mid_message && self.app.upgrade().is_some_and(|a| a.read(cx).settings.saved.inline_skill_palette == Some(false))
+    }
+
+    /// `SkillPicker`: the small list for a skill named inside a message.
+    /// It shares the palette's matching and keys, with just the one list.
+    fn render_compact_skills(&mut self, matches: &[SlashCommand], picked: Option<&SlashCommand>, cx: &mut Context<Self>) -> AnyElement {
+        let mut rows = v_flex().w_full().py(px(5.));
+        for command in matches {
+            let name = command.name.clone();
+            let choice = command.clone();
+            let selected = picked.is_some_and(|p| p.name == name);
+            let description = command.description.as_deref().map(slash::plain_description).unwrap_or_default();
+            rows = rows.child(
+                v_flex()
+                    .id(SharedString::from(format!("inline-skill-{name}")))
+                    .test_support()
+                    .role(Role::ListItem)
+                    .aria_label(format!("/{name}"))
+                    .px(px(12.))
+                    .py(px(6.))
+                    .cursor_pointer()
+                    .when(selected, |s| s.bg(style::primary_opacity(cx, 0.08)))
+                    .tip(format!("Insert /{name} in the message"))
+                    .on_click(cx.listener(move |this, _: &ClickEvent, window, cx| this.palette_pick(choice.clone(), false, window, cx)))
+                    .child(div().text_size(px(13.)).child(format!("/{name}")))
+                    .when(!description.is_empty(), |s| s.child(div().truncate().text_size(px(11.)).text_color(style::secondary_text(cx)).child(description))),
+            );
+        }
+        deferred(
+            div().absolute().left_0().bottom_full().mb(px(8.)).w(px(360.)).child(
+                div()
+                    .id("inline-skill-list")
+                    .max_h(px(260.))
+                    .overflow_y_scroll()
+                    .track_scroll(&self.palette_scroll)
+                    .rounded(px(8.))
+                    .bg(cx.theme().background)
+                    .border_1()
+                    .border_color(style::hairline(cx))
+                    .shadow_lg()
+                    .occlude()
+                    .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
+                    .child(rows),
+            ),
+        )
+        .with_priority(2)
+        .into_any_element()
+    }
+
     /// Whether the palette's search field has the keys.
     pub(crate) fn palette_search_focused(&self, window: &Window, cx: &App) -> bool {
         self.palette_search.read(cx).focus_handle(cx).is_focused(window)
@@ -425,8 +490,9 @@ impl Composer {
 
     /// `PaletteSearchField`: along the palette's top, narrowing every
     /// category by name and description. A click puts the keys in it; its
-    /// arrows, Return, Tab and Esc work the palette as the box's do (the
-    /// composer's own key handling catches them on the way down).
+    /// arrows, Return, Tab and Esc work the palette as the box's do (caught
+    /// here on the way down, and Return from its PressEnter in composer.rs).
+    /// Left and Right stay the field's, to move its cursor.
     fn render_palette_search(&mut self, cx: &mut Context<Self>) -> AnyElement {
         let muted = style::secondary_text(cx);
         h_flex()
@@ -445,6 +511,25 @@ impl Composer {
                     .flex_1()
                     .min_w_0()
                     .tip("Narrows every category by name and description. Arrows move, Return picks, Esc closes")
+                    .capture_action(cx.listener(|this, _: &MoveUp, window, cx| {
+                        if this.palette_key(PaletteKey::Up, window, cx) {
+                            cx.stop_propagation();
+                        }
+                    }))
+                    .capture_action(cx.listener(|this, _: &MoveDown, window, cx| {
+                        if this.palette_key(PaletteKey::Down, window, cx) {
+                            cx.stop_propagation();
+                        }
+                    }))
+                    .capture_action(cx.listener(|this, _: &IndentInline, window, cx| {
+                        if this.palette_key(PaletteKey::Tab, window, cx) {
+                            cx.stop_propagation();
+                        }
+                    }))
+                    .capture_action(cx.listener(|this, _: &Escape, window, cx| {
+                        this.palette_key(PaletteKey::Escape, window, cx);
+                        cx.stop_propagation();
+                    }))
                     .child(Input::new(&self.palette_search).appearance(false).small().cleanable(true).pl(px(0.))),
             )
             // Closes the palette, as Esc does (Wayne, 11 Nov).
@@ -646,7 +731,7 @@ impl Composer {
     /// page), it goes through the open gate, which opens the real file and
     /// asks before anything that would run. Another runner's thread has no
     /// button at all.
-    fn palette_open_file(&mut self, path: String, cx: &mut Context<Self>) {
+    pub(crate) fn palette_open_file(&mut self, path: String, cx: &mut Context<Self>) {
         let data = self.chip_data(cx);
         if data.away.is_none() {
             let thread = data.summary.filter(|_| self.thread_id.is_some());
@@ -692,6 +777,7 @@ impl Composer {
         json!({
             "query": query,
             "search": search,
+            "compact": self.compact_skills(&view, cx),
             "category": view.category_title(self.palette.category),
             "categories": categories,
             "commands": matches.iter().map(|c| format!("/{}", c.name)).collect::<Vec<_>>(),

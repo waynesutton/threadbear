@@ -26,6 +26,29 @@ use threadbear_core::text_file::{words, EditSession, Saved, CHECK_DELAY_MS, EDIT
 
 actions!(file_preview, [SaveFile]);
 
+/// How long the bar's quiet "✓ Saved" stays after a save lands.
+const JUST_SAVED_MS: u64 = 1500;
+
+/// What leaving a file with changes not saved does, when Save files
+/// automatically is off: Save, Don't Save or Cancel (`EditedFiles.Answer`).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum LeaveAnswer {
+    Save,
+    Discard,
+    Cancel,
+}
+
+impl LeaveAnswer {
+    pub(crate) fn from_name(name: &str) -> Option<Self> {
+        match name {
+            "save" => Some(LeaveAnswer::Save),
+            "discard" => Some(LeaveAnswer::Discard),
+            "cancel" => Some(LeaveAnswer::Cancel),
+            _ => None,
+        }
+    }
+}
+
 /// ⌘S, bound once for every window, in the file's key context.
 pub(crate) fn bind_keys(cx: &mut App) {
     static BOUND: std::sync::Once = std::sync::Once::new();
@@ -36,12 +59,6 @@ pub(crate) fn bind_keys(cx: &mut App) {
 /// The file's text in an editor of its own, and the document it came from.
 pub(crate) struct FileEdit {
     pub(crate) session: EditSession,
-    /// Edit files like an editor, as it was when the file opened: typing
-    /// waits for ⌘S, Save or leaving the file, and a status bar shows.
-    pub(crate) editor_mode: bool,
-    /// A save just landed: the status bar's quiet "Saved" tick, for a moment.
-    pub(crate) just_saved: bool,
-    just_saved_soon: Option<Task<()>>,
     pub(crate) editor: Entity<EditorState>,
     /// The save a moment after the last keystroke.
     save_soon: Option<Task<()>>,
@@ -50,6 +67,17 @@ pub(crate) struct FileEdit {
     /// The file's folder, watched for the file changing under the editor.
     _watch: Option<FolderWatch>,
     _typing: Subscription,
+    /// The cursor moving, for the line and column in the bar under the text.
+    _cursor: Subscription,
+    /// Edit files like an editor, as it was when the file opened: the bar
+    /// under the text, and saves that wait for ⌘S while autosave is off.
+    pub(crate) editor_mode: bool,
+    /// Typed and not in the file yet: the bar says Edited and the file's
+    /// name has a dot.
+    pub(crate) dirty: bool,
+    /// A save just landed: the bar's quiet "✓ Saved", for a moment.
+    pub(crate) just_saved: bool,
+    _just_saved_clear: Option<Task<()>>,
 }
 
 impl FileEdit {
@@ -69,6 +97,8 @@ impl FileEdit {
                 .auto_close(false)
                 .smart_indent(false)
                 .searchable(false)
+                // The find bar's Replace and All (file_find.rs).
+                .replaceable(true)
                 .tab_size(gpui_kit::component::input::TabSize { tab_size: 4, hard_tabs: true });
             match language {
                 Some(language) => state.language(language),
@@ -98,7 +128,35 @@ impl FileEdit {
             watch.set(&HashSet::from([folder]));
             Some(watch)
         });
-        FileEdit { session, editor_mode, just_saved: false, just_saved_soon: None, editor, save_soon: None, check_soon: None, _watch: watch, _typing: typing }
+        let cursor = cx.observe(&editor, |_, _, cx| cx.notify());
+        FileEdit { session, editor, save_soon: None, check_soon: None, _watch: watch, _typing: typing, _cursor: cursor, editor_mode, dirty: false, just_saved: false, _just_saved_clear: None }
+    }
+
+    /// Where the cursor is, from 1, for the bar under the text.
+    pub(crate) fn cursor(&self, cx: &App) -> (u32, u32) {
+        let at = self.editor.read(cx).cursor_position();
+        (at.line + 1, at.character + 1)
+    }
+
+    /// Whether what's typed is written by itself a moment after the typing
+    /// stops: always outside editor mode, and in it while Save files
+    /// automatically is on (`autosaves`).
+    pub(crate) fn autosaves(&self, autosave: bool) -> bool {
+        !self.editor_mode || autosave
+    }
+
+    /// The bar's words for whether what's typed is in the file yet.
+    pub(crate) fn state_words(&self, autosave: bool) -> &'static str {
+        if self.dirty {
+            words::edited(self.autosaves(autosave))
+        } else {
+            "Saved"
+        }
+    }
+
+    /// Whether the editor holds text the file doesn't.
+    fn differs(&self, cx: &App) -> bool {
+        self.session.takes_typing() && *self.editor.read(cx).value() != *self.session.document.saved()
     }
 }
 
@@ -107,25 +165,37 @@ impl SidePane {
         self.files.open.get_mut(thread_id)?.edit.as_mut()
     }
 
-    /// Something was typed: saved a moment after the typing stops (`textDidChange`).
+    /// Settings > General > Files: (Edit files like an editor, Save files
+    /// automatically).
+    pub(crate) fn file_modes(&self, cx: &App) -> (bool, bool) {
+        self.app.upgrade().map_or((true, true), |app| {
+            let s = &app.read(cx).settings;
+            (s.edits_files_like_an_editor(), s.saves_files_automatically())
+        })
+    }
+
+    /// Whether the thread's file has typing in it that isn't saved yet.
+    pub(crate) fn file_unsaved(&self, thread_id: &str) -> bool {
+        self.files.open.get(thread_id).and_then(|o| o.edit.as_ref()).is_some_and(|e| e.dirty)
+    }
+
+    /// Something was typed: saved a moment after the typing stops while it
+    /// autosaves, else marked Edited until ⌘S (`textDidChange`).
     pub(crate) fn edit_typed(&mut self, thread_id: &str, cx: &mut Context<Self>) {
+        let autosave = self.file_modes(cx).1;
         let Some(edit) = self.edit_mut(thread_id) else { return };
         if !edit.session.takes_typing() {
             return;
         }
         edit.session.typed();
-        let editor_mode = edit.editor_mode;
-        // Like an editor with Save files automatically off: nothing's
-        // written until ⌘S, Save or leaving it.
-        if editor_mode && !self.saves_files_automatically(cx) {
-            cx.notify();
+        edit.dirty = edit.differs(cx);
+        cx.notify();
+        if !edit.dirty || !edit.autosaves(autosave) {
+            edit.save_soon = None;
             return;
         }
-        let Some(edit) = self.edit_mut(thread_id) else { return };
+        let delay = if edit.editor_mode { EDITOR_SAVE_DELAY_MS } else { SAVE_DELAY_MS };
         let id = thread_id.to_owned();
-        // About a second after the typing stops like an editor, a moment otherwise.
-        let delay = if editor_mode { EDITOR_SAVE_DELAY_MS } else { SAVE_DELAY_MS };
-        cx.notify();
         edit.save_soon = Some(cx.spawn(async move |this, cx| {
             cx.background_executor().timer(Duration::from_millis(delay)).await;
             this.update(cx, |this, cx| {
@@ -141,23 +211,26 @@ impl SidePane {
         let handle = self.files.window;
         let Some(edit) = self.files.open.get_mut(thread_id).and_then(|o| o.edit.as_mut()) else { return Saved::Done };
         edit.save_soon = None;
+        let was_dirty = edit.dirty;
         let typed = edit.editor.read(cx).value().to_string();
-        let was_drafted = edit.session.drafted();
         let saved = edit.session.save_now(&typed);
-        // The quiet tick, for a moment, once something typed is in the file.
-        if was_drafted && !edit.session.drafted() && edit.editor_mode {
-            edit.just_saved = true;
-            let id = thread_id.to_owned();
-            edit.just_saved_soon = Some(cx.spawn(async move |this, cx| {
-                cx.background_executor().timer(Duration::from_millis(1500)).await;
-                this.update(cx, |this, cx| {
-                    if let Some(edit) = this.edit_mut(&id) {
-                        edit.just_saved = false;
-                    }
-                    cx.notify();
-                })
-                .ok();
-            }));
+        if !matches!(saved, Saved::Kept) {
+            edit.dirty = false;
+            // The quiet tick, only when something was written.
+            if was_dirty {
+                edit.just_saved = true;
+                let id = thread_id.to_owned();
+                edit._just_saved_clear = Some(cx.spawn(async move |this, cx| {
+                    cx.background_executor().timer(Duration::from_millis(JUST_SAVED_MS)).await;
+                    this.update(cx, |this, cx| {
+                        if let Some(edit) = this.edit_mut(&id) {
+                            edit.just_saved = false;
+                            cx.notify();
+                        }
+                    })
+                    .ok();
+                }));
+            }
         }
         if let Saved::DoneShowing(text) = &saved {
             let editor = edit.editor.clone();
@@ -187,6 +260,8 @@ impl SidePane {
         let shown = edit.session.shown(&in_view).to_owned();
         let change = edit.session.document.check(&shown);
         if let Some(text) = edit.session.file_changed(change) {
+            // The file's text shows: nothing of Mike's is waiting.
+            edit.dirty = false;
             let editor = edit.editor.clone();
             show_text(&editor, text, None, handle, cx);
         }
@@ -199,6 +274,7 @@ impl SidePane {
         let Some(edit) = self.edit_mut(thread_id) else { return };
         let Some(file_text) = edit.session.conflict.clone() else { return };
         let text = edit.session.use_file(file_text);
+        edit.dirty = false;
         let editor = edit.editor.clone();
         show_text(&editor, text, Some(window), None, cx);
         cx.notify();
@@ -208,8 +284,79 @@ impl SidePane {
     pub(crate) fn keep_mine(&mut self, thread_id: &str, cx: &mut Context<Self>) {
         let Some(edit) = self.edit_mut(thread_id) else { return };
         let typed = edit.editor.read(cx).value().to_string();
-        edit.session.keep_mine(&typed);
+        if !matches!(edit.session.keep_mine(&typed), Saved::Kept) {
+            edit.dirty = false;
+        }
         cx.notify();
+    }
+
+    /// Whether the thread's file can be left now (`mayLeaveFile`): nothing
+    /// unsaved, or saved now while it autosaves. With Save files
+    /// automatically off and changes typed it asks Save, Don't Save or Cancel
+    /// and says no; `then` does the leaving once Save or Don't Save is picked.
+    pub(crate) fn may_leave_file(&mut self, thread_id: &str, then: impl FnOnce(&mut Self, &mut Context<Self>) + 'static, cx: &mut Context<Self>) -> bool {
+        let autosave = self.file_modes(cx).1;
+        let Some(edit) = self.edit_mut(thread_id) else { return true };
+        if !edit.dirty {
+            return true;
+        }
+        if edit.autosaves(autosave) {
+            self.save_edit(thread_id, None, cx);
+            return true;
+        }
+        let name = threadbear_core::highlights::last_component(edit.session.document.path().to_string_lossy().as_ref()).to_owned();
+        // A script's answer, given before (a scripted app can't click an alert).
+        if let Some(answer) = self.files.leave_answer.take() {
+            return self.leave_answered(thread_id, answer, cx);
+        }
+        if cfg!(feature = "automation") {
+            return false;
+        }
+        let Some(handle) = self.files.window else {
+            // Nowhere to ask: keeping what's typed beats losing it.
+            self.save_edit(thread_id, None, cx);
+            return true;
+        };
+        let (id, side) = (thread_id.to_owned(), cx.entity().downgrade());
+        // Asked once the click that led here has finished.
+        cx.defer(move |cx| {
+            let answers = [PromptButton::new("Save"), PromptButton::cancel("Cancel"), PromptButton::new("Don't Save")];
+            let title = format!("Save the changes to {name}?");
+            let Ok(asked) = handle.update(cx, |_, window, cx| window.prompt(PromptLevel::Warning, &title, Some("If you don't save them, what you typed is lost."), &answers, cx)) else { return };
+            cx.spawn(async move |cx| {
+                let answer = match asked.await {
+                    Ok(0) => LeaveAnswer::Save,
+                    Ok(2) => LeaveAnswer::Discard,
+                    _ => return,
+                };
+                side.update(cx, |this, cx| {
+                    if this.leave_answered(&id, answer, cx) {
+                        then(this, cx);
+                    }
+                })
+                .ok();
+            })
+            .detach();
+        });
+        false
+    }
+
+    /// What Save, Don't Save or Cancel came to: whether the file can go.
+    /// Save that can't write (a conflict waiting) stays, for the bar.
+    fn leave_answered(&mut self, thread_id: &str, answer: LeaveAnswer, cx: &mut Context<Self>) -> bool {
+        match answer {
+            LeaveAnswer::Cancel => false,
+            LeaveAnswer::Save => !matches!(self.save_edit(thread_id, None, cx), Saved::Kept),
+            // What's typed goes, and nothing is written on the way out: the
+            // file's text is read again if it's shown again.
+            LeaveAnswer::Discard => {
+                if let Some(open) = self.files.open.get_mut(thread_id) {
+                    open.edit = None;
+                }
+                cx.notify();
+                true
+            }
+        }
     }
 
     /// The thread's file is leaving the pane (Back, another file, another
@@ -266,113 +413,50 @@ impl SidePane {
             .text_size(px(style::size::DETAIL))
             .line_height(px(crate::files::CODE_LINE))
             .font_family(cx.theme().mono_font_family.clone());
+        let status = (edit.editor_mode && edit.session.takes_typing()).then(|| self.status_bar(thread_id, edit, cx));
         // The text starts where the Swift app's does, past its 44 point
         // gutter of line numbers.
-        let status = (edit.editor_mode && edit.session.takes_typing()).then(|| self.editor_status_bar(thread_id, edit, cx));
         v_flex().size_full().children(bar).children(find).child(div().flex_1().min_h_0().pl(px(14.)).child(editor)).children(status).into_any_element()
     }
 
-    /// `EditorStatusBar`: where the cursor is, whether what's typed is in
-    /// the file yet, and Save (⌘S).
-    fn editor_status_bar(&self, thread_id: &str, edit: &FileEdit, cx: &mut Context<Self>) -> AnyElement {
+    /// `EditorStatusBar`, under the text in Edit files like an editor: where
+    /// the cursor is, whether what's typed is in the file yet, and Save.
+    fn status_bar(&self, thread_id: &str, edit: &FileEdit, cx: &mut Context<Self>) -> AnyElement {
         let p = palette(cx);
-        let place = edit.editor.read(cx).cursor_position();
-        let edited = edit.session.drafted();
-        let autosaves = self.saves_files_automatically(cx);
-        let id = thread_id.to_owned();
-        let side = cx.entity().downgrade();
-        let save = PushButton::new("editor-save", words::SAVE, words::SAVE_TIP).disabled(!edited || edit.session.conflict.is_some()).render(cx, move |_, window, cx| {
+        let autosave = self.file_modes(cx).1;
+        let (line, column) = edit.cursor(cx);
+        let (id, side) = (thread_id.to_owned(), cx.entity().downgrade());
+        let save = PushButton::new("file-save", words::SAVE, words::SAVE_TIP).small().disabled(!edit.dirty || edit.session.conflict.is_some()).render(cx, move |_, window, cx| {
             side.update(cx, |this, cx| {
                 this.save_edit(&id, Some(window), cx);
             })
             .ok();
         });
+        let state: AnyElement = if edit.dirty {
+            h_flex().gap(px(5.)).items_center().child(div().size(px(6.)).rounded_full().bg(p.accent)).child(edit.state_words(autosave)).into_any_element()
+        } else if edit.just_saved {
+            h_flex().gap(px(4.)).items_center().child(icon("checkmark", 10., p.secondary)).child("Saved").into_any_element()
+        } else {
+            div().text_color(p.faint).child("Saved").into_any_element()
+        };
         h_flex()
-            .id("editor-status")
+            .id("file-status")
             .flex_none()
             .w_full()
             .px(px(12.))
-            .py(px(5.))
+            .py(px(4.))
             .gap(px(10.))
             .items_center()
             .border_t_1()
             .border_color(p.hairline)
             .text_size(px(style::size::LABEL))
-            .child(div().text_color(p.secondary).child(format!("Line {}, Column {}", place.line + 1, place.character + 1)))
+            .line_height(px(style::natural_line(style::size::LABEL)))
+            .text_color(p.secondary)
+            .child(format!("Line {line}, Column {column}"))
             .child(div().flex_1())
-            .when(edited, |s| s.child(div().size(px(6.)).rounded_full().bg(style::accent(cx))).child(div().text_color(p.secondary).child(words::edited(autosaves))))
-            .when(!edited && edit.just_saved, |s| s.child(icon("checkmark", style::size::LABEL, p.secondary)).child(div().text_color(p.secondary).child("Saved")))
-            .when(!edited && !edit.just_saved, |s| s.child(div().text_color(p.faint).child("Saved")))
+            .child(state)
             .child(save)
             .into_any_element()
-    }
-
-    /// Save files automatically, as Settings has it now.
-    pub(crate) fn saves_files_automatically(&self, cx: &App) -> bool {
-        self.app.upgrade().is_none_or(|app| app.read(cx).settings.saves_files_automatically())
-    }
-
-    /// Whether leaving the thread's file has to ask first: like an editor,
-    /// with Save files automatically off and something typed not saved.
-    pub(crate) fn must_ask_to_leave(&self, thread_id: &str, cx: &App) -> bool {
-        !self.saves_files_automatically(cx) && self.files.open.get(thread_id).and_then(|o| o.edit.as_ref()).is_some_and(|e| e.editor_mode && e.session.drafted())
-    }
-
-    /// Leaving the file with unsaved typing (`EditedFiles.mayLeave`): Save,
-    /// Don't Save or Cancel. Save or Don't Save then does `then`, the
-    /// leaving that was asked about; Cancel stays. A save that can't land
-    /// (a conflict waiting) stays too, with the bar saying why.
-    pub(crate) fn ask_to_leave(&mut self, thread_id: &str, then: impl FnOnce(&mut Self, &mut Context<Self>) + 'static, cx: &mut Context<Self>) {
-        let file = self.files.open.get(thread_id).map(|o| threadbear_core::highlights::last_component(&o.path).to_owned()).unwrap_or_default();
-        self.files.last_asked = Some(file.clone());
-        let id = thread_id.to_owned();
-        if let Some(picked) = self.files.scripted_answer.clone() {
-            self.answer_leave(&id, &picked, Box::new(then), cx);
-            cx.notify();
-            return;
-        }
-        let Some(handle) = self.files.window else { return };
-        let question = format!("Save the changes to {file}?");
-        let Ok(reply) = handle.update(cx, |_, window, cx| window.prompt(PromptLevel::Warning, &question, Some("If you don't save them, what you typed is lost."), &["Save", "Cancel", "Don't Save"], cx)) else { return };
-        let then: Box<dyn FnOnce(&mut Self, &mut Context<Self>)> = Box::new(then);
-        cx.spawn(async move |this, cx| {
-            let Ok(picked) = reply.await else { return };
-            let picked = match picked {
-                0 => "save",
-                2 => "discard",
-                _ => "cancel",
-            };
-            this.update(cx, |this, cx| {
-                this.answer_leave(&id, picked, then, cx);
-                cx.notify();
-            })
-            .ok();
-        })
-        .detach();
-    }
-
-    /// What Save, Don't Save or Cancel does: Save writes it and goes on if
-    /// it landed; Don't Save drops what's typed, writing nothing, and goes on.
-    fn answer_leave(&mut self, thread_id: &str, picked: &str, then: Box<dyn FnOnce(&mut Self, &mut Context<Self>)>, cx: &mut Context<Self>) {
-        match picked {
-            "save" => {
-                if self.save_edit(thread_id, None, cx) == Saved::Done {
-                    then(self, cx);
-                }
-            }
-            "discard" => {
-                if let Some(open) = self.files.open.get_mut(thread_id) {
-                    open.edit = None;
-                }
-                then(self, cx);
-            }
-            _ => {}
-        }
-    }
-
-    /// Edit files like an editor, as Settings has it now.
-    pub(crate) fn edits_like_an_editor(&self, cx: &App) -> bool {
-        self.app.upgrade().is_some_and(|app| app.read(cx).settings.edits_like_an_editor())
     }
 
     /// `ConflictBar`: the file changed on disk while the editor holds unsaved

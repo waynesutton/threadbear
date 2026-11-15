@@ -235,6 +235,10 @@ async fn run(app: &WeakEntity<Threadbear>, window: AnyWindowHandle, cmd: &Value,
     if cmd["cmd"] == "palette-menu" {
         return crate::slash_resize::menu_command(window, cmd, cx).await;
     }
+    // A Terminal tab's right-click menu (terminal.rs), the same way.
+    if cmd["cmd"] == "terminal-menu" {
+        return crate::terminal::menu_command(window, cmd, cx).await;
+    }
     if cmd["cmd"] == "composer-menu" && cmd["menu"] == "send" {
         return crate::composer_send::menu_command(window, cmd, cx).await;
     }
@@ -480,6 +484,7 @@ fn step(app: &Entity<Threadbear>, cmd: &Value, window: &mut Window, cx: &mut App
         }
         // The activity bar's panels, as the Swift app's commands of these names.
         "runners" => crate::runners_panel::automation(app, cmd, window, cx),
+        "look" => crate::looks::automation(app, cmd, cx),
         "updates" => crate::updates_panel::automation(app, cmd, window, cx),
         "connectors" => crate::connectors_panel::automation(app, cmd, cx),
         "usage" => crate::usage::automation(app, cmd, cx),

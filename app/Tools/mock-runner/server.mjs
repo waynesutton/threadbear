@@ -324,15 +324,24 @@ const devicesRefusal = () => {
 let mockInstructions = { text: '' };
 let instructionsFailNext = false;
 const settings = {
-  defaultCwd: defaults.cwd, idleMinutes: 30, maxLiveCLIs: 6, followMain: true, bulletReplies: true, oneReply: true, labReview: true, keepAwake: true, fullSync: false, printsWhenAsked: false,
+  defaultCwd: defaults.cwd, idleMinutes: 30, maxLiveCLIs: 6, followMain: true, bulletReplies: true, oneReply: true, labReview: true, keepAwake: true, fullSync: false,
+  // Prints' "Only make Prints when I ask" (Settings > General > Prints),
+  // shown while the pages experiment below is on.
+  printsWhenAsked: false,
   models: {
     pool: 'claude',
     privateFolders: ['~/dev/clients/acme'],
   },
+  // Every experiment, as the real runner lists them (runner/src/experiments):
+  // only Prints here, on unless TB_MOCK_PAGES_OFF, so both apps' Prints
+  // scenarios have a store to read (features/prints.feature).
+  experiments: [{ id: 'pages', name: 'Prints', does: 'Threads make Prints you keep: charts, dashboards, reports, docs and diagrams, with versions, in a reply as a card.', on: !process.env.TB_MOCK_PAGES_OFF }],
 };
+const pagesOn = () => settings.experiments.some((e) => e.id === 'pages' && e.on);
+/** Prints by id: { page, versions: number[], sources: Map(version -> { markdown?, mermaid? }) }. */
+const mockPages = new Map();
 
 /** threadId -> { summary, events: [], inProgress: Map(itemId -> {type,text}), timers: [] } */
-const mockProfiles = [{ id: 'personal', name: 'Personal', home: '/Users/mike/Library/Application Support/Threadbear', port: 8797, label: 'com.mikerosoft.threadbear.runner', running: true, convexUrl: 'https://demo-bear-123.convex.cloud' }];
 const threads = new Map();
 // A reconnect spec's deliberately unreadable list, without damaging its
 // transcripts or real summaries. No live runner implements this method.
@@ -345,6 +354,8 @@ addDemoPools();
 const highlights = new Map();
 addDemoHighlights();
 addDemoSubagents();
+// Prints (the pages experiment): a chart and a diagram, the chart's card in a reply.
+addDemoPrints();
 applyScriptedThreads();
 /**
  * The runners a schedule can run on (runners.list, docs/protocol.md,
@@ -418,7 +429,7 @@ addDemoProjects();
 // Decisions on the Projects page with TB_MOCK_DECISIONS, and the GPUI app's
 // Voice button and Settings > Voice & Audio with TB_MOCK_VOICE.
 function mockExperiments() {
-  return [...(process.env.TB_MOCK_OPEN_ANYTHING_OFF ? [] : ['openAnything']), ...(process.env.TB_MOCK_DECISIONS ? ['projectDecisions'] : []), ...(process.env.TB_MOCK_VOICE ? ['voiceMode'] : [])];
+  return [...(process.env.TB_MOCK_OPEN_ANYTHING_OFF ? [] : ['openAnything']), ...(process.env.TB_MOCK_DECISIONS ? ['projectDecisions'] : []), ...(process.env.TB_MOCK_VOICE ? ['voiceMode'] : []), ...(pagesOn() ? ['pages'] : [])];
 }
 
 // Decisions on the Projects page (the projectDecisions experiment): three of
@@ -432,6 +443,13 @@ if (process.env.TB_MOCK_PARTS) {
   const tb = projects.find((p) => p.title === 'Threadbear');
   if (photo && tb) photo.parentId = tb.id;
 }
+// Bears and tables (docs/protocol.md, "Bears", "Tables"), with
+// TB_MOCK_BEARS=1: three bears, each with a demo thread in its folder
+// (the summary's `bear`, the sidebar's tile), and two tables, Head table
+// on its own and Launch crew as a Part of Threadbear. Only when asked, as
+// it changes those threads' tiles.
+let bears = [];
+if (process.env.TB_MOCK_BEARS) addDemoBears();
 // A big set for timing the Projects view (TB_MOCK_PERF_PROJECTS=<threads>):
 // that many threads over 80 projects, nearly all archived, the open ones
 // partly waiting on a card of asks, and a third of the projects with a
@@ -751,36 +769,6 @@ async function dispatch(client, method, p) {
       }
       return { threads: made.reverse() };
     }
-    // Settings > Profiles (runner/src/profiles.ts), made up: making one
-    // "runs setup" for a few seconds, a line at a time.
-    case 'profiles.list':
-      return { profiles: mockProfiles.map((p) => ({ ...p })) };
-    case 'profiles.create': {
-      if (!p.name?.trim()) throw rpcError(-32602, 'name must be a string');
-      const id = p.name.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-');
-      const profile = { id, name: p.name.trim(), home: `/Users/mike/Library/Application Support/Threadbear Profiles/${id}`, port: 8797 + mockProfiles.length, label: `com.mikerosoft.threadbear.runner.${id}`, running: false, job: { state: 'running', lines: ['4. Convex', '  → npx convex login (opens the browser)'] } };
-      mockProfiles.push(profile);
-      const steps = ['  ✓ logged in to Convex', `  ✓ project ${p.project || `threadbear-${id}`}`, '  ✓ deploy key', '  ✓ runner key set as RUNNER_KEY', "  ✓ the profile's runner installed (the Mac app is shared)"];
-      steps.forEach((line, i) => setTimeout(() => {
-        profile.job.lines = [...profile.job.lines, line].slice(-12);
-        if (i === steps.length - 1) Object.assign(profile, { running: true, convexUrl: `https://happy-otter-${mockProfiles.length}.convex.cloud`, job: { ...profile.job, state: 'done' } });
-      }, 800 * (i + 1)));
-      return { profile: { id, name: profile.name, home: profile.home, port: profile.port, label: profile.label } };
-    }
-    case 'profiles.rename': {
-      const profile = mockProfiles.find((x) => x.id === p.id);
-      if (!profile || profile.id === 'personal') throw rpcError(-32602, `No profile ${p.id}.`);
-      profile.name = p.name;
-      return { profile };
-    }
-    case 'profiles.retry':
-      return { ok: true };
-    case 'profiles.remove': {
-      const profile = mockProfiles.find((x) => x.id === p.id);
-      if (!profile || profile.id === 'personal') throw rpcError(-32602, `No profile ${p.id}.`);
-      mockProfiles.splice(mockProfiles.indexOf(profile), 1);
-      return { profile };
-    }
     case 'threads.create': {
       if (!p.text) throw rpcError(-32602, 'text is required');
       // New Thread on a project's page: every project checked first, as the runner does.
@@ -860,9 +848,6 @@ async function dispatch(client, method, p) {
       const turnId = 'turn_' + crypto.randomBytes(4).toString('hex');
       // Answers from the card go on the user.message, as the runner keeps them.
       const extra = Array.isArray(p.answers) && p.answers.length ? { answers: p.answers } : {};
-      // Plan or Ask mode (docs/protocol.md, "Plan and Ask modes").
-      if (p.mode !== undefined && p.mode !== 'plan' && p.mode !== 'ask') throw rpcError(-32602, 'mode must be "plan" or "ask"');
-      if (p.mode) extra.mode = p.mode;
       // As the runner has it once the CLI starts a session (the app's
       // Finish setting up counts that as a login that works).
       t.summary.nativeSessionId ??= 'mock-session-' + t.summary.id;
@@ -1419,6 +1404,34 @@ async function dispatch(client, method, p) {
       need(p.threadId).highlightsFailures = Number(p.count ?? 1);
       return {};
     }
+    case 'mock.savedPlan': {
+      // A Plan first turn whose plan the runner saved, as runner.ts
+      // `savePlan` does: the file in the thread's folder, pinned with show
+      // (so the app opens it in the side pane), and the note linking it.
+      // {threadId}. For features/plans.feature and the port's pictures.
+      const t = need(p.threadId);
+      const id = t.summary.id;
+      const rel = `plans/${new Date().toISOString().slice(0, 10)}-site.md`;
+      const file = path.join(t.summary.cwd, rel);
+      fs.mkdirSync(path.dirname(file), { recursive: true });
+      fs.writeFileSync(file, `# Plan: ${t.summary.title}\n\n## Goal\n\nThe pricing page shows the real plan prices.\n\n## Steps\n\n1. Put the prices in the plan cards.\n2. Check the cards line up on a phone.\n3. Push and post the preview.\n`);
+      const turnId = 'turn_plan_' + crypto.randomBytes(3).toString('hex');
+      persist(id, { type: 'user.message', text: 'Plan the pricing page', images: [], mode: 'plan' }, turnId);
+      persist(id, { type: 'turn.started', turnId }, turnId);
+      persist(id, { type: 'assistant.text', itemId: turnId + '_m', text: 'Here is the plan: real prices in the three cards, a phone check, then the preview.' }, turnId);
+      persist(id, { type: 'system.note', text: `Saved the plan in [${rel}](<${file}>).` }, turnId);
+      persist(id, { type: 'turn.completed', turnId, outcome: 'completed', durationMs: 4000 }, turnId);
+      const list = highlights.get(id) ?? { highlights: [], edited: [] };
+      highlights.set(id, list);
+      const hid = `file:${file}`;
+      list.highlights = list.highlights.filter((h) => h.id !== hid);
+      list.highlights.unshift({ id: hid, kind: 'file', title: `Plan: ${t.summary.title}`, path: file, how: 'pinned', note: 'The plan from Plan first', seq: t.summary.lastSeq, lastSeq: t.summary.lastSeq, at: iso() });
+      t.summary.highlightsAt = iso();
+      t.summary.panelRequest = { id: 'pr_' + crypto.randomBytes(4).toString('hex'), panel: 'highlights', title: list.highlights[0].title, highlight: hid, at: iso() };
+      setStatus(id, 'idle');
+      broadcastSummary(id);
+      return { path: file };
+    }
     case 'mock.panelState': {
       // What's waiting on the thread and what the app has said it showed.
       const t = need(p.threadId);
@@ -1565,6 +1578,10 @@ async function dispatch(client, method, p) {
     case 'librarian.update':
       if (oldRunner) throw rpcError(-32601, `Unknown method ${method}`);
       return projectRequest(method, p);
+    case 'bears.list':
+    case 'bears.update':
+    case 'tables.list':
+      return bearsRequest(method, p);
     // The profile page (docs/protocol.md, "Profile page"): kept in memory,
     // sent nowhere.
     case 'profilePage.get':
@@ -1686,6 +1703,101 @@ async function dispatch(client, method, p) {
       mockInstructions = { text: p.text.trim() ? p.text.trim() + '\n' : '' };
       broadcast('instructions.updated', { instructions: mockInstructions });
       return { instructions: mockInstructions };
+    // Prints (docs/protocol.md, "Prints"): the pages experiment's store,
+    // in memory with each version's files under <data dir>/pages, as the
+    // real runner keeps them.
+    case 'pages.list': {
+      if (!pagesOn()) return { pages: [] };
+      let list = [...mockPages.values()].map((x) => x.page).filter((pg) => (p.deleted ? pg.deletedAt : !pg.deletedAt));
+      if (p.project) list = list.filter((pg) => pg.projects.some((r) => r.id === p.project));
+      if (p.thread) list = list.filter((pg) => pg.ownerThread === p.thread);
+      if (p.none) list = list.filter((pg) => pg.projects.length === 0);
+      return { pages: list.sort((a, b) => Date.parse(b.updatedAt) - Date.parse(a.updatedAt)) };
+    }
+    case 'pages.get': {
+      const x = knownPage(p.pageId);
+      const version = p.version ?? x.page.version;
+      if (!x.versions.includes(version)) throw rpcError(-32602, `${p.pageId} has no version ${version}`);
+      return { page: x.page, file: pageFile(x.page.id, version), versions: x.versions, ...x.sources.get(version) };
+    }
+    case 'pages.saveDoc': {
+      const x = knownPage(p.pageId);
+      if (typeof p.markdown !== 'string') throw rpcError(-32602, 'markdown must be text');
+      if (p.title) x.page.title = String(p.title);
+      return { page: savePageVersion(x, docPage(x.page.title, p.markdown), { markdown: p.markdown }, 'user') };
+    }
+    case 'pages.saveDiagram': {
+      const x = knownPage(p.pageId);
+      // The real runner draws it with Pele and refuses what doesn't parse;
+      // here a source that doesn't open with a diagram type is malformed.
+      if (typeof p.mermaid !== 'string' || !/^\s*(graph|flowchart|sequenceDiagram|classDiagram|stateDiagram)/.test(p.mermaid)) throw rpcError(-32602, "Couldn't render the diagram: it doesn't start with a diagram type like flowchart");
+      return { page: savePageVersion(x, diagramPage(x.page.title, p.mermaid), { mermaid: p.mermaid }, 'user') };
+    }
+    case 'pages.toggleItem':
+    case 'pages.moveCard':
+      knownPage(p.pageId);
+      throw rpcError(-32602, `${p.pageId} isn't a todo list or a board`);
+    case 'pages.restoreVersion': {
+      const x = knownPage(p.pageId);
+      if (!x.versions.includes(p.version)) throw rpcError(-32602, `${p.pageId} no longer keeps version ${p.version}`);
+      return { page: savePageVersion(x, fs.readFileSync(pageFile(x.page.id, p.version), 'utf8'), x.sources.get(p.version) ?? {}, x.page.editedBy ?? 'agent') };
+    }
+    case 'pages.delete': {
+      const x = knownPage(p.pageId, true);
+      x.page.deletedAt = iso();
+      delete x.page.published;
+      broadcastPages();
+      return { page: x.page };
+    }
+    case 'pages.restore': {
+      const x = knownPage(p.pageId, true);
+      delete x.page.deletedAt;
+      broadcastPages();
+      return { page: x.page };
+    }
+    case 'pages.export': {
+      const x = knownPage(p.pageId);
+      const version = p.version ?? x.page.version;
+      if (typeof p.dest !== 'string' || !path.isAbsolute(p.dest)) throw rpcError(-32602, 'dest must be an absolute folder');
+      if (fs.existsSync(p.dest) && fs.readdirSync(p.dest).length) throw rpcError(-32602, `${p.dest} isn't empty`);
+      fs.mkdirSync(p.dest, { recursive: true });
+      fs.cpSync(path.dirname(pageFile(x.page.id, version)), p.dest, { recursive: true });
+      return { file: path.join(p.dest, 'index.html') };
+    }
+    case 'pages.publish': {
+      const x = knownPage(p.pageId);
+      x.page.published = { slug: crypto.randomBytes(16).toString('hex'), at: iso(), version: x.page.version };
+      broadcastPages();
+      return { page: x.page, url: `${DEMO_SITE}/p/${x.page.published.slug}` };
+    }
+    case 'pages.unpublish': {
+      const x = knownPage(p.pageId);
+      delete x.page.published;
+      broadcastPages();
+      return { page: x.page };
+    }
+    case 'pages.refresh':
+    case 'pages.edit': {
+      // Only asks the thread that made it; nothing is made here.
+      const x = knownPage(p.pageId);
+      return { threadId: x.page.ownerThread, started: false };
+    }
+    case 'pages.setProjects': {
+      const x = knownPage(p.pageId);
+      const remove = new Set(p.remove ?? []);
+      x.page.projects = x.page.projects.filter((r) => !remove.has(r.id));
+      for (const id of p.add ?? []) if (!x.page.projects.some((r) => r.id === id)) x.page.projects.push({ id, by: 'mike', pinned: true });
+      broadcastPages();
+      return { page: x.page };
+    }
+    // A thread saving the next version of a Print, for the scenario where
+    // the side pane follows it (`pageId`, default the chart).
+    case 'mock.savePage': {
+      const x = knownPage(p.pageId ?? 'pg_invoice_totals');
+      const next = x.page.version + 1;
+      const html = x.page.kind === 'diagram' ? diagramPage(x.page.title, mockDiagram()) : chartPage(x.page.title, next);
+      return { page: savePageVersion(x, html, x.sources.get(x.page.version) ?? {}, 'agent') };
+    }
     case 'settings.get':
       return { settings };
     case 'settings.update': {
@@ -1708,6 +1820,11 @@ async function dispatch(client, method, p) {
       if (p.keepAwake !== undefined) settings.keepAwake = Boolean(p.keepAwake);
       if (p.fullSync !== undefined) settings.fullSync = Boolean(p.fullSync);
       if (p.printsWhenAsked !== undefined) settings.printsWhenAsked = Boolean(p.printsWhenAsked);
+      for (const [id, on] of Object.entries(p.experiments ?? {})) {
+        const e = settings.experiments.find((x) => x.id === id);
+        if (!e) throw rpcError(-32602, `No experiment called ${id}`);
+        e.on = Boolean(on);
+      }
       const m = p.models ?? {};
       if (m.pool !== undefined) {
         if (m.pool !== null && !poolOf(m.pool)) throw rpcError(-32602, `No pool called ${m.pool}`);
@@ -2212,15 +2329,6 @@ async function fakeTurn(threadId, text, images, turnId = 'turn_' + crypto.random
   const started = Date.now();
   persist(threadId, { type: 'user.message', text, images, ...(origin ? { origin } : {}), ...extra }, turnId);
   persist(threadId, { type: 'turn.started', turnId }, turnId);
-  // A Plan mode turn's reply is saved as the plan, as the runner does.
-  if (extra.mode === 'plan') {
-    // A real file, so the link opens: in the mock's temp folder.
-    const dir = path.join(os.tmpdir(), 'threadbear-mock-plans');
-    fs.mkdirSync(dir, { recursive: true });
-    const file = path.join(dir, `${new Date().toISOString().slice(0, 10)}-mock.md`);
-    fs.writeFileSync(file, `# Plan: ${t.summary.title}\n\n## Goal\n\n${text}\n\n## Steps\n\n1. Look\n2. Plan\n3. Do\n`);
-    setTimeout(() => persist(threadId, { type: "system.note", text: `Saved the plan to [plans/${path.basename(file)}](<${file}>).` }), 7000);
-  }
   setStatus(threadId, 'running');
 
   // A provider refusal for checking the recovery offer, without sending
@@ -2274,6 +2382,19 @@ async function fakeTurn(threadId, text, images, turnId = 'turn_' + crypto.random
     for (const c of [head, ...calls]) persist(threadId, { type: 'tool.result', itemId: c.itemId, ok: answers[c.itemId] === 'allow', text: answers[c.itemId] === 'allow' ? 'Done.' : 'The user denied this.', truncated: false, images: [] }, turnId);
     const allowed = Object.values(answers).filter((d) => d === 'allow').length;
     persist(threadId, { type: 'assistant.text', itemId: 'm_' + crypto.randomBytes(4).toString('hex'), text: `Allowed ${allowed} of ${calls.length + 1}.` }, turnId);
+    return finishTurn(threadId, turnId, started, 'completed');
+  }
+
+  // "two approvals" in a message: two cards waiting at once, as subagents
+  // asking side by side do, for Return allowing the oldest first.
+  if (/two approvals/i.test(text)) {
+    const cards = ['ls -la', 'git status'].map((command) => ({ approvalId: 'ap_' + crypto.randomBytes(4).toString('hex'), command }));
+    for (const c of cards) persist(threadId, { type: 'approval.requested', approvalId: c.approvalId, name: 'Bash', title: c.command, input: { command: c.command }, options: ['allow', 'allowAlways', 'deny'] }, turnId);
+    setStatus(threadId, 'waiting', true);
+    t.approvalWaiters ??= new Map();
+    await Promise.all(cards.map((c) => new Promise((resolve) => t.approvalWaiters.set(c.approvalId, resolve))));
+    setStatus(threadId, 'running', false);
+    persist(threadId, { type: 'assistant.text', itemId: 'm_' + crypto.randomBytes(4).toString('hex'), text: 'Both answered.' }, turnId);
     return finishTurn(threadId, turnId, started, 'completed');
   }
 
@@ -3207,6 +3328,70 @@ function addDemoSchedules() {
   }
 }
 
+// ---------------------------------------------------------------- bears
+
+function addDemoBears() {
+  const now = Date.now();
+  const ago = (minutes) => new Date(now - minutes * 60_000).toISOString();
+  bears = [
+    { id: 'head-bear-1a2b', name: 'Head Bear', does: 'Runs the other bears and keeps their plans straight', head: true },
+    { id: 'writer-3c4d', name: 'Writer', does: 'Drafts posts, docs and release notes', icon: 'pencil', color: '#3E8ED0' },
+    { id: 'designer-5e6f', name: 'Designer', does: 'Mocks up screens and picks colours', icon: 'paintbrush', color: '#8A5CC2' },
+  ];
+  const homes = { 'head-bear-1a2b': 'demo_tidy_imports', 'writer-3c4d': 'demo_landing_pages', 'designer-5e6f': 'demo_codex_poster' };
+  for (const bear of bears) {
+    const t = threads.get(homes[bear.id]);
+    if (t) t.summary.bear = bearTile(bear);
+  }
+  const head = {
+    id: 'p_7ab1e001', title: 'Head table', folders: ['/Users/mike/Bears/Tables/head-table-7ab1'], goals: 'Where the bears plan the week together.',
+    state: '', notes: '', links: [], createdBy: 'mike', createdAt: ago(60 * 24), updatedAt: ago(30),
+    icon: { symbol: 'person.3', by: 'mike', updatedAt: ago(60 * 24) },
+    table: { bears: ['head-bear-1a2b', 'writer-3c4d'] },
+  };
+  const crew = {
+    id: 'p_7ab1e002', title: 'Launch crew', folders: ['/Users/mike/Bears/Tables/launch-crew-9c0d'], goals: 'Gets Threadbear 0.4 out the door.',
+    state: '', notes: '', links: [], createdBy: 'mike', createdAt: ago(60 * 12), updatedAt: ago(20),
+    icon: { symbol: 'person.3', by: 'mike', updatedAt: ago(60 * 12) },
+    parentId: projects.find((p) => p.title === 'Threadbear')?.id,
+    table: { bears: ['writer-3c4d'] },
+  };
+  projects.push(head, crew);
+  const tidy = threads.get('demo_tidy_imports');
+  if (tidy) join(tidy.summary, head, 'mike', false, ago(30));
+}
+
+/** What a thread in a bear's folder carries for its tile (Bears.tile). */
+function bearTile(b) {
+  return { id: b.id, name: b.name, ...(b.icon ? { icon: b.icon } : {}), ...(b.color ? { color: b.color } : {}), ...(b.head ? { head: true } : {}) };
+}
+
+function bearsRequest(method, p) {
+  const on = bears.length > 0;
+  switch (method) {
+    case 'bears.list':
+      return { on, bears: bears.map((b) => ({ ...b, folder: `/Users/mike/Bears/${b.id}`, state: {}, away: false, archived: false, routines: [] })) };
+    case 'bears.update': {
+      if (!on) throw rpcError(-32000, 'Bears are off: turn them on in Settings > General > Experiments.');
+      const bear = bears.find((b) => b.id === p.bear);
+      if (!bear) throw rpcError(-32602, `No bear ${p.bear}`);
+      if ('color' in p) {
+        if (p.color === null) delete bear.color;
+        else bear.color = String(p.color);
+      }
+      // As bears.update does, its threads' summaries go again so the tile follows.
+      for (const [id, t] of threads) {
+        if (t.summary.bear?.id !== bear.id) continue;
+        t.summary.bear = bearTile(bear);
+        broadcastSummary(id);
+      }
+      return { bear };
+    }
+    case 'tables.list':
+      return { on, tables: listedProjects(false).filter((x) => x.table) };
+  }
+}
+
 // ---------------------------------------------------------------- projects
 
 function projectRequest(method, p) {
@@ -3471,6 +3656,10 @@ function addDemoDecisions() {
 }
 
 function join(summary, project, by, pinned, at = iso(), why) {
+  // The real Projects.onJoined seats a bear when its thread joins a table.
+  if (project.table && summary.bear && !project.table.bears.includes(summary.bear.id)) {
+    project.table.bears.push(summary.bear.id);
+  }
   summary.projects = [...(summary.projects ?? []), { id: project.id, title: project.title, by, ...(pinned ? { pinned: true } : {}), at, ...(why ? { why } : {}) }];
 }
 
@@ -3827,6 +4016,111 @@ function onePagePdf(line, link) {
   const table = out.length;
   out += `xref\n0 ${objects.length + 1}\n0000000000 65535 f \n${offsets.map((n) => `${String(n).padStart(10, '0')} 00000 n \n`).join('')}`;
   return `${out}trailer\n<< /Size ${objects.length + 1} /Root 1 0 R >>\nstartxref\n${table}\n%%EOF\n`;
+}
+
+// ------------------------------------------------------------------ Prints
+
+// Two Prints the invoice export thread made (docs/protocol.md, "Prints"):
+// a chart, whose card its reply shows as the real runner's agents write it
+// (a ```print <id> block), and a diagram with its Mermaid source. Static
+// HTML and SVG under <data dir>/pages/<id>/v<n>/index.html, as the runner
+// keeps them, so either app can draw a card's picture and open it in the pane.
+function addDemoPrints() {
+  if (!pagesOn()) return;
+  const thread = threads.get('demo_invoice_export');
+  const owner = thread ? 'demo_invoice_export' : '';
+  const made = (minutesAgo) => new Date(Date.now() - minutesAgo * 60_000).toISOString();
+  addMockPage({ id: 'pg_invoice_totals', title: 'Invoice totals by month', summary: 'Last quarter\'s invoice totals for July, August and September, from the CSV export.', kind: 'chart', ownerThread: owner, source: 'invoices-q3.csv', recipe: 'Read invoices-q3.csv and chart the total per month as bars.', createdAt: made(70), updatedAt: made(60) }, chartPage('Invoice totals by month', 1), {});
+  addMockPage({ id: 'pg_export_flow', title: 'How the export runs', summary: 'The invoice export: read the PDFs, fill in missing client names, write the CSV.', kind: 'diagram', ownerThread: owner, createdAt: made(65), updatedAt: made(64) }, diagramPage('How the export runs', mockDiagram()), { mermaid: mockDiagram() });
+  // The reply carries the chart's card after what it said.
+  const reply = thread?.events.find((e) => e.type === 'assistant.text');
+  if (reply) reply.text += '\n\nHere are the totals by month:\n\n```print pg_invoice_totals\n```';
+}
+
+function addMockPage(fields, html, source) {
+  const page = { projects: [], version: 1, bytes: Buffer.byteLength(html), live: false, editedBy: 'agent', ...fields };
+  const x = { page, versions: [1], sources: new Map([[1, source]]) };
+  writePageFile(page.id, 1, html);
+  mockPages.set(page.id, x);
+  return x;
+}
+
+function pageFile(id, version) {
+  return path.join(path.resolve(dataDir), 'pages', id, `v${version}`, 'index.html');
+}
+
+function writePageFile(id, version, html) {
+  const file = pageFile(id, version);
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  fs.writeFileSync(file, html);
+}
+
+/** A Print by id, refusing an unknown or deleted one (or any, with the experiment off). */
+function knownPage(id, evenDeleted = false) {
+  const x = pagesOn() ? mockPages.get(id) : undefined;
+  if (!x || (x.page.deletedAt && !evenDeleted)) throw rpcError(-32602, `No print ${id}`);
+  return x;
+}
+
+/** The next version, the last 10 kept, and every client told. */
+function savePageVersion(x, html, source, editedBy) {
+  const version = x.page.version + 1;
+  writePageFile(x.page.id, version, html);
+  x.versions = [...x.versions, version].slice(-10);
+  x.sources.set(version, source);
+  Object.assign(x.page, { version, bytes: Buffer.byteLength(html), editedBy, updatedAt: iso() });
+  if (x.page.published) x.page.published = { ...x.page.published, at: iso(), version };
+  broadcastPages();
+  return x.page;
+}
+
+function broadcastPages() {
+  if (!pagesOn()) return;
+  broadcast('pages.updated', { pages: [...mockPages.values()].map((x) => x.page).filter((pg) => !pg.deletedAt) });
+}
+
+function mockDiagram() {
+  return 'flowchart LR\n  A[Read the invoice PDFs] --> B{Client name?}\n  B -->|Missing| C[Fill it in from the PDF]\n  B -->|There| D[Write a CSV row]\n  C --> D';
+}
+
+function printStyle() {
+  return `<style>
+:root { color-scheme: light dark; --bg: #ffffff; --fg: #1d1d1f; --muted: #6e6e73; --line: #e5e5ea; --bar: #0a84ff; --bar2: #5e5ce6; }
+@media (prefers-color-scheme: dark) { :root { --bg: #1c1c1e; --fg: #f5f5f7; --muted: #98989d; --line: #3a3a3c; --bar: #0a84ff; --bar2: #7d7aff; } }
+body { margin: 0; padding: 28px 32px; background: var(--bg); color: var(--fg); font: 15px -apple-system, system-ui, sans-serif; }
+h1 { margin: 0 0 4px; font-size: 26px; font-weight: 650; }
+p { margin: 0 0 20px; color: var(--muted); }
+svg text { fill: var(--fg); font: 13px -apple-system, system-ui, sans-serif; }
+</style>`;
+}
+
+/** A bar chart Print; each version's numbers move a little, so a new one looks new. */
+function chartPage(title, version) {
+  const months = [['July', 18400], ['August', 21250], ['September', 19900 + (version - 1) * 2600]];
+  const most = Math.max(...months.map(([, n]) => n));
+  const bars = months.map(([month, n], i) => {
+    const h = Math.round((n / most) * 220);
+    const x = 70 + i * 220;
+    return `<rect x="${x}" y="${260 - h}" width="140" height="${h}" rx="8" style="fill: var(--bar${i === 2 ? '2' : ''})"/>`
+      + `<text x="${x + 70}" y="${250 - h}" text-anchor="middle">$${n.toLocaleString('en-US')}</text>`
+      + `<text x="${x + 70}" y="284" text-anchor="middle">${month}</text>`;
+  }).join('');
+  return `<!doctype html><html><head><meta charset="utf-8"><title>${title}</title>${printStyle()}</head><body>
+<h1>${title}</h1><p>Q3 invoices from the CSV export, version ${version}. Two invoices still have no client name.</p>
+<svg viewBox="0 0 740 300" width="740" height="300" role="img" aria-label="${title}"><line x1="50" y1="260" x2="720" y2="260" style="stroke: var(--line)"/>${bars}</svg>
+</body></html>\n`;
+}
+
+/** A diagram Print: static SVG drawn here in place of Pele, with its source folded under it. */
+function diagramPage(title, mermaid) {
+  const box = (x, label) => `<rect x="${x}" y="70" width="170" height="56" rx="10" style="fill: none; stroke: var(--bar)"/><text x="${x + 85}" y="103" text-anchor="middle">${label}</text>`;
+  const arrow = (x1, x2) => `<line x1="${x1}" y1="98" x2="${x2 - 6}" y2="98" style="stroke: var(--muted)"/><path d="M${x2 - 8},92 L${x2},98 L${x2 - 8},104 Z" style="fill: var(--muted)"/>`;
+  const escaped = mermaid.replace(/&/g, '&amp;').replace(/</g, '&lt;');
+  return `<!doctype html><html><head><meta charset="utf-8"><title>${title}</title>${printStyle()}</head><body>
+<h1>${title}</h1><p>Drawn from its Mermaid source.</p>
+<svg viewBox="0 0 740 200" width="740" height="200" role="img" aria-label="${title}">${box(10, 'Read the PDFs')}${arrow(180, 285)}${box(285, 'Client name?')}${arrow(455, 560)}${box(560, 'Write a CSV row')}</svg>
+<details><summary>Source</summary><pre>${escaped}</pre></details>
+</body></html>\n`;
 }
 
 // The landing pages thread works in a real folder under the data dir, so its

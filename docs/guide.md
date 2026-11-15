@@ -538,24 +538,16 @@ Any other file you paste or drop in (a video, a PDF, a folder) goes in as
 its full path where you drop it, for the agent to open where it is.
 Nothing's copied, so a big one is fine.
 
-Shift-Tab in the message box steps through **Plan first** and **Ask**,
-then off. Plan first is the access menu's Plan first: the agent reads and
-plans, changes nothing, and puts its plan to you on a card with Go ahead
-and Send back. Threadbear also saves each plan in the thread's folder as
+Shift-Tab in the message box turns **Plan first** on and off. Plan first
+is the access menu's Plan first: the agent reads and plans, changes
+nothing, and puts its plan to you on a card with Go ahead and Send back.
+Threadbear also saves each plan in the thread's folder as
 `plans/<date>-<project>.md` (the folder's name if the thread isn't in a
 project), opens it in the panel beside the thread, and pins it in
 Highlights; a revised plan updates the same file until you say Go ahead.
-Stepping on from Plan first puts back the access the thread had, or Ask
-before edits if Threadbear can't tell what that was (after a restart). In
-Ask, the agent reads what it needs but changes nothing, whatever the access
-chip says, and just answers: on Claude, shell commands and other tools that
-could change something (another MCP server's, most of Threadbear's own,
-and skills, which can run commands as they load) are switched off for
-that turn, so it reads files and the web instead; on Codex, Threadbear's
-own tools that change something are off too; it shows as an Ask chip beside the access
-chip (click it to turn it off) and stays on for the thread until you
-change it. Off, nothing shows and messages work as always. Settings (⌘,)
-> General can turn Shift-Tab's modes off.
+Turning Plan first off puts back the access the thread had, or Ask before
+edits if Threadbear can't tell what that was (after a restart). Settings
+(⌘,) > General can give Shift-Tab back to the message box.
 
 Your messages show basic Markdown as replies do: start lines with "- " or
 "1. " for a list, and use **bold**, *italics*, `code`, [links](https://example.com),
@@ -667,8 +659,9 @@ or Tab puts the skill in your words, and nothing is sent until you send
 the message. Claude Code's own commands, and skills set to run only when
 you type them (`disable-model-invocation: true`), work only at the start
 of a message, so they aren't listed there. If you'd rather have the
-small list at the cursor for these (described under Skills), pick it in
-Settings > General > Slash commands. Only one of the two shows.
+small list above the message box for these, turn off Use full palette for
+skills inside a message in Settings > General > Slash commands. Only one
+of the two shows.
 
 The iPhone app has it too: type `/` in a thread's reply box and a list of
 its commands opens above it, with the categories as buttons along the top.
@@ -833,6 +826,10 @@ started. Threadbear remembers your layout between launches.
 ### Terminal
 <!-- slug: terminal -->
 
+For a Terminal button beside Files on the right-hand rail, turn on Settings >
+General > Terminal > Show Terminal on the right-hand rail. It opens the same
+terminal as the keyboard shortcut and is off by default.
+
 ⌘J opens a terminal under the thread, and ⌘J again hides it. It's a real
 one, with your login shell, its colours and full-screen programs like vim
 or htop, and it takes the keyboard as it opens. Each thread has a shell
@@ -854,7 +851,7 @@ quit Threadbear. The Terminal is a panel like the others: drag it
 beside the thread, into a tab, or out into a window of its own.
 
 ⌘-click a web address, a file path or a labelled link printed in the
-Terminal to open it (Ctrl-click on Windows and Linux). Programs and links
+Terminal to open it (Ctrl-click on Windows and Linux). Web addresses underline under the pointer, with a tip showing how to open them. Programs and links
 that start another app ask first, as they do elsewhere in Threadbear.
 
 A shell command an agent gives you (a ```` ```bash ````, `sh`, `zsh` or
@@ -1219,6 +1216,7 @@ off Look at threads there to pause it; what's queued waits until you turn
 it back on. If it files a thread wrongly, take the thread out of the
 project and it won't put it back.
 
+The GPUI app keeps page looks in its desktop settings on this Mac.
 With Customize the Librarian page on (Settings › General › Look, off by
 default), the page gets a Customize button at its top right. It opens a
 panel beside the page that changes it as you go: keep the bear, use a
@@ -1330,7 +1328,6 @@ window: middle is the middle of the space left, and bottom is the
 window's bottom edge. A page too tall for the window stacks them in order
 and scrolls. Turning the switch off puts the page back as it ships
 and keeps your changes; Reset to the standard page clears them.
-
 With Convex sync on, schedules need a connection to your backend. If the
 first connection fails after a restart, the runner tries again after a
 second, then waits longer between attempts, up to a minute. Try saving
@@ -1832,35 +1829,6 @@ The ones there are now, and what each does, are in
 themselves so it stays true.
 <!-- experiments:end -->
 
-## Profiles
-<!-- slug: profiles -->
-
-A profile is a whole Threadbear of its own on this Mac, such as Work beside
-Personal: its own threads, projects, skills, notes, bear, and Claude and
-Codex logins, and its own Convex account and backend, so work never mixes
-with personal. Your first setup is Personal.
-
-To make one, open Settings (⌘,) > Profiles and press New Profile…. Give it
-a name and, if you like, a name for its Convex project. Threadbear opens
-your browser to sign in to the Convex account for it (a work account, say:
-it never touches the Convex login your other profiles use), makes its
-backend there and starts its runner. Its row shows how it's going; if your
-Convex login has several teams it asks which. Then, from the row's ⋯ menu,
-Sign In to Claude… (or Codex…) opens a Terminal window to sign its own
-login in, and Switch opens Threadbear on it.
-
-With more than one profile, the sidebar has a profile menu at the top (its
-colour and name) and a thin strip of its colour runs along the top of the
-window, so you can always see which one you're in. Pick another from the
-menu, or press ⌃⌘1, ⌃⌘2 and so on, and Threadbear opens again on it,
-keeping its window; it opens on that one next time too. Each profile's
-runner keeps working while you're in another, and notifications say which
-profile they're from. Keyboard shortcuts and how the app looks are shared;
-everything else is the profile's own. Its agents are told which profile
-they're in, and to keep its work inside it. Rename, Colour and Remove are in
-the row's ⋯ menu; removing one stops its runner and can keep or delete its
-files, and leaves its Convex backend for you to delete in Convex.
-
 ## Connectors
 <!-- slug: connectors -->
 
@@ -2235,7 +2203,8 @@ will run. Skills page skills show under their own names, as `/pele`
 (`/threadbear:pele` works too). That's any skill the thread can use: the Skills page's, and
 the ones Claude or Codex find themselves, such as those in
 `~/.claude/skills` or the folder's own. Click one for the Skills page,
-or for one that isn't there, its SKILL.md. It works anywhere in
+or for one that isn't there, its SKILL.md. In the GPUI app, the link
+opens its SKILL.md beside the thread. It works anywhere in
 the message, in Claude and Codex threads alike. A change reaches threads
 that are already running too: each gets a fresh start before its next
 message, carrying on the same conversation with the new skills. Remove

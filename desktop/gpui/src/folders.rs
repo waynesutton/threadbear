@@ -15,7 +15,7 @@ use crate::highlights::{icon, palette, MenuItem, Palette, PanePreview, SidePane,
 use crate::style;
 use crate::tips::Tip as _;
 use crate::spinner::Spinner;
-use gpui_kit::component::{h_flex, v_flex, ActiveTheme as _, Sizable as _};
+use gpui_kit::component::{h_flex, v_flex, Sizable as _};
 use gpui_kit::prelude::*;
 use gpui_kit::*;
 // Shadows gpui's px, so sizes here follow the app's zoom (style.rs).
@@ -203,21 +203,6 @@ pub(crate) struct FoldersState {
     /// Reads the folder showing again when the window comes back to the front:
     /// a file that grew changes nothing the watch hears.
     _activation: Option<Subscription>,
-    /// Each folder's search inside its files, by view key, kept while the app
-    /// runs so Back from a hit finds the same results (`FolderSearchMemory`).
-    pub(crate) searches: HashMap<String, FolderSearch>,
-}
-
-/// A folder's search field and what it found (`FolderSearchView`).
-pub(crate) struct FolderSearch {
-    pub(crate) input: Entity<gpui_kit::component::input::InputState>,
-    pub(crate) query: String,
-    pub(crate) found: threadbear_core::folder_search::Found,
-    pub(crate) searching: bool,
-    /// Tells the walk under way to stop: a new letter, or the folder gone.
-    stop: std::sync::Arc<std::sync::atomic::AtomicBool>,
-    _task: Option<Task<()>>,
-    _sub: Subscription,
 }
 
 fn view_key(thread_id: &str, root: &str) -> String {
@@ -527,32 +512,43 @@ impl SidePane {
         }
         let focus = self.folders.focus.get_or_insert_with(|| cx.focus_handle()).clone();
         let key = view_key(&thread.id, path);
+        // This Mac's folder has a search box over it (folder_search_view.rs).
+        let local = !thread.is_remote() && self.folders.views.get(&key).is_some_and(|v| v.away.is_none());
+        if local {
+            self.ensure_search_box(&key, path, window, cx);
+        }
+        let searching = local && self.searching_folder(&key);
         let Some(view) = self.folders.views.get(&key) else { return div().into_any_element() };
         let (note, mode, sort) = (view.note(), view.mode, view.sort);
         let crumb_list = crumbs(path, &self.folder_home(view.away.is_some(), path));
         let path_bar = self.path_bar(&key, &crumb_list, thread, preview, p, window, cx).into_any_element();
         let body = match (&note, mode) {
             (Some(note), _) => div().flex_1().min_h_0().child(crate::files::pane_note(note, p)).into_any_element(),
+            // The first look still going: a spinner, as the Swift
+            // FolderSearchView's ProgressView.
+            (None, _) if searching && self.files.searches.get(&key).is_some_and(|s| s.found.is_none()) => div()
+                .id("folder-searching")
+                .flex_1()
+                .min_h_0()
+                .flex()
+                .items_center()
+                .justify_center()
+                .child(Spinner::new().with_size(px(14.)).color(p.secondary))
+                .tip("Searching the files in this folder")
+                .into_any_element(),
+            (None, _) if searching => self.render_search_results(&key, thread, preview, cx),
             (None, FolderMode::List) => self.render_list(&key, thread, preview, p, cx),
             (None, FolderMode::Icons) => self.render_grid(&key, thread, preview, p, cx),
         };
         let mut column = v_flex().size_full();
-        // This Mac's folders can be searched inside (another Mac's aren't
-        // here to read).
-        let searchable = !thread.is_remote() && self.folders.views.get(&key).is_some_and(|v| v.away.is_none());
-        let searching = searchable.then(|| self.folder_search_bar(&key, path, window, cx));
-        let query = self.folders.searches.get(&key).map(|s| s.query.trim().to_owned()).filter(|q| !q.is_empty() && searchable);
-        column = column.children(searching);
-        if let Some(query) = query {
-            column = column.child(self.folder_search_results(&key, path, &query, thread, preview, p, cx));
-        } else {
-            if mode == FolderMode::List {
-                column = column.child(self.folder_header(&key, sort, p, cx));
-            }
-            column = column.child(body);
+        if local {
+            column = column.children(self.render_search_field(&key, p, cx));
+        }
+        if mode == FolderMode::List && !searching {
+            column = column.child(self.folder_header(&key, sort, p, cx));
         }
         // The path bar under the rows, as the Finder's is.
-        column = column.child(path_bar);
+        column = column.child(body).child(path_bar);
         let (keys_key, keys_thread, keys_preview) = (key.clone(), thread.clone(), preview.clone());
         div()
             .id("folder-browser")
@@ -560,205 +556,16 @@ impl SidePane {
             .track_focus(&focus)
             .key_context(CONTEXT)
             .on_key_down(cx.listener(move |this, ev: &KeyDownEvent, window, cx| {
+                // Typing in the search box is the box's, not the list's.
+                if this.files.searches.get(&keys_key).is_some_and(|s| s.input.read(cx).focus_handle(cx).is_focused(window)) {
+                    return;
+                }
                 if this.folder_key(&keys_key, ev, &keys_thread, &keys_preview, window, cx) {
                     cx.stop_propagation();
                 }
             }))
             .child(column)
             .into_any_element()
-    }
-
-    /// The search field over a folder, made the first time it's drawn.
-    fn folder_search_bar(&mut self, key: &str, root: &str, window: &mut Window, cx: &mut Context<Self>) -> AnyElement {
-        if !self.folders.searches.contains_key(key) {
-            let input = cx.new(|cx| gpui_kit::component::input::InputState::new(window, cx).placeholder("Search in files"));
-            let (k, r) = (key.to_owned(), root.to_owned());
-            let sub = cx.subscribe(&input, move |this: &mut Self, _, ev: &gpui_kit::component::input::InputEvent, cx| {
-                if matches!(ev, gpui_kit::component::input::InputEvent::Change) {
-                    this.folder_search_changed(&k, &r, cx);
-                }
-            });
-            self.folders.searches.insert(key.to_owned(), FolderSearch { input, query: String::new(), found: Default::default(), searching: false, stop: Default::default(), _task: None, _sub: sub });
-        }
-        let p = palette(cx);
-        let input = self.folders.searches[key].input.clone();
-        h_flex()
-            .flex_none()
-            .w_full()
-            .px(px(8.))
-            .py(px(6.))
-            .border_b_1()
-            .border_color(p.hairline)
-            .child(
-                h_flex()
-                    .id("folder-search")
-                    .flex_1()
-                    .min_w_0()
-                    .h(px(22.))
-                    .pl(px(7.))
-                    .pr(px(4.))
-                    .gap(px(4.))
-                    .rounded(px(6.))
-                    .bg(style::primary_opacity(cx, 0.07))
-                    .tip("Search the text inside this folder's files")
-                    .child(crate::highlights::icon("magnifyingglass", 12., p.secondary).flex_none())
-                    .child(div().flex_1().min_w_0().child(gpui_kit::component::input::Input::new(&input).appearance(false).small().cleanable(true).pl(px(0.)).text_size(px(style::size::LABEL)))),
-            )
-            .into_any_element()
-    }
-
-    /// The words changed: after a pause for typing, the walk off the main
-    /// thread, the last one told to stop.
-    pub(crate) fn folder_search_changed(&mut self, key: &str, root: &str, cx: &mut Context<Self>) {
-        let Some(search) = self.folders.searches.get_mut(key) else { return };
-        let query = search.input.read(cx).value().to_string();
-        if query.trim() == search.query.trim() {
-            search.query = query;
-            return;
-        }
-        search.query = query.clone();
-        search.stop.store(true, std::sync::atomic::Ordering::Relaxed);
-        let stop = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
-        search.stop = stop.clone();
-        let query = query.trim().to_owned();
-        if query.is_empty() {
-            search.found = Default::default();
-            search.searching = false;
-            search._task = None;
-            cx.notify();
-            return;
-        }
-        search.searching = true;
-        let (k, root) = (key.to_owned(), root.to_owned());
-        search._task = Some(cx.spawn(async move |this, cx| {
-            cx.background_executor().timer(std::time::Duration::from_millis(250)).await;
-            if stop.load(std::sync::atomic::Ordering::Relaxed) {
-                return;
-            }
-            let walk_stop = stop.clone();
-            let found = cx.background_spawn(async move { threadbear_core::folder_search::search(&root, &query, threadbear_core::folder_search::DEFAULT_LIMIT, &|| walk_stop.load(std::sync::atomic::Ordering::Relaxed)) }).await;
-            if stop.load(std::sync::atomic::Ordering::Relaxed) {
-                return;
-            }
-            this.update(cx, |this, cx| {
-                if let Some(search) = this.folders.searches.get_mut(&k) {
-                    search.found = found;
-                    search.searching = false;
-                }
-                cx.notify();
-            })
-            .ok();
-        }));
-        cx.notify();
-    }
-
-    /// The lines that match, file by file, in place of the folder's list.
-    #[allow(clippy::too_many_arguments)]
-    fn folder_search_results(&mut self, key: &str, root: &str, query: &str, thread: &ThreadSummary, preview: &PanePreview, p: Palette, cx: &mut Context<Self>) -> AnyElement {
-        use threadbear_core::folder_search as fs;
-        let Some(search) = self.folders.searches.get(key) else { return div().into_any_element() };
-        if search.searching && search.found.hits.is_empty() {
-            return div().flex_1().min_h_0().flex().items_center().justify_center().child(Spinner::new().with_size(px(14.)).color(p.secondary)).into_any_element();
-        }
-        if search.found.hits.is_empty() {
-            return div().flex_1().min_h_0().child(crate::files::pane_note(&format!("Nothing in this folder's files has \u{201C}{query}\u{201D}."), p)).into_any_element();
-        }
-        let mut list = v_flex().w_full().pb(px(10.)).child(div().px(px(12.)).py(px(6.)).text_size(px(style::size::SMALL)).text_color(p.secondary).child(fs::summary(&search.found)));
-        let hits = search.found.hits.clone();
-        let mut at = 0;
-        while at < hits.len() {
-            let path = hits[at].path.clone();
-            let count = hits[at..].iter().take_while(|h| h.path == path).count();
-            let shown = fs::relative(&path, root).to_owned();
-            list = list.child(
-                h_flex()
-                    .px(px(12.))
-                    .pt(px(8.))
-                    .pb(px(2.))
-                    .gap(px(6.))
-                    .child(div().flex_1().min_w_0().truncate().text_size(px(style::size::LABEL)).font_weight(FontWeight::MEDIUM).text_color(p.fg).child(shown))
-                    .child(div().flex_none().text_size(px(style::size::SMALL)).text_color(p.secondary).child(count.to_string())),
-            );
-            for (n, hit) in hits[at..at + count].iter().enumerate() {
-                let (hit_path, line, words) = (hit.path.clone(), hit.line, query.to_owned());
-                let (key_owned, thread_owned, preview_owned) = (key.to_owned(), thread.clone(), preview.clone());
-                let name = threadbear_core::highlights::last_component(&hit.path).to_owned();
-                let hover = p.hover;
-                list = list.child(
-                    crate::highlights::tipped(
-                        h_flex()
-                            .id(SharedString::from(format!("folder-hit-{}-{n}", at)))
-                            .mx(px(4.))
-                            .px(px(8.))
-                            .py(px(3.))
-                            .gap(px(8.))
-                            .items_start()
-                            .rounded(px(5.))
-                            .cursor_pointer()
-                            .hover(move |s| s.bg(hover))
-                            .child(div().flex_none().min_w(px(28.)).text_right().text_size(px(style::size::SMALL)).text_color(p.faint).child(line.to_string()))
-                            .child(div().flex_1().min_w_0().line_clamp(2).text_size(px(style::size::SMALL)).font_family(cx.theme().mono_font_family.clone()).text_color(p.fg).child(hit.text.clone())),
-                        format!("Open {name} at line {line}"),
-                    )
-                    .on_click(cx.listener(move |this, _: &ClickEvent, _, cx| this.open_search_hit(&key_owned, hit_path.clone(), line, &words, &thread_owned, &preview_owned, cx))),
-                );
-            }
-            at += count;
-        }
-        div().id("folder-search-results").flex_1().min_h_0().overflow_y_scroll().child(list).into_any_element()
-    }
-
-    /// What the folder's search says, for the dump: the summary and each hit
-    /// as "path:line", "searching", or why there's nothing.
-    pub(crate) fn folder_search_words(&self, thread_id: &str, root: &str) -> Option<String> {
-        use threadbear_core::folder_search as fs;
-        let search = self.folders.searches.get(&view_key(thread_id, root))?;
-        let query = search.query.trim();
-        if query.is_empty() {
-            return None;
-        }
-        Some(if search.searching {
-            "searching".to_owned()
-        } else if search.found.hits.is_empty() {
-            format!("Nothing in this folder's files has \u{201C}{query}\u{201D}.")
-        } else {
-            let hits: Vec<String> = search.found.hits.iter().map(|h| format!("{}:{}", fs::relative(&h.path, root), h.line)).collect();
-            format!("{} | {}", fs::summary(&search.found), hits.join(" "))
-        })
-    }
-
-    /// The scripted search: the words typed in the folder's field, and with
-    /// `hit` (from 0), that hit clicked once it's found.
-    #[cfg(feature = "automation")]
-    pub(crate) fn folder_search_typed(&mut self, thread: &ThreadSummary, root: &str, words: &str, window: &mut Window, cx: &mut Context<Self>) {
-        let key = view_key(&thread.id, root);
-        if !self.folders.searches.contains_key(&key) {
-            self.folder_search_bar(&key, root, window, cx);
-        }
-        let Some(input) = self.folders.searches.get(&key).map(|s| s.input.clone()) else { return };
-        input.update(cx, |s, cx| s.set_value(words.to_owned(), window, cx));
-        self.folder_search_changed(&key, root, cx);
-    }
-
-    /// The scripted click on a hit, by its place in the list.
-    #[cfg(feature = "automation")]
-    pub(crate) fn folder_search_open(&mut self, thread: &ThreadSummary, preview: &PanePreview, root: &str, index: usize, cx: &mut Context<Self>) -> Result<String, String> {
-        let key = view_key(&thread.id, root);
-        let search = self.folders.searches.get(&key).ok_or("no search in this folder")?;
-        let hit = search.found.hits.get(index).cloned().ok_or("no such hit")?;
-        let query = search.query.trim().to_owned();
-        self.open_search_hit(&key, hit.path.clone(), hit.line, &query, thread, preview, cx);
-        Ok(hit.path)
-    }
-
-    /// A hit clicked: its file, with Back to these results and the words
-    /// found in it (`openSearchHit`).
-    #[allow(clippy::too_many_arguments)]
-    fn open_search_hit(&mut self, key: &str, path: String, _line: usize, query: &str, thread: &ThreadSummary, preview: &PanePreview, cx: &mut Context<Self>) {
-        let memory = self.folders.views.get(key).map(|v| v.memory()).unwrap_or_default();
-        let name = threadbear_core::highlights::last_component(&path).to_owned();
-        self.files.pending_find = Some((thread.id.clone(), path.clone(), query.to_owned()));
-        self.leave_folder(key, path, name, false, memory, thread, preview, cx);
     }
 
     /// Another Mac's home, for its path bar: its folders under /Users say.
@@ -1298,6 +1105,19 @@ impl SidePane {
         self.show_preview(next, &thread.id, cx);
     }
 
+    /// A line a folder's search found: its file, with Back to the folder and
+    /// its results, opened at the line with the words found there.
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn open_search_hit(&mut self, key: &str, path: &str, line: usize, query: &str, thread: &ThreadSummary, preview: &PanePreview, cx: &mut Context<Self>) {
+        let memory = self.folders.views.get(key).map(|v| v.memory()).unwrap_or_default();
+        let name = core_folders_name(path).to_owned();
+        self.leave_folder(key, path.to_owned(), name, false, memory, thread, preview, cx);
+        if let Some(opened) = self.previews.get_mut(&thread.id).filter(|p| p.file_path() == Some(path)) {
+            opened.hit = Some(crate::highlights::SearchHit { line, query: query.to_owned() });
+        }
+        cx.notify();
+    }
+
     /// A folder in the path bar, or its "…" menu: there, with Back to here,
     /// and the folder below it on the way here picked, as the Finder does.
     fn go_to_crumb(&mut self, key: &str, path: String, selecting: Option<String>, thread: &ThreadSummary, preview: &PanePreview, cx: &mut Context<Self>) {
@@ -1562,6 +1382,18 @@ pub(crate) fn folder_command(side: &Entity<SidePane>, thread: &ThreadSummary, cm
     let key = pane.current_folder_key(thread).ok_or("no folder is showing in the pane")?;
     let preview = pane.folder_preview(thread);
     let find = |pane: &SidePane, name: &str| pane.folders.views.get(&key).and_then(|v| v.rows().into_iter().find(|e| e.name == name));
+    if let Some(words) = cmd["search"].as_str() {
+        // The words in the folder's search box, and the folder read for them.
+        if !side.read(cx).files.searches.contains_key(&key) {
+            return Err("this folder has no search box".into());
+        }
+        side.update(cx, |pane, cx| pane.search_typed(&key, words, window, cx));
+        return Ok(json!(format!("ok searching for {words:?}")));
+    }
+    if let Some(named) = cmd["openHit"].as_str() {
+        side.update(cx, |pane, cx| pane.open_hit_named(&key, named, thread, &preview, cx))?;
+        return Ok(json!(format!("ok opened {named}")));
+    }
     if let Some(mode) = cmd["mode"].as_str() {
         let mode = FolderMode::from_name(mode).ok_or("mode is list or icons")?;
         side.update(cx, |pane, cx| pane.set_folder_mode(mode, cx));

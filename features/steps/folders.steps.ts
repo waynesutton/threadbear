@@ -195,3 +195,24 @@ Then('the pane is browsing that folder', async function (this: ThreadbearWorld) 
   const at = (d: Parameters<typeof previewLine>[0]) => previewLine(d)?.split(' ')[1] ?? '';
   await this.until(`the pane browsing ${name}`, (d) => previewLine(d)?.startsWith('folder ') && (name === '/' ? at(d) === '/' : at(d).endsWith(`/${name}`)));
 });
+
+// The search box over a folder on this Mac (FolderSearchView): its words,
+// "12 matches in 3 files", and each line found as "src/app.ts:2".
+const search = (d: Parameters<typeof pane>[0]) => pane(d)?.folderSearch ?? undefined;
+
+When('I search the folder for {string}', async function (this: ThreadbearWorld, words: string) {
+  await this.app.do({ cmd: 'folder', search: words });
+});
+
+Then('the folder search says {string}', async function (this: ThreadbearWorld, words: string) {
+  await this.until(`the folder search to say "${words}"`, (d) => search(d)?.summary === words);
+});
+
+Then('the folder search lists {string}', async function (this: ThreadbearWorld, hit: string) {
+  await this.until(`the folder search to list ${hit}`, (d) => search(d)?.hits.includes(hit));
+});
+
+When('I open the folder search\'s match in {string} at line {int}', async function (this: ThreadbearWorld, relative: string, line: number) {
+  await this.until(`the folder search to list ${relative}:${line}`, (d) => search(d)?.hits.includes(`${relative}:${line}`));
+  await this.app.do({ cmd: 'folder', openHit: `${relative}:${line}` });
+});

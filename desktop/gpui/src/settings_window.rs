@@ -559,7 +559,7 @@ impl SettingsWindow {
 
     fn render_general(&mut self, settings: Option<&RunnerSettings>, window: &mut Window, cx: &mut Context<Self>) -> Vec<AnyElement> {
         // This Mac's own, so they're here while the runner's away too.
-        let mut sections = vec![self.appearance_section(cx), self.panels_section(cx), self.notes_section(cx), self.slash_section(cx), self.turn_modes_section(cx), self.files_section(cx), self.quitting_section(cx), self.look_section(cx), self.notifications_section(cx)];
+        let mut sections = vec![self.appearance_section(cx), self.panels_section(cx), self.notes_section(cx), self.files_section(cx), self.slash_section(cx), self.turn_modes_section(cx), self.terminal_section(cx), self.quitting_section(cx), self.look_section(cx), self.notifications_section(cx)];
         // The web runtime is this Mac's too (web_runtime.rs), last, so it
         // moves nothing the Swift app's General has.
         let web_runtime = section("settings-web-runtime", "Web runtime", crate::web_runtime::SETTINGS_ABOUT, "check whether it's installed and working, or why a diagram or panel isn't showing.", vec![row("Web runtime", crate::web_runtime::settings_control(cx), cx)], cx);
@@ -625,10 +625,8 @@ impl SettingsWindow {
                 cx,
             ));
         }
-        // Only while Prints is on: with it off there are none to hold back
-        // (Wayne, 11 Nov). A runner that lists no experiments shows it.
-        let prints_on = settings.experiments.iter().find(|e| e.id == "pages").is_none_or(|e| e.on);
-        if let Some(on) = settings.prints_when_asked.filter(|_| prints_on) {
+        // Only while Prints is on (RunnerSettings::prints_switch).
+        if let Some(on) = settings.prints_switch() {
             let switch = self.switch("settings-prints-when-asked", on, "Have threads ask before making a Print you didn't ask for", cx, |this, on, cx| this.update(json!({ "printsWhenAsked": on }), cx));
             sections.push(section(
                 "settings-prints",
@@ -738,29 +736,6 @@ impl SettingsWindow {
         )
     }
 
-    /// `SlashReturn`: whether Return in the slash palette sends the picked
-    /// command at once, or puts it in the box for the next Return (off).
-    fn slash_section(&mut self, cx: &mut Context<Self>) -> AnyElement {
-        let on = self.app.upgrade().is_some_and(|a| a.read(cx).settings.slash_return_runs());
-        let switch = self.switch("settings-slash-return-runs", on, "Off: Return puts the command in the box and the next Return sends it, so a new thread doesn't start by surprise. The Run button always sends", cx, |this, on, cx| {
-            this.app
-                .update(cx, |app, cx| {
-                    app.settings.saved.slash_return_runs = Some(on);
-                    app.save_settings_soon(cx);
-                    cx.notify();
-                })
-                .ok();
-        });
-        section(
-            "settings-slash-commands",
-            "Slash commands",
-            "Typing / in the message box opens the slash palette. Return puts the picked command in the box, and the next Return sends it; turn on Return sends a command right away to skip that step. The Run button always sends.",
-            "change what the slash palette does when you press Return.",
-            vec![row("Return sends a command right away", switch, cx)],
-            cx,
-        )
-    }
-
     /// `TurnModes`: whether Shift-Tab steps through Plan first and Ask.
     fn turn_modes_section(&mut self, cx: &mut Context<Self>) -> AnyElement {
         let on = self.app.upgrade().is_none_or(|a| a.read(cx).settings.turn_modes_enabled());
@@ -786,10 +761,14 @@ impl SettingsWindow {
         )
     }
 
-    /// `FileEditorMode`: text files open ready to type in, saved on ⌘S.
+    /// Files (Wayne's 41275129 and 0a003c67): how a text file opens in the
+    /// side pane, and when what's typed in it is written. This Mac's own.
     fn files_section(&mut self, cx: &mut Context<Self>) -> AnyElement {
-        let on = self.app.upgrade().is_some_and(|a| a.read(cx).settings.edits_like_an_editor());
-        let switch = self.switch("settings-files-editor", on, "Open text files ready to type in, with line numbers, and save with ⌘S", cx, |this, on, cx| {
+        let (editor, autosave) = self.app.upgrade().map_or((true, true), |a| {
+            let s = &a.read(cx).settings;
+            (s.edits_files_like_an_editor(), s.saves_files_automatically())
+        });
+        let editor_switch = self.switch("settings-files-editor", editor, "Open text files ready to type in, with line numbers and a line and column bar", cx, |this, on, cx| {
             this.app
                 .update(cx, |app, cx| {
                     app.settings.saved.files_edit_like_an_editor = Some(on);
@@ -798,8 +777,7 @@ impl SettingsWindow {
                 })
                 .ok();
         });
-        let autosave_on = self.app.upgrade().is_none_or(|a| a.read(cx).settings.saves_files_automatically());
-        let autosave = self.switch("settings-files-autosave", autosave_on, "Write what's typed about a second after you stop, and when you leave the file", cx, |this, on, cx| {
+        let autosave_switch = self.switch("settings-files-autosave", autosave, "Write what you type a second after you stop. Off, ⌘S saves and leaving a file with changes asks first", cx, |this, on, cx| {
             this.app
                 .update(cx, |app, cx| {
                     app.settings.saved.files_save_automatically = Some(on);
@@ -811,11 +789,52 @@ impl SettingsWindow {
         section(
             "settings-files",
             "Files",
-            "Edit files like an editor opens a text file in the side pane ready to type in, with line numbers and a bar showing the line, the column and whether what you typed is saved. Save files automatically writes it about a second after you stop typing and when you leave the file. Off, it waits for ⌘S or Save, the file's title has a dot while anything isn't saved, and leaving it asks Save, Don't Save or Cancel.",
-            "change how files open in the side pane.",
-            vec![row("Edit files like an editor", switch, cx), row("Save files automatically", autosave, cx)],
+            "Edit files like an editor opens a text file in the side pane ready to type in, with line numbers and a bar under it showing the line and column. Save files automatically writes what you type a second after you stop, and ⌘S saves at once; with it off, nothing is written until you save, and leaving a file with changes asks whether to save them.",
+            "change either for you.",
+            vec![row("Edit files like an editor", editor_switch, cx), row("Save files automatically", autosave_switch, cx)],
             cx,
         )
+    }
+
+    /// `SlashReturn`'s switch: whether Return in the slash palette sends the
+    /// command at once, or puts it in the box for the next Return to send.
+    fn slash_section(&mut self, cx: &mut Context<Self>) -> AnyElement {
+        let on = self.app.upgrade().is_some_and(|a| a.read(cx).settings.slash_return_runs());
+        let switch = self.switch("settings-slash-return-runs", on, "Off: Return puts the command in the box and the next Return sends it, so a new thread doesn't start by surprise. The Run button always sends", cx, |this, on, cx| {
+            this.app
+                .update(cx, |app, cx| {
+                    app.settings.saved.slash_return_runs = Some(on);
+                    app.save_settings_soon(cx);
+                })
+                .ok();
+        });
+        let full = self.app.upgrade().is_none_or(|a| a.read(cx).settings.saved.inline_skill_palette.unwrap_or(true));
+        let skills = self.switch("settings-inline-skill-palette", full, "Use the full palette for a /skill inside a message. Off shows a small skill list instead", cx, |this, on, cx| {
+            this.app.update(cx, |app, cx| {
+                app.settings.saved.inline_skill_palette = Some(on);
+                app.save_settings_soon(cx);
+            }).ok();
+        });
+        section(
+            "settings-slash",
+            "Slash commands",
+            "Typing / in the message box opens the slash palette: every command and skill, with a search field, categories you can step through with the left and right arrows, and Esc or its X to close. Return puts the picked command in the box, and the next Return sends it; turn on Return sends a command right away to skip that step (the Run button always sends).",
+            "change what the slash palette lists or how it looks.",
+            vec![row("Return sends a command right away", switch, cx), row("Use full palette for skills inside a message", skills, cx)],
+            cx,
+        )
+    }
+
+    /// The rail button opens the very same drawer as the Terminal shortcut.
+    fn terminal_section(&mut self, cx: &mut Context<Self>) -> AnyElement {
+        let on = self.app.upgrade().is_some_and(|a| a.read(cx).settings.saved.rail_terminal.unwrap_or(false));
+        let switch = self.switch("settings-rail-terminal", on, "Add a Terminal button to the rail beside Files. The keyboard shortcut works either way", cx, |this, on, cx| {
+            this.app.update(cx, |app, cx| {
+                app.settings.saved.rail_terminal = Some(on);
+                app.save_settings_soon(cx);
+            }).ok();
+        });
+        section("settings-terminal", "Terminal", "The Terminal opens under the thread. Add a button on the right-hand rail to open that same terminal with a click.", "change how the Terminal opens or looks.", vec![row("Show Terminal on the right-hand rail", switch, cx)], cx)
     }
 
     /// `QuitPrompt`'s switch: ticking Don't ask again turns it off, and this
@@ -1381,7 +1400,8 @@ impl SettingsWindow {
             "defaultFolder": settings.as_ref().map(|s| s.default_cwd.clone()),
             "keepAwake": settings.as_ref().and_then(|s| s.keep_awake),
             "fullSync": settings.as_ref().and_then(|s| s.full_sync),
-            "printsWhenAsked": settings.as_ref().and_then(|s| s.prints_when_asked),
+            // Null while the switch isn't shown (Prints off, or an older runner).
+            "printsWhenAsked": settings.as_ref().and_then(|s| s.prints_switch()),
             "labReview": settings.as_ref().map(|s| s.lab_review),
             "privateFolders": settings.as_ref().map(|s| s.private_folders.clone()),
             "smallJobsPool": settings.as_ref().and_then(|s| s.pool.clone()),

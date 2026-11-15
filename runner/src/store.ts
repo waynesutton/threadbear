@@ -15,9 +15,7 @@ export type LabLedger = LabReviewLedger & { delivered?: number; answered?: numbe
 // A reviewer's verdict: its findings, none when nothing holds up.
 export type ReviewVerdict = { findings: Pick<ReviewFinding, 'severity' | 'claim' | 'where' | 'case'>[] };
 
-export type QueuedSend = { scheduledSince?: number; turnId: string; text: string; images: ImageRef[]; origin?: MessageOrigin; scheduleId?: string; reviewId?: string; reviewResponse?: ReviewDraft; answers?: AskAnswer[]; editOf?: number; mode?: TurnMode };
-// Plan or Ask mode, from the composer (modes.ts): a read-only turn.
-export type TurnMode = 'ask';
+export type QueuedSend = { scheduledSince?: number; turnId: string; text: string; images: ImageRef[]; origin?: MessageOrigin; scheduleId?: string; reviewId?: string; reviewResponse?: ReviewDraft; answers?: AskAnswer[]; editOf?: number };
 
 // What thread.json holds: the public summary fields plus a few internal ones.
 export type PressNote = { id: string; line: string; told?: { seq: number; inFlight?: boolean } };

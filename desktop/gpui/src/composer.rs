@@ -91,7 +91,10 @@ pub struct Composer {
     /// opening of it has asked for (the thread's, or a new thread's login
     /// and folder's, which the chips can change while it's open).
     pub(crate) palette: PaletteState,
+    pub(crate) bear_gate: threadbear_core::bears::Gate,
+    pub(crate) bear_selected: usize,
     pub(crate) palette_asked: Option<String>,
+    pub(crate) mentions_asked: Option<String>,
     /// The palette's list, kept so the arrows can scroll the pick into sight.
     pub(crate) palette_scroll: ScrollHandle,
     /// The palette's own search field (slash_palette.rs).
@@ -192,6 +195,7 @@ impl Composer {
             // what's in the box.
             InputEvent::Change => {
                 this.palette_text_changed(cx);
+                this.bear_text_changed(cx);
                 // Marks, and a correction as a word ends (composer_spelling.rs).
                 this.spelling_after_edit(window, cx);
                 // Kept across a quit (drafts.rs).
@@ -206,10 +210,13 @@ impl Composer {
         });
         crate::text_services::register_text_box(&input);
         let palette_search = cx.new(|cx| InputState::new(window, cx).placeholder("Search skills and commands"));
-        let search_sub = cx.subscribe(&palette_search, |this, _, ev: &InputEvent, cx| {
-            if matches!(ev, InputEvent::Change) {
-                this.palette_search_changed(cx);
+        // Typing in it narrows the list; Return in it picks, as in the box.
+        let search_sub = cx.subscribe_in(&palette_search, window, |this, _, ev: &InputEvent, window, cx| match ev {
+            InputEvent::Change => this.palette_search_changed(cx),
+            InputEvent::PressEnter { .. } => {
+                this.palette_key(PaletteKey::Enter, window, cx);
             }
+            _ => {}
         });
         Composer {
             thread_id,
@@ -238,7 +245,10 @@ impl Composer {
             pending_box: None,
             pending_mentions: vec![],
             palette: PaletteState::default(),
+            bear_gate: Default::default(),
+            bear_selected: 0,
             palette_asked: None,
+            mentions_asked: None,
             palette_scroll: ScrollHandle::new(),
             palette_search,
             card_width: Rc::new(Cell::new(style::MAX_CONTENT_WIDTH)),
@@ -481,7 +491,7 @@ impl Composer {
     }
 
     /// ComposerView.returnWhenEmpty: Return with nothing typed allows the
-    /// sole waiting approval (the ⏎ its Allow button shows). Not while a
+    /// oldest waiting approval (the ⏎ its Allow button shows). Not while a
     /// message is being edited: the box is the edit then, an empty one
     /// sends nothing, and Return there is about that message, never a card
     /// that may be off screen (Daybreak, 11 Nov: pencil, clear, Return
@@ -1461,22 +1471,30 @@ impl Composer {
             // Greyed and locked while a new thread is being made from it, or
             // while its thread moves to another machine.
             .when(creating, |s| s.opacity(0.5))
+            .capture_key_down(cx.listener(|this, event: &KeyDownEvent, _, cx| {
+                let m = event.keystroke.modifiers;
+                if m.shift || m.control || m.alt || m.platform {
+                    let input = this.input.read(cx);
+                    this.bear_gate.dismissed_at = threadbear_core::bears::token(&input.value().to_string(), input.selected_range().end).map(|r| r.start);
+                    cx.notify();
+                }
+            }))
             .capture_action(cx.listener(|this, action: &Enter, window, cx| {
                 if action.shift && this.shift_return(window, cx) {
                     cx.stop_propagation();
-                } else if !action.shift && this.palette_key(PaletteKey::Enter, window, cx) {
+                } else if !action.shift && (this.bear_key(PaletteKey::Enter, window, cx) || this.palette_key(PaletteKey::Enter, window, cx)) {
                     cx.stop_propagation();
                 }
             }))
             // The palette's keys, while it's open (ComposerView.paletteKey);
             // otherwise the box has them as usual.
             .capture_action(cx.listener(|this, _: &MoveUp, window, cx| {
-                if this.palette_key(PaletteKey::Up, window, cx) {
+                if this.bear_key(PaletteKey::Up, window, cx) || this.palette_key(PaletteKey::Up, window, cx) {
                     cx.stop_propagation();
                 }
             }))
             .capture_action(cx.listener(|this, _: &MoveDown, window, cx| {
-                if this.palette_key(PaletteKey::Down, window, cx) {
+                if this.bear_key(PaletteKey::Down, window, cx) || this.palette_key(PaletteKey::Down, window, cx) {
                     cx.stop_propagation();
                 }
             }))
@@ -1500,7 +1518,7 @@ impl Composer {
                 }
             }))
             .capture_action(cx.listener(|this, _: &IndentInline, window, cx| {
-                if this.palette_key(PaletteKey::Tab, window, cx) {
+                if this.bear_key(PaletteKey::Tab, window, cx) || this.palette_key(PaletteKey::Tab, window, cx) {
                     cx.stop_propagation();
                 }
             }))
@@ -1517,7 +1535,7 @@ impl Composer {
                 }
             }))
             .capture_action(cx.listener(|this, _: &Escape, window, cx| {
-                if this.palette_key(PaletteKey::Escape, window, cx) {
+                if this.bear_key(PaletteKey::Escape, window, cx) || this.palette_key(PaletteKey::Escape, window, cx) {
                     cx.stop_propagation();
                 } else if this.editing.as_ref().is_some_and(|e| !e.sending) {
                     // Esc while editing a message leaves the edit.
@@ -1605,6 +1623,8 @@ impl Composer {
 
 impl Render for Composer {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        self.preload_mentions(cx);
+        self.draw_spelling_marks(cx);
         // The box as it was before an edit that's just gone, first: it
         // replaces what's there, so anything given back goes after it.
         if let Some((text, images)) = self.pending_box.take() {
@@ -1671,6 +1691,7 @@ impl Render for Composer {
         let answer_chips = self.render_answer_chips(cx);
         let needs_you = self.open_card(cx).is_some_and(|c| !c.is_done());
         let palette = self.render_palette(window, cx);
+        let bear_picker = self.render_bear_picker(window, cx);
         let width = self.card_width.clone();
         let top = self.box_top.clone();
         // The folder's actions, on shelves on the box's top edge, in from its
@@ -1751,6 +1772,7 @@ impl Render for Composer {
                     .absolute().inset_0().size_full())
                     .children(palette)
                     .children(crate::voice::button::pill(&self.app, cx))
+                    .children(bear_picker)
                     // The main panel's box, for the tour's first thread.
                     .children(crate::tour::mark_composer(self.thread_id.as_deref())),
                     ),

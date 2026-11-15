@@ -3,6 +3,7 @@
 // rows. Keeping it out of the GPUI crate means its tests need no graphics
 // libraries and take seconds.
 pub mod activity;
+pub mod bears;
 pub mod board;
 pub mod archive_flight;
 pub mod app_update;
@@ -33,6 +34,7 @@ pub mod investigate;
 pub mod juice;
 pub mod keyboard;
 pub mod librarian;
+pub mod looks;
 pub mod html_tags;
 pub mod local_preview;
 pub mod login_picker;
@@ -48,6 +50,7 @@ pub mod browserbear;
 pub mod panel_requests;
 pub mod private_file;
 pub mod pools;
+pub mod prints;
 pub mod projects;
 pub mod remote;
 pub mod reply_buttons;
@@ -78,7 +81,6 @@ pub mod wait_for;
 pub mod web_runtime;
 pub mod zoom;
 pub mod local_files;
-pub mod looks;
 pub mod milestones;
 pub mod voice;
 pub mod voice_keys;
@@ -89,3 +91,5 @@ pub mod reducer;
 pub mod tour;
 
 pub mod wire;
+
+pub mod skill_mentions;

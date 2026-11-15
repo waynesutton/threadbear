@@ -199,6 +199,7 @@ impl Threadbear {
         if self.projects.open.as_deref() != Some(id) {
             self.projects.editing = None;
         }
+        self.refresh_bears(cx);
         self.projects.open = Some(id.to_owned());
         self.shows_home = false;
         self.note_navigation();

@@ -324,25 +324,29 @@ impl ThreadPane {
             // Words between chips as one run of selectable text each.
             let mut words = String::new();
             let (mut runs, mut chips) = (0, 0);
-            let flush = |line: Div, words: &mut String, runs: &mut usize| -> Div {
+            let flush = |line: Div, words: &mut String, runs: &mut usize, this: &mut ThreadPane, cx: &mut Context<ThreadPane>| -> Div {
                 if words.is_empty() {
                     return line;
                 }
                 *runs += 1;
                 let id = ("user-chip-text", ix * 100_000 + n * 100 + *runs);
-                line.child(div().flex_none().child(SelectableText::new(id, std::mem::take(words))))
+                let text = std::mem::take(words);
+                let key = format!("chip-{ix}-{n}-{}", *runs);
+                let width = text_width(&text, size::BODY, window);
+                let rendered = this.skill_words(&key, &text, cx).unwrap_or_else(|| SelectableText::new(id, text).into_any_element());
+                line.child(div().flex_none().w(width).child(rendered))
             };
             for token in tokens {
                 match token {
                     Token::Words(text) => words.push_str(&text),
                     Token::Chip(kind) => {
-                        line = flush(line, &mut words, &mut runs);
+                        line = flush(line, &mut words, &mut runs, self, cx);
                         chips += 1;
                         line = line.child(self.bubble_chip(ix, n, chips, kind, &message.images, window.scale_factor() >= 2., cx));
                     }
                 }
             }
-            line = flush(line, &mut words, &mut runs);
+            line = flush(line, &mut words, &mut runs, self, cx);
             body = body.child(line);
         }
         Some((widest, body.into_any_element()))

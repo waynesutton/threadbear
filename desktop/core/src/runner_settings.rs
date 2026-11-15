@@ -74,8 +74,8 @@ pub struct RunnerSettings {
     /// Full sync (runner.json's sync.full), as it'll be from the runner's next
     /// start. None from a runner from before it, and Settings then hides it.
     pub full_sync: Option<bool>,
-    /// Only make Prints when I ask (runner.json's printsWhenAsked). None from
-    /// a runner too old to have it, and Settings then hides it.
+    /// Prints only when asked (docs/protocol.md, "Prints", "Only when
+    /// asked"). None from a runner from before it, and Settings then hides it.
     pub prints_when_asked: Option<bool>,
     pub bring_in: BringIn,
     pub bring_in_supported: bool,
@@ -122,7 +122,22 @@ impl RunnerSettings {
                 .collect(),
         }
     }
+
+    /// Whether an experiment is on, as Settings lists them.
+    pub fn experiment_on(&self, id: &str) -> bool {
+        self.experiments.iter().any(|e| e.id == id && e.on)
+    }
+
+    /// The "Only make Prints when I ask" switch's state, while it's shown:
+    /// only with Prints on, as with it off there are none to hold back
+    /// (the Swift SettingsView's Prints section, Wayne, 11 Nov).
+    pub fn prints_switch(&self) -> Option<bool> {
+        self.prints_when_asked.filter(|_| self.experiment_on(PAGES_EXPERIMENT))
+    }
 }
+
+/// The Prints experiment's id (`Page.experiment`).
+pub const PAGES_EXPERIMENT: &str = "pages";
 
 /// An experiment's paragraph as plain text for its ⓘ: the guide writes it in
 /// Markdown, so code marks and doubled spaces go (`experimentAbout`).
@@ -187,6 +202,16 @@ mod tests {
         assert!(old.full_sync.is_none(), "an older runner shows no Full sync switch");
         let none = RunnerSettings::decode(&json!({ "models": { "pool": null } }));
         assert!(none.pool_supported && none.pool.is_none(), "null is None, and the runner has the setting");
+    }
+
+    #[test]
+    fn the_prints_switch_shows_only_with_prints_on() {
+        let on = RunnerSettings::decode(&json!({ "printsWhenAsked": false, "experiments": [{ "id": "pages", "on": true }] }));
+        assert_eq!(on.prints_switch(), Some(false));
+        let off = RunnerSettings::decode(&json!({ "printsWhenAsked": true, "experiments": [{ "id": "pages", "on": false }] }));
+        assert_eq!(off.prints_switch(), None, "with Prints off there are none to hold back");
+        let old = RunnerSettings::decode(&json!({ "experiments": [{ "id": "pages", "on": true }] }));
+        assert_eq!(old.prints_switch(), None, "a runner from before the setting shows no switch");
     }
 
     #[test]

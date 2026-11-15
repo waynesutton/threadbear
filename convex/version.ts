@@ -370,17 +370,17 @@
 //    changed login, as the Mac does. Without it the page is as before, for
 //    apps built earlier. phone:thread, phone:search and share's page still
 //    leave them out.
-// 80: Prints can be published (this copy's: 73, then 77, moved to 80 as
+// 80: Prints can be published (this copy's; it was 73, then 77, until
 //    Mike's releases took 73 to 79, 12 and 14 Nov 2026). sync:publishPrint
 //    stores one print's index.html (static, at most 700,000 characters)
 //    under a link its runner made, sync:unpublishPrint removes it,
 //    prints:view answers the website's /p/<slug> page for anyone with the
 //    link, and prints:list gives the phone and the website the published
-//    ones. A runner publishes only from 80; nothing about a print is
-//    stored before it's published.
-// 81: webhooks (this copy's, 13 Nov 2026, experiment webhooks; 78 until
-//    Mike's release took it). POST /hook/<key> takes a delivery
-//    (webhooks:deliver, capped, limited, deduped, batched);
-//    webhooks:issueWebhook, listWebhooks and revokeWebhook take the owner
-//    key. A runner offers webhooks only from 81.
+//    ones. A runner publishes only from 80; nothing about a print is stored
+//    before it's published.
+// 81: webhooks (this copy's, 13 Nov 2026, experiment webhooks; it was 78
+//    here until Mike's release took 77 to 79, 14 Nov 2026). POST
+//    /hook/<key> takes a delivery (webhooks:deliver, capped, limited,
+//    deduped, batched); webhooks:issueWebhook, listWebhooks and
+//    revokeWebhook take the owner key. A runner offers webhooks only from 81.
 export const API_VERSION = 81;

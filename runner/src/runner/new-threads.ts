@@ -39,8 +39,6 @@ export const newThreadsPart = {
     // worktree per thread.
     worktree?: boolean;
     startedBy?: ThreadStartedBy;
-    // Its first message in Ask mode (modes.ts).
-    mode?: 'ask';
     // Started by a sandboxed thread's agent in a sandbox folder: shut in
     // one too (ThreadRecord.confined).
     confined?: boolean;
@@ -90,7 +88,7 @@ export const newThreadsPart = {
     if (projectIds.length) this.projects!.changeMembership(st.rec.id, { add: projectIds, by: 'mike' });
     const sameWork = params.text?.trim() && experimentOn(this.cfg.home, 'sameWork') ? this.findSameWork(st, params.text) : undefined;
     if (sameWork) notes.push(sameWork);
-    const turnId = this.sendTo(st, params.text ?? '', params.images ?? [], { origin: params.origin, scheduleId: params.scheduleId, ...(params.mode ? { mode: params.mode } : {}) });
+    const turnId = this.sendTo(st, params.text ?? '', params.images ?? [], { origin: params.origin, scheduleId: params.scheduleId });
     // Under the first turn, so they read as part of starting it.
     for (const text of notes) this.emit(st, { type: 'system.note', text }, st.rt.turn?.turnId ?? turnId);
     if (!st.rec.titleSet && params.text?.trim()) void this.titleFromModel(st, params.text);

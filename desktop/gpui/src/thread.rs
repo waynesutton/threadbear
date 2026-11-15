@@ -1560,6 +1560,10 @@ impl ThreadPane {
                     if let Some(rich) = crate::rich_boxes::dump(&item.text, cx) {
                         out["rich"] = rich;
                     }
+                    // Its Print cards (prints.rs).
+                    if let Some(prints) = crate::prints::dump(&item.text, cx) {
+                        out["prints"] = prints;
+                    }
                     if let Some(blocks) = crate::shell_blocks::dump_lines(&item.text, &self.summary.id, cx) {
                         out["shellBlocks"] = json!(blocks);
                     }
@@ -1814,16 +1818,20 @@ impl Render for ThreadPane {
                 Some(message) if !self.loaded => s.child(self.render_load_failure(message, cx)),
                 _ if self.loaded && self.subagent_id.is_some() && self.feed.model().rows().is_empty() => s.child(div().flex_1().flex().items_center().justify_center().text_size(px(13.)).text_color(muted).child("Nothing yet.")),
                 _ => s.child(crate::open_motion::transcript_frame(
-                    div()
+                    div().size_full().child(div()
+                        .id("thread-transcript-frame")
                         .relative()
                         .size_full()
                         // Return with a reply's text focused (a click to select
                         // or read takes the keys from the box) allows the
-                        // waiting approval, as it does in an empty box. Not a
-                        // held key: holding it mustn't work through every card.
-                        .on_key_down(cx.listener(|this, ev: &KeyDownEvent, _, cx| {
-                            let m = &ev.keystroke.modifiers;
-                            if ev.keystroke.key == "enter" && !ev.is_held && !m.shift && !m.alt && !m.control && !m.platform && this.allow_next_approval(cx) {
+                        // waiting approval, as it does in an empty box.
+                        // Embedded question and secret fields keep their own
+                        // Return. Not a held key: holding it mustn't work
+                        // through every card.
+                        .on_key_down(cx.listener(|this, ev: &KeyDownEvent, window, cx| {
+                            let mods = ev.keystroke.modifiers;
+                            let plain_return = ev.keystroke.key == "enter" && !ev.is_held && !mods.secondary(cx) && !mods.control && !mods.alt && !mods.shift;
+                            if plain_return && this.rows.documents.values().any(|doc| doc.read(cx).focus_handle().contains_focused(window, cx)) && this.allow_next_approval(cx) {
                                 cx.stop_propagation();
                             }
                         }))
@@ -1834,7 +1842,7 @@ impl Render for ThreadPane {
                         // over the transcript while `.loading`).
                         .when(loading, |s| s.child(div().absolute().inset_0().flex().items_center().justify_center().child(self.spinner(16., cx).transcript_loader())))
                         // Where an archive's page starts from (archive_flight.rs); a sub-agent's never flies.
-                        .when(self.subagent_id.is_none(), |s| s.child(crate::archive_flight::transcript_mark(cx.entity_id()))),
+                        .when(self.subagent_id.is_none(), |s| s.child(crate::archive_flight::transcript_mark(cx.entity_id())))),
                     entering,
                 )),
             })

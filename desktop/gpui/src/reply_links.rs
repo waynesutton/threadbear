@@ -284,6 +284,7 @@ impl ThreadPane {
         let scheme = url.split_once(':').map(|(s, _)| s.to_ascii_lowercase());
         let rest = url.split_once(':').map_or("", |(_, r)| r);
         match scheme.as_deref() {
+            Some("threadbear-skill") => return self.open_skill_link(rest, cx),
             Some("work") => return self.open_work_link(&crate::rows::markdown::percent_decode(rest), row_id, window, cx),
             Some("thread") => return self.open_thread_link(&crate::rows::markdown::percent_decode(rest), window, cx),
             Some("review") => return self.open_review_link(&crate::rows::markdown::percent_decode(rest), window, cx),
@@ -357,7 +358,7 @@ impl ThreadPane {
 
     /// A file in the pane beside the transcript, opening the pane if it's
     /// closed (`PaneModel.show`).
-    fn preview_in_pane(&mut self, path: &str, cx: &mut Context<Self>) {
+    pub(crate) fn preview_in_pane(&mut self, path: &str, cx: &mut Context<Self>) {
         let thread = self.summary.clone();
         let Some(app) = self.composer.read(cx).app.upgrade() else { return };
         let side = app.read(cx).side.clone();
@@ -970,12 +971,17 @@ pub(crate) fn peek_command(app: &Entity<crate::app::Threadbear>, cmd: &serde_jso
         let ix = rows.iter().position(|r| r.id.starts_with(prefix))?;
         (ix, rows[ix].clone())
     };
-    let RowContent::Assistant(item) = &row.content else { return None };
+    // A reply's links, or a note's (the saved plan's).
+    let source = match &row.content {
+        RowContent::Assistant(item) => crate::rows::markdown::prepare(&item.text, &pane.read(cx).summary.id),
+        RowContent::Note(note) if row.content.is_linked_note() => note.clone(),
+        _ => return None,
+    };
     if cmd["show"].as_bool() == Some(false) {
         hide_peek(cx);
         return Some(Ok(json!("ok")));
     }
-    let links = reply_links_in(&crate::rows::markdown::prepare(&item.text, &pane.read(cx).summary.id));
+    let links = reply_links_in(&source);
     let named = |url: &str| -> Option<String> {
         match pane.read(cx).link_target(url)? {
             LinkTarget::Web(web) => Some(web),

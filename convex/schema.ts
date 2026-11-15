@@ -758,7 +758,7 @@ export default defineSchema({
     .index('by_ip_at', ['ip', 'at'])
     .index('by_at', ['at']),
 
-  // Published Prints (docs/protocol.md, "Prints", since API 77): one row
+  // Published Prints (docs/protocol.md, "Prints", since API 80): one row
   // per print its runner's user chose to publish, with the print's
   // index.html as text, for the website's /p/<slug> page and the phone.
   // Nothing about a print is here until it's published, and the row goes

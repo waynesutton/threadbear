@@ -105,6 +105,7 @@ Feature: The slash command palette
     When I press Return
     Then the palette is closed
     And the composer says "/clear "
+    And the transcript doesn't show my message "/clear"
     When I press Return
     Then the transcript shows my message "/clear"
     And the composer is empty
@@ -213,3 +214,26 @@ Feature: The slash command palette
     When I note the palette's size
     And I drag the list's edge 40 points right
     Then the list is 40 points wider than it was
+
+  # Return in the search field picks, as in the box.
+  @composer.slash @swift-pending
+  Scenario: Return in the palette's search fills the command it found
+    When I type "/" in the composer
+    And I search the palette for "code-review"
+    Then the palette's commands are "/code-review"
+    When I press Return
+    Then the composer says "/code-review "
+    And the palette is closed
+
+  # The frozen Swift app uses a picker here; this step exercises GPUI's switch.
+  @composer.slash @swift-pending
+  Scenario: Skills inside a message can use the small list
+    When I open Settings on "general"
+    And I press "Use the full palette for a /skill" in Settings
+    And I close the slash settings window
+    And I type "use /desl" in the composer
+    Then the compact skill list is showing
+    And the palette's commands are "/deslop"
+    When I press Return
+    Then the composer says "use /deslop "
+    And the palette is closed

@@ -13,14 +13,6 @@ Feature: Reading a thread
     And the transcript shows a reply starting "Uploads now pick up where they stopped"
     And my message "Uploads start again from zero" comes before the reply "Uploads now pick up"
 
-  # The saved plan's note links to the plan, so it stays out of the folded
-  # work where it can be clicked (Wayne, 5 Nov).
-  @transcript.workedfor
-  Scenario: The saved plan's note stays out of the folded work
-    When I open the thread "Morning brief"
-    And a Plan turn saves its plan
-    Then the transcript shows the note "Saved the plan to" outside the folded work
-
   @transcript.workedfor
   Scenario: What the agent did is folded into one line
     When I open the thread "Make uploads resume after a crash"

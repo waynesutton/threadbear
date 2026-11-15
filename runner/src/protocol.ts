@@ -798,7 +798,7 @@ export type EventBody =
   | { type: 'button.updated'; button: ReplyButton }
   // origin is set only on messages the runner sent by itself (the resume
   // after a restart).
-  | { type: 'user.message'; text: string; images: ImageRef[]; origin?: MessageOrigin; scheduleId?: string; reviewId?: string; reviewResponse?: ReviewDraft; answers?: AskAnswer[]; editOf?: number; mode?: 'plan' | 'ask' } // 'plan': from before Plan first, shown as sent
+  | { type: 'user.message'; text: string; images: ImageRef[]; origin?: MessageOrigin; scheduleId?: string; reviewId?: string; reviewResponse?: ReviewDraft; answers?: AskAnswer[]; editOf?: number }
   // summary: the turn's summary, written by the runner from end_turn
   // givesWay: the turn's summary, with bullet replies off: any message of
   // the turn is the reply over it, however short

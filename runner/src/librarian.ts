@@ -183,14 +183,14 @@ export class Librarian {
   private projects: Projects;
   // The conditions each look was shown (prompt), for its met (apply).
   private shownWaiters = new Map<string, { threadId: string; title: string; until: string }[]>();
-  // Bear notes (experiment bearNotes, bears.ts): the bears that may leave a
-  // note on a thread, set in main.ts while it's on. [] for none.
-  bearNotes?: (cwd: string) => NoteBear[];
-  private shownBears = new Map<string, NoteBear[]>();
   // The topics each look was shown, for its wake (apply): an answer counts
   // only for the wait it judged, not one set since while the model ran
   // (Codex's review, 13 Nov 2026).
   private shownTopics = new Map<string, { threadId: string; title: string; topic: string; happened?: true }[]>();
+  // Bear notes (experiment bearNotes, bears.ts): the bears that may leave a
+  // note on a thread, set in main.ts while it's on. [] for none.
+  bearNotes?: (cwd: string) => NoteBear[];
+  private shownBears = new Map<string, NoteBear[]>();
   private models?: Pick<Models, 'generate'> & { unavailable?(opts?: { poolOnly?: boolean }): string | undefined; isPrivateFolder?(cwd: string): boolean };
   private clock: Clock;
   private log: Logger;

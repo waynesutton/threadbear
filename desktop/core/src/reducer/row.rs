@@ -535,15 +535,16 @@ impl RowContent {
     /// The runner words it (runner/src/runner/hibernation.ts) and it's what
     /// Mike came to the thread to read, so it never folds into the work
     /// above it.
-    /// A note with a link in it, the saved plan's "Saved the plan to
-    /// [plans/…](path)": something to click, so it's never folded into the
-    /// turn's work.
-    pub fn is_linked_note(&self) -> bool {
-        matches!(self, RowContent::Note(text) if text.contains("]("))
-    }
-
     pub fn is_wake_note(&self) -> bool {
         matches!(self, RowContent::Note(text) if text.starts_with("Woke up"))
+    }
+
+    /// A note with a Markdown link in it: the saved plan's "Saved the plan in
+    /// [plans/…](<path>)." (runner.ts `savePlan`). It's something to click,
+    /// so it never folds into the work, where it couldn't be seen (`isWork`,
+    /// Wayne's d28e38f4).
+    pub fn is_linked_note(&self) -> bool {
+        matches!(self, RowContent::Note(text) if text.contains("](") && !text.contains('\n'))
     }
 
     /// The note a thread leaves when its login ran out: it moved to another

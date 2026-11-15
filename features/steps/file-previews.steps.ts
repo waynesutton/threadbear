@@ -44,7 +44,8 @@ When('I open {string} in the thread\'s folder in the pane', async function (this
 });
 
 Then('the pane is showing the file {string}', async function (this: ThreadbearWorld, relative: string) {
-  await this.until(`the preview line to name ${relative}`, (d) => previewLine(d)?.startsWith('file ') && previewLine(d)?.endsWith(relative));
+  // A file open to type in says so after its path.
+  await this.until(`the preview line to name ${relative}`, (d) => previewLine(d)?.startsWith('file ') && previewLine(d)?.replace(/ \(editing\)$/, '').endsWith(relative));
 });
 
 When('I press Back in the pane', async function (this: ThreadbearWorld) {
@@ -53,19 +54,6 @@ When('I press Back in the pane', async function (this: ThreadbearWorld) {
 
 Then('the pane shows Highlights', async function (this: ThreadbearWorld) {
   await this.until('Highlights to be showing, with no preview over it', (d) => !previewLine(d) && pane(d)?.section === 'threadbear.highlights');
-});
-
-When('I search this folder\'s files for {string}', async function (this: ThreadbearWorld, words: string) {
-  await this.until('a folder showing', (d) => (pane(d) as { previewKind?: string } | null | undefined)?.previewKind === 'folder');
-  await this.app.do({ cmd: 'preview', search: words });
-});
-
-Then('the folder search says {string}', async function (this: ThreadbearWorld, words: string) {
-  await this.until(`the folder search saying "${words}"`, (d) => (pane(d) as { previewSearch?: string } | null | undefined)?.previewSearch === words);
-});
-
-When('I open the folder search\'s first hit', async function (this: ThreadbearWorld) {
-  await this.app.do({ cmd: 'preview', hit: 0 });
 });
 
 When('I replace every match with {string}', async function (this: ThreadbearWorld, words: string) {
@@ -194,4 +182,12 @@ Then('the local page in the pane is titled {string}', { timeout: 120_000 }, asyn
 When('I press Run them over the page in the pane', async function (this: ThreadbearWorld) {
   await this.until('the bar asking to run its scripts', (d) => pane(d)?.previewNote === 'This page has scripts');
   await this.app.do({ cmd: 'preview', runScripts: true });
+});
+
+// A section of the pane, as its button in the right-hand rail picks it.
+When('I switch the pane to {string}', async function (this: ThreadbearWorld, title: string) {
+  const id = { Highlights: 'threadbear.highlights', Files: 'threadbear.files', Patches: 'threadbear.patches' }[title];
+  if (!id) throw new Error(`no section called ${title}`);
+  await this.app.do({ cmd: 'panel', id });
+  await this.until(`the pane on ${title}`, (d) => pane(d)?.section === id);
 });

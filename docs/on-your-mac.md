@@ -347,7 +347,7 @@ background, and the Librarian, Scheduled and Projects pages' pictures and
 backgrounds when their Customize switches are on; all off by default) are copied, scaled down,
 into `looks/` in the data folder; removing or replacing one deletes its
 copy. The rest of those settings are in the app's own settings. Neither
-is ever sent anywhere (`app/Sources/Threadbear/Looks.swift`), except as
+is ever sent anywhere (`desktop/gpui/src/looks.rs`; frozen Swift: `app/Sources/Threadbear/Looks.swift`), except as
 below for a profile page.
 The public profile page (the Customize panel's Profile page section, none
 until you change something there) is kept in `profile.json` in the runner's data folder.
@@ -378,31 +378,6 @@ for 4:30. Deleting a bear moves its folder to the runner's `trash/`. With
 Tables on, `tb tables new` makes `~/ThreadbearThreads/Tables/<id>/` with
 the host's `CLAUDE.md`. Faces are drawn by the `open-bot-avatar` package
 (0.2.1, MIT, no dependencies), installed with the runner's packages.
-
-### Profiles (a Work setup beside your Personal one)
-
-`tb profile add "Work"` makes a second, whole Threadbear setup on this Mac:
-its own folder (`~/Library/Application Support/Threadbear Profiles/work/`),
-its own runner (LaunchAgent `com.mikerosoft.threadbear.runner.work`, its
-own port and `Threadbear Runner.app` in its folder), and its own logins in
-`<folder>/logins/`: Claude and Codex (never your `~/.claude` or
-`~/.codex`) and the Convex CLI (run with `HOME` there, so its login is
-never your `~/.convex`). Its agents are told which profile they're in and
-to keep its work inside it. `profiles.json` in your usual folder lists the
-profiles (names, folders, ports, labels; no secrets). `tb profile list`
-shows them, `tb <command> --profile work` runs any command on that
-profile's runner, and `tb profile remove work` stops its runner and takes
-it off the list (`--delete-files` deletes its folder too).
-
-With more than one profile, the app's sidebar has a profile menu (its
-colour and name) and a thin strip of that colour runs along the top of the
-window. Picking another profile (or ⌃⌘1, ⌃⌘2…) opens the app again on its
-folder, handing the window over so it never goes away; the app remembers
-the profile in its settings (`profileHome`) and opens on it next time. Each
-profile keeps its own Notes (and notes key) in its folder, its own bear
-(`~/ThreadbearThreads/<profile>/Bear`), and its own last login, pool,
-model and runner choices; keyboard shortcuts and the app's looks are
-shared. Notifications say which profile they're from.
 
 ## What runs in the background
 

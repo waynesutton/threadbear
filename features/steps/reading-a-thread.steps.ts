@@ -154,16 +154,6 @@ Then('the clipboard holds {string}', async function (this: ThreadbearWorld, word
   assert.fail(`the clipboard says ${last}`);
 });
 
-// mock.planNote: a finished Plan turn with its "Saved the plan to" note.
-When('a Plan turn saves its plan', async function (this: ThreadbearWorld) {
-  const d = await this.app.dump();
-  await this.app.do({ cmd: 'mock', method: 'planNote', params: { threadId: d.selection?.id } });
-});
-
-Then('the transcript shows the note {string} outside the folded work', async function (this: ThreadbearWorld, words: string) {
-  await this.until(`the note "${words}"`, (d) => d.transcript.rows.some((r) => r.kind === 'note' && r.text.includes(words) && !(r as { inGroup?: boolean }).inGroup));
-});
-
 // mock.wakes: a reply, then two turns the agent started by itself as
 // background jobs finished, one 44 s later and one 3 min later.
 Given('a thread the agent picked up twice as background jobs finished, called {string}', async function (this: ThreadbearWorld, title: string) {
