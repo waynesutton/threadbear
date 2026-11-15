@@ -73,6 +73,7 @@ mod media_view;
 mod move_sheet;
 mod new_thread;
 mod notes_page;
+mod skills_page;
 mod notify;
 mod open_anything;
 mod open_gate;

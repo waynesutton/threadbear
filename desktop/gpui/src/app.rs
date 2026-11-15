@@ -186,6 +186,9 @@ pub struct Threadbear {
     pub(crate) settings_window: Option<(AnyWindowHandle, Entity<crate::settings_window::SettingsWindow>)>,
     /// Notes over the main panel while it's up (notes_page.rs).
     pub(crate) notes_page: Option<Entity<crate::notes_page::NotesPage>>,
+    /// Skills over the main panel while it's up (skills_page.rs), and what the runner said.
+    pub(crate) skills_page: Option<Entity<crate::skills_page::SkillsPage>>,
+    pub(crate) skills: crate::skills_page::SkillsState,
     /// The main window, for opening a thread from outside it (a
     /// notification's click).
     pub(crate) main_window: AnyWindowHandle,
@@ -557,6 +560,8 @@ impl Threadbear {
             small_jobs: vec!["claude".into()],
             settings_window: None,
             notes_page: None,
+            skills_page: None,
+            skills: Default::default(),
             main_window: window.window_handle(),
             pending_open: None,
             pending_restore: None,
@@ -880,6 +885,7 @@ impl Threadbear {
                     self.load_remote(cx);
                     self.load_clis(cx);
                     self.load_connectors(cx);
+                    self.load_skills(cx);
                     self.load_setup_devices(cx);
                     self.side.update(cx, |side, cx| side.connected(cx));
                     for pane in self.pane.iter().chain(self.thread_panels.panes()) {
@@ -968,7 +974,13 @@ impl Threadbear {
                     }
                 }
                 "librarian.updated" => self.librarian.status = Some(threadbear_core::librarian::Status::decode(&params["librarian"])),
-                "settings.updated" => self.runner_settings = Some(params["settings"].clone()),
+                "settings.updated" => {
+                    self.runner_settings = Some(params["settings"].clone());
+                    // The skillsStore experiment turned off takes Skills away.
+                    if !self.skills_shown() {
+                        self.skills_page = None;
+                    }
+                }
                 // A login appearing or going, its models once asked, its
                 // usage; and the pools after a save: both replace `hello`'s.
                 "accounts.updated" => self.logins.set_accounts(&params["accounts"]),
@@ -992,6 +1004,7 @@ impl Threadbear {
                 "clis.updated" => self.clis_updated(&params),
                 "runner.updates" => self.runner_updates_changed(&params),
                 "connectors.updated" => self.connectors_updated(&params),
+                "skills.updated" => self.skills_updated(&params, cx),
                 "thread.event" => {
                     // An open review window hears its review change whichever
                     // thread is open here (review_window.rs).
@@ -1251,6 +1264,7 @@ impl Threadbear {
     pub(crate) fn open_with(&mut self, id: String, moved: Option<Entity<ThreadPane>>, window: &mut Window, cx: &mut Context<Self>) {
         self.close_settings(cx);
         self.close_notes(cx);
+        self.close_skills(cx);
         // How it comes in (open_motion.rs): taken now, so an open that goes
         // nowhere doesn't leave it for the next one. One brought back from a
         // panel of its own was on screen a moment ago.
@@ -1602,6 +1616,7 @@ impl Threadbear {
         dump["importNote"] = json!(self.import_note);
         // Notes (notes_page.rs). `notes` above is the Swift dump's, the list's errors.
         dump["notesPage"] = self.notes_dump(cx);
+        dump["skillsPage"] = self.skills_dump(cx);
         // Panels pinned to their threads (pinned_panels.rs).
         dump["pinnedPanels"] = self.pinned_panels_dump(cx);
         // The tour or a page's intro on show, and Finish setting up (tour.rs, setup_panel.rs).
