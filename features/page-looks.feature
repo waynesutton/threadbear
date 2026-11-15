@@ -26,3 +26,12 @@ Feature: Customize the home pages
     And the customized page draws its greeting and quote
     When I ask for another quote
     Then the customized page draws a different quote
+
+  @looks.scheduled @swift-pending
+  Scenario: The Scheduled page takes a look and keeps it when Customize goes off
+    When I customize the Scheduled page without its bear or its On number
+    Then the customized Scheduled page draws its title and numbers without them
+    When I open Customize on the Scheduled page
+    Then its panel has the Layout and Numbers sections
+    When I turn off the Scheduled page customization
+    Then the standard Scheduled page is shown and my Scheduled look is kept

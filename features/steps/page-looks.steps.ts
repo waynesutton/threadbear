@@ -60,3 +60,36 @@ When('I choose a Librarian background', async function(this: ThreadbearWorld) {
 Then('the customized page draws its background', async function(this: ThreadbearWorld) {
   await this.app.do({ cmd: 'label-point', label: 'Page background photo' });
 });
+
+type ScheduledLook = { hidden: string[]; hiddenNumbers: string[] };
+const scheduled = (d: Dump) => (d as unknown as { looks: { on: { scheduled: boolean }; scheduled: ScheduledLook } }).looks;
+const SCHEDULED_BEAR = 'The bear winding a big alarm clock, beside a calendar';
+
+When('I customize the Scheduled page without its bear or its On number', async function(this: ThreadbearWorld) {
+  await this.app.do({ cmd: 'mode', mode: 'scheduled' });
+  await this.app.do({ cmd: 'look', page: 'scheduled', on: true, set: { hidden: ['picture'], hiddenNumbers: ['on'] } });
+  await this.until('the Scheduled look saved', d => scheduled(d).on.scheduled && scheduled(d).scheduled.hidden.includes('picture') && d);
+});
+Then('the customized Scheduled page draws its title and numbers without them', async function(this: ThreadbearWorld) {
+  await this.app.do({ cmd: 'label-point', label: 'Scheduled' });
+  await this.app.do({ cmd: 'label-point', label: 'Due in a day', prefix: true });
+  await assert.rejects(this.app.do({ cmd: 'label-point', label: SCHEDULED_BEAR }));
+});
+When('I open Customize on the Scheduled page', async function(this: ThreadbearWorld) {
+  await this.app.do({ cmd: 'look', page: 'scheduled', customize: true });
+  await this.until('the Scheduled panel open', d => (d as unknown as { looks: { editing?: string } }).looks.editing === 'scheduled' && d);
+});
+Then('its panel has the Layout and Numbers sections', async function(this: ThreadbearWorld) {
+  for (const label of ['Layout', 'Numbers', 'Reset to the standard page']) {
+    await this.app.do({ cmd: 'label-point', label });
+  }
+});
+When('I turn off the Scheduled page customization', async function(this: ThreadbearWorld) {
+  await this.app.do({ cmd: 'look', page: 'scheduled', on: false });
+});
+Then('the standard Scheduled page is shown and my Scheduled look is kept', async function(this: ThreadbearWorld) {
+  const d = await this.until('the standard Scheduled page', d => !scheduled(d).on.scheduled && d);
+  assert.deepEqual(scheduled(d).scheduled.hiddenNumbers, ['on']);
+  assert.equal((d as unknown as { homePage: { title: string } }).homePage.title, 'Scheduled');
+  await this.app.do({ cmd: 'label-point', label: SCHEDULED_BEAR });
+});
