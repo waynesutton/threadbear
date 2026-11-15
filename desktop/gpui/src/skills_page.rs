@@ -9,6 +9,7 @@
 // "Skills"): `skills.list` at connect, `skills.updated` after any change,
 // from this app, the Swift one or another thread. The page keeps only what's
 // being typed.
+use crate::a11y::A11yRole as _;
 use crate::app::Threadbear;
 use crate::highlights::{tipped, tipped_as};
 use crate::mac_switch::MacSwitch;
@@ -508,7 +509,7 @@ impl SkillsPage {
         let tip = if skill.always { format!("Agents use it whenever it fits. Turn off to use it only with /{name}") } else { format!("Only /{name} uses it. Turn on to let agents use it whenever it fits") };
         let app = self.app.clone();
         let switch_name = name.clone();
-        let switch = div().id(SharedString::from(format!("skill-always-{name}"))).test_support().aria_label(tip.clone()).tip(tip).child(
+        let switch = div().id(SharedString::from(format!("skill-always-{name}"))).test_support().a11y_role(gpui_kit::Role::GenericContainer).aria_label(tip.clone()).tip(tip).child(
             h_flex().gap(px(6.)).items_center().child(div().text_size(px(style::size::SMALL)).text_color(secondary).child("Always on")).child(
                 MacSwitch::new(SharedString::from(format!("skill-always-switch-{name}")), skill.always).outside_form().disabled(busy).on_change(move |on, _, cx| {
                     app.update(cx, |app, cx| app.set_skill_always(switch_name.clone(), on, cx)).ok();
