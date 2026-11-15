@@ -293,6 +293,7 @@ actions!(
         ShowLibrarian,
         ShowHibernating,
         ShowArchived,
+        ShowNotes,
         ShowPreviousTab,
         ShowNextTab,
         OpenSettings,
@@ -381,6 +382,7 @@ commands!(
     (ShowLibrarian, ShowLibrarian, Some(ShortcutCommand::ShowLibrarian)),
     (ShowHibernating, ShowHibernating, Some(ShortcutCommand::ShowHibernating)),
     (ShowArchived, ShowArchived, Some(ShortcutCommand::ShowArchived)),
+    (ShowNotes, ShowNotes, Some(ShortcutCommand::ShowNotes)),
     (PreviousTab, ShowPreviousTab, Some(ShortcutCommand::PreviousTab)),
     (NextTab, ShowNextTab, Some(ShortcutCommand::NextTab)),
     (Settings, OpenSettings, Some(ShortcutCommand::Settings)),
@@ -463,6 +465,9 @@ impl Threadbear {
     pub(crate) fn main_panel_title(&self) -> String {
         if self.settings_window.is_some() {
             return "Settings".into();
+        }
+        if self.notes_page.is_some() {
+            return "Notes".into();
         }
         if let Some(project) = self.open_project() {
             return project.title.clone();
@@ -759,6 +764,8 @@ impl Threadbear {
                 }
             }
             Command::Settings => self.open_settings(None, cx),
+            // Up, or put away if it's up; nothing while Show Notes is off.
+            Command::ShowNotes => self.toggle_notes(window, cx),
             Command::ZoomIn => self.zoom_in(window, cx),
             Command::ZoomOut => self.zoom_out(window, cx),
             Command::ActualSize => self.set_zoom(zoom::DEFAULT_PERCENT, window, cx),
@@ -792,7 +799,7 @@ impl Threadbear {
             Command::Zoom => window.zoom_window(),
             Command::BringAllToFront => crate::window_menu::bring_all_to_front(cx),
             Command::Close => {
-                if !self.close_settings(cx) { crate::window_menu::close_window(window, cx); }
+                if !self.close_settings(cx) && !self.close_notes(cx) { crate::window_menu::close_window(window, cx); }
             },
         }
         self.sync_menus(cx);
@@ -853,6 +860,7 @@ impl Threadbear {
     /// main panel too (`showSchedules`); picking a thread puts the thread back.
     pub(crate) fn set_mode(&mut self, mode: SidebarMode, cx: &mut Context<Self>) {
         self.close_settings(cx);
+        self.close_notes(cx);
         let home = mode != SidebarMode::Inbox;
         // A page of the activity bar's takes a project's page's place
         // (`showProjects`); the Inbox leaves it where it is.
@@ -917,16 +925,22 @@ impl Threadbear {
         place.home || place.thread.as_ref().is_none_or(|id| self.threads.contains_key(id))
     }
 
+    /// Settings or Notes over the main panel: Back puts it away, and
+    /// there's no Forward until it's gone.
+    fn over_main_panel(&self) -> bool {
+        self.settings_window.is_some() || self.notes_page.is_some()
+    }
+
     pub(crate) fn can_go_back(&self) -> bool {
-        self.settings_window.is_some() || self.history.can_go_back()
+        self.over_main_panel() || self.history.can_go_back()
     }
 
     pub(crate) fn can_go_forward(&self) -> bool {
-        self.settings_window.is_none() && self.history.can_go_forward()
+        !self.over_main_panel() && self.history.can_go_forward()
     }
 
     pub(crate) fn go_back(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        if self.close_settings(cx) { return; }
+        if self.close_settings(cx) || self.close_notes(cx) { return; }
         let threads = self.threads.keys().cloned().collect::<std::collections::HashSet<_>>();
         let projects = self.projects.list.iter().map(|p| p.id.clone()).collect::<std::collections::HashSet<_>>();
         let can_show = |p: &NavPlace| match &p.project {
@@ -939,7 +953,7 @@ impl Threadbear {
     }
 
     pub(crate) fn go_forward(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        if self.settings_window.is_some() { return; }
+        if self.over_main_panel() { return; }
         let threads = self.threads.keys().cloned().collect::<std::collections::HashSet<_>>();
         let projects = self.projects.list.iter().map(|p| p.id.clone()).collect::<std::collections::HashSet<_>>();
         let can_show = |p: &NavPlace| match &p.project {
@@ -977,7 +991,7 @@ impl Threadbear {
 
     /// Where Back or Forward would go, named for its tooltip (`destination`).
     pub(crate) fn destination(&self, back: bool) -> Option<String> {
-        let place = if self.settings_window.is_some() {
+        let place = if self.over_main_panel() {
             if !back { return None; }
             self.place()
         } else {
@@ -1311,6 +1325,7 @@ impl Threadbear {
                     item("Show Scheduled", Command::ShowScheduled).enabled(self.schedules_supported),
                     item("Show Projects", Command::ShowProjects).enabled(self.projects_supported),
                     item("Show Librarian", Command::ShowLibrarian).enabled(self.projects_supported),
+                    item("Show Notes", Command::ShowNotes).enabled(self.notes_shown()),
                     Separator,
                     item("Show Hibernating", Command::ShowHibernating),
                     item("Show Archived", Command::ShowArchived),
@@ -1578,6 +1593,7 @@ impl Threadbear {
         }
         let main: AnyElement = match (&self.pane, page) {
             _ if self.settings_window.is_some() => self.render_settings_page(cx),
+            _ if self.notes_page.is_some() => self.render_notes_page(),
             // A project's page takes the thread's place until a thread is
             // picked again (project_page.rs).
             _ if self.open_project().is_some() => self.render_project_page(window, cx),

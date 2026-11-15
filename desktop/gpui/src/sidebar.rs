@@ -1333,6 +1333,7 @@ impl Threadbear {
     /// cursor in the new box.
     pub(crate) fn new_thread(&mut self, cx: &mut Context<Self>) {
         self.close_settings(cx);
+        self.close_notes(cx);
         self.leave_pane(cx);
         self.selected = None;
         self.shows_home = false;

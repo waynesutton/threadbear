@@ -192,6 +192,7 @@ impl Threadbear {
     /// stays where it is.
     pub(crate) fn open_project_page(&mut self, id: &str, cx: &mut Context<Self>) {
         self.close_settings(cx);
+        self.close_notes(cx);
         if self.project(id).is_none() {
             return;
         }

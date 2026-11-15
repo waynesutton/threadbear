@@ -97,6 +97,7 @@ impl Threadbear {
     /// All entry points share the main panel. Defer creation because the
     /// form observes and reads the app, which is borrowed by this update.
     pub(crate) fn open_settings(&mut self, tab: Option<Tab>, cx: &mut Context<Self>) {
+        self.close_notes(cx);
         let (me, handle) = (cx.entity(), self.main_window);
         let (client, instructions) = (self.client.clone(), self.standing_instructions.clone());
         cx.defer(move |cx| {
@@ -536,7 +537,7 @@ impl SettingsWindow {
 
     fn render_general(&mut self, settings: Option<&RunnerSettings>, window: &mut Window, cx: &mut Context<Self>) -> Vec<AnyElement> {
         // This Mac's own, so they're here while the runner's away too.
-        let mut sections = vec![self.appearance_section(cx), self.panels_section(cx), self.slash_section(cx), self.turn_modes_section(cx), self.files_section(cx), self.quitting_section(cx), self.notifications_section(cx)];
+        let mut sections = vec![self.appearance_section(cx), self.panels_section(cx), self.notes_section(cx), self.slash_section(cx), self.turn_modes_section(cx), self.files_section(cx), self.quitting_section(cx), self.notifications_section(cx)];
         // The web runtime is this Mac's too (web_runtime.rs), last, so it
         // moves nothing the Swift app's General has.
         let web_runtime = section("settings-web-runtime", "Web runtime", crate::web_runtime::SETTINGS_ABOUT, "check whether it's installed and working, or why a diagram or panel isn't showing.", vec![row("Web runtime", crate::web_runtime::settings_control(cx), cx)], cx);
@@ -797,6 +798,23 @@ impl SettingsWindow {
 
     /// `QuitPrompt`'s switch: ticking Don't ask again turns it off, and this
     /// turns it back on.
+    /// Show Notes (notes_page.rs): the bar's button and ⌘6. Off puts the
+    /// page away and keeps the notes.
+    fn notes_section(&mut self, cx: &mut Context<Self>) -> AnyElement {
+        let on = self.app.upgrade().is_none_or(|a| a.read(cx).notes_shown());
+        let switch = self.switch("settings-show-notes", on, "Show Notes in the bar on the left", cx, |this, on, cx| {
+            this.app.update(cx, |app, cx| app.set_notes_shown(on, cx)).ok();
+        });
+        section(
+            "settings-notes",
+            "Notes",
+            "Notes (in the bar on the left, ⌘6) are yours alone: kept on this Mac, each encrypted with a key kept beside Threadbear's other secrets, and never sent to the runner, an agent, your phone or the website. Hiding Notes keeps them; turn it back on to see them again.",
+            "explain where your notes are kept.",
+            vec![row("Show Notes", switch, cx)],
+            cx,
+        )
+    }
+
     fn quitting_section(&mut self, cx: &mut Context<Self>) -> AnyElement {
         let on = self.app.upgrade().is_none_or(|a| a.read(cx).settings.asks_before_quitting());
         let switch = self.switch("settings-ask-before-quitting", on, "Ask to confirm when you quit Threadbear", cx, |this, on, cx| {

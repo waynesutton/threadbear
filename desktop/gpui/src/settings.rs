@@ -137,6 +137,12 @@ pub struct Saved {
     /// `turnModesEnabled` (TurnModes): Shift-Tab steps the box through Plan
     /// first and Ask. None is on.
     pub turn_modes_enabled: Option<bool>,
+    /// `notesShown` (NotesStore.shownKey): Settings > General > Show Notes,
+    /// the bar's Notes button and ⌘6. None is on.
+    pub notes_shown: Option<bool>,
+    /// `notesListHidden`: the Notes page's list folded away for more room
+    /// to write, kept across launches. None is showing.
+    pub notes_list_hidden: Option<bool>,
 }
 
 /// The settings file: where it is and what's in it. Reading is at launch only;
@@ -242,6 +248,11 @@ impl Settings {
 
     pub fn asks_before_quitting(&self) -> bool {
         self.saved.ask_before_quitting.unwrap_or(true)
+    }
+
+    /// Settings > General > Show Notes: the bar's button and ⌘6 (notes_page.rs).
+    pub fn notes_shown(&self) -> bool {
+        self.saved.notes_shown.unwrap_or(true)
     }
 }
 

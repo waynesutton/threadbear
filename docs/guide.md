@@ -2233,6 +2233,11 @@ never asks for your Mac password. Notes are for ideas and to-dos, not
 passwords: keep those in a password manager. To hide Notes, turn off Show Notes in Settings >
 General; the notes are kept.
 
+The GPUI desktop app has Notes too, in the bar under the Librarian (⌘6),
+with the same notes as the Swift app. Back and ⌘W leave it as Esc does.
+Two things differ there for now: headings are bold but not bigger, and you
+can't dictate into a note.
+
 With Voice on, you can dictate into any text box in Threadbear (the
 message box, a note, a search field) from the keyboard:
 

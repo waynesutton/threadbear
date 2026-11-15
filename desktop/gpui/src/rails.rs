@@ -297,6 +297,15 @@ impl Threadbear {
                 crate::web_panels::keyboard_to_app(window);
             }, cx));
         }
+        // Your own notes, this Mac's alone (notes_page.rs), while Settings >
+        // General > Show Notes is on. A page over the main panel, as
+        // Settings is, so it doesn't slide the views' lit square.
+        if self.notes_shown() {
+            let mut button = RailButton::new("rail-notes", "note.text", "Notes", self.notes_page.is_some());
+            button.tip = self.shortcut_tip("Notes", ShortcutCommand::ShowNotes);
+            button.hint = self.shortcut_display(ShortcutCommand::ShowNotes);
+            views.push(rail_button(button, |this, window, cx| this.run_command(shell::Command::ShowNotes, window, cx), cx));
+        }
         // Connectors, Runners and Updates at the foot (activity_panels.rs),
         // each with its dot: the accent when only Mike can do something, grey
         // while something sorts itself out.

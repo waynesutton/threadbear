@@ -312,6 +312,10 @@ Notes (the bar's Notes) are files in `~/Library/Application Support/Threadbear/n
 (the folder only you can open, each file only you can read), each a note
 encrypted with AES-GCM under a key the app makes the first time and keeps
 in `secrets/notes-key` (only you can read it) (`app/Sources/Threadbear/Notes/NotesStore.swift`).
+The GPUI app reads and writes the same files the same way
+(`desktop/core/src/notes.rs`). It makes a key only while there are no notes
+yet, and never reads the Keychain: notes left from before the key moved open
+there once the Swift app has moved it.
 It used to be in your login Keychain as "Threadbear notes"; the first time
 Notes opens after that changed, the key moves to the file and the Keychain
 item is deleted. In the Keychain, macOS asked for your password after every

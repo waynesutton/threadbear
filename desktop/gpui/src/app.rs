@@ -182,6 +182,8 @@ pub struct Threadbear {
     /// Settings in the main panel. The handle is the main window; kept here
     /// so existing scripted Settings commands still target the same form.
     pub(crate) settings_window: Option<(AnyWindowHandle, Entity<crate::settings_window::SettingsWindow>)>,
+    /// Notes over the main panel while it's up (notes_page.rs).
+    pub(crate) notes_page: Option<Entity<crate::notes_page::NotesPage>>,
     /// The main window, for opening a thread from outside it (a
     /// notification's click).
     pub(crate) main_window: AnyWindowHandle,
@@ -547,6 +549,7 @@ impl Threadbear {
             runner_settings: None,
             small_jobs: vec!["claude".into()],
             settings_window: None,
+            notes_page: None,
             main_window: window.window_handle(),
             pending_open: None,
             pending_restore: None,
@@ -1211,6 +1214,7 @@ impl Threadbear {
     /// (thread_panels.rs), which goes on reading it rather than reading it again.
     pub(crate) fn open_with(&mut self, id: String, moved: Option<Entity<ThreadPane>>, window: &mut Window, cx: &mut Context<Self>) {
         self.close_settings(cx);
+        self.close_notes(cx);
         // How it comes in (open_motion.rs): taken now, so an open that goes
         // nowhere doesn't leave it for the next one. One brought back from a
         // panel of its own was on screen a moment ago.
@@ -1560,6 +1564,8 @@ impl Threadbear {
         // What came across from the Swift app, while its note's up. Set
         // after, as the literal above is as long as serde_json's macro goes.
         dump["importNote"] = json!(self.import_note);
+        // Notes (notes_page.rs). `notes` above is the Swift dump's, the list's errors.
+        dump["notesPage"] = self.notes_dump(cx);
         // Panels pinned to their threads (pinned_panels.rs).
         dump["pinnedPanels"] = self.pinned_panels_dump(cx);
         // The tour or a page's intro on show, and Finish setting up (tour.rs, setup_panel.rs).

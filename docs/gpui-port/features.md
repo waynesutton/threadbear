@@ -362,6 +362,7 @@ It comes from reading code, not from running anything, so "(unverified)" means n
 | `librarian.page` | Librarian page | Picture, tiles, Look at threads, Runs on | Drawn. | build | S | `LibrarianHome`, `HomePage` |
 | `librarian.log` | Librarian log | Recent, Next, Look at everything | Drawn list. | build | M | `LibrarianView` |
 | `librarian.picture` | Pokeable picture | Secret lines | Built, with its wobble on a poke (`home_page.rs`, core's `juice::wobble`): GPUI can't turn a picture, so the Swift tilt is a sway of the picture's middle, with the squash as it is. | build | S | `HomePage` |
+| `notes.page` | Notes page | Your own notes over the main panel (⌘6): list, rename, delete, Markdown colouring, task boxes, list typing, encrypted on this Mac | Main-panel page; the text in `EditorState` with a note highlighter (headings coloured, not sized), files sealed with `ring` as CryptoKit seals them. No dictation yet. | build | M | `NotesPage`, `NoteEditor`, `NotesStore` |
 | `schedule.page` | Scheduled page | Stats tiles | Drawn. | build | S | `ScheduledHome`, `HomePage` |
 | `schedule.list` | Scheduled list | Active, Paused, Done, Run now, Edit, Delete | gpui-kit list, menus and dialog. | kit | M | `ScheduledList`, `Schedules` |
 | `schedule.editor` | Schedule editor | Message, once or repeat, cron, target, model, machine | Form of `Input`, `Textarea` and menus, with the parsing ported. | build | L | `ScheduleEditor`, `ScheduleText`, `ScheduleModels` |

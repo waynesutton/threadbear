@@ -12,6 +12,7 @@ How Prints work today, what's missing and what's next: [Prints status](https://g
 
 ### Added
 
+- Notes in the GPUI app: the bar's Notes button and ⌘6 open your notes over the main window, the same encrypted notes the Swift app keeps. New Note, rename, delete, coloured Markdown, task boxes you tick with a click, and lists that carry on when you press Return. Settings > General > Show Notes hides them and keeps them.
 - The GPUI Connectors panel can set up a gateway, add services, connect outside agents with masked key fields, hide and restore rows, and review pinned local-server commands before adding them.
 - A background picture can be an animated GIF, in the main window (Settings > General > Look) and behind the Librarian, Scheduled and Projects pages. It plays, and holds still with Reduce Motion on. Swift Mac app only.
 - A project with tables among its Parts lists each table's bears on its own Project tab.

@@ -1,5 +1,12 @@
 # Files
 
+## GPUI Notes
+
+- `desktop/core/src/notes.rs` notes as the Swift app keeps them: sealing (AES-256-GCM with `ring`), names, Markdown spans, list typing and the files.
+- `desktop/gpui/src/notes_page.rs` the Notes page over the main panel, its editor and highlighter, the delete question and the scripted `notes` command.
+- `features/notes.feature` and `features/steps/notes.steps.ts` Notes scenarios.
+- `prds/gpui-notes.md` scope and verification for the port.
+
 ## GPUI Settings
 
 - `desktop/gpui/src/settings_window.rs` the main-window Settings page, section navigation and pending instruction saves.

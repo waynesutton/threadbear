@@ -431,6 +431,8 @@ fn step(app: &Entity<Threadbear>, cmd: &Value, window: &mut Window, cx: &mut App
         }
         // Settings > Keyboard, as the Swift app's `shortcuts` (settings_window/keyboard.rs).
         "shortcuts" => crate::settings_window::keyboard_automation(app, cmd, window, cx),
+        // Notes (notes_page.rs): opened, a note renamed, picked, a box ticked, a delete answered.
+        "notes" => crate::notes_page::automation(app, cmd, window, cx),
         // The sidebar's commands (sidebar.rs). Guarded ones only take the forms
         // that name a section, a row or a tip; the others fall through below.
         "hover" | "sort" | "archive-more" | "star" | "unstar" | "unarchive" | "realMenu" | "menu-popover" => crate::sidebar::automation(app, cmd, window, cx),

@@ -188,7 +188,8 @@ pub fn try_symbol(name: &str) -> Option<Icon> {
         "safari" => IconName::Compass,
         "exclamationmark.triangle" => IconName::TriangleAlert,
         "bolt.horizontal" | "bolt.horizontal.circle" => IconName::Zap,
-        "lock" => IconName::Lock,
+        "lock" | "lock.fill" => IconName::Lock,
+        "note.text" => IconName::NotepadText,
         "lock.open" => return Some(Icon::default().data(LOCK_OPEN)),
         "cpu" => IconName::Cpu,
         // The trust chip over the composer, and the origin badges' marks.

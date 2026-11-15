@@ -42,6 +42,10 @@ base64 = "=0.22.1"
 # the kit hands the selection over as Markdown. The version gpui-kit parses
 # with, already in the build.
 markdown = "=1.0.0"
+# Notes (notes.rs): AES-256-GCM, as the Swift app's CryptoKit seals each
+# note, and the random key, nonces and ids. Already in the build through
+# ureq's rustls, at this version and with only this feature.
+ring = { version = "=0.17.14", default-features = false, features = ["alloc"] }
 # canonicalize without Windows' `\\?\` prefix; on Mac and Linux it is just
 # std::fs::canonicalize. Already in the Windows build through gpui, at this version.
 dunce = "1.0.5"

@@ -5009,3 +5009,35 @@ Fixes from Codex's review of the slice before:
   systems keep the file symbol.
 - Native regression tests synthesize their own film and PDF, including path
   replacement, size/output caps, version mismatch and delayed callbacks.
+
+### 2026-11-15 Notes over the main panel (`notes.page`)
+
+- The bar's Notes button (under the Librarian) and ⌘6 open your notes over
+  the main panel, as Settings does, leaving the thread and its draft
+  underneath. Esc, the X, ⌘6 again, Back, ⌘W, ⌘1 to ⌘4, a bar view, a
+  thread, a project or Settings put it away. Settings > General > Show Notes
+  hides the button and quiets ⌘6, keeping the notes.
+- Same files as the Swift app (`desktop/core/src/notes.rs`): AES-256-GCM
+  through `ring`, laid out as CryptoKit's sealed box, over the Swift `Note`
+  JSON. A unit test opens a note CryptoKit sealed, and CryptoKit opened one
+  this code sealed. With notes on disk and no key file (the Keychain key not
+  yet moved by the Swift app), the page says they can't be unlocked and
+  makes no new key.
+- The editor is the kit's `EditorState` with line numbers and a note
+  highlighter fed by core's spans (the Swift `NoteHighlight` rules). Return
+  carries a list on and ends it on an empty item; a click on `[ ]` ticks it
+  through the editor's own edit, so ⌘Z unticks it.
+- Not yet: headings drawn bigger by level (the editor's runs can't size
+  text, so they're bold), dictation into a note (no Voice in this app), the
+  pointing hand over a box, and bringing `notesShown` and `notesListHidden`
+  across from the Swift app (its settings import has already run).
+- Found while driving it: the highlighter's greys were see-through, and the
+  editor blends a run's colour over its white text, so marks and quotes came
+  out white; they're made solid over the page now. And closing Notes from a
+  key (⌘6, ⌘W) left the keyboard on the gone editor, so no shortcut worked
+  after; `close_notes` now takes it back for the window.
+- Verification: 11 core notes tests and the shortcut tests pass, as do all
+  core tests and the GPUI app's 96 unit tests. The five `features/notes.feature`
+  scenarios were driven by hand on a mock dev app (Cucumber isn't installed in
+  this copy), in dark and light, with each way in and out checked, rename by
+  typing, an emptied title, ticking and ⌘Z, delete, the switch, a restart.
