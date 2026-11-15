@@ -29,3 +29,5 @@ Before/after dark-mode shots and the driver script/log are retained locally in `
 ## Review follow-up
 
 2026-11-15 03:56 UTC: finding 1 confirmed against Swift and reproduced with a mock `agents.list` outage. Refresh failures now log under `rpc` and preserve the previous agent list instead of showing the global error banner. Added a failure fixture and behavior scenario. Five Connectors rule tests and feature pairing pass. The old binary failed the new direct-driver regression as expected; rebuilding and rerunning it, followed by landing, waits for Mac load below 4. The earlier landing failed on unrelated runner timeouts under heavy load; main is unchanged.
+
+2026-11-15 04:16 UTC: the reviewed GPUI build passed. Both direct-driver checks now pass against that build: the outage regression confirms repeated open/refresh retains keys with no banner and logs the failure, and the broader Connectors flows pass again. Round 2 review found nothing new. Cucumber remains unrun because its dependencies are absent. Only the repository landing and installed-app check remain.

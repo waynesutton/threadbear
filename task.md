@@ -13,6 +13,8 @@ Nothing.
 
 ## Completed
 
+- [x] 2026-11-15 04:16 UTC Verify the reviewed Connectors build: the background-outage regression and all broader scripted Connectors flows pass against the rebuilt app. Review round 2 is clean. Landing still waits for quiet load after unrelated runner test timeouts; Cucumber dependencies remain absent.
+
 - [x] 2026-11-15 03:56 UTC Fix Connectors review finding 1: background agents.list failures log and retain the previous list, matching Swift. Added an outage fixture and behavior scenario; reproduced the old error banner and reran five Connectors rule tests plus spec pairing. Rebuilt UI regression and landing remain scheduled for quiet load.
 
 - [x] 2026-11-14 23:55 UTC Port Connectors setup, catalog and custom HTTPS/local servers, outside-agent permissions and masked one-time keys, revoke and hidden rows to GPUI. Swift sources remain frozen. Verified: 1,022 core tests, GPUI automation build, focus guard, spec pairing, and scripted UI checks for setup/add, Grok/Notion/Slack, copy/revoke, hide/restore and pinned local trust. Dark-mode shots in `.fixtures/connectors-port/`. Cucumber dependencies are absent; the same driver was exercised directly.
