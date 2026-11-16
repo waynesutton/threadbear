@@ -15,17 +15,6 @@ Feature: The sidebar bear's chat
     Then the same bear chat is open
 
   @sidebar.bearchat @swift-pending
-  Scenario: Hiding the button keeps its instructions
-    When I press "Chat with the bear"
-    Then the bear's instructions have been prepared
-    When I open Settings
-    And I press "Show the bear in the sidebar" in Settings
-    Then the bear's button is hidden
-    And the bear's instructions have been prepared
-    When the app is quit and opened again
-    Then the bear's button is hidden
-
-  @sidebar.bearchat @swift-pending
   Scenario: The bear's menu opens chat and its instructions folder
     When I open the bear's menu
     Then exactly one context menu offers "Open Chat | Show the Bear's Folder"

@@ -2739,8 +2739,7 @@ lasting information to its folder's agent memory.
 Its instructions are `CLAUDE.md` in that folder, written only the first
 time. Right-click the bear and choose Show the Bear's Folder to edit them.
 The bear shows a spinner while preparing its folder or working on your
-chat. Settings (⌘,) > General > Bear chat can hide the button; its chats,
-memory and files stay where they are.
+chat.
 
 ### Bears
 

@@ -606,7 +606,6 @@ impl SettingsWindow {
         // This Mac's own, so they're here while the runner's away too.
         let mut sections = vec![self.appearance_section(cx), self.settings_place_section(cx), self.panels_section(cx), self.files_section(cx), self.slash_section(cx), self.terminal_section(cx), self.quitting_section(cx), self.look_section(cx), self.notifications_section(cx)];
         sections.push(self.notes_section(cx));
-        sections.push(self.bear_chat_section(cx));
         if self.app.upgrade().is_some_and(|app|app.read(cx).skills.supported) {sections.push(self.skills_section(cx));}
         // The web runtime is this Mac's too (web_runtime.rs), last, so it
         // moves nothing the Swift app's General has.
@@ -880,14 +879,6 @@ impl SettingsWindow {
             this.app.update(cx, |app,cx| app.skill_change("skills.enable",json!({"enabled":on}),cx)).ok();
         });
         section("settings-skills", "Skills", "A shared store of agent skills for every thread, login and CLI. Turning it off keeps the skills.", "manage the shared skills.", vec![row("Enable shared agent skills",switch,cx)],cx)
-    }
-
-    fn bear_chat_section(&mut self,cx:&mut Context<Self>)->AnyElement {
-        let on=self.app.upgrade().is_none_or(|app|app.read(cx).settings.saved.bear_shown!=Some(false));
-        let switch=self.switch("settings-bear-chat",on,"Show the bear in the sidebar",cx,|this,on,cx| {
-            this.app.update(cx,|app,cx|{app.settings.saved.bear_shown=Some(on);app.save_settings_soon(cx);cx.notify();}).ok();
-        });
-        section("settings-bear-chat","Bear chat","A personal chat in its own folder, with memory shared across its chats. Hiding the button keeps its chats and files.","change whether the sidebar bear is shown.",vec![row("Show the bear in the sidebar",switch,cx)],cx)
     }
 
     fn notes_section(&mut self, cx: &mut Context<Self>) -> AnyElement {

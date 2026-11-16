@@ -19,7 +19,6 @@ fn user_home() -> PathBuf {
 }
 impl Threadbear {
     pub(crate) fn render_bear_chat(&mut self, cx: &mut Context<Self>) -> AnyElement {
-        if self.settings.saved.bear_shown == Some(false) {return div().into_any_element();}
         let thread=bear_chat::newest(&user_home(),self.threads.values().map(|t|t.as_ref()));
         let selected=thread.is_some_and(|t|self.selected.as_ref()==Some(&t.id));
         let thinking=self.bear_preparing || thread.is_some_and(|t|matches!(t.status.as_str(),"running"|"starting"));
@@ -67,7 +66,6 @@ impl Threadbear {
     }
     #[cfg(feature="automation")]
     pub(crate) fn bear_chat_dump(&self)->serde_json::Value {
-        serde_json::json!({"folder":bear_chat::folder(&user_home()),"shown":self.settings.saved.bear_shown!=Some(false),
-            "preparing":self.bear_preparing,"thread":bear_chat::newest(&user_home(),self.threads.values().map(|t|t.as_ref())).map(|t|&t.id)})
+        serde_json::json!({"folder":bear_chat::folder(&user_home()),"preparing":self.bear_preparing,"thread":bear_chat::newest(&user_home(),self.threads.values().map(|t|t.as_ref())).map(|t|&t.id)})
     }
 }
