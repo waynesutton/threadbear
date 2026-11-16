@@ -93,7 +93,7 @@ fn terminals(cx: &App) -> Option<Entity<Terminals>> {
 /// keyboard focus must suppress an older reply selection in text services.
 /// This only reads existing focus handles; it never starts a shell.
 pub(crate) fn has_focus(window: &Window, cx: &App) -> bool {
-    terminals(cx).is_some_and(|terminals| terminals.read(cx).sessions.values().any(|session| session.read(cx).focus.is_focused(window)))
+    terminals(cx).is_some_and(|terminals| terminals.read(cx).sessions.values().any(|tabs| tabs.shells.iter().any(|tab| tab.session.read(cx).focus.is_focused(window))))
 }
 
 /// Whether any shell has something an update's restart would lose, as
