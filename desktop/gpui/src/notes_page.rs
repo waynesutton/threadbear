@@ -43,7 +43,7 @@ impl Threadbear {
             let first = self.notes.store.sorted().first().map(|n|n.id.clone());
             if let Some(id) = first { self.select_note(id, window, cx); }
         }
-        if let Some(editor) = &self.notes.editor { window.focus(&editor.read(cx).focus_handle(cx), cx); crate::web_panels::keyboard_to_app(window); }
+        if let Some(editor) = &self.notes.editor { window.focus(&editor.read(cx).focus_handle(cx), cx); }
         cx.notify();
     }
     pub(crate) fn close_notes(&mut self, cx: &mut Context<Self>) {
@@ -81,7 +81,6 @@ impl Threadbear {
             }
         }));
         window.focus(&editor.read(cx).focus_handle(cx), cx);
-        crate::web_panels::keyboard_to_app(window);
         self.notes.editor = Some(editor);
         self.notes.title = Some(title);
         cx.notify();
