@@ -161,7 +161,6 @@ pub enum ShortcutCommand {
     ShowScheduled,
     ShowProjects,
     ShowLibrarian,
-    ShowSkills,
     ShowNotes,
     ShowHibernating,
     ShowArchived,
@@ -185,7 +184,7 @@ pub enum ShortcutCommand {
 pub const OPEN_ANYTHING_EXPERIMENT: &str = "openAnything";
 
 impl ShortcutCommand {
-    pub const ALL: [ShortcutCommand; 29] = [
+    pub const ALL: [ShortcutCommand; 28] = [
         Self::NewThread,
         Self::Archive,
         Self::Hibernate,
@@ -200,7 +199,6 @@ impl ShortcutCommand {
         Self::ShowScheduled,
         Self::ShowProjects,
         Self::ShowLibrarian,
-        Self::ShowSkills,
         Self::ShowNotes,
         Self::ShowHibernating,
         Self::ShowArchived,
@@ -233,7 +231,6 @@ impl ShortcutCommand {
             Self::ShowScheduled => "showScheduled",
             Self::ShowProjects => "showProjects",
             Self::ShowLibrarian => "showLibrarian",
-            Self::ShowSkills => "showSkills",
             Self::ShowNotes => "showNotes",
             Self::ShowHibernating => "showHibernating",
             Self::ShowArchived => "showArchived",
@@ -271,7 +268,6 @@ impl ShortcutCommand {
             Self::ShowScheduled => "Show Scheduled",
             Self::ShowProjects => "Show Projects",
             Self::ShowLibrarian => "Show Librarian",
-            Self::ShowSkills => "Show Skills",
             Self::ShowNotes => "Show Notes",
             Self::ShowHibernating => "Show Hibernating",
             Self::ShowArchived => "Show Archived",
@@ -317,7 +313,6 @@ impl ShortcutCommand {
             Self::ShowScheduled => Some(ShortcutKey::new("2")),
             Self::ShowProjects => Some(ShortcutKey::new("3")),
             Self::ShowLibrarian => Some(ShortcutKey::new("4")),
-            Self::ShowSkills => Some(ShortcutKey::new("5")),
             Self::ShowNotes => Some(ShortcutKey::new("6")),
             // ⌘= is the key under the + sign, so ⌘+ works without shift.
             Self::ZoomIn => Some(ShortcutKey::new("=")),
@@ -480,8 +475,7 @@ mod tests {
         let keys: Vec<ShortcutKey> = ShortcutCommand::ALL.iter().filter_map(|c| c.default_key()).collect();
         let unique: std::collections::HashSet<&ShortcutKey> = keys.iter().collect();
         assert_eq!(keys.len(), unique.len(), "two commands can't start on one key");
-        assert_eq!(ShortcutCommand::ALL.len(), 29);
-        assert_eq!(ShortcutCommand::ShowSkills.default_key(), Some(key("cmd+5")));
+        assert_eq!(ShortcutCommand::ALL.len(), 28);
         assert_eq!(ShortcutCommand::ShowNotes.default_key(), Some(key("cmd+6")));
         assert_eq!(ShortcutCommand::from_name("showNotes"), Some(ShortcutCommand::ShowNotes));
         // The Swift app's names and keys, as both apps read shortcuts.json.

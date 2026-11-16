@@ -98,7 +98,6 @@ impl Threadbear {
     /// Normal Settings covers the main panel, while the scripted command can
     /// still ask for the separate window used by the shared behaviour specs.
     pub(crate) fn open_settings(&mut self, tab: Option<Tab>, cx: &mut Context<Self>) {
-        self.skills.open = false;
         let window_open = self.settings_window.as_ref().is_some_and(|(handle, _)| handle.update(cx, |_, _, _| {}).is_ok());
         if self.settings.saved.settings_in_window.unwrap_or(false) || window_open {
             self.open_settings_window(tab, cx);
@@ -607,7 +606,6 @@ impl SettingsWindow {
         // This Mac's own, so they're here while the runner's away too.
         let mut sections = vec![self.appearance_section(cx), self.settings_place_section(cx), self.panels_section(cx), self.files_section(cx), self.slash_section(cx), self.terminal_section(cx), self.quitting_section(cx), self.look_section(cx), self.notifications_section(cx)];
         sections.push(self.notes_section(cx));
-        if self.app.upgrade().is_some_and(|app|app.read(cx).skills.supported) {sections.push(self.skills_section(cx));}
         // The web runtime is this Mac's too (web_runtime.rs), last, so it
         // moves nothing the Swift app's General has.
         let web_runtime = section("settings-web-runtime", "Web runtime", crate::web_runtime::SETTINGS_ABOUT, "check whether it's installed and working, or why a diagram or panel isn't showing.", vec![row("Web runtime", crate::web_runtime::settings_control(cx), cx)], cx);
@@ -879,14 +877,6 @@ impl SettingsWindow {
 
     /// `QuitPrompt`'s switch: ticking Don't ask again turns it off, and this
     /// turns it back on.
-    fn skills_section(&mut self, cx: &mut Context<Self>) -> AnyElement {
-        let on = self.app.upgrade().is_some_and(|app|app.read(cx).skills.enabled);
-        let switch = self.switch("settings-skills", on, "Enable shared agent skills", cx, |this,on,cx| {
-            this.app.update(cx, |app,cx| app.skill_change("skills.enable",json!({"enabled":on}),cx)).ok();
-        });
-        section("settings-skills", "Skills", "A shared store of agent skills for every thread, login and CLI. Turning it off keeps the skills.", "manage the shared skills.", vec![row("Enable shared agent skills",switch,cx)],cx)
-    }
-
     fn notes_section(&mut self, cx: &mut Context<Self>) -> AnyElement {
         let on = self.app.upgrade().is_none_or(|a| a.read(cx).settings.saved.show_notes != Some(false));
         let switch = self.switch("settings-show-notes", on, "Show Notes in the activity bar", cx, |this, on, cx| {

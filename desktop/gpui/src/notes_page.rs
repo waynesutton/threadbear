@@ -38,8 +38,6 @@ impl NotesPage {
 impl Threadbear {
     pub(crate) fn show_notes(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         if self.settings.saved.show_notes == Some(false) { return; }
-        self.hide_settings_page(cx);
-        self.skills.open = false;
         self.notes.open = true;
         window.focus(&self.sidebar.focus, cx);
         crate::web_panels::keyboard_to_app(window);

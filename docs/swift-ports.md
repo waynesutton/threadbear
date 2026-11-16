@@ -123,7 +123,7 @@ the keyboard shortcut.
 | 27 | 7ebe4e66 | Notes save (no file protection) | done |
 | 90 | f1510297 | One Settings… (already); Notes never asks for the Mac password | done |
 | 88 | 95cdefc8 | A code comment | nothing |
-| 64 | 1952b193 | Back and Forward (already); ⌘5 Skills and ⌘6 Notes | done: ⌘5 Skills and ⌘6 Notes; Back/Forward already present |
+| 64 | 1952b193 | Back and Forward (already); ⌘5 Skills and ⌘6 Notes | Notes done; ⌘5 left, no Skills page |
 
 ## Voice (skip)
 

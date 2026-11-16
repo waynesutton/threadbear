@@ -293,7 +293,6 @@ actions!(
         ShowScheduled,
         ShowProjects,
         ShowLibrarian,
-        ShowSkills,
         ShowNotes,
         ShowHibernating,
         ShowArchived,
@@ -383,7 +382,6 @@ commands!(
     (ShowScheduled, ShowScheduled, Some(ShortcutCommand::ShowScheduled)),
     (ShowProjects, ShowProjects, Some(ShortcutCommand::ShowProjects)),
     (ShowLibrarian, ShowLibrarian, Some(ShortcutCommand::ShowLibrarian)),
-    (ShowSkills, ShowSkills, Some(ShortcutCommand::ShowSkills)),
     (ShowNotes, ShowNotes, Some(ShortcutCommand::ShowNotes)),
     (ShowHibernating, ShowHibernating, Some(ShortcutCommand::ShowHibernating)),
     (ShowArchived, ShowArchived, Some(ShortcutCommand::ShowArchived)),
@@ -764,7 +762,6 @@ impl Threadbear {
                     _ => self.set_mode(SidebarMode::Inbox, cx),
                 }
             }
-            Command::ShowSkills => { if self.skills.open {self.close_skills(window,cx)} else {self.show_skills(window,cx)} },
             Command::ShowNotes => { if self.notes.open {self.close_notes(cx)} else {self.show_notes(window,cx)} },
             Command::Settings => self.open_settings(None, cx),
             Command::ZoomIn => self.zoom_in(window, cx),
@@ -860,7 +857,6 @@ impl Threadbear {
     /// The Scheduled, Projects and Librarian buttons open their page in the
     /// main panel too (`showSchedules`); picking a thread puts the thread back.
     pub(crate) fn set_mode(&mut self, mode: SidebarMode, cx: &mut Context<Self>) {
-        self.skills.open = false;
         self.notes.open = false;
         self.hide_settings_page(cx);
         let home = mode != SidebarMode::Inbox;
@@ -928,7 +924,7 @@ impl Threadbear {
     }
 
     pub(crate) fn can_go_back(&self) -> bool {
-        self.settings_page_open || self.skills.open || self.notes.open || self.history.can_go_back()
+        self.settings_page_open || self.notes.open || self.history.can_go_back()
     }
 
     pub(crate) fn can_go_forward(&self) -> bool {
@@ -940,7 +936,6 @@ impl Threadbear {
             self.close_settings_page(window, cx);
             return;
         }
-        if self.skills.open {self.close_skills(window,cx);return;}
         if self.notes.open { self.close_notes(cx); return; }
         let threads = self.threads.keys().cloned().collect::<std::collections::HashSet<_>>();
         let projects = self.projects.list.iter().map(|p| p.id.clone()).collect::<std::collections::HashSet<_>>();
@@ -954,7 +949,6 @@ impl Threadbear {
     }
 
     pub(crate) fn go_forward(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        self.skills.open = false;
         self.notes.open = false;
         let threads = self.threads.keys().cloned().collect::<std::collections::HashSet<_>>();
         let projects = self.projects.list.iter().map(|p| p.id.clone()).collect::<std::collections::HashSet<_>>();
@@ -1606,7 +1600,6 @@ impl Threadbear {
             _ => None,
         };
         let main: AnyElement = if self.settings_page_open { self.render_settings_page(cx) } else { match (&self.pane, page) {
-            _ if self.skills.open => self.render_skills(cx),
             _ if self.notes.open => self.render_notes(window, cx),
             // A project's page takes the thread's place until a thread is
             // picked again (project_page.rs).

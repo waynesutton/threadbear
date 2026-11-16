@@ -266,5 +266,3 @@ What a first list of the cuts missed and the trial found: the `-ThreadbearPocket
 launch argument, the positional parameter shifting the tools test, and the
 App Store review notes. Expect a few like that in any feature: after the
 listed cuts, `git grep -i <feature>` across the repo finds the rest.
-
-The GPUI Skills page is `desktop/gpui/src/skills_page.rs`, using the existing runner skills store. Remove its rail button and Show Skills shortcut to hide it; General can turn off the whole store.
