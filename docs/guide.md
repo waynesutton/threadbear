@@ -1256,7 +1256,8 @@ the switch off puts the page back as it ships and keeps your changes for
 next time; Reset to the standard page clears them.
 
 The GPUI desktop app has the same Look switches, the same Customize panels
-for the Librarian and Scheduled pages, and the same background photo. It
+for the Librarian, Scheduled and Projects pages, and the same background
+photo. It
 picks up what you set in the Swift app the first time it opens, and the two
 share the pictures. You can also drop a photo from Finder on the
 background's Picture row in Settings. Two things differ there for now: a

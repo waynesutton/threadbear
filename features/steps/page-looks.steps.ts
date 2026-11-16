@@ -93,3 +93,33 @@ Then('the standard Scheduled page is shown and my Scheduled look is kept', async
   assert.equal((d as unknown as { homePage: { title: string } }).homePage.title, 'Scheduled');
   await this.app.do({ cmd: 'label-point', label: SCHEDULED_BEAR });
 });
+
+type ProjectsLook = { hidden: string[]; hiddenCardParts: string[] };
+const projects = (d: Dump) => (d as unknown as { looks: { on: { projects: boolean }; editing?: string; projects: ProjectsLook } }).looks;
+
+When('I customize the Projects page without its header or the cards\' icon tiles', async function(this: ThreadbearWorld) {
+  await this.app.do({ cmd: 'mode', mode: 'projects' });
+  await this.app.do({ cmd: 'look', page: 'projects', on: true, set: { hidden: ['header'], hiddenCardParts: ['art'] } });
+  await this.until('the Projects look saved', d => projects(d).on.projects && projects(d).projects.hiddenCardParts.includes('art') && d);
+});
+Then('the customized Projects page draws its cards without them', async function(this: ThreadbearWorld) {
+  await this.app.do({ cmd: 'label-point', label: 'Open ', prefix: true });
+  await assert.rejects(this.app.do({ cmd: 'label-point', label: 'Search projects' }));
+});
+When('I open Customize on the Projects page', async function(this: ThreadbearWorld) {
+  await this.app.do({ cmd: 'look', page: 'projects', customize: true });
+  await this.until('the Projects panel open', d => projects(d).editing === 'projects' && d);
+});
+Then('its panel has the Layout and Cards sections', async function(this: ThreadbearWorld) {
+  for (const label of ['Layout', 'Cards', 'Icon tile', 'Reset to the standard page']) {
+    await this.app.do({ cmd: 'label-point', label });
+  }
+});
+When('I turn off the Projects page customization', async function(this: ThreadbearWorld) {
+  await this.app.do({ cmd: 'look', page: 'projects', on: false });
+});
+Then('the standard Projects page is shown and my Projects look is kept', async function(this: ThreadbearWorld) {
+  const d = await this.until('the standard Projects page', d => !projects(d).on.projects && d);
+  assert.deepEqual(projects(d).projects.hiddenCardParts, ['art']);
+  await this.app.do({ cmd: 'label-point', label: 'Search projects' });
+});

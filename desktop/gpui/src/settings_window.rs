@@ -870,6 +870,7 @@ impl SettingsWindow {
         for (page, label, tip) in [
             (Page::Librarian, "Customize the Librarian page", "Add Customize to the Librarian page: its picture, a background, the layout, and what shows"),
             (Page::Scheduled, "Customize the Scheduled page", "Add Customize to the Scheduled page: its picture, a background, the layout, and what shows"),
+            (Page::Projects, "Customize the Projects page", "Add Customize to the Projects page: a picture of yours, a background, the layout, and what each card shows"),
         ] {
             let on = app.read(cx).customizable(page);
             let switch = self.switch_owned(format!("settings-look-{}", page.name()), on, tip.to_owned(), cx, move |this, on, cx| {
@@ -901,8 +902,8 @@ impl SettingsWindow {
         section(
             "settings-look",
             "Look",
-            "Customize the Librarian page adds Customize at the top right of the Librarian page: change or remove the bear, put a photo behind the page, move each part to the top, middle or bottom, hide parts and numbers, and show your GitHub activity. Customize the Scheduled page does the same for the Scheduled page: its picture, a background photo, and the picture, title and numbers each at the top, middle or bottom, or hidden. Turning any of them off puts its page back as it ships and keeps your changes for next time. Background picture puts a photo of yours (choose one, or drop it on the Picture row from Finder) behind a new thread in the main window, or behind every thread, faded so text stays readable in light and dark. A background can be an animated GIF, which plays (and holds still with Reduce Motion on). Pictures are copied into Threadbear's data folder and never sent anywhere.",
-            "change the Librarian or Scheduled page, or the background, for you.",
+            "Customize the Librarian page adds Customize at the top right of the Librarian page: change or remove the bear, put a photo behind the page, move each part to the top, middle or bottom, hide parts and numbers, and show your GitHub activity. Customize the Scheduled page does the same for the Scheduled page: its picture, a background photo, and the picture, title and numbers each at the top, middle or bottom, or hidden. Customize the Projects page adds a picture of your own (it has none as it ships), a background photo, the title and search and the cards each at the top, middle or bottom, or hidden, and what each card shows. Turning any of them off puts its page back as it ships and keeps your changes for next time. Background picture puts a photo of yours (choose one, or drop it on the Picture row from Finder) behind a new thread in the main window, or behind every thread, faded so text stays readable in light and dark. A background can be an animated GIF, which plays (and holds still with Reduce Motion on). Pictures are copied into Threadbear's data folder and never sent anywhere.",
+            "change the Librarian, Scheduled or Projects page, or the background, for you.",
             rows,
             cx,
         )
