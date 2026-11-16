@@ -238,10 +238,7 @@ is the crate as published, so `git log -p desktop/vendor` is the whole fork;
 a gpui-kit bump copies the new version in and puts that back.
 
 `desktop/vendor/gpui-base` keeps the input, text and test-support fixes listed
-in `desktop/Cargo.toml`. Private Notes uses opt-in per-line font scales in an
-unwrapped editor, with one line height large enough for its largest heading.
-Its pointer and selection positions use the same shaped lines; other inputs
-keep their normal font and wrapping. `desktop/vendor/gpui-pre` is GPUI 0.3.11 with file
+in `desktop/Cargo.toml`. `desktop/vendor/gpui-pre` is GPUI 0.3.11 with file
 drops leaving keyboard mode before hover hit tests, so dropping after typing
 still works. GPUI exposes no input-mode setter for an app shim. The published
 crates are separate commits from our changes; retain those patches on an

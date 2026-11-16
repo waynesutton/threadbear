@@ -762,7 +762,7 @@ impl Threadbear {
                     _ => self.set_mode(SidebarMode::Inbox, cx),
                 }
             }
-            Command::ShowNotes => { if self.notes.open {self.close_notes(cx)} else {self.show_notes(window,cx)} },
+            Command::ShowNotes => self.show_notes(window, cx),
             Command::Settings => self.open_settings(None, cx),
             Command::ZoomIn => self.zoom_in(window, cx),
             Command::ZoomOut => self.zoom_out(window, cx),
@@ -923,7 +923,7 @@ impl Threadbear {
     }
 
     pub(crate) fn can_go_back(&self) -> bool {
-        self.notes.open || self.history.can_go_back()
+        self.history.can_go_back()
     }
 
     pub(crate) fn can_go_forward(&self) -> bool {
@@ -931,7 +931,7 @@ impl Threadbear {
     }
 
     pub(crate) fn go_back(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        if self.notes.open { self.close_notes(cx); return; }
+        self.notes.open = false;
         let threads = self.threads.keys().cloned().collect::<std::collections::HashSet<_>>();
         let projects = self.projects.list.iter().map(|p| p.id.clone()).collect::<std::collections::HashSet<_>>();
         let can_show = |p: &NavPlace| match &p.project {

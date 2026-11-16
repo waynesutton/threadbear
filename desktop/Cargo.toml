@@ -26,8 +26,6 @@ exclude = ["vendor"]
 # scrolled half out of a pane is over its neighbour (13 Nov).
 [patch.crates-io]
 gpui-component = { path = "vendor/gpui-component" }
-# The unwrapped Notes editor also supports per-line font scales; ordinary
-# editors and wrapped text keep the normal sizing and layout.
 gpui-base = { path = "vendor/gpui-base" }
 # gpui-pre 0.3.11 as published, with file drags switching out of keyboard
 # modality before hover hit tests (window.rs). Otherwise a drop after typing

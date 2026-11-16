@@ -33,11 +33,6 @@ impl From<ShapedLine> for InputLine {
     }
 }
 impl InputLine {
-    #[cfg(feature = "test-support")]
-    pub(crate) fn font_size(&self) -> Option<Pixels> {
-        match &self.content { Content::Text(line) => Some(line.font_size), Content::Inline(_) => None }
-    }
-
     pub(crate) fn inline(text: SharedString, fragments: Vec<InlineFragment>) -> Self {
         let width = fragments.last().map_or(px(0.), |f| f.x + f.width);
         Self {

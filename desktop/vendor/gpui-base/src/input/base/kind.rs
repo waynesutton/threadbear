@@ -78,9 +78,6 @@ impl MultiLineMode for EditorMode {}
 /// during an edit. Adding a field an editor renders belongs here and leaves
 /// the engine's callbacks alone.
 pub trait InputExtras: Default + 'static {
-    /// Optional per-buffer-line font scale, used by unwrapped rich source editors.
-    fn line_font_scale(&self, _row: usize) -> f32 { 1. }
-
     /// This app's: the whole value was set (`set_value`), which emits no
     /// change, so what was drawn for the old text goes.
     fn value_set(&mut self) {}
@@ -400,7 +397,6 @@ impl InputExtras for TextareaExtras {
 
 /// What a code editor adds on top of multi-line text: language features.
 pub struct EditorExtras {
-    pub(crate) line_font_scales: std::collections::BTreeMap<usize, f32>,
     pub(crate) lsp: Lsp,
     pub(crate) decorations: DecorationCollections,
     pub(crate) range_decorations: DecorationCollections<RangeDecoration>,
@@ -417,7 +413,6 @@ pub struct EditorExtras {
 impl Default for EditorExtras {
     fn default() -> Self {
         Self {
-            line_font_scales: Default::default(),
             lsp: Lsp::default(),
             decorations: DecorationCollections::default(),
             range_decorations: DecorationCollections::default(),
