@@ -39,6 +39,7 @@ impl Threadbear {
         let page = self.tasks_draft_page.take().unwrap_or_else(|| cx.new(|cx| TasksPage::new(app, client, window, cx)));
         let focus = page.read(cx).focus.clone();
         window.focus(&focus,cx);
+        crate::web_panels::keyboard_to_app(window);
         page.update(cx, |p, cx| {
             p.refresh(cx);
             p.change("tasks.setPreferences", json!({"theme":style::appearance().name()}), cx);
@@ -49,7 +50,7 @@ impl Threadbear {
         let Some(page) = self.tasks_page.take() else { return false; };
         if page.read(cx).draft_dirty(cx) || page.read(cx).busy { self.tasks_draft_page = Some(page); }
         let (window, focus) = (self.main_window, self.root_focus.clone());
-        cx.defer(move |cx| { window.update(cx, |_, window, cx| window.focus(&focus, cx)).ok(); });
+        cx.defer(move |cx| { window.update(cx, |_, window, cx| { window.focus(&focus, cx); crate::web_panels::keyboard_to_app(window); }).ok(); });
         self.sync_menus(cx); cx.notify(); true
     }
     pub(crate) fn load_project_task_count(&mut self, id: &str, cx: &mut Context<Self>) {
