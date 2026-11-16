@@ -230,7 +230,6 @@ private struct GeneralSettings: View {
     @AppStorage(ActivityRecorder.enabledKey) private var activityLog = false
     @AppStorage(AppAppearance.key) private var appearance: AppAppearance = .system
     @AppStorage(SettingsPlace.key) private var settingsPlace: SettingsPlace = .panel
-    @AppStorage(BearChat.shownKey) private var bearShown = true
     @AppStorage(NotesStore.shownKey) private var notesShown = true
     @AppStorage(FileOpenPlace.key) private var fileOpenPlace: FileOpenPlace = .threadbear
     @AppStorage(SlashListChoice.key) private var slashList: SlashListChoice = .mike
@@ -313,13 +312,6 @@ private struct GeneralSettings: View {
         SettingsGate { settings in
             Form {
                 thisMac
-
-                SettingsSection("The bear",
-                                about: "The bear at the top right of the sidebar is a chat for anything, out loud too (right-click it), that remembers what it learns about you. Hiding it only takes the button away: its chats stay in the sidebar, and its memory and Voice still work.",
-                                ask: "change what the bear knows or how it talks. Its instructions are CLAUDE.md in ~/ThreadbearThreads/Bear.") {
-                    Toggle("Show the bear in the sidebar", isOn: $bearShown)
-                        .tip("Show or hide the bear at the top right of the sidebar")
-                }
 
                 if app.skillsSupported {
                     SettingsSection("Skills",

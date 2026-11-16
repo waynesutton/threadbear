@@ -272,7 +272,7 @@ Spec for all four: `features/connectors.feature` has two scenarios; add setup, a
 
 ### 2.7 The bear
 
-**What it is.** A bear at the top right of the sidebar that opens a chat for anything. Its chats are ordinary threads in `~/ThreadbearThreads/Bear`, with `CLAUDE.md` there as its instructions and a memory it keeps. Right-click has Talk Out Loud and Show the Bear's Folder. Settings > General > Show the bear in the sidebar.
+**What it is.** A bear at the top right of the sidebar that opens a chat for anything. Its chats are ordinary threads in `~/ThreadbearThreads/Bear`, with `CLAUDE.md` there as its instructions and a memory it keeps. Right-click has Talk Out Loud and Show the Bear's Folder. It's always shown; there's no setting to hide it.
 - Not an experiment. Talk Out Loud needs Voice (2.8).
 - Swift: `Voice/BearChat.swift`, bear parts of `Voice/VoiceBear.swift`, `Views/SidebarView.swift`, `AppModel+ThreadActions.swift`.
 - GPUI: a button in `sidebar.rs`, starting or opening its thread through `threads.create` with that folder; the folder setup ported from `BearChat.swift`. Mike passed over drawn bears on 13 Nov, so use the SVG the About window draws. Size S to M.

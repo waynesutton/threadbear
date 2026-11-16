@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import type { ThreadbearWorld } from '../support/world.ts';
-type Bear={folder:string;shown:boolean;thread?:string|null};
+type Bear={folder:string;thread?:string|null};
 const chats=new WeakMap<ThreadbearWorld,string>();
 const bear=(d:unknown)=>(d as {bearChat:Bear}).bearChat;
 Then('the bear draft uses its own local folder',async function(this:ThreadbearWorld){
@@ -20,9 +20,6 @@ Then('the bear chat is open',async function(this:ThreadbearWorld){
 });
 Then('the same bear chat is open',async function(this:ThreadbearWorld){
   await this.until('same bear thread',d=>d.selection?.id===chats.get(this));
-});
-Then("the bear's button is hidden",async function(this:ThreadbearWorld){
-  await this.until('bear hidden',d=>!bear(d).shown);
 });
 
 When("I open the bear's menu",async function(this:ThreadbearWorld){
