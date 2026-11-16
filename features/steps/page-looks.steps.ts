@@ -71,8 +71,9 @@ When('I customize the Scheduled page without its bear or its On number', async f
   await this.until('the Scheduled look saved', d => scheduled(d).on.scheduled && scheduled(d).scheduled.hidden.includes('picture') && d);
 });
 Then('the customized Scheduled page draws its title and numbers without them', async function(this: ThreadbearWorld) {
-  await this.app.do({ cmd: 'label-point', label: 'Scheduled' });
-  await this.app.do({ cmd: 'label-point', label: 'Due in a day', prefix: true });
+  // Tiles are labelled by their tips (home_page.rs).
+  await this.app.do({ cmd: 'label-point', label: 'On schedules due to run in the next 24 hours' });
+  await assert.rejects(this.app.do({ cmd: 'label-point', label: 'Schedules that will still run: not paused and not finished' }));
   await assert.rejects(this.app.do({ cmd: 'label-point', label: SCHEDULED_BEAR }));
 });
 When('I open Customize on the Scheduled page', async function(this: ThreadbearWorld) {
@@ -80,7 +81,8 @@ When('I open Customize on the Scheduled page', async function(this: ThreadbearWo
   await this.until('the Scheduled panel open', d => (d as unknown as { looks: { editing?: string } }).looks.editing === 'scheduled' && d);
 });
 Then('its panel has the Layout and Numbers sections', async function(this: ThreadbearWorld) {
-  for (const label of ['Layout', 'Numbers', 'Reset to the standard page']) {
+  // The panel's switches are labelled by their tips.
+  for (const label of ['Show or hide numbers on the page', 'Show or hide due in a day', 'Reset to the standard page']) {
     await this.app.do({ cmd: 'label-point', label });
   }
 });
@@ -111,7 +113,7 @@ When('I open Customize on the Projects page', async function(this: ThreadbearWor
   await this.until('the Projects panel open', d => projects(d).editing === 'projects' && d);
 });
 Then('its panel has the Layout and Cards sections', async function(this: ThreadbearWorld) {
-  for (const label of ['Layout', 'Cards', 'Icon tile', 'Reset to the standard page']) {
+  for (const label of ['Show or hide the title, search and New project. Hidden, the cards show every project', 'The wide tile with the project\'s icon. Off, cards are just text', 'Reset to the standard page']) {
     await this.app.do({ cmd: 'label-point', label });
   }
 });
