@@ -61,26 +61,6 @@ Then('the customized page draws its background', async function(this: Threadbear
   await this.app.do({ cmd: 'label-point', label: 'Page background photo' });
 });
 
-When('I customize the Scheduled page with its numbers at the bottom', async function(this: ThreadbearWorld) {
-  await this.app.do({ cmd: 'mode', mode: 'scheduled' });
-  await this.app.do({ cmd: 'look', page: 'scheduled', on: true, set: { hidden: ['picture', 'about'], places: { numbers: 'bottom' }, hiddenNumbers: ['on', 'dueSoon', 'byThreads', 'paused', 'runs'] } });
-});
-Then('the Scheduled numbers are drawn near the bottom of the window', async function(this: ThreadbearWorld) {
-  const geometry = String(await this.app.do({ cmd: 'window' }));
-  const height = Number(/x([0-9]+)$/.exec(geometry)?.[1]);
-  const point = String(await this.app.do({ cmd: 'label-point', label: 'On schedules that run over and over, rather than once' }));
-  const y = Number(point.split(' ').at(-1));
-  assert.ok(height > 0 && y > height * 0.6, `${point} should be in the bottom of ${geometry}`);
-});
-When('I search for projects then hide the customized page header', async function(this: ThreadbearWorld) {
-  await this.app.do({ cmd: 'mode', mode: 'projects' });
-  await this.app.do({ cmd: 'search', projects: true, text: 'nothing matches this query' });
-  await this.app.do({ cmd: 'look', page: 'projects', on: true, set: { hidden: ['header'], hiddenCardParts: ['art', 'state'] } });
-});
-Then('every project card is shown', async function(this: ThreadbearWorld) {
-  await this.app.do({ cmd: 'label-point', label: 'Open Threadbear' });
-  await this.app.do({ cmd: 'label-point', label: "Open Photo sync" });
-});
 const animation = Buffer.from('47494638396101000100800000ce33443355dd21ff0b4e45545343415045322e30030100000021f90400230000002c000000000100010000020244010021f90400230000002c00000000010001000002024c01003b', 'hex');
 When('I choose an animated Librarian background', async function(this: ThreadbearWorld) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'look-animation-'));

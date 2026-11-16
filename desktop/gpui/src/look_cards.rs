@@ -316,8 +316,6 @@ impl Threadbear {
                         .size(px(side))
                         .rounded(px(2.))
                         .bg(shade(day.level, cx))
-                        .role(Role::Image)
-                        .aria_label(format!("{} {} on {}", day.count, if card == "github" { "contributions" } else { "threads" }, day.date))
                         .tip(format!("{} on {}", day.count, day.date))
                         .when(lit, |d| d.border_1().border_color(ink))
                         .on_hover(cx.listener(move |this, over: &bool, _, cx| {
@@ -328,7 +326,7 @@ impl Threadbear {
                             }
                             cx.notify();
                         }))
-                        .when(card == "github", |d| d.role(Role::Button).on_click(move |_, _, cx| open(&click, cx))),
+                        .role(Role::Button).on_click(move |_, _, cx| open(&click, cx)),
                 );
             }
         }

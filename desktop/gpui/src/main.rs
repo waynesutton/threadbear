@@ -73,8 +73,6 @@ mod librarian;
 mod librarian_look;
 mod look_cards;
 mod looks;
-mod scheduled_look;
-mod projects_look;
 mod picture_picker;
 mod profile_page;
 mod mac_switch;

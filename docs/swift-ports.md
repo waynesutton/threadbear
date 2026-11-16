@@ -95,9 +95,9 @@ the keyboard shortcut.
 | 50 | 2b0a8dab | Photo picker as a sheet; drags from Photos | done |
 | 47 | 5b2e6d8e | Your own picture sticks | done |
 | 6 | 13069201 | Animated GIF backgrounds play | done |
-| 39 | 6f5cc154 | Customize the Scheduled page | done |
-| 38 | 78be088e | Scheduled page parts move to their place | done |
-| 37 | 84fad5ff | Customize the Projects page | done |
+| 39 | 6f5cc154 | Customize the Scheduled page | to do |
+| 38 | 78be088e | Scheduled page parts move to their place | to do |
+| 37 | 84fad5ff | Customize the Projects page | to do |
 
 ## Profile page
 

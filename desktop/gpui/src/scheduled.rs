@@ -547,7 +547,6 @@ impl Threadbear {
     /// `ScheduledHome`: what clicking Scheduled in the activity bar shows in
     /// the main panel, beside the sidebar's list.
     pub(crate) fn render_scheduled_home(&mut self, cx: &mut Context<Self>) -> AnyElement {
-        if self.customizable(crate::looks::Page::Scheduled) { return self.render_customized_scheduled(cx); }
         let now = now_ms();
         let local = Local::now();
         let next = rules::next(&self.scheduled.list);
@@ -617,7 +616,7 @@ impl Threadbear {
 }
 
 /// What the ⓘ beside the page's title says.
-pub(crate) const SCHEDULED_MORE: &str = "Once at a set time, or over and over, like every weekday at 9. Each goes to a thread, or starts a new thread each time. Agents book them too, to check back on something. Make one with New schedule in the list, from Schedule\u{2026} in a composer, or by asking an agent. A schedule that sends to a thread puts it under Waiting until then. A schedule that starts a new thread can run on another of your Macs (Runs on). Schedules live in your Convex backend, so with no internet they wait.";
+const SCHEDULED_MORE: &str = "Once at a set time, or over and over, like every weekday at 9. Each goes to a thread, or starts a new thread each time. Agents book them too, to check back on something. Make one with New schedule in the list, from Schedule\u{2026} in a composer, or by asking an agent. A schedule that sends to a thread puts it under Waiting until then. A schedule that starts a new thread can run on another of your Macs (Runs on). Schedules live in your Convex backend, so with no internet they wait.";
 
 /// Scripted commands for the Scheduled view, as the Swift app's: a heading
 /// folded or opened (`scheduleSection`). A row's buttons are clicked by their

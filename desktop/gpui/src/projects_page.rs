@@ -4,8 +4,6 @@
 // search over what each is about. A card opens the project's page; the
 // sidebar's Projects view lists the threads.
 use crate::app::Threadbear;
-use threadbear_core::looks::{ProjectsLook, ProjectsBlock, CardPart as LookCardPart, PictureLook, Place};
-use crate::looks::{Page, Slot};
 use crate::projects::project_icon;
 use crate::style::{self, px};
 use crate::{icons, now_ms};
@@ -66,7 +64,6 @@ impl Threadbear {
 
     /// What's typed in the search, if anything.
     fn projects_query(&self, cx: &App) -> Option<String> {
-        if self.customizable(Page::Projects) && !self.look::<ProjectsLook>().shows(ProjectsBlock::Header) { return None; }
         let (search, _) = self.projects.search.as_ref()?;
         let query = search.read(cx).value().trim().to_owned();
         (!query.is_empty()).then_some(query)
@@ -91,9 +88,7 @@ impl Threadbear {
             window.focus(&handle, cx);
         }
         let decisions = self.project_decisions_on();
-        let custom = self.customizable(Page::Projects);
-        let look: ProjectsLook = self.look();
-        let query = if custom && !look.shows(ProjectsBlock::Header) { None } else { self.projects_query(cx) };
+        let query = self.projects_query(cx);
         let (all, total, summary) = {
             let sections = Sections::build(&self.projects.list, self.threads.values().map(|t| &**t), now_ms());
             let all = rules::cards(&sections, 3, decisions);
@@ -132,24 +127,6 @@ impl Threadbear {
         } else {
             self.render_project_cards(all, cx)
         };
-        if custom {
-            let pic = look.pic();
-            let backdrop = pic.background.as_deref().and_then(|f| self.render_backdrop(Slot::Page(Page::Projects), f, pic.background_dim, pic.background_focus, cx));
-            let mut zones: [Vec<AnyElement>; 3] = Default::default();
-            let mut header = Some(header.into_any_element());
-            let mut body = Some(body);
-            for block in look.layout() {
-                let zone = match look.place(block) { Place::Top => 0, Place::Middle => 1, Place::Bottom => 2 };
-                let el = match block {
-                    ProjectsBlock::Picture => self.render_look_picture(pic.picture, pic.picture_file.as_deref(), pic.picture_size.side(), None, cx),
-                    ProjectsBlock::Header => header.take(),
-                    ProjectsBlock::Cards => body.take(),
-                };
-                if let Some(el) = el { zones[zone].push(el); }
-            }
-            let editor = (self.looks.editing == Some(Page::Projects)).then(|| self.render_projects_look_editor(cx));
-            return self.render_customized_page(Page::Projects, backdrop, zones, true, 1160., "Change the picture, background, layout, and what each project card shows", vec![], editor, cx);
-        }
         div()
             .id("projects-home")
             .size_full()
@@ -236,16 +213,12 @@ impl Threadbear {
     fn render_project_card(&mut self, card: CardView, width: f32, cx: &mut Context<Self>) -> AnyElement {
         let id = card.project.id.clone();
         let secondary = style::secondary_text(cx);
-        let look: ProjectsLook = self.look();
-        let custom = self.customizable(Page::Projects);
-        let show = |part| !custom || look.shows_card(part);
-        let art = show(LookCardPart::Art).then(|| self.render_project_art(&card.project, if show(LookCardPart::Threads) { card.status.open } else { 0 }, width, cx));
+        let art = self.render_project_art(&card.project, card.status.open, width, cx);
         let mut words = v_flex()
             .gap(px(5.))
             .px(px(2.))
             .child(div().truncate().text_size(px(15.)).line_height(px(19.)).font_semibold().child(card.project.title.clone()))
-            .when(show(LookCardPart::Status), |d| d.child(project_status_line(&card.status, card.last_activity_ms, cx)));
-        if !show(LookCardPart::Art) && show(LookCardPart::Threads) && card.status.open > 0 { words = words.child(h_flex().child(thread_count_badge(card.status.open, &id, cx))); }
+            .child(project_status_line(&card.status, card.last_activity_ms, cx));
         // Its parts are inside its card rather than cards of their own; its
         // page lists them with their state.
         if !card.parts.is_empty() {
@@ -260,14 +233,14 @@ impl Threadbear {
                     .child(div().min_w_0().truncate().child(card.parts.join(" · "))),
             );
         }
-        if show(LookCardPart::State) && !card.project.state.is_empty() {
+        if !card.project.state.is_empty() {
             words = words.child(div().pt(px(2.)).text_size(px(style::size::LABEL)).line_height(px(16.)).text_color(secondary).line_clamp(3).child(rules::first_lines(&card.project.state)));
         }
         let (open_id, menu_id) = (id.clone(), id.clone());
         crate::highlights::tipped(div().id(gpui_kit::SharedString::from(format!("project-card-{id}"))).w(px(width)).flex_none().cursor_pointer(), format!("Open {}", card.project.title))
             .on_click(cx.listener(move |this, _: &ClickEvent, _, cx| this.open_project_page(&open_id, cx)))
             .on_mouse_down(MouseButton::Right, cx.listener(move |this, ev: &MouseDownEvent, window, cx| this.open_project_menu(&menu_id, ev.position, window, cx)))
-            .child(v_flex().gap(px(10.)).children(art).child(words))
+            .child(v_flex().gap(px(10.)).child(art).child(words))
             .into_any_element()
     }
 
