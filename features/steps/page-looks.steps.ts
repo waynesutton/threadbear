@@ -117,7 +117,9 @@ When('I open Customize on the Projects page', async function(this: ThreadbearWor
   await this.until('the Projects panel open', d => projects(d).editing === 'projects' && d);
 });
 Then('its panel has the Layout and Cards sections', async function(this: ThreadbearWorld) {
-  for (const label of ['Show or hide the title, search and New project. Hidden, the cards show every project', 'The wide tile with the project\'s icon. Off, cards are just text', 'Reset to the standard page']) {
+  // Reset sits at the panel's foot, below the fold on GitHub's Mac screen
+  // (as on the Scheduled panel), so it isn't looked for here.
+  for (const label of ['Show or hide the title, search and New project. Hidden, the cards show every project', 'The wide tile with the project\'s icon. Off, cards are just text']) {
     await this.app.do({ cmd: 'label-point', label });
   }
 });
