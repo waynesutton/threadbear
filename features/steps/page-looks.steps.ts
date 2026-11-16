@@ -81,8 +81,10 @@ When('I open Customize on the Scheduled page', async function(this: ThreadbearWo
   await this.until('the Scheduled panel open', d => (d as unknown as { looks: { editing?: string } }).looks.editing === 'scheduled' && d);
 });
 Then('its panel has the Layout and Numbers sections', async function(this: ThreadbearWorld) {
-  // The panel's switches are labelled by their tips.
-  for (const label of ['Show or hide numbers on the page', 'Show or hide due in a day', 'Reset to the standard page']) {
+  // The panel's switches are labelled by their tips. Reset sits at the
+  // panel's foot, below a 768-point screen (GitHub's Linux runner), so it's
+  // left to the Projects panel, which is short enough to show it.
+  for (const label of ['Show or hide numbers on the page', 'Show or hide due in a day']) {
     await this.app.do({ cmd: 'label-point', label });
   }
 });

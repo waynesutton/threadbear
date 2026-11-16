@@ -261,7 +261,10 @@ impl SettingsWindow {
             .text_size(px(12.))
             .line_height(px(style::natural_line(12.)))
             .when_some(problem, |s, problem| s.child(h_flex().gap(px(6.)).items_start().text_color(orange).child(div().pt(px(1.)).child(icons::symbol("exclamationmark.triangle").with_size(px(12.)))).child(div().flex_1().child(problem))))
-            .child(h_flex().items_center().child(tipped_as(div().id("settings-keyboard-file"), path, gpui_kit::Role::GenericContainer).text_color(secondary).child(rules::FOOTER)).child(div().flex_1()).child(reset_all));
+            // The words wrap and Reset All keeps its place: in a narrow pane
+            // (Settings over the main panel, beside the sidebar and a side
+            // pane) the line ran on and pushed the button out of sight.
+            .child(h_flex().items_center().gap(px(12.)).child(tipped_as(div().id("settings-keyboard-file").flex_1().min_w_0(), path, gpui_kit::Role::GenericContainer).text_color(secondary).child(rules::FOOTER)).child(div().flex_none().child(reset_all)));
         let me = cx.entity().downgrade();
         v_flex()
             .id("settings-keyboard")
