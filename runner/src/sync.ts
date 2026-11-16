@@ -52,6 +52,7 @@ import { BodyCollector, prepareBody, type BodyDoc, type RawBody } from './full-s
 import type { ConvexUse, ConvexUseTally } from './convex-use.ts';
 import { cutSafely } from './safe-cut.ts';
 import { siteOf } from './convex-admin.ts';
+import { withNetworkCause } from './network-cause.ts';
 import { credentialUrlProblem } from './secure-url.ts';
 // How soon what the backend left out of a closed thread id goes again.
 const CLOSED_RETRY_MS = 30_000;
@@ -142,18 +143,18 @@ export type SyncConfig = {
 // lower one means its backend hasn't been deployed since this runner was:
 // said in runner.status, tb status and the log rather than stopping, since
 // the runner only adds to what it sends while the number stays the same.
-export const BACKEND_API_VERSION = 81;
+export const BACKEND_API_VERSION = 82;
 // From this one a message row can be a login's note (role "note"): a thread
 // that moved to another login or is waiting for room says so on another Mac.
 export const LOGIN_NOTES_API_VERSION = 78;
 const HELD_NOTES = 200;
-// webhooks:* and the /hook/ route (this copy's, experiment webhooks; 78
-// here until Mike's release took 77 to 79).
-export const WEBHOOKS_API_VERSION = 81;
+// webhooks:* and the /hook/ route (this copy's, experiment webhooks; 78,
+// then 81, here until Mike's releases took 77 to 80).
+export const WEBHOOKS_API_VERSION = 82;
 // sync:publishPrint and sync:unpublishPrint (Prints can be published).
-// 73, then 77, in this copy before Mike's releases took 73 to 79 (12 and
-// 14 Nov 2026).
-export const PRINTS_API_VERSION = 80;
+// 73, then 77, then 80, in this copy before Mike's releases took 73 to 80
+// (12, 14 and 16 Nov 2026).
+export const PRINTS_API_VERSION = 81;
 // From this one sync:sharedThreads lists a runner's rows shared by link, which
 // it checks against its own threads on every start and every
 // SHARE_RECONCILE_MS (reconcileShares).
@@ -744,8 +745,12 @@ export function convexPoster(url: string, fetchFn: typeof fetch = fetch): Post {
       body: wellFormedJson(JSON.stringify({ path: fn, args, format: 'json' })),
       redirect: 'error',
       signal: AbortSignal.timeout(POST_TIMEOUT_MS),
-    });
-    const body = (await res.json().catch(() => undefined)) as { status?: string; value?: unknown; errorMessage?: string; errorData?: unknown } | undefined;
+    }).catch((e: unknown) => { throw withNetworkCause(e); });
+    const body = (await res.json().catch((e: unknown) => {
+      // A write may already have committed. Keep the read failure useful
+      // without copying JSON parser snippets from the private response.
+      throw withNetworkCause(new Error(`Couldn't read the Convex reply (HTTP ${res.status})`, { cause: e }));
+    })) as { status?: string; value?: unknown; errorMessage?: string; errorData?: unknown } | undefined;
     if (!res.ok || !body || body.status !== 'success') {
       // A ConvexError's data (`{ kind, message }`), as the Convex client
       // keeps it, so forbiddenText can tell a runner key's refusal.
@@ -1802,6 +1807,19 @@ export class ConvexSync {
     return { id: r.id, token: r.token, expiresAt: r.expiresAt };
   }
 
+  /**
+   * A one-use pairing code for the phone's QR code (API 80, convex/tokens.ts):
+   * the phone trades it for its token. A backend without it fails here,
+   * said as "older than this runner", and no token is ever put in a QR code
+   * instead (Daybreak 127).
+   */
+  async issuePairingCode(args: { name: string; days?: number }): Promise<{ id: string; code: string; expiresAt: string }> {
+    this.mustBeOn();
+    const r = (await this.backend('mutation', 'sync:issuePairingCode', { key: this.deps.key, ...args })) as { id?: unknown; code?: unknown; expiresAt?: unknown } | null;
+    if (!r || typeof r.id !== 'string' || typeof r.code !== 'string' || typeof r.expiresAt !== 'string') throw new Error('The backend gave no pairing code back.');
+    return { id: r.id, code: r.code, expiresAt: r.expiresAt };
+  }
+
   /** runners.setOrder: Mike's runner order, the one the phone sets too (API 58). */
   async setRunnerOrder(runnerIds: string[]): Promise<void> {
     this.mustBeOn();
@@ -1809,7 +1827,7 @@ export class ConvexSync {
     await this.backend('mutation', 'sync:setRunnerOrder', { key: this.deps.key, runnerIds });
   }
 
-  /** Prints can be published: sync is on and the backend is API 80 or later. */
+  /** Prints can be published: sync is on and the backend is API 81 or later. */
   printsProblem(): string | undefined {
     if (this.off) return 'Publishing needs your Convex backend, which is off on this runner.';
     if ((this.backendApiVersion ?? 0) < PRINTS_API_VERSION) return 'The backend is too old to publish a print: it deploys with the runner\'s next update, so try again in a few minutes.';
