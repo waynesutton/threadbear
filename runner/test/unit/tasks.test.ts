@@ -26,6 +26,14 @@ test('Tasks bridge supplies its own credentials and preserves retry ids', async 
 test('Tasks bridge rejects disabled, offline and unknown operations', async () => {
   await assert.rejects(
     new Tasks(
+      () => ({ key: 'owner', apiVersion: 83, post: async () => { throw new Error('Must not reach the old backend'); } }),
+      () => true,
+      () => {},
+    ).call('create', { title: 'Work in progress', status: 'doing' }),
+    /Update the Threadbear backend/,
+  );
+  await assert.rejects(
+    new Tasks(
       () => undefined,
       () => false,
       () => {},

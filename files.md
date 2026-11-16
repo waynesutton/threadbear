@@ -4,9 +4,10 @@
 
 - `convex/tasks.ts`, `convex/taskFields.ts`: authenticated cloud-owned tasks and synced preferences.
 - `runner/src/tasks.ts`: desktop/agent bridge and realtime invalidation.
-- `desktop/gpui/src/tasks_page.rs`: native Tasks board/list, editor and background controls.
+- `desktop/gpui/src/tasks_page.rs`: native Tasks quick-add list, board, row menu, editor and background controls.
 - `web/src/tasks.tsx`, `web/src/tasks.css`: authenticated responsive Tasks route.
 - `web/src/tasks-draft.ts`, `web/src/tasks-draft.test.ts`: field-specific edits that preserve concurrent changes.
+- `web/src/tasks-order.ts`, `desktop/core/src/task_order.rs`: where dropped tasks, columns, list sections and project groups land, and how a quick-added line splits into title and note. Same rules on both, each with tests.
 - `runner/test/unit/tasks*.test.ts`, `features/tasks.feature`: backend/bridge and native behavior checks.
 - `prds/realtime-tasks.md`: scope, delivery constraints and verification checkpoint.
 

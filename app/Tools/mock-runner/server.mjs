@@ -603,7 +603,7 @@ async function handle(client, { id, method, params = {} }) {
 // Isolated task fixtures for native UI specs; never reaches Convex.
 const mockTasks = new Map();
 let tasksFailNext = false;
-const mockTaskPrefs = { defaultView: 'board', columnOrder: ['backlog','todo','done'], grouping: 'status', sort: 'manual', fade: .85, theme: 'system' };
+const mockTaskPrefs = { defaultView: 'list', columnOrder: ['backlog','todo','doing','done'], listOrder: ['doing','todo','backlog','done'], grouping: 'status', sort: 'manual', fade: .85, theme: 'system' };
 async function dispatch(client, method, p) {
   if (method.startsWith('tasks.')) {
     if (!process.env.TB_MOCK_TASKS) throw new Error('Tasks is off');
@@ -615,7 +615,7 @@ async function dispatch(client, method, p) {
       case 'tasks.projects': return projects.map(p => ({id:p.id,runnerId:'mock',title:p.title}));
       case 'tasks.count':
       case 'tasks.projectCount': return {count:[...mockTasks.values()].filter(t=>!t.deleted && t.project?.id === (p.project?.id ?? p.project)).length,more:false};
-      case 'tasks.create': if (!mockTasks.has(p.id)) mockTasks.set(p.id,{id:p.id,title:p.title,notes:p.notes??'',status:p.status??'todo',project:p.project??null,position:Date.now(),createdAt:Date.now(),updatedAt:Date.now(),deleted:false}); break;
+      case 'tasks.create': if (!mockTasks.has(p.id)) mockTasks.set(p.id,{id:p.id,title:p.title,notes:p.notes??'',status:p.status??'todo',project:p.project??null,position:p.position??Date.now(),createdAt:Date.now(),updatedAt:Date.now(),deleted:false}); break;
       case 'tasks.update': if (!mockTasks.has(p.id)) throw new Error('Task no longer exists'); Object.assign(mockTasks.get(p.id),p,{updatedAt:Date.now()}); break;
       case 'tasks.remove': if(mockTasks.has(p.id)) mockTasks.get(p.id).deleted=true; break;
       case 'tasks.restore': if(mockTasks.has(p.id)) mockTasks.get(p.id).deleted=false; break;
@@ -1747,6 +1747,12 @@ async function dispatch(client, method, p) {
         const row = [...mockTasks.values()].find(t=>t.title===p.complete);
         if (!row) throw rpcError(-32602,'No mock task with that title');
         row.status='done'; broadcast('tasks.updated',{});
+      }
+      // Another device moving a task: {move: title, status}.
+      if (p.move) {
+        const row = [...mockTasks.values()].find(t=>t.title===p.move);
+        if (!row) throw rpcError(-32602,'No mock task with that title');
+        row.status=p.status??'doing'; row.updatedAt=Date.now(); broadcast('tasks.updated',{});
       }
       return {};
     case 'mock.instructions':

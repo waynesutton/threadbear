@@ -389,4 +389,7 @@
 //    deduped, batched); webhooks:issueWebhook, listWebhooks and
 //    revokeWebhook take the owner key. A runner offers webhooks only from 82.
 // 83: Native Tasks, cloud-owned and editable while the runner is offline.
-export const API_VERSION = 83;
+// 84: Tasks take a Doing status and a position on create, and preferences
+//    keep projectOrder and listOrder; a columnOrder saved before Doing comes
+//    back with it.
+export const API_VERSION = 84;

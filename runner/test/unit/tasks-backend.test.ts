@@ -61,13 +61,33 @@ test('invalid projects, empty titles and invalid column order are refused', asyn
 });
 test('default view is explicit and preference patches preserve other choices', async () => {
   const b = await setup();
-  assert.equal((await b.run('preferences')).defaultView, 'board');
+  assert.equal((await b.run('preferences')).defaultView, 'list');
+  await b.run('setPreferences', { defaultView: 'board' });
   await b.run('setPreferences', { defaultView: 'list' });
   await b.run('setPreferences', { backgroundColor: '#112233', fade: 0.6 });
   const prefs = await b.run('preferences');
   assert.equal(prefs.defaultView, 'list');
   assert.equal(prefs.backgroundColor, '#112233');
   assert.equal(prefs.fade, 0.6);
+});
+test('Doing is a status, and orders saved before it get it back', async () => {
+  const b = await setup();
+  await b.run('create', { id: 'w', title: 'Write it', status: 'doing', position: 5 });
+  const row = (await b.run('list')).items.find((t: { id: string }) => t.id === 'w');
+  assert.equal(row.status, 'doing');
+  assert.equal(row.position, 5);
+  const fresh = await b.run('preferences');
+  assert.deepEqual(fresh.columnOrder, ['backlog', 'todo', 'doing', 'done']);
+  assert.deepEqual(fresh.listOrder, ['doing', 'todo', 'backlog', 'done']);
+  // An older client still sends three columns; Doing goes back after Todo.
+  await b.run('setPreferences', { columnOrder: ['done', 'todo', 'backlog'] });
+  assert.deepEqual((await b.run('preferences')).columnOrder, ['done', 'todo', 'doing', 'backlog']);
+  await b.run('setPreferences', { listOrder: ['backlog', 'doing', 'todo', 'done'], projectOrder: ['mac/b', 'none', 'mac/a'] });
+  const prefs = await b.run('preferences');
+  assert.deepEqual(prefs.listOrder, ['backlog', 'doing', 'todo', 'done']);
+  assert.deepEqual(prefs.projectOrder, ['mac/b', 'none', 'mac/a']);
+  await assert.rejects(b.run('setPreferences', { columnOrder: ['todo', 'todo', 'done'] }), /each status once/);
+  await assert.rejects(b.run('setPreferences', { projectOrder: ['mac/a', 'mac/a'] }), /each project once/);
 });
 test('rapid updates always invalidate subscribers and pages do not repeat tasks', async () => {
   const b = await setup();

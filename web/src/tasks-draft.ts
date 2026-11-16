@@ -2,7 +2,7 @@
 export type TaskDraft = {
   title: string;
   notes: string;
-  status: 'backlog' | 'todo' | 'done';
+  status: 'backlog' | 'todo' | 'doing' | 'done';
   project: { id: string; runnerId: string } | null;
 };
 export function taskDraftChanges(base: TaskDraft, next: TaskDraft): Partial<TaskDraft> {

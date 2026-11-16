@@ -18,6 +18,9 @@ const CIRCLE_FILLED: &[u8] = br#"<svg xmlns="http://www.w3.org/2000/svg" viewBox
 
 /// A filled message bubble distinguishes a board card worked on by this
 /// thread from the outline button that opens another thread.
+/// Tasks' Doing: a ring half filled, as Linear marks work in progress.
+const CIRCLE_HALF: &[u8] = br#"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8" fill="none" stroke="black" stroke-width="2"/><path d="M12 6a6 6 0 0 1 0 12z" fill="black"/></svg>"#;
+
 const BUBBLE_FILLED: &[u8] = br#"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M4 3h16a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H7l-5 3V5a2 2 0 0 1 2-2z" fill="black"/></svg>"#;
 
 /// `hand.raised.fill`, the asks card's mark: Lucide's hand is an outline, and
@@ -84,6 +87,7 @@ pub fn try_symbol(name: &str) -> Option<Icon> {
         "star.fill" => return Some(Icon::default().data(STAR_FILLED)),
         "bubble.left.fill" => return Some(Icon::default().data(BUBBLE_FILLED)),
         "circle.fill" => return Some(Icon::default().data(CIRCLE_FILLED)),
+        "circle.lefthalf.filled" => return Some(Icon::default().data(CIRCLE_HALF)),
         // Bears (bears.rs): the head bear's crown, any other's paw, Bear
         // Colour's palette, and a table's three people.
         "crown" | "crown.fill" => IconName::Crown,

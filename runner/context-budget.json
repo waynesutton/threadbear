@@ -1,20 +1,20 @@
 {
   "claude": {
     "instructions": 2984,
-    "tools": 41316,
-    "total": 44300
+    "tools": 41332,
+    "total": 44316
   },
   "codex": {
     "instructions": 2153,
-    "tools": 41415,
-    "total": 43568
+    "tools": 41431,
+    "total": 43584
   },
   "worktreeInstructions": 608,
   "perTool": {
     "add_button": 1659,
     "ask_secret": 1241,
     "create_project": 1433,
-    "create_task": 566,
+    "create_task": 574,
     "create_thread": 2574,
     "delete_schedule": 267,
     "delete_task": 228,
@@ -40,7 +40,7 @@
     "unpin": 300,
     "update_project": 2937,
     "update_schedule": 1705,
-    "update_task": 591,
+    "update_task": 599,
     "update_thread": 1720,
     "wait_for_app_restart": 649
   }

@@ -158,6 +158,12 @@ export const Stack = () => (
     <path d="m8 2 6 3-6 3-6-3zM2 8l6 3 6-3M2 11l6 3 6-3" />
   </svg>
 );
+// A checklist, as the desktop rail's Tasks icon.
+export const Checklist = () => (
+  <svg {...base}>
+    <path d="m2 4 1.3 1.3L5.6 3M2 10.5l1.3 1.3 2.3-2.3M8 4.3h6M8 10.8h6" />
+  </svg>
+);
 export const Bars = () => (
   <svg {...base}>
     <path d="M2.5 13.5V9M6.2 13.5v-8M9.9 13.5V8M13.5 13.5v-11" />

@@ -11,6 +11,7 @@ Status and gap list: prds/prints-status.md
 
 - [ ] 2026-11-16 21:53 UTC Desktop CI: Linux's 60-minute budget landed as 7f2ba41e after 12 focused tests and the 505-second quick check passed. Run 43948148837 also passed all Windows specs before its release build hit 60 minutes; give Windows 90 minutes, keeping Linux/Mac at 60. Windows follow-up checks and a complete GitHub run remain required.
 
+- [ ] Tasks list and board polish (2026-11-16 20:44 UTC): quick-add list as default, Doing column, row menu, drag to reorder columns, sections and projects, photo button. API 84. Native 10 scenarios/131 steps, 17 focused backend/runner checks, web tests/typechecks/build and Rust ordering tests pass. Real local backend sync and browser save/retry/ordering verified. Landing and installed verification pending. prds/realtime-tasks.md
 - [x] Realtime Tasks local draft (2026-11-16T11:03:00Z): native build and six UI scenarios (77 steps), 14 backend/runner tests, two web draft tests, typechecks and web build pass. Real local-backend browser save/photo and touch drag verified; native card/column drag and light/dark inspected. Not deployed or landed. prds/realtime-tasks.md
 
 - [ ] Land verified Settings review fixes when the Mac is quiet, then verify the installed update.

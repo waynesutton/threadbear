@@ -4,7 +4,9 @@ Created: 2026-11-16T09:14:50.172751+00:00
 
 ## Approved experience
 
-Tasks below Notes, opened with Command-7. Native GPUI desktop and authenticated mobile web /tasks share one Convex collection. Board initially defaults to Backlog, Todo, Done. List/Board switch has an explicit Set as default action, synced across devices. Switching the current view does not change the default.
+Tasks below Notes, opened with Command-7. Native GPUI desktop and authenticated mobile web /tasks share one Convex collection. The simple quick-add list is the default. Board has Backlog, Todo, Doing and Done. List/Board switch has an explicit Set as default action, synced across devices. Switching the current view does not change the default.
+
+16 November refinement: enter a task in the list and press Return; check it to hide it in Done, with Undo. Each task's menu opens notes, changes status or moves it to a project. Cards omit status dropdowns. Drag columns, list sections and project groups to reorder them, with separate saved list/board orders. Keep the background file picker consistent with other controls. The supplied Linear PRD and better-todo are visual references; no extra issue-tracker features are in scope.
 
 Tasks have title, optional notes, status, optional existing project, timestamps and manual order. Inline add, detail editing, checkbox completion, status menus, card and column dragging, delete with Undo. New tasks default to Todo or the column they were added in; unchecking returns to Todo. Filter by project or No project; group by status or project; sort manually, newest, oldest or title. Manual drag ordering only in manual sort.
 
@@ -13,6 +15,18 @@ Project pages show Tasks and count beside Decisions when tasks exist, and offer 
 Theme follows app appearance; background color or uploaded photo supports position and fade. Synced preferences. Mobile has touch targets, horizontal board scrolling, persistent Add and status-menu alternatives to drag.
 
 Online editing only, cached viewing offline, explicit connection/error states and retained failed drafts. Web edits must work while Mac is off. No due dates, priorities, subtasks, public sharing or native iPhone screen in v1.
+
+## List and board verification checkpoint 2026-11-16 20:44 UTC
+
+The refinement adds Doing, independent column/list/project order, quick-add, hidden completed rows with Undo, and task menus on desktop and web. Backend API 84 is required by the new clients. Existing three-column preferences normalize to include Doing.
+
+- Final native regression run: 10 scenarios, 131 steps passed, including failed editor save, quick-add retry across page close, concurrent edits, completion, deletion and ordering.
+- Seventeen focused backend/bridge/context/experiment checks and eight web draft/order tests pass. The five Rust task-order unit tests pass. Runner, backend and web typechecks pass; production web build passes with the existing chunk-size warning.
+- Real disposable Convex backend: runner/browser writes and realtime subscription, preferences, remove/restore and bad token checks pass. Headless Chrome exercised quick-add, completion/Undo, column/list/project ordering and server-rejected draft retry. Light/dark desktop browser and 390px mobile images inspected; browser access host is unavailable, so these are isolated test-browser checks.
+- Fixed native editor height, opaque sheet/toast/background panel, and the frame-read hook so editor errors and Undo text are actually asserted. Quick-add inputs remain until save succeeds; a failed draft survives leaving Tasks.
+- Diff security review traced all 12 public Tasks operations through capability authentication; scanner auth candidates are false positives. Full-tree scanner also reports unchanged files outside this diff, which were not audited. No clean full-repository security result is claimed.
+
+Landing and production/installed verification of this refinement remain pending. The earlier Tasks deployment authorization applies; no new approval is needed.
 
 ## Architecture
 

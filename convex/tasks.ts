@@ -3,7 +3,7 @@
 import { ConvexError, v } from 'convex/values';
 import { mutation, query, type QueryCtx, type MutationCtx } from './_generated/server';
 import { checkPhoneToken, runnerAuth } from './lib';
-import { taskFields, taskPreferenceFields, taskProject, taskStatus } from './taskFields';
+import { fullColumnOrder, listStatuses, taskFields, taskPreferenceFields, taskProject, taskStatus } from './taskFields';
 import type { Infer } from 'convex/values';
 
 const authField = v.union(v.object({ token: v.string() }), v.object({ key: v.string() }));
@@ -95,6 +95,8 @@ export const create = mutation({
     notes: v.optional(v.string()),
     status: v.optional(taskStatus),
     project: v.optional(v.union(taskProject, v.null())),
+    // Where it sorts; left out, it goes last. API 84.
+    position: v.optional(v.number()),
   },
   returns: v.string(),
   handler: async (ctx, a) => {
@@ -109,7 +111,7 @@ export const create = mutation({
       notes: text(a.notes ?? '', 20000, 'Notes'),
       status: a.status ?? 'todo',
       project: a.project ?? null,
-      position: now,
+      position: a.position !== undefined && Number.isFinite(a.position) ? a.position : now,
       createdAt: now,
       updatedAt: now,
       deleted: false,
@@ -173,14 +175,15 @@ export const preferences = query({
     const row = await prefRow(ctx);
     const { _id, _creationTime, name, ...prefs } = row ?? {};
     return {
-      defaultView: 'board' as const,
-      columnOrder: ['backlog', 'todo', 'done'] as ('backlog' | 'todo' | 'done')[],
+      defaultView: 'list' as const,
       grouping: 'status' as const,
       sort: 'manual' as const,
       fade: 0.85,
       photoPosition: 'center' as const,
       theme: 'system' as const,
       ...prefs,
+      columnOrder: fullColumnOrder(row?.columnOrder),
+      listOrder: fullColumnOrder(row?.listOrder, listStatuses),
     };
   },
 });
@@ -189,7 +192,15 @@ export const setPreferences = mutation({
   returns: v.null(),
   handler: async (ctx, { auth, ...patch }) => {
     await authenticate(ctx, auth);
-    if (patch.columnOrder && (patch.columnOrder.length !== 3 || new Set(patch.columnOrder).size !== 3)) bad('Use each status once');
+    if (patch.columnOrder) {
+      if (new Set(patch.columnOrder).size !== patch.columnOrder.length) bad('Use each status once');
+      patch.columnOrder = fullColumnOrder(patch.columnOrder);
+    }
+    if (patch.listOrder) {
+      if (new Set(patch.listOrder).size !== patch.listOrder.length) bad('Use each status once');
+      patch.listOrder = fullColumnOrder(patch.listOrder, listStatuses);
+    }
+    if (patch.projectOrder && (patch.projectOrder.length > 1000 || patch.projectOrder.some((k) => k.length > 300) || new Set(patch.projectOrder).size !== patch.projectOrder.length)) bad('Use each project once');
     if (patch.fade !== undefined && (!Number.isFinite(patch.fade) || patch.fade < 0 || patch.fade > 1)) bad('Fade must be between 0 and 1');
     if (patch.backgroundColor !== undefined && patch.backgroundColor !== '' && !/^#[0-9a-f]{6}$/i.test(patch.backgroundColor)) bad('Choose a hex color');
     if (patch.backgroundPhoto) {

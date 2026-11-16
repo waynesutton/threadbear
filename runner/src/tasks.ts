@@ -10,7 +10,7 @@ export type TaskSource = {
   connection?: object;
   upload?: Upload;
 };
-export type TaskStatus = 'backlog' | 'todo' | 'done';
+export type TaskStatus = 'backlog' | 'todo' | 'doing' | 'done';
 export type NativeTask = {
   id: string;
   title: string;
@@ -47,7 +47,7 @@ export class Tasks {
       this.stop();
       throw new Error('Tasks needs a connection to your Threadbear backend. Your draft has not been saved.');
     }
-    if ((source.apiVersion ?? 83) < 83) throw new Error('Update the Threadbear backend to use Tasks.');
+    if ((source.apiVersion ?? 84) < 84) throw new Error('Update the Threadbear backend to use Tasks.');
     if (operation === 'photoFile') {
       if (typeof args.path !== 'string' || !source.upload) throw new Error('Choose a photo on this Mac.');
       const image = readReplyImage(args.path);

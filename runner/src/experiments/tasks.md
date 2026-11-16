@@ -9,9 +9,9 @@ reminder: cb15fc10
 
 ## What it does
 
-Tasks sits below Notes (Command-7). Keep tasks in Backlog, Todo or Done, switch between a board and a checklist, and choose which view opens by default. Tasks can belong to a project or stand alone. Their titles, notes, status and appearance are kept in your own Convex deployment, so the signed-in website works while your Mac is off. Agents can add and update tasks when you ask. Notes stay private to your Mac and Notion boards remain separate.
+Tasks sits below Notes (Command-7). It opens on a quick-add list: type a task, press Return, tick it off. Switch to a board with Backlog, Todo, Doing and Done, drag cards, columns, sections and projects into the order you like, and choose which view opens by default. Tasks can belong to a project or stand alone. Their titles, notes, status and appearance are kept in your own Convex deployment, so the signed-in website works while your Mac is off. Agents can add and update tasks when you ask. Notes stay private to your Mac and Notion boards remain separate.
 
-Requires backend API 83. Editing needs a connection; an open page retains its last loaded tasks if it loses contact. The desktop and agent tools follow this switch. The authenticated website offers Tasks once its backend supports it.
+Requires backend API 83, and 84 for Doing and saved orders. Editing needs a connection; an open page retains its last loaded tasks if it loses contact. The desktop and agent tools follow this switch. The authenticated website offers Tasks once its backend supports it.
 
 ## Lives in
 

@@ -7874,7 +7874,7 @@ Either side may be upgraded first, so each tolerates the other:
   runner older than Devices gets `-32601` from `devices.*` and says the
   Phone & browser tab needs a newer runner.
 
-## Native Tasks (experiment, backend API 83)
+## Native Tasks (experiment, backend API 83; Doing and saved orders 84)
 
 Tasks are an account-wide Convex-owned collection, separate from encrypted
 Mac Notes and Notion-backed ProjectTasks. The Tasks experiment exposes
@@ -7883,15 +7883,17 @@ the runner, with equivalent paired-browser functions. Changes subscribe
 in realtime; browser mutations do not queue behind an online runner.
 
 Each task carries a stable client-generated id (retry-safe creation), title,
-notes, status (backlog/todo/done), optional project reference (runnerId and
+notes, status (backlog/todo/doing/done; doing since API 84), optional project reference (runnerId and
 project id), created/updated timestamps and manual position. Mutations
 patch specified fields only. Deletion can be undone by restoring the same
-id. New tasks use timestamp ordering. Project deletion leaves tasks
+id. New tasks use timestamp ordering unless create gives a position (API
+84), which clients use to put a quick-added task on top. Project deletion leaves tasks
 unassigned rather than deleting them.
 
-Preferences include defaultView (board initially, or list), column order,
-grouping, sorting, background color/photo, photo position/fade and theme.
-Changing the current view does not set defaultView: Set as default does.
+Preferences include defaultView (list initially since API 84, or board), the
+board's column order, the list's own section order (most active first),
+project group order, grouping, sorting, background color/photo, photo position/fade and theme.
+Changing the current view does not set defaultView: Display's default does.
 Desktop Tasks is below Notes, Command-7; website is /tasks. Links require
 existing account authentication. Offline views may show cached data but
 mutations require connectivity.
@@ -7899,26 +7901,29 @@ mutations require connectivity.
 ### Tasks RPC contract
 
 The `tasks` experiment gates desktop RPCs and agent tools. The website checks
-backend API 83 before calling these functions. A runner supplies its own key;
+backend API 84 before calling these functions. A runner supplies its own key;
 clients cannot override credentials in an RPC. Paired browsers use their token
 with the same Convex functions. This is a single-owner deployment collection.
 
 - `tasks.list {after?, limit?}` returns `{items, next}`. Follow `next` as `after`
   until null; limit defaults to 100 and is capped at 250. Ids order pagination,
   while `position` controls display order.
-- `tasks.create {id?, title, notes?, status?, project?}` returns the id. Supply
+- `tasks.create {id?, title, notes?, status?, project?, position?}` returns the id. Supply
   the same id on retries. Repeating creation never overwrites an existing task.
 - `tasks.update {id, title?, notes?, status?, project?, position?}` patches only
   supplied fields. A null project removes the association. Status is `backlog`,
-  `todo` or `done`; checking completes, unchecking sets `todo`.
+  `todo`, `doing` or `done`; checking completes, unchecking sets `todo`.
 - `tasks.remove {id}` and `tasks.restore {id}` soft-delete and restore.
 - `tasks.projects {}` returns `{runnerId,id,title}[]`. A project argument can
   also be its exact id or title; ambiguous names fail. `tasks.count {project}`
   and `tasks.projectCount {project}` return `{count,more}` capped at 1000.
-- `tasks.preferences {}` returns defaultView, columnOrder, grouping
+- `tasks.preferences {}` returns defaultView, columnOrder, listOrder,
+  projectOrder (`runnerId/id` keys, `none` for no project), grouping
   (`status`/`project`), sort (`manual`/`newest`/`oldest`/`title`), backgroundColor,
   backgroundPhoto, photoPosition, fade and theme. `tasks.setPreferences` patches
-  those fields. Column order must contain each of the three statuses once.
+  those fields. columnOrder and listOrder name each status at most once, and
+  come back with any missing status added (Doing after Todo), so an order an
+  older client saved with three statuses still works.
 - `tasks.photo {}` returns an authenticated storage capability URL or null.
   `tasks.uploadPhoto {}` returns an upload URL. `tasks.photoFile {path}` reads
   a local image, uploads it and selects it. PNG/JPEG/WebP/GIF, at most 10 MB.
