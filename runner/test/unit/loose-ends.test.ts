@@ -347,7 +347,7 @@ test('looseEnds: work pushed to a branch that main lacks is open until its PR is
   ]);
   // Someone else's branch with the same name doesn't count.
   assert.deepEqual(await editedLooseEnds([a], [], undefined, { pushed: [sha, more], prs: byRepo({ 'mikecann/website': { number: 70, state: 'OPEN', isDraft: false, headOwner: 'someone' } }) }), [
-    { kind: 'unmerged', text: "Work it pushed to mike/examples in website isn't on main" },
+    { kind: 'unmerged', text: "Work it pushed to alex/examples in website isn't on main" },
   ]);
   // Merged upstream with this tip: not open.
   assert.deepEqual(await editedLooseEnds([a], [], undefined, { pushed: [sha, more], prs: byRepo({ 'mikecann/website': { number: 66, state: 'MERGED', isDraft: false, headOwner: 'convex', headRefOid: more } }) }), []);

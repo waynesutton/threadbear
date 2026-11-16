@@ -12,6 +12,7 @@ const mcp = load('mcp');
 const rpc = load('mcpRpc');
 const phone = load('phone');
 const sync = load('sync');
+const tokens = load('tokens');
 
 const NOW = Date.now();
 
@@ -100,7 +101,9 @@ test('no key, a made-up key, an expired or a revoked key all get the same 401', 
 
 test('a phone token is no good at /mcp', async () => {
   const s = await setup();
-  const { token } = await call(s.ctx, sync.issueToken, { key: OWNER, kind: 'phone', name: 'iphone' });
+  // A phone's token comes only from a pairing code it claims (API 80).
+  const { code } = await call(s.ctx, sync.issuePairingCode, { key: OWNER, name: 'iphone' });
+  const { token } = await call(s.ctx, tokens.claim, { code });
   assert.equal((await s.post(token, { jsonrpc: '2.0', id: 1, method: 'tools/list' })).status, 401);
 });
 

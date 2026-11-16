@@ -11,6 +11,7 @@ const BRUCE_KEY = 'bruce-key';
 const { sha256 } = load('lib') as { sha256: (s: string) => Promise<string> };
 const profile = load('profile');
 const sync = load('sync');
+const tokens = load('tokens');
 
 const base = { published: true, name: 'Wayne Sutton', bio: 'Builds with agents', links: [{ title: 'GitHub', url: 'https://github.com/waynesutton' }], order: ['numbers', 'activity'] };
 
@@ -53,7 +54,9 @@ test('a page that is not published is gone to strangers and a preview for Mike',
   await s.publish({ ...base, published: false });
   assert.equal(await s.view(), null);
   assert.equal(await s.view('made-up-token'), null);
-  const { token } = await call(s.b.ctx, sync.issueToken, { key: OWNER, kind: 'phone', name: 'browser' });
+  // A phone's token comes only from a pairing code it claims (API 80).
+  const { code } = await call(s.b.ctx, sync.issuePairingCode, { key: OWNER, name: 'browser' });
+  const { token } = await call(s.b.ctx, tokens.claim, { code });
   const page = await s.view(token);
   assert.equal(page.preview, true);
   assert.equal(await call(s.b.ctx, profile.card, {}), null);
