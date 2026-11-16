@@ -86,3 +86,13 @@ Local implementation is built and behaviorally verified. No production deploy, p
 - Evidence is ignored in .fixtures/tasks: native-features.log, native-list.png, native-light.png, native-drag.png, mobile-board.png, mobile-editor.png, browser-smoke.mjs and browser-photo.mjs. Native images use only mock sample threads. Browser uses disposable local data.
 
 Delivery limitations: creating a project uses the existing native Create project dialog; browser selects existing synced projects. Background uploads remain in storage when replaced/reset (no garbage collector). Native UI was tested against the mock bridge; backend/website were tested against real local Convex separately. No installed-app, production-backend or physical-phone verification is claimed. The live /tasks URL requires deploying the matching backend API83 and website and enabling the desktop experiment.
+
+## Deployment checkpoint 2026-11-16T14:40:00Z
+
+Wayne explicitly approved Deploy Tasks. No more approval is needed to deploy, land, enable or verify this feature.
+
+- Rebased on main897aa777; regenerated context budget. Feature commit is e968d8b4.
+- Deployed backend and website successfully with deploy-backend.mjs to the configured owner deployment uncommon-seal-914. Live https://uncommon-seal-914.convex.site/tasks returns200. Authenticated create/read/update passed; verification task removed. Default view is board.
+- Landing is held by fork GitHub run43876632987. Windows and Linux pass. Mac has twice been canceled before any step ran: hosted macOS arm64 capacity unavailable. Retried failed job again at14:39Z, currently queued. Do not mistake this for a code failure or report desktop installed.
+- Local ./check.sh --quick completed: runner/backend/web typechecks, web tests, core tests, desktop check and app mock tests pass. Two failures fixed: site docs icon missing (2007ae6c, focused site build passes) and keyboard ownership on Tasks open/close (fdbbd92c, focused focus-contract test passes). Latest serialized cargo check with automation passes too. Full check log .fixtures/tasks/prelanding-check.log; focus check .fixtures/tasks/focus-check.log.
+- No dev apps, local backend, browser or check processes remain. Next: once CI clears, tb land with cargo PATH and THREADBEAR_NODE set. Let runner/desktop update safely, enable tasks through settings.update, verify Tasks RPC and installed Cmd7; register wait_for_app_restart after landing. Do not ask approval again or use Mike's hosts.
