@@ -589,7 +589,10 @@ impl Threadbear {
             .children(backdrop)
             .child(
                 div().id(SharedString::from(format!("{}-home", page.name()))).size_full().overflow_y_scroll().child(
-                    h_flex().w_full().min_h_full().justify_center().child(
+                    // Stretched to the page's height when places are real
+                    // places: h_flex centres its child, which put a short
+                    // page's Top in the middle of the window.
+                    h_flex().w_full().min_h_full().justify_center().when(pins_places, |r| r.items_stretch()).child(
                         v_flex()
                             .w_full()
                             .min_h_full()

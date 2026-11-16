@@ -35,3 +35,12 @@ Feature: Customize the home pages
     Then its panel has the Layout and Numbers sections
     When I turn off the Scheduled page customization
     Then the standard Scheduled page is shown and my Scheduled look is kept
+
+  @looks.projects @swift-pending
+  Scenario: The Projects page shows every project as plain cards when its header is hidden
+    When I customize the Projects page without its header or the cards' icon tiles
+    Then the customized Projects page draws its cards without them
+    When I open Customize on the Projects page
+    Then its panel has the Layout and Cards sections
+    When I turn off the Projects page customization
+    Then the standard Projects page is shown and my Projects look is kept

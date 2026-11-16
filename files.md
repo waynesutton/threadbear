@@ -6,6 +6,7 @@
 - `desktop/gpui/src/looks.rs` the pictures in `looks/` (import, sizes, removal), the background photo and its Position preview, the Customize panel's shared sections, and the app's look settings.
 - `desktop/gpui/src/librarian_look.rs` the customized Librarian page and its Customize panel.
 - `desktop/gpui/src/scheduled_look.rs` the customized Scheduled page and its Customize panel.
+- `desktop/gpui/src/projects_look.rs` the customized Projects page and its Customize panel; `projects_page.rs` drops the card parts it hides.
 - `desktop/gpui/src/look_cards.rs` the GitHub and Threadbear activity calendars.
 
 ## GPUI Notes

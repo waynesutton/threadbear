@@ -16,6 +16,9 @@ use std::cell::Cell;
 use std::rc::Rc;
 use std::sync::Arc;
 use threadbear_core::projects::{self as rules, CardPart, CardStatus, Project, Sections};
+use crate::looks::Page;
+use std::collections::BTreeSet;
+use threadbear_core::looks::{CardPart as LookCardPart, ProjectsBlock, ProjectsLook};
 use crate::tips::Tip as _;
 
 /// Cards are this wide at least and at most (`GridItem(.adaptive(minimum:
@@ -79,16 +82,22 @@ impl Threadbear {
     /// `ProjectsHome`: the title, a summary, the search and New project, then
     /// the cards.
     pub(crate) fn render_projects_home(&mut self, window: &mut Window, cx: &mut Context<Self>) -> AnyElement {
+        // Settings > General > Look's Customize the Projects page
+        // (projects_look.rs). Off, the page is as it ships, whatever look is
+        // saved.
+        let look: Option<ProjectsLook> = self.customizable(Page::Projects).then(|| self.look());
+        // With the title and search hidden, nothing narrows the cards.
+        let searchable = look.as_ref().is_none_or(|l| l.shows(ProjectsBlock::Header));
         let search = self.projects_search(window, cx);
         // Typing finds a project from the moment the page is up, as the Swift
         // field's focusOnAppear; not over anything that's taken the keys.
         // Leaves AppKit's keyboard where it is: a drawing's, not a request.
-        if window.focused(cx).is_none_or(|f| f == self.root_focus) {
+        if searchable && window.focused(cx).is_none_or(|f| f == self.root_focus) {
             let handle = search.read(cx).focus_handle(cx);
             window.focus(&handle, cx);
         }
         let decisions = self.project_decisions_on();
-        let query = self.projects_query(cx);
+        let query = if searchable { self.projects_query(cx) } else { None };
         let (all, total, summary) = {
             let sections = Sections::build(&self.projects.list, self.threads.values().map(|t| &**t), now_ms());
             let all = rules::cards(&sections, 3, decisions);
@@ -125,8 +134,12 @@ impl Threadbear {
         } else if all.is_empty() {
             div().text_size(px(style::size::LABEL)).line_height(px(16.)).text_color(secondary).child("No projects match that.").into_any_element()
         } else {
-            self.render_project_cards(all, cx)
+            let hidden = look.as_ref().map(|l| l.hidden_card_parts.clone()).unwrap_or_default();
+            self.render_project_cards(all, &hidden, cx)
         };
+        if let Some(look) = look {
+            return self.render_customized_projects(look, header.into_any_element(), body, cx);
+        }
         div()
             .id("projects-home")
             .size_full()
@@ -170,14 +183,14 @@ impl Threadbear {
 
     /// The cards in a grid as LazyVGrid lays out an adaptive column: as many
     /// as fit at the narrowest, each the same width up to the widest.
-    fn render_project_cards(&mut self, cards: Vec<CardView>, cx: &mut Context<Self>) -> AnyElement {
+    fn render_project_cards(&mut self, cards: Vec<CardView>, hidden: &BTreeSet<LookCardPart>, cx: &mut Context<Self>) -> AnyElement {
         let measured = GRID_WIDTH.with(|w| w.clone());
         let width = measured.get().max(CARD_MIN);
         let columns = (((width + CARD_GAP) / (CARD_MIN + CARD_GAP)).floor() as usize).max(1);
         let card_width = ((width - CARD_GAP * (columns as f32 - 1.)) / columns as f32).min(CARD_MAX);
         let mut grid = h_flex().w_full().flex_wrap().items_start().gap_x(px(CARD_GAP)).gap_y(px(ROW_GAP));
         for card in cards {
-            grid = grid.child(self.render_project_card(card, card_width, cx));
+            grid = grid.child(self.render_project_card(card, card_width, hidden, cx));
         }
         let probe = measured.clone();
         let notify = cx.entity().downgrade();
@@ -209,16 +222,24 @@ impl Threadbear {
     /// `ProjectCardView`: its icon on a wide tile with its open threads'
     /// count in the corner, then its title, what its threads are doing, its
     /// parts and the first lines of its state. A click opens its page; its
-    /// menu is the project's.
-    fn render_project_card(&mut self, card: CardView, width: f32, cx: &mut Context<Self>) -> AnyElement {
+    /// menu is the project's. `hidden` is what Customize took off it.
+    fn render_project_card(&mut self, card: CardView, width: f32, hidden: &BTreeSet<LookCardPart>, cx: &mut Context<Self>) -> AnyElement {
         let id = card.project.id.clone();
         let secondary = style::secondary_text(cx);
-        let art = self.render_project_art(&card.project, card.status.open, width, cx);
+        let shows_art = !hidden.contains(&LookCardPart::Art);
+        let shows_count = card.status.open > 0 && !hidden.contains(&LookCardPart::Threads);
+        let art = shows_art.then(|| self.render_project_art(&card.project, if shows_count { card.status.open } else { 0 }, width, cx));
+        let title = div().min_w_0().truncate().text_size(px(15.)).line_height(px(19.)).font_semibold().child(card.project.title.clone());
+        // With no tile to sit on, the count goes by the name.
+        let title_row = match (shows_art, shows_count) {
+            (false, true) => h_flex().w_full().gap(px(8.)).items_center().justify_between().child(title).child(thread_count_badge(card.status.open, &card.project.id, cx)).into_any_element(),
+            _ => title.into_any_element(),
+        };
         let mut words = v_flex()
             .gap(px(5.))
             .px(px(2.))
-            .child(div().truncate().text_size(px(15.)).line_height(px(19.)).font_semibold().child(card.project.title.clone()))
-            .child(project_status_line(&card.status, card.last_activity_ms, cx));
+            .child(title_row)
+            .when(!hidden.contains(&LookCardPart::Status), |w| w.child(project_status_line(&card.status, card.last_activity_ms, cx)));
         // Its parts are inside its card rather than cards of their own; its
         // page lists them with their state.
         if !card.parts.is_empty() {
@@ -233,14 +254,14 @@ impl Threadbear {
                     .child(div().min_w_0().truncate().child(card.parts.join(" · "))),
             );
         }
-        if !card.project.state.is_empty() {
+        if !card.project.state.is_empty() && !hidden.contains(&LookCardPart::State) {
             words = words.child(div().pt(px(2.)).text_size(px(style::size::LABEL)).line_height(px(16.)).text_color(secondary).line_clamp(3).child(rules::first_lines(&card.project.state)));
         }
         let (open_id, menu_id) = (id.clone(), id.clone());
         crate::highlights::tipped(div().id(gpui_kit::SharedString::from(format!("project-card-{id}"))).w(px(width)).flex_none().cursor_pointer(), format!("Open {}", card.project.title))
             .on_click(cx.listener(move |this, _: &ClickEvent, _, cx| this.open_project_page(&open_id, cx)))
             .on_mouse_down(MouseButton::Right, cx.listener(move |this, ev: &MouseDownEvent, window, cx| this.open_project_menu(&menu_id, ev.position, window, cx)))
-            .child(v_flex().gap(px(10.)).child(art).child(words))
+            .child(v_flex().gap(px(10.)).children(art).child(words))
             .into_any_element()
     }
 
