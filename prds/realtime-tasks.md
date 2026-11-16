@@ -28,6 +28,8 @@ The refinement adds Doing, independent column/list/project order, quick-add, hid
 
 Landing and production/installed verification of this refinement remain pending. The earlier Tasks deployment authorization applies; no new approval is needed.
 
+Landing checkpoint 2026-11-16 20:47 UTC: `tb land` rebased the feature to `4eeb6ce2` on main `1300ba08`, then stopped at the Desktop CI gate. Last completed run `43922230506` passed Linux and Windows but cancelled Mac before any steps; newer run `43948148837` remains pending. Do not bypass that gate. The standalone `./check.sh --quick` is running in `.fixtures/tasks/v2/quick-check.log` (runner/backend/web typechecks, web tests, feature pairing and site step passed so far). The headless dev app, disposable backend and Vite server are stopped. No refinement deployed, pushed or landed. Keep the rollout together because the old desktop labels a Doing column as Todo. Once the gate clears, land, deploy API 84 plus web, set Wayne's default view to list, and verify the automatic desktop update using the existing restart workflow.
+
 ## Architecture
 
 New task and preference tables, authenticated with existing paired browser tokens and runner authentication. Deployment is the existing single-owner account boundary. Project identity includes runnerId plus project id. Convex owns tasks, browser subscribes directly, desktop uses runner subscription bridge. Keep existing project mirror ownership intact. Field-specific updates, retry-safe creates, timestamp-based initial ordering and persistent manual order.
