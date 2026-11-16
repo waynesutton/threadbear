@@ -261,7 +261,7 @@ impl SettingsWindow {
             .text_size(px(12.))
             .line_height(px(style::natural_line(12.)))
             .when_some(problem, |s, problem| s.child(h_flex().gap(px(6.)).items_start().text_color(orange).child(div().pt(px(1.)).child(icons::symbol("exclamationmark.triangle").with_size(px(12.)))).child(div().flex_1().child(problem))))
-            .child(h_flex().items_center().gap(px(10.)).child(tipped_as(div().id("settings-keyboard-file"), path, gpui_kit::Role::GenericContainer).flex_1().min_w_0().text_color(secondary).child(rules::FOOTER)).child(div().flex_none().child(reset_all)));
+            .child(h_flex().items_center().child(tipped_as(div().id("settings-keyboard-file"), path, gpui_kit::Role::GenericContainer).text_color(secondary).child(rules::FOOTER)).child(div().flex_1()).child(reset_all));
         let me = cx.entity().downgrade();
         v_flex()
             .id("settings-keyboard")
@@ -464,17 +464,11 @@ fn disabled_button(id: &'static str, label: &'static str, tip: &'static str, cx:
 /// search box. Says what's listening, what the last press came to, and
 /// what's changed, as the Swift command does.
 #[cfg(feature = "automation")]
-pub(crate) fn automation(app: &Entity<Threadbear>, cmd: &Value, current_window: &mut Window, cx: &mut App) -> Result<Value, String> {
+pub(crate) fn automation(app: &Entity<Threadbear>, cmd: &Value, cx: &mut App) -> Result<Value, String> {
     use gpui_kit::test::{TestEventExt as _, TestQueryExt as _, TestWindowExt as _};
     use threadbear_core::keyboard::Outcome;
     use threadbear_core::shortcuts::ShortcutKey;
-    let embedded = app.read(cx).settings_page_open;
-    let (handle, view) = {
-        let app = app.read(cx);
-        if app.settings_page_open {
-            app.settings_page.clone().map(|view| (app.main_window, view))
-        } else { app.settings_window.clone() }
-    }.ok_or("Settings isn't open")?;
+    let (handle, view) = app.read(cx).settings_window.clone().ok_or("the Settings window isn't open")?;
     let record = cmd["record"].as_str().map(|name| ShortcutCommand::from_name(name).ok_or_else(|| format!("no command {name}"))).transpose()?;
     let bindings = app.read(cx).shortcuts.clone();
     // The keys as GPUI names them, from `press` or `post`.
@@ -510,7 +504,8 @@ pub(crate) fn automation(app: &Entity<Threadbear>, cmd: &Value, current_window: 
         }
         _ => None,
     };
-    let interact = |window: &mut Window, cx: &mut App| -> Result<(), String> {
+    handle
+        .update(cx, |_, window, cx| -> Result<(), String> {
             window.render_frame(cx);
             // A control by its name (or the start of it), through a real click.
             let click = |label: &str, prefix: bool, window: &mut Window, cx: &mut App| -> bool {
@@ -559,12 +554,8 @@ pub(crate) fn automation(app: &Entity<Threadbear>, cmd: &Value, current_window: 
             }
             window.render_frame(cx);
             Ok(())
-        };
-    if embedded {
-        interact(current_window, cx)?;
-    } else {
-        handle.update(cx, |_, window, cx| interact(window, cx)).map_err(|e| e.to_string())??;
-    }
+        })
+        .map_err(|e| e.to_string())??;
     let recorder = view.read(cx).keyboard.recorder.clone();
     let outcome = match &recorder.outcome {
         Outcome::Waiting => "waiting".to_owned(),

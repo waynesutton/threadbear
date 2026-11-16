@@ -450,7 +450,7 @@ fn step(app: &Entity<Threadbear>, cmd: &Value, window: &mut Window, cx: &mut App
                 Some(name) => Some(crate::settings_window::Tab::from_name(name).ok_or_else(|| format!("tab must be one of {}", crate::settings_window::Tab::ALL.map(|t| t.name()).join(", ")))?),
                 None => None,
             };
-            app.update(cx, |t, cx| t.open_settings_window(tab, cx));
+            app.update(cx, |t, cx| t.open_settings(tab, cx));
             // Its sections' buttons and menus, as the Swift command takes them.
             if let Some(done) = crate::settings_window::automation(app, cmd, cx)? {
                 return Ok(done);
@@ -473,7 +473,7 @@ fn step(app: &Entity<Threadbear>, cmd: &Value, window: &mut Window, cx: &mut App
             Ok(json!("ok"))
         }
         // Settings > Keyboard, as the Swift app's `shortcuts` (settings_window/keyboard.rs).
-        "shortcuts" => crate::settings_window::keyboard_automation(app, cmd, window, cx),
+        "shortcuts" => crate::settings_window::keyboard_automation(app, cmd, cx),
         // The sidebar's commands (sidebar.rs). Guarded ones only take the forms
         // that name a section, a row or a tip; the others fall through below.
         "hover" | "sort" | "archive-more" | "star" | "unstar" | "unarchive" | "realMenu" | "menu-popover" | "group" => crate::sidebar::automation(app, cmd, window, cx),

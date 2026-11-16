@@ -858,7 +858,6 @@ impl Threadbear {
     /// main panel too (`showSchedules`); picking a thread puts the thread back.
     pub(crate) fn set_mode(&mut self, mode: SidebarMode, cx: &mut Context<Self>) {
         self.notes.open = false;
-        self.hide_settings_page(cx);
         let home = mode != SidebarMode::Inbox;
         // A page of the activity bar's takes a project's page's place
         // (`showProjects`); the Inbox leaves it where it is.
@@ -924,7 +923,7 @@ impl Threadbear {
     }
 
     pub(crate) fn can_go_back(&self) -> bool {
-        self.settings_page_open || self.notes.open || self.history.can_go_back()
+        self.notes.open || self.history.can_go_back()
     }
 
     pub(crate) fn can_go_forward(&self) -> bool {
@@ -932,10 +931,6 @@ impl Threadbear {
     }
 
     pub(crate) fn go_back(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        if self.settings_page_open {
-            self.close_settings_page(window, cx);
-            return;
-        }
         if self.notes.open { self.close_notes(cx); return; }
         let threads = self.threads.keys().cloned().collect::<std::collections::HashSet<_>>();
         let projects = self.projects.list.iter().map(|p| p.id.clone()).collect::<std::collections::HashSet<_>>();
@@ -1599,7 +1594,7 @@ impl Threadbear {
             (Some(file), true) if behind.everywhere && self.pane.is_some() && page.is_none() && self.open_project().is_none() => self.render_backdrop(crate::looks::Slot::Main, file, (behind.dim + 0.2).min(0.95), behind.focus, cx),
             _ => None,
         };
-        let main: AnyElement = if self.settings_page_open { self.render_settings_page(cx) } else { match (&self.pane, page) {
+        let main: AnyElement = match (&self.pane, page) {
             _ if self.notes.open => self.render_notes(window, cx),
             // A project's page takes the thread's place until a thread is
             // picked again (project_page.rs).
@@ -1619,7 +1614,7 @@ impl Threadbear {
             }
             // No thread open is the new-thread page, as in the Swift app.
             (None, None) => self.render_new_page(window, cx),
-        }};
+        };
         let toasts = self.render_toasts(window, cx);
         div().relative().size_full().children(backdrop).child(v_flex().size_full().child(banners).child(div().flex_1().min_h_0().child(main))).child(toasts)
     }

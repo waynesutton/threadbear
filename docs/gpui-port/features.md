@@ -395,7 +395,7 @@ It comes from reading code, not from running anything, so "(unverified)" means n
 
 | ID | Feature | What it does | How in GPUI | Route | Size | Swift |
 |---|---|---|---|---|---|---|
-| `settings.window` | Settings window | Tabbed, width draggable, up and down move through the sections | Grouped form over the main panel by default, or its own resizable window; sections down the left. | kit | M | `SettingsView` |
+| `settings.window` | Settings window | Tabbed, width draggable, up and down move through the sections | Own GPUI window with gpui-kit tabs and a resizable width. | kit | M | `SettingsView` |
 | `settings.general` | General | Appearance, ding with sound and volume, default folder, activity log, Updates from Mike | gpui-kit form, but GPUI has no sound API, so the ding needs an audio crate or code on macOS, Windows and Linux. | shim | M | `SettingsView`, `DingPlayer`, `CompletionSound` |
 | `settings.models` | Models | Small-jobs pool, private folders | gpui-kit form and GPUI path prompts. | kit | S | `SettingsView` |
 | `settings.pools` | Pools | List, rename, order, icon, logins, folders | Drawn, with `foundation.reorder`. | build | L | `SettingsView`, `PoolsModel` |
