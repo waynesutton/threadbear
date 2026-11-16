@@ -85,7 +85,7 @@
 
 ## Runner checks
 
-- `.github/workflows/desktop.yml` runs desktop tests, behaviour specs, release builds and artifact uploads on Linux, Mac and Windows with a 60-minute job limit.
+- `.github/workflows/desktop.yml` runs desktop tests, behaviour specs, release builds and artifact uploads with 60-minute Linux/Mac and 90-minute Windows limits.
 - `runner/test/unit/net-probe.test.ts` checks proxy deadlines and response-size limits with controlled time, plus real TCP and TLS connections.
 - `runner/package.json` caps the updater's npm unit suite at four workers, with failed files still rerun one at a time.
 

@@ -54,8 +54,9 @@ jobs:
     name: ${{ matrix.name }}
     runs-on: ${{ matrix.os }}
     # Leave time for the release build and upload after the behaviour specs:
-    # Linux hit its old 45-minute limit during artifact upload (16 Nov).
-    timeout-minutes: 60
+    # Linux exhausted 45 minutes; Windows passed specs at 52 minutes and
+    # hit its old 60-minute limit during the release build (16 Nov).
+    timeout-minutes: ${{ matrix.os == 'windows-latest' && 90 || 60 }}
     strategy:
       fail-fast: false
       matrix:

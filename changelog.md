@@ -8,7 +8,7 @@ How Prints work today, what's missing and what's next: [Prints status](https://g
 
 ### Changed
 
-- Linux Desktop CI has 60 minutes for tests, the release build and artifact upload, matching Mac and Windows.
+- Desktop CI has 60 minutes on Linux and Mac, and 90 on Windows, to finish tests, the release build and artifact upload.
 - GPUI Settings opens inside the main window. Back, Esc or Close returns to the previous view with its thread draft intact.
 
 ### Added
