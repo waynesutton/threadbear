@@ -10,9 +10,10 @@ Status and gap list: prds/prints-status.md
 ## In Progress
 
 - [ ] Land verified Settings review fixes when the Mac is quiet, then verify the installed update.
-- [ ] Build five always-on bear improvements and document the GPUI follow-through. prds/bears-always-on.md. Focused verification passed; repeat review and quiet-Mac repository check precede landing.
 
 ## Completed
+
+- [x] 2026-11-16 13:50 UTC Five always-on bear improvements landed: one shared unattended worker per bear, memory rules with told.md and tasks/, built-in tidies in Auto for Claude bears, quiet finishes for empty runs, and late answers (experiment). prds/bears-always-on.md. Rebased over 186 main commits; 291 focused tests and ./check.sh --quick passed (539 s); landed as 2876bbc2..897aa777 and pushed with scripts/sync-main.sh. bears.refreshRules ran on all four bears on the live runner (897aa777): personas and bear.json unchanged, one managed block added each, the four tidy routines kept their ids and times. PR #66 already carries the three fixes.
 
 - [x] 2026-11-15 04:22 UTC Collect the bears research links in prds/bears-resources.md, separating user-supplied references from supporting documentation and recording what each informed. Verified against the original planning thread, build history and saved plans; local document links checked.
 
