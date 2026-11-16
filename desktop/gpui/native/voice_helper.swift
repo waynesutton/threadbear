@@ -126,7 +126,11 @@ final class Helper {
             }
             Out.send(["event": "heard", "session": session, "text": r.text, "start": r.start, "end": r.end, "final": r.isFinal, "clockStart": clockStart ?? NSNull(), "now": Out.now(), "headphones": VoiceAudio.outputIsHeadphones()])
         }
-        audio.onInputLevel = { Out.send(["event": "inputLevel", "level": $0]) }
+        var loudest: Float = 0
+        audio.onInputLevel = { level in
+            loudest = max(loudest, level)
+            Out.send(["event": "inputLevel", "level": level])
+        }
         audio.onOutputLevel = { Out.send(["event": "outputLevel", "level": $0]) }
         audio.onSpeaking = { Out.send(["event": "speaking", "on": $0, "at": Out.now()]) }
         Task {
@@ -137,7 +141,9 @@ final class Helper {
                 // Whether the microphone is really giving anything: a Mac that
                 // didn't let the app use it can give silence rather than an error.
                 try? await Task.sleep(for: .seconds(2))
-                if self.startId == startId { VoiceLog.write(audio.hasAudio ? "audio is coming from the microphone" : "no audio from the microphone after 2 s") }
+                // Silence all through (loudest 0.00) is what a microphone macOS
+                // hasn't let the app use gives: no error, just nothing.
+                if self.startId == startId { VoiceLog.write(audio.hasAudio ? "audio is coming from the microphone, loudest \(String(format: "%.2f", loudest)) in 2 s" : "no audio from the microphone after 2 s") }
             } catch {
                 guard self.startId == startId else { return }
                 self.audio = nil
