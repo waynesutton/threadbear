@@ -2198,7 +2198,9 @@ draws its first 10 pictures; any past that show as their names.
 Skills give your agents extra know-how: how to draw a Mermaid diagram,
 build an isometric explainer, write in a house style. Click Skills in the
 bar on the left (under the Librarian), or press ⌘5, to see yours. The page opens over the
-main panel; its X or Esc puts you back where you were. Skills shows only
+main panel; its X or Esc puts you back where you were. With a long list,
+type part of a name in the search beside Your skills (rem finds every
+remotion one); it narrows Suggested too. Skills shows only
 while the Skills store experiment is on (below).
 
 To add one, paste its GitHub link in Import a skill and press Import: a

@@ -29,6 +29,11 @@ use threadbear_core::skills::{self, Skill, Suggested};
 
 actions!(skills_page, [CloseSkills]);
 
+/// What Your skills says when the search leaves none.
+fn no_match(typed: &str) -> String {
+    format!("No skill's name has \u{201C}{}\u{201D} in it.", typed.trim())
+}
+
 const PAGE_CONTEXT: &str = "SkillsPage";
 /// The column's width at 100% (`.frame(maxWidth: 680)`).
 const COLUMN: f32 = 680.;
@@ -222,6 +227,20 @@ impl Threadbear {
             "suggested": self.skills.suggested.iter().map(|s| s.name.clone()).collect::<Vec<_>>(),
             "form": page.and_then(|p| p.form.as_ref()).map(|f| json!({ "replacing": f.replacing, "name": f.name.read(cx).value().to_string(), "error": f.error })),
             "importError": page.and_then(|p| p.import_error.clone()),
+            "search": page.map(|p| p.search.read(cx).value().to_string()),
+            "noMatch": page.and_then(|p| {
+                let typed = p.search.read(cx).value().to_string();
+                (!self.skills.skills.is_empty() && !self.skills.skills.iter().any(|s| skills::name_matches(&s.name, &typed))).then(|| no_match(&typed))
+            }),
+            "suggestedShown": page.map(|p| {
+                let typed = p.search.read(cx).value().to_string();
+                self.skills.suggested.iter().filter(|s| skills::name_matches(&s.name, &typed)).map(|s| s.name.clone()).collect::<Vec<_>>()
+            }),
+            // What the search leaves showing, in order.
+            "shown": page.map(|p| {
+                let typed = p.search.read(cx).value().to_string();
+                self.skills.skills.iter().filter(|s| skills::name_matches(&s.name, &typed)).map(|s| s.name.clone()).collect::<Vec<_>>()
+            }),
         })
     }
 }
@@ -239,6 +258,8 @@ struct Form {
 pub(crate) struct SkillsPage {
     app: WeakEntity<Threadbear>,
     link: Entity<InputState>,
+    /// Search over Your skills and Suggested, by name.
+    search: Entity<InputState>,
     importing: bool,
     import_error: Option<String>,
     form: Option<Form>,
@@ -256,14 +277,21 @@ impl SkillsPage {
                 this.run_import(window, cx);
             }
         })];
+        let search = cx.new(|cx| InputState::new(window, cx).placeholder("Search skills by name"));
+        let mut subs = subs;
+        subs.push(cx.subscribe(&search, |_, _, ev: &InputEvent, cx| {
+            if matches!(ev, InputEvent::Change) {
+                cx.notify();
+            }
+        }));
         let focus = cx.focus_handle();
         window.focus(&focus, cx);
         crate::web_panels::keyboard_to_app(window);
-        SkillsPage { app, link, importing: false, import_error: None, form: None, scroll: ScrollHandle::new(), focus, _subs: subs }
+        SkillsPage { app, link, search, importing: false, import_error: None, form: None, scroll: ScrollHandle::new(), focus, _subs: subs }
     }
 
     fn focus_handles(&self, cx: &App) -> Vec<FocusHandle> {
-        let mut out = vec![self.focus.clone(), self.link.read(cx).focus_handle(cx)];
+        let mut out = vec![self.focus.clone(), self.link.read(cx).focus_handle(cx), self.search.read(cx).focus_handle(cx)];
         if let Some(f) = &self.form {
             out.extend([f.name.read(cx).focus_handle(cx), f.description.read(cx).focus_handle(cx), f.text.read(cx).focus_handle(cx)]);
         }
@@ -571,11 +599,36 @@ impl SkillsPage {
         div().flex_none().child(button).into_any_element()
     }
 
-    fn installed(&self, list: &[Skill], busy: &HashSet<String>, cx: &mut Context<Self>) -> AnyElement {
+    /// The search, beside Your skills' heading: a magnifying glass, the
+    /// field, and its clear button, as Settings > Keyboard's.
+    fn search_box(&self, cx: &mut Context<Self>) -> AnyElement {
+        let faint = style::tertiary_label(cx);
+        tipped_as(div().id("skills-search"), "Search skills by name", gpui_kit::Role::GenericContainer)
+            .w(px(240.))
+            .h(px(26.))
+            .pl(px(8.))
+            .pr(px(6.))
+            .flex()
+            .items_center()
+            .gap(px(6.))
+            .rounded(px(7.))
+            .bg(style::primary_opacity(cx, 0.035))
+            .border(gpui_kit::px(0.5))
+            .border_color(style::hairline(cx))
+            .child(div().flex_none().child(icons::symbol("magnifyingglass").with_size(px(11.5)).text_color(faint)))
+            .child(div().flex_1().min_w_0().child(Input::new(&self.search).appearance(false).small().cleanable(true).pl(px(0.)).text_size(px(style::size::LABEL))))
+            .into_any_element()
+    }
+
+    fn installed(&self, all: &[Skill], typed: &str, busy: &HashSet<String>, cx: &mut Context<Self>) -> AnyElement {
         let secondary = style::secondary_text(cx);
-        let mut col = v_flex().gap(px(8.)).child(Self::heading("Your skills"));
-        if list.is_empty() {
+        let mut col = v_flex().gap(px(8.)).child(h_flex().items_center().gap(px(12.)).child(Self::heading("Your skills")).child(div().flex_1()).when(!all.is_empty(), |d| d.child(self.search_box(cx))));
+        if all.is_empty() {
             return col.child(div().text_size(px(style::size::LABEL)).text_color(secondary).child("None yet. Import one above, or add a suggested one below.")).into_any_element();
+        }
+        let list: Vec<&Skill> = all.iter().filter(|s| skills::name_matches(&s.name, typed)).collect();
+        if list.is_empty() {
+            return col.child(div().text_size(px(style::size::LABEL)).text_color(secondary).child(no_match(typed))).into_any_element();
         }
         let rows: Vec<AnyElement> = list.iter().enumerate().map(|(i, s)| self.skill_row(s, i == 0, busy.contains(&s.name), cx)).collect();
         col = col
@@ -584,7 +637,8 @@ impl SkillsPage {
         col.into_any_element()
     }
 
-    fn suggested(&self, list: &[Suggested], busy: &HashSet<String>, cx: &mut Context<Self>) -> Option<AnyElement> {
+    fn suggested(&self, all: &[Suggested], typed: &str, busy: &HashSet<String>, cx: &mut Context<Self>) -> Option<AnyElement> {
+        let list: Vec<&Suggested> = all.iter().filter(|s| skills::name_matches(&s.name, typed)).collect();
         if list.is_empty() {
             return None;
         }
@@ -624,6 +678,7 @@ impl Render for SkillsPage {
                 (s.skills.clone(), s.suggested.clone(), s.busy.clone())
             })
             .unwrap_or_default();
+        let typed = self.search.read(cx).value().to_string();
         let intro = div()
             .text_size(px(style::size::LABEL))
             .text_color(style::secondary_text(cx))
@@ -635,8 +690,8 @@ impl Render for SkillsPage {
             .child(intro)
             .children(self.form(cx))
             .child(self.import_box(cx))
-            .child(self.installed(&list, &busy, cx))
-            .children(self.suggested(&suggested, &busy, cx));
+            .child(self.installed(&list, &typed, &busy, cx))
+            .children(self.suggested(&suggested, &typed, &busy, cx));
         v_flex()
             .id("skills-page")
             .key_context(PAGE_CONTEXT)
@@ -681,6 +736,13 @@ pub(crate) fn automation(app: &Entity<Threadbear>, cmd: &Value, window: &mut Win
                     f.text.update(cx, |s, cx| s.set_value(t.to_owned(), window, cx));
                 }
             }
+        });
+    }
+    if let Some(typed) = cmd["search"].as_str() {
+        // Setting the text isn't typing, so the page is told to draw again.
+        page.update(cx, |p, cx| {
+            p.search.update(cx, |s, cx| s.set_value(typed.to_owned(), window, cx));
+            cx.notify();
         });
     }
     if cmd["save"].as_bool() == Some(true) {

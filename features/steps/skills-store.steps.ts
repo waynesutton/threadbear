@@ -62,6 +62,22 @@ Then('{string} is not Always on', async function (this: ThreadbearWorld, name: s
   await this.until(`${name} not Always on`, (d) => skills(d)?.skills.some((s) => s.name === name && !s.always));
 });
 
+Then('no suggestion is shown', async function (this: ThreadbearWorld) {
+  await this.until('no suggestion shown', (d) => ((skills(d) as { suggestedShown?: string[] } | null | undefined)?.suggestedShown ?? ['?']).length === 0);
+});
+
+When('I search skills for {string}', async function (this: ThreadbearWorld, typed: string) {
+  await this.app.do({ cmd: 'skills', search: typed });
+});
+
+Then('the skills shown are {string}', async function (this: ThreadbearWorld, want: string) {
+  await this.until(`skills shown as ${want || 'none'}`, (d) => ((skills(d) as { shown?: string[] } | null | undefined)?.shown ?? []).join(', ') === want);
+});
+
+Then('Skills says {string}', async function (this: ThreadbearWorld, words: string) {
+  await this.until(`Skills saying ${words}`, (d) => (skills(d) as { noMatch?: string | null } | null | undefined)?.noMatch === words);
+});
+
 Then('there is no Skills button', async function (this: ThreadbearWorld) {
   await this.until('no Skills button', (d) => skills(d) && !skills(d)?.button);
 });

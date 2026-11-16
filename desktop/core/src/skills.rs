@@ -109,6 +109,13 @@ pub fn slug(typed: &str) -> String {
     out.trim_matches('-').to_owned()
 }
 
+/// The Skills page's search: a name holding what's typed, any case, with
+/// or without its slash. Nothing typed shows everything.
+pub fn name_matches(name: &str, typed: &str) -> bool {
+    let want = typed.trim().trim_start_matches('/').to_lowercase();
+    want.is_empty() || name.to_lowercase().contains(&want)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -137,6 +144,14 @@ mod tests {
         assert_eq!(slug("/Brand Voice!"), "brand-voice");
         assert_eq!(slug("  release-notes "), "release-notes");
         assert_eq!(slug("!!!"), "");
+    }
+
+    #[test]
+    fn search_finds_names_holding_what_is_typed() {
+        assert!(name_matches("remotion-captions", "capt"));
+        assert!(name_matches("remotion-captions", "/Remotion"));
+        assert!(name_matches("pele", "  "));
+        assert!(!name_matches("pele", "write"));
     }
 
     #[test]
