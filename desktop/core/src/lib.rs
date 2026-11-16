@@ -44,7 +44,6 @@ pub mod navigation_swipe;
 pub mod nested;
 pub mod shortcuts;
 pub mod new_thread;
-pub mod notes;
 pub mod open_anything;
 pub mod open_policy;
 pub mod browserbear;

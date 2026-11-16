@@ -293,7 +293,6 @@ actions!(
         ShowScheduled,
         ShowProjects,
         ShowLibrarian,
-        ShowNotes,
         ShowHibernating,
         ShowArchived,
         ShowPreviousTab,
@@ -382,7 +381,6 @@ commands!(
     (ShowScheduled, ShowScheduled, Some(ShortcutCommand::ShowScheduled)),
     (ShowProjects, ShowProjects, Some(ShortcutCommand::ShowProjects)),
     (ShowLibrarian, ShowLibrarian, Some(ShortcutCommand::ShowLibrarian)),
-    (ShowNotes, ShowNotes, Some(ShortcutCommand::ShowNotes)),
     (ShowHibernating, ShowHibernating, Some(ShortcutCommand::ShowHibernating)),
     (ShowArchived, ShowArchived, Some(ShortcutCommand::ShowArchived)),
     (PreviousTab, ShowPreviousTab, Some(ShortcutCommand::PreviousTab)),
@@ -466,7 +464,6 @@ impl Threadbear {
 
     /// `WindowDock.title(of: .main)` and the window's own title.
     pub(crate) fn main_panel_title(&self) -> String {
-        if self.notes.open { return "Notes".into(); }
         if let Some(project) = self.open_project() {
             return project.title.clone();
         }
@@ -762,7 +759,6 @@ impl Threadbear {
                     _ => self.set_mode(SidebarMode::Inbox, cx),
                 }
             }
-            Command::ShowNotes => self.show_notes(window, cx),
             Command::Settings => self.open_settings(None, cx),
             Command::ZoomIn => self.zoom_in(window, cx),
             Command::ZoomOut => self.zoom_out(window, cx),
@@ -857,7 +853,6 @@ impl Threadbear {
     /// The Scheduled, Projects and Librarian buttons open their page in the
     /// main panel too (`showSchedules`); picking a thread puts the thread back.
     pub(crate) fn set_mode(&mut self, mode: SidebarMode, cx: &mut Context<Self>) {
-        self.notes.open = false;
         let home = mode != SidebarMode::Inbox;
         // A page of the activity bar's takes a project's page's place
         // (`showProjects`); the Inbox leaves it where it is.
@@ -931,7 +926,6 @@ impl Threadbear {
     }
 
     pub(crate) fn go_back(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        self.notes.open = false;
         let threads = self.threads.keys().cloned().collect::<std::collections::HashSet<_>>();
         let projects = self.projects.list.iter().map(|p| p.id.clone()).collect::<std::collections::HashSet<_>>();
         let can_show = |p: &NavPlace| match &p.project {
@@ -944,7 +938,6 @@ impl Threadbear {
     }
 
     pub(crate) fn go_forward(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        self.notes.open = false;
         let threads = self.threads.keys().cloned().collect::<std::collections::HashSet<_>>();
         let projects = self.projects.list.iter().map(|p| p.id.clone()).collect::<std::collections::HashSet<_>>();
         let can_show = |p: &NavPlace| match &p.project {
@@ -1318,7 +1311,6 @@ impl Threadbear {
                     item("Show Scheduled", Command::ShowScheduled).enabled(self.schedules_supported),
                     item("Show Projects", Command::ShowProjects).enabled(self.projects_supported),
                     item("Show Librarian", Command::ShowLibrarian).enabled(self.projects_supported),
-                    item("Show Notes", Command::ShowNotes).enabled(self.settings.saved.show_notes != Some(false)),
                     Separator,
                     item("Show Hibernating", Command::ShowHibernating),
                     item("Show Archived", Command::ShowArchived),
@@ -1595,7 +1587,6 @@ impl Threadbear {
             _ => None,
         };
         let main: AnyElement = match (&self.pane, page) {
-            _ if self.notes.open => self.render_notes(window, cx),
             // A project's page takes the thread's place until a thread is
             // picked again (project_page.rs).
             _ if self.open_project().is_some() => self.render_project_page(window, cx),

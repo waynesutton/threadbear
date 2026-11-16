@@ -33,10 +33,6 @@ pub struct WindowFrame {
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", default)]
 pub struct Saved {
-    #[serde(rename = "notesShown")]
-    pub show_notes: Option<bool>,
-    #[serde(rename = "notesListHidden")]
-    pub notes_list_collapsed: Option<bool>,
     /// Highest thread-count milestone actually shown, as in the Swift app.
     pub thread_milestone_shown: Option<usize>,
     /// The window's frame, in points from the top left of the screens.

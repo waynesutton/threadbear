@@ -330,10 +330,10 @@ the SwiftTerm package).
 Notes (the bar's Notes) are files in `~/Library/Application Support/Threadbear/notes/`
 (the folder only you can open, each file only you can read), each a note
 encrypted with AES-GCM under a key the app makes the first time and keeps
-in `secrets/notes-key` (only you can read it) (`desktop/core/src/notes.rs`; the frozen Swift app uses `app/Sources/Threadbear/Notes/NotesStore.swift`).
+in `secrets/notes-key` (only you can read it) (`app/Sources/Threadbear/Notes/NotesStore.swift`).
 It used to be in your login Keychain as "Threadbear notes"; the first time
 Notes opens after that changed, the key moves to the file and the Keychain
-item is deleted. The GPUI app only reads the key file. If the key is still in the Keychain, open Notes once in the older Swift app to migrate it. In the Keychain, macOS asked for your password after every
+item is deleted. In the Keychain, macOS asked for your password after every
 update, as each update re-signs the app.
 They're never sent anywhere, and the runner never reads them.
 Pictures you choose under Settings > General > Look (the main window's

@@ -7401,7 +7401,6 @@ dependencies = [
  "libc",
  "markdown",
  "qrcodegen",
- "ring",
  "roxmltree 0.21.2",
  "rustc-demangle",
  "serde",

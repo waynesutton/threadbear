@@ -342,12 +342,6 @@ impl Threadbear {
         // Connectors, Runners and Updates at the foot (activity_panels.rs),
         // each with its dot: the accent when only Mike can do something, grey
         // while something sorts itself out.
-        if self.settings.saved.show_notes != Some(false) {
-            let mut button = RailButton::new("rail-notes", "doc.plaintext", "Notes", self.notes.open);
-            button.tip = self.shortcut_tip("Notes", ShortcutCommand::ShowNotes);
-            button.hint = self.shortcut_display(ShortcutCommand::ShowNotes);
-            views.push(rail_button(button, |this, window, cx| { if this.notes.open { this.close_notes(cx); } else { this.show_notes(window, cx); } }, cx));
-        }
         let mut foot = vec![];
         // Finish setting up, with how many are left: only while something's
         // left and it isn't hidden (setup_panel.rs).

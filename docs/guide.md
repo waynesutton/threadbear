@@ -2243,7 +2243,7 @@ Your notes stay on this Mac and are yours alone: each is encrypted, with
 a key Threadbear keeps beside its other secrets (readable only by you), so
 a copy of the notes folder on its own can't be read, and they're never
 sent to the runner, an agent, your phone or the website. Opening Notes
-never asks for your Mac password. If notes from an older Swift app still have their key in the Keychain, open Notes once in that app to move the key into its file. Notes are for ideas and to-dos, not
+never asks for your Mac password. Notes are for ideas and to-dos, not
 passwords: keep those in a password manager. To hide Notes, turn off Show Notes in Settings >
 General; the notes are kept.
 

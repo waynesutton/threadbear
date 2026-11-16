@@ -158,7 +158,6 @@ impl Threadbear {
     /// Esc in the Threads panel: the Scheduled, Projects or Librarian view
     /// goes back to the Inbox.
     fn list_escape(&mut self, _window: &mut Window, cx: &mut Context<Self>) {
-        if self.notes.open { self.close_notes(cx); return; }
         if self.mode != SidebarMode::Inbox {
             self.set_mode(SidebarMode::Inbox, cx);
         }
@@ -1496,7 +1495,6 @@ impl Threadbear {
     /// `app.newThread()`: leaves the open thread for a fresh start, the
     /// cursor in the new box.
     pub(crate) fn new_thread(&mut self, cx: &mut Context<Self>) {
-        self.notes.open = false;
         self.leave_pane(cx);
         self.selected = None;
         self.shows_home = false;
