@@ -3077,3 +3077,24 @@ Each item ticks itself off once it's done, and the list's icon on the
 left-hand rail goes once they all have. Hide this list puts it away, and
 Help > Finish Setting Up brings it back. The phone and website items only
 show when your Threadbear has a Convex deployment for them to use.
+
+## Tasks (experiment)
+
+Tasks keeps a simple shared list for your account. Turn on Tasks in Settings >
+Experiments, then use Tasks below Notes or Command-7. Board starts with
+Backlog, Todo and Done. Switch to List for checkboxes; checking a task moves
+it to Done, and unchecking returns it to Todo. The view switch is temporary;
+Set as default saves the view to open next time on your devices.
+
+Add a title and optional notes or project. Projects are optional, and their
+pages link to matching tasks. Use the project filter, grouping and sort menus
+to organize the board. In manual order you can move cards and columns; status
+menus also work without dragging. Delete offers Undo. Customize chooses a
+color or photo background and its fade.
+
+Open on web goes to your private `/tasks` page with the usual browser pairing.
+Web task edits work while your Mac sleeps. Editing needs a connection; failed
+saves leave the draft available to retry. Notes remains local and encrypted;
+Tasks is stored in your configured Convex backend. Notion project boards stay
+separate. Ask a thread to “add a task to review the launch checklist” to use
+the same collection through its task tools.

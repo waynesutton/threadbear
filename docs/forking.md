@@ -266,3 +266,13 @@ What a first list of the cuts missed and the trial found: the `-ThreadbearPocket
 launch argument, the positional parameter shifting the tools test, and the
 App Store review notes. Expect a few like that in any feature: after the
 listed cuts, `git grep -i <feature>` across the repo finds the rest.
+
+## Tasks
+
+The `tasks` experiment adds a cloud collection, separate from Notion project
+boards and Mac Notes. Its parts are `convex/tasks.ts`, `taskFields.ts`, the
+`tasks`/`taskPreferences` schema tables, `runner/src/tasks.ts`, four MCP tools,
+`desktop/gpui/src/tasks_page.rs` and `web/src/tasks.tsx`. Desktop is off by
+default; web checks API 83. Remove its route/navigation/protocol wiring with
+those files to omit it. It uses the configured backend and no owner-specific
+service or account. Deploy the additive backend before shipping clients.

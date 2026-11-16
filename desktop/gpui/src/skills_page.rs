@@ -123,6 +123,7 @@ impl Threadbear {
         if !self.skills_shown() || self.skills_page.is_some() {
             return;
         }
+        self.close_tasks(cx);
         self.close_settings(cx);
         self.close_notes(cx);
         let app = cx.entity().downgrade();

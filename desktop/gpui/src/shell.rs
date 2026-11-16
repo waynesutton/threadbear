@@ -295,6 +295,7 @@ actions!(
         ShowArchived,
         ShowSkills,
         ShowNotes,
+        ShowTasks,
         ShowPreviousTab,
         ShowNextTab,
         OpenSettings,
@@ -385,6 +386,7 @@ commands!(
     (ShowArchived, ShowArchived, Some(ShortcutCommand::ShowArchived)),
     (ShowSkills, ShowSkills, Some(ShortcutCommand::ShowSkills)),
     (ShowNotes, ShowNotes, Some(ShortcutCommand::ShowNotes)),
+    (ShowTasks, ShowTasks, Some(ShortcutCommand::ShowTasks)),
     (PreviousTab, ShowPreviousTab, Some(ShortcutCommand::PreviousTab)),
     (NextTab, ShowNextTab, Some(ShortcutCommand::NextTab)),
     (Settings, OpenSettings, Some(ShortcutCommand::Settings)),
@@ -468,6 +470,7 @@ impl Threadbear {
         if self.settings_window.is_some() {
             return "Settings".into();
         }
+        if self.tasks_page.is_some() { return "Tasks".into(); }
         if self.notes_page.is_some() {
             return "Notes".into();
         }
@@ -771,6 +774,7 @@ impl Threadbear {
             Command::Settings => self.open_settings(None, cx),
             // Up, or put away if it's up; nothing while Show Notes is off.
             Command::ShowSkills => self.toggle_skills(window, cx),
+            Command::ShowTasks => self.toggle_tasks(window, cx),
             Command::ShowNotes => self.toggle_notes(window, cx),
             Command::ZoomIn => self.zoom_in(window, cx),
             Command::ZoomOut => self.zoom_out(window, cx),
@@ -805,7 +809,7 @@ impl Threadbear {
             Command::Zoom => window.zoom_window(),
             Command::BringAllToFront => crate::window_menu::bring_all_to_front(cx),
             Command::Close => {
-                if !self.close_settings(cx) && !self.close_notes(cx) && !self.close_skills(cx) { crate::window_menu::close_window(window, cx); }
+                if !self.close_tasks(cx) && !self.close_settings(cx) && !self.close_notes(cx) && !self.close_skills(cx) { crate::window_menu::close_window(window, cx); }
             },
         }
         self.sync_menus(cx);
@@ -868,6 +872,7 @@ impl Threadbear {
     /// main panel too (`showSchedules`); picking a thread puts the thread back.
     pub(crate) fn set_mode(&mut self, mode: SidebarMode, cx: &mut Context<Self>) {
         self.close_settings(cx);
+        self.close_tasks(cx);
         self.close_notes(cx);
         self.close_skills(cx);
         let home = mode != SidebarMode::Inbox;
@@ -944,7 +949,7 @@ impl Threadbear {
     /// Settings or Notes over the main panel: Back puts it away, and
     /// there's no Forward until it's gone.
     fn over_main_panel(&self) -> bool {
-        self.settings_window.is_some() || self.notes_page.is_some() || self.skills_page.is_some()
+        self.tasks_page.is_some() || self.settings_window.is_some() || self.notes_page.is_some() || self.skills_page.is_some()
     }
 
     pub(crate) fn can_go_back(&self) -> bool {
@@ -956,7 +961,7 @@ impl Threadbear {
     }
 
     pub(crate) fn go_back(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        if self.close_settings(cx) || self.close_notes(cx) || self.close_skills(cx) { return; }
+        if self.close_tasks(cx) || self.close_settings(cx) || self.close_notes(cx) || self.close_skills(cx) { return; }
         let threads = self.threads.keys().cloned().collect::<std::collections::HashSet<_>>();
         let projects = self.projects.list.iter().map(|p| p.id.clone()).collect::<std::collections::HashSet<_>>();
         let can_show = |p: &NavPlace| match &p.project {
@@ -1348,6 +1353,7 @@ impl Threadbear {
                     item("Show Projects", Command::ShowProjects).enabled(self.projects_supported),
                     item("Show Librarian", Command::ShowLibrarian).enabled(self.projects_supported),
                     item("Show Skills", Command::ShowSkills).enabled(self.skills_shown()),
+                    item("Show Tasks", Command::ShowTasks).enabled(self.experiment_on("tasks")),
                     item("Show Notes", Command::ShowNotes).enabled(self.notes_shown()),
                     Separator,
                     item("Show Hibernating", Command::ShowHibernating),
@@ -1617,7 +1623,7 @@ impl Threadbear {
         // The main window's background picture (Settings > General > Look):
         // behind a new thread, or behind every thread with "Show behind open
         // threads too", faded more there as there's more text to read.
-        let over = self.settings_window.is_some() || self.notes_page.is_some() || self.skills_page.is_some();
+        let over = self.tasks_page.is_some() || self.settings_window.is_some() || self.notes_page.is_some() || self.skills_page.is_some();
         let is_new = !over && self.pane.is_none() && page.is_none() && self.open_project().is_none() && self.open_elsewhere(cx).is_none();
         let behind = self.main_background();
         let backdrop = match (&behind.file, behind.on) {
@@ -1627,6 +1633,7 @@ impl Threadbear {
         };
         let main: AnyElement = match (&self.pane, page) {
             _ if self.settings_window.is_some() => self.render_settings_page(cx),
+            _ if self.tasks_page.is_some() => self.render_tasks_page(),
             _ if self.notes_page.is_some() => self.render_notes_page(),
             _ if self.skills_page.is_some() => self.render_skills_page(),
             // A project's page takes the thread's place until a thread is

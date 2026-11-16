@@ -1,5 +1,15 @@
 # Files
 
+## Realtime Tasks
+
+- `convex/tasks.ts`, `convex/taskFields.ts`: authenticated cloud-owned tasks and synced preferences.
+- `runner/src/tasks.ts`: desktop/agent bridge and realtime invalidation.
+- `desktop/gpui/src/tasks_page.rs`: native Tasks board/list, editor and background controls.
+- `web/src/tasks.tsx`, `web/src/tasks.css`: authenticated responsive Tasks route.
+- `web/src/tasks-draft.ts`, `web/src/tasks-draft.test.ts`: field-specific edits that preserve concurrent changes.
+- `runner/test/unit/tasks*.test.ts`, `features/tasks.feature`: backend/bridge and native behavior checks.
+- `prds/realtime-tasks.md`: scope, delivery constraints and verification checkpoint.
+
 ## GPUI Looks
 
 - `desktop/core/src/looks/` the Librarian, Scheduled and Projects pages' looks in the Swift app's JSON, the background's focus and crop, the greeting, GitHub contributions, Threadbear activity, the quote of the day and the profile page made from the Librarian's look.

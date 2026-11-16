@@ -388,4 +388,5 @@
 //    POST /hook/<key> takes a delivery (webhooks:deliver, capped, limited,
 //    deduped, batched); webhooks:issueWebhook, listWebhooks and
 //    revokeWebhook take the owner key. A runner offers webhooks only from 82.
-export const API_VERSION = 82;
+// 83: Native Tasks, cloud-owned and editable while the runner is offline.
+export const API_VERSION = 83;

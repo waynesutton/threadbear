@@ -1,0 +1,330 @@
+.tasks-shell {
+  display: flex;
+  height: 100dvh;
+}
+.tasks-shell > .main {
+  flex: 1;
+  min-width: 0;
+}
+.tasks-page {
+  position: relative;
+  isolation: isolate;
+  min-height: 100%;
+  padding: 24px;
+  background: var(--tasks-color);
+  overflow: auto;
+}
+.tasks-page:before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background-image: var(--tasks-photo);
+  background-size: cover;
+  background-position: var(--tasks-position);
+  opacity: calc(1 - var(--tasks-fade));
+  pointer-events: none;
+}
+.tasks-header,
+.tasks-toolbar,
+.tasks-view {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.tasks-header h1 {
+  margin: 0 auto 0 0;
+  font-size: 24px;
+}
+.tasks-view {
+  gap: 2px;
+  border: 1px solid var(--line, #555);
+  border-radius: 8px;
+  padding: 3px;
+}
+.tasks-page button,
+.tasks-page select,
+.tasks-page input,
+.tasks-page textarea {
+  font: inherit;
+  color: inherit;
+}
+.tasks-page button,
+.tasks-page select {
+  border: 1px solid var(--line, #555);
+  border-radius: 6px;
+  background: var(--raised);
+  padding: 7px 10px;
+  cursor: pointer;
+}
+.tasks-page button[aria-pressed='true'] {
+  background: var(--hover, #41454d);
+}
+.tasks-page button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+.tasks-toolbar {
+  margin: 20px 0;
+}
+.tasks-toolbar > span {
+  opacity: 0.65;
+  font-size: 13px;
+}
+.tasks-columns {
+  display: flex;
+  gap: 16px;
+  align-items: flex-start;
+  min-height: 400px;
+}
+.task-column {
+  flex: 1;
+  min-width: 260px;
+  background: color-mix(in srgb, var(--side) 88%, transparent);
+  border-radius: 8px;
+  padding: 12px;
+  min-height: 300px;
+}
+.task-column h2 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  margin: 0 0 16px;
+}
+.task-column h2 span {
+  opacity: 0.55;
+  font-weight: 400;
+}
+.task-column h2 button {
+  margin-left: auto;
+  border: 0;
+}
+.task-card {
+  display: grid;
+  grid-template-columns: 20px 1fr;
+  gap: 8px;
+  align-items: start;
+  border: 1px solid var(--line, #555);
+  background: var(--raised);
+  padding: 12px;
+  margin-bottom: 8px;
+  border-radius: 7px;
+}
+.task-card > input {
+  margin-top: 6px;
+  accent-color: #539b8d;
+}
+.task-card .task-title {
+  background: none;
+  border: 0;
+  text-align: left;
+  padding: 0;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+.task-card.is-done .task-title {
+  text-decoration: line-through;
+  opacity: 0.6;
+}
+.task-project {
+  grid-column: 2;
+  font-size: 12px;
+  opacity: 0.65;
+}
+.task-card select {
+  grid-column: 2;
+  justify-self: start;
+  font-size: 12px;
+  padding: 3px;
+}
+.task-add {
+  width: 100%;
+  text-align: left;
+  background: transparent !important;
+  border: 0 !important;
+  opacity: 0.65;
+}
+.tasks-list .tasks-columns {
+  display: block;
+}
+.tasks-list .task-column {
+  min-height: 0;
+  margin-bottom: 14px;
+}
+.tasks-list .task-card {
+  grid-template-columns: 20px 1fr auto auto;
+  background: transparent;
+  border: 0;
+  border-bottom: 1px solid var(--line, #555);
+  border-radius: 0;
+}
+.tasks-list .task-project,
+.tasks-list .task-card select {
+  grid-column: auto;
+}
+.tasks-customize {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 20px;
+  padding: 20px;
+  margin-bottom: 20px;
+  background: var(--raised);
+  border-radius: 8px;
+}
+.task-editor-backdrop {
+  position: fixed;
+  inset: 0;
+  background: #0008;
+  z-index: 100;
+  display: grid;
+  place-items: center;
+  padding: 16px;
+}
+.task-editor {
+  width: min(540px, 100%);
+  max-height: 90dvh;
+  overflow: auto;
+  background: var(--raised);
+  border: 1px solid var(--line, #555);
+  border-radius: 12px;
+  padding: 24px;
+}
+.task-editor label {
+  display: grid;
+  gap: 6px;
+  margin-bottom: 14px;
+}
+.task-editor input,
+.task-editor textarea {
+  background: var(--bg, #18191c);
+  border: 1px solid var(--line, #555);
+  border-radius: 6px;
+  padding: 10px;
+  width: 100%;
+  box-sizing: border-box;
+}
+.task-editor footer {
+  display: flex;
+  gap: 10px;
+  justify-content: flex-end;
+}
+.tasks-page :focus-visible {
+  outline: 2px solid #67b9aa;
+  outline-offset: 3px;
+}
+@media (max-width: 760px) {
+  .tasks-page {
+    padding: 16px 12px 84px;
+  }
+  .tasks-columns {
+    overflow-x: auto;
+    scroll-snap-type: x proximity;
+  }
+  .task-column {
+    flex: 0 0 84vw;
+    scroll-snap-align: start;
+  }
+  .tasks-header {
+    gap: 10px;
+  }
+  .tasks-header > button:last-child {
+    position: fixed;
+    bottom: 68px;
+    right: 16px;
+    z-index: 3;
+    min-height: 44px;
+  }
+  .tasks-page button,
+  .tasks-page select {
+    min-height: 40px;
+  }
+  .tasks-header h1 {
+    width: 100%;
+  }
+  .tasks-list .task-card {
+    grid-template-columns: 20px 1fr;
+  }
+  .tasks-list .task-project,
+  .tasks-list .task-card select {
+    grid-column: 2;
+  }
+}
+
+.task-drag {
+  touch-action: none;
+  grid-column: 1;
+  opacity: 0.55;
+  cursor: grab !important;
+  border: 0 !important;
+  background: none !important;
+  padding: 0 !important;
+}
+.task-card {
+  grid-template-columns: 18px 20px 1fr;
+}
+.task-card > .task-title {
+  grid-column: 3;
+}
+.task-project,
+.task-card select {
+  grid-column: 3;
+}
+.tasks-list .task-card {
+  grid-template-columns: 18px 20px 1fr auto auto;
+}
+.tasks-list .task-project,
+.tasks-list .task-card select {
+  grid-column: auto;
+}
+.task-touch-ghost {
+  position: fixed;
+  z-index: 200;
+  pointer-events: none;
+  max-width: 240px;
+  padding: 12px;
+  border: 1px solid var(--line-strong);
+  border-radius: 8px;
+  background: var(--raised);
+  box-shadow: var(--shadow);
+}
+@media (max-width: 760px) {
+  .tasks-list .task-card {
+    grid-template-columns: 18px 20px 1fr;
+  }
+  .tasks-list .task-project,
+  .tasks-list .task-card select {
+    grid-column: 3;
+  }
+}
+
+.task-column h2 {
+  touch-action: none;
+}
+
+/* Tasks has no thread sidebar; keep the existing rail below it on phones. */
+.tasks-shell > .rail {
+  flex: 0 0 44px;
+}
+.tasks-page {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+}
+.tasks-columns {
+  overflow-x: auto;
+}
+@media (max-width: 760px) {
+  .tasks-shell {
+    flex-direction: column;
+  }
+  .tasks-shell > .main {
+    width: 100%;
+  }
+  .tasks-shell > .rail {
+    flex: 0 0 auto;
+    width: 100%;
+  }
+}

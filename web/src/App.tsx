@@ -23,6 +23,7 @@ import { busy, Lists, ResizeHandle, type Row, useSidebarWidth } from './sidebar'
 import { Pop } from './menu';
 import { pastedOf } from './picture-chips';
 import { Rail } from './rail';
+import { TasksPage } from './tasks';
 import { NewThread, ProjectPage, ProjectsList, RunnerPage, RunnersList, ScheduledList, SchedulePage, UsageList, UsagePage } from './pages';
 import { duration, fold, isNote, splitTurns, type Item } from './turns';
 import { folderName, sender } from './format';
@@ -118,6 +119,7 @@ function Shell({ token, route }: { token: string; route: ReturnType<typeof useRo
   const shell = useRef<HTMLDivElement>(null);
   // On a phone there's one column: a list, or what's open from it.
   const open = !!selected || !!id || route.page === 'new';
+  if (route.page === 'tasks') return <div className="tasks-shell"><Rail token={token} route={route} /><main className="main"><TasksPage token={token} projectFilter={route.id ?? ''} /></main></div>;
   return (
     <div ref={shell} className={`shell ${open ? 'has-thread' : ''}`} style={{ '--sidebar-width': `${width}px` } as CSSProperties}>
       <Rail token={token} route={route} />

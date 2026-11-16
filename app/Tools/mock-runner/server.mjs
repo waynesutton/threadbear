@@ -441,6 +441,7 @@ function mockExperiments() {
     ...(process.env.TB_MOCK_VOICE ? ['voiceMode'] : []),
     ...(pagesOn() ? ['pages'] : []),
     ...(process.env.TB_MOCK_SKILLS ? ['skillsStore'] : []),
+    ...(process.env.TB_MOCK_TASKS ? ['tasks'] : []),
     // TB_MOCK_NESTED_OFF keeps its demo threads with the experiment off.
     ...(process.env.TB_MOCK_NESTED && !process.env.TB_MOCK_NESTED_OFF ? ['nestedThreads'] : []),
   ];
@@ -599,7 +600,30 @@ async function handle(client, { id, method, params = {} }) {
   }
 }
 
+// Isolated task fixtures for native UI specs; never reaches Convex.
+const mockTasks = new Map();
+let tasksFailNext = false;
+const mockTaskPrefs = { defaultView: 'board', columnOrder: ['backlog','todo','done'], grouping: 'status', sort: 'manual', fade: .85, theme: 'system' };
 async function dispatch(client, method, p) {
+  if (method.startsWith('tasks.')) {
+    if (!process.env.TB_MOCK_TASKS) throw new Error('Tasks is off');
+    if (tasksFailNext && ['tasks.create','tasks.update'].includes(method)) { tasksFailNext=false; throw rpcError(-32000,'Task save rejected by the mock runner.'); }
+    switch (method) {
+      case 'tasks.list': return {items:[...mockTasks.values()].filter(t => !t.deleted),next:null};
+      case 'tasks.preferences': return mockTaskPrefs;
+      case 'tasks.photo': return null;
+      case 'tasks.projects': return projects.map(p => ({id:p.id,runnerId:'mock',title:p.title}));
+      case 'tasks.count':
+      case 'tasks.projectCount': return {count:[...mockTasks.values()].filter(t=>!t.deleted && t.project?.id === (p.project?.id ?? p.project)).length,more:false};
+      case 'tasks.create': if (!mockTasks.has(p.id)) mockTasks.set(p.id,{id:p.id,title:p.title,notes:p.notes??'',status:p.status??'todo',project:p.project??null,position:Date.now(),createdAt:Date.now(),updatedAt:Date.now(),deleted:false}); break;
+      case 'tasks.update': if (!mockTasks.has(p.id)) throw new Error('Task no longer exists'); Object.assign(mockTasks.get(p.id),p,{updatedAt:Date.now()}); break;
+      case 'tasks.remove': if(mockTasks.has(p.id)) mockTasks.get(p.id).deleted=true; break;
+      case 'tasks.restore': if(mockTasks.has(p.id)) mockTasks.get(p.id).deleted=false; break;
+      case 'tasks.setPreferences': Object.assign(mockTaskPrefs,p); break;
+      default: throw new Error('Unsupported mock task operation');
+    }
+    broadcast('tasks.updated',{}); return null;
+  }
   switch (method) {
     case 'hello':
       // The Mac mini has two logins of its own and no pools, as the real one does,
@@ -1717,6 +1741,14 @@ async function dispatch(client, method, p) {
     }
     case 'instructions.get':
       return { instructions: mockInstructions };
+    case 'mock.tasks':
+      tasksFailNext = p.failNext === true;
+      if (p.complete) {
+        const row = [...mockTasks.values()].find(t=>t.title===p.complete);
+        if (!row) throw rpcError(-32602,'No mock task with that title');
+        row.status='done'; broadcast('tasks.updated',{});
+      }
+      return {};
     case 'mock.instructions':
       instructionsFailNext = p.failNext === true;
       return {};

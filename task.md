@@ -9,6 +9,8 @@ Status and gap list: prds/prints-status.md
 
 ## In Progress
 
+- [x] Realtime Tasks local draft (2026-11-16T11:03:00Z): native build and six UI scenarios (77 steps), 14 backend/runner tests, two web draft tests, typechecks and web build pass. Real local-backend browser save/photo and touch drag verified; native card/column drag and light/dark inspected. Not deployed or landed. prds/realtime-tasks.md
+
 - [ ] Land verified Settings review fixes when the Mac is quiet, then verify the installed update.
 
 ## Completed

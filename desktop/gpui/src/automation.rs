@@ -401,6 +401,13 @@ fn step(app: &Entity<Threadbear>, cmd: &Value, window: &mut Window, cx: &mut App
                 && window.try_find("settings-page").is_some_and(|page| page.visible()));
             // Who AppKit gives the keys to: GPUI's view, or a page's.
             dump["keyboard"] = crate::web_panels::keyboard_dump(window);
+            dump["tasksDrawn"] = json!(gpui_kit::base::test_support::texts(window).into_iter()
+                .filter(|t| t.visible() && t.path().contains(&ElementId::Name("tasks-page".into())))
+                .map(|t| t.text().to_owned())
+                .chain(gpui_kit::base::test_support::snapshots(window).into_iter()
+                    .filter(|e| e.visible() && e.path().contains(&ElementId::Name("tasks-page".into())))
+                    .filter_map(|e| e.label().map(str::to_owned)))
+                .collect::<Vec<_>>());
             // Whether the Threads panel has the keyboard (its arrows and Esc).
             if dump["sidebar"].is_object() {
                 dump["sidebar"]["keyboard"] = json!(app.read(cx).sidebar.focus.contains_focused(window, cx));
@@ -453,6 +460,7 @@ fn step(app: &Entity<Threadbear>, cmd: &Value, window: &mut Window, cx: &mut App
         // Settings > Keyboard, as the Swift app's `shortcuts` (settings_window/keyboard.rs).
         "shortcuts" => crate::settings_window::keyboard_automation(app, cmd, window, cx),
         // Notes (notes_page.rs): opened, a note renamed, picked, a box ticked, a delete answered.
+        "tasks" => crate::tasks_page::automation(app, cmd, window, cx),
         "notes" => crate::notes_page::automation(app, cmd, window, cx),
         "skills" => crate::skills_page::automation(app, cmd, window, cx),
         // The sidebar's commands (sidebar.rs). Guarded ones only take the forms

@@ -893,3 +893,13 @@ priority, it passes a sample of tool output and pictures to Apple's on-device
 model, and Apple's on-device text recognition for a picture. Nothing leaves the
 Mac and it changes nothing that uploads. It keeps counts, and the thread and
 sequence number of what it flagged, in `<data>/secret-check.json`. Never the text.
+
+## Tasks experiment
+
+Tasks stores titles, notes, project references and display preferences in your
+configured Convex deployment, separately from encrypted local Notes. Desktop
+uses authenticated runner queries/mutations and three live subscriptions; the
+paired browser reads and writes directly. Dropping a Tasks background image
+reads that selected file (up to 10 MB) and uploads it to Convex storage. No
+other folder is scanned. Photo URLs are storage capability links returned to
+authenticated clients. There is no offline edit queue or local task database.

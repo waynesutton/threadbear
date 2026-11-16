@@ -103,6 +103,7 @@ impl Threadbear {
     /// All entry points share the main panel. Defer creation because the
     /// form observes and reads the app, which is borrowed by this update.
     pub(crate) fn open_settings(&mut self, tab: Option<Tab>, cx: &mut Context<Self>) {
+        self.close_tasks(cx);
         self.close_notes(cx);
         self.close_skills(cx);
         let (me, handle) = (cx.entity(), self.main_window);

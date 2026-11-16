@@ -7559,6 +7559,7 @@ anyone's); "any runner" is any good key. Anything not sorted is owner only.
 | `sharedUsage` | its own | only the main key's readings, and only of the logins the owner has listed for its runner (`setRunnerLogins`), with no runner id; never what its own accounts rows name. Nobody, the owner included, gets a runner key's readings |
 | `setRunnerLogins` | owner only | which logins a runner key's runner shares: its own rows say whatever its key likes |
 | `runnerLogins` | owner only | each keyed runner's listed logins, and the ones its rows name |
+| `nativeTasks` | any runner | shared account Tasks and preferences, through the authenticated helper in tasks.ts; paired browser tokens use the same account boundary |
 | `pools` | any runner | the shared pools, which every runner follows; a runner key gets no member named by another runner's id |
 | `savePools` | owner only | pools reach the main Mac's logins and folders |
 | `adoptPools` | owner only | as `savePools`; a runner key's runner keeps its own until the main Mac sets them |
@@ -7872,3 +7873,61 @@ Either side may be upgraded first, so each tolerates the other:
 - An app older than Devices never asks for them. A newer app talking to a
   runner older than Devices gets `-32601` from `devices.*` and says the
   Phone & browser tab needs a newer runner.
+
+## Native Tasks (experiment, backend API 83)
+
+Tasks are an account-wide Convex-owned collection, separate from encrypted
+Mac Notes and Notion-backed ProjectTasks. The Tasks experiment exposes
+list/create/update/move/delete/restore and preferences operations through
+the runner, with equivalent paired-browser functions. Changes subscribe
+in realtime; browser mutations do not queue behind an online runner.
+
+Each task carries a stable client-generated id (retry-safe creation), title,
+notes, status (backlog/todo/done), optional project reference (runnerId and
+project id), created/updated timestamps and manual position. Mutations
+patch specified fields only. Deletion can be undone by restoring the same
+id. New tasks use timestamp ordering. Project deletion leaves tasks
+unassigned rather than deleting them.
+
+Preferences include defaultView (board initially, or list), column order,
+grouping, sorting, background color/photo, photo position/fade and theme.
+Changing the current view does not set defaultView: Set as default does.
+Desktop Tasks is below Notes, Command-7; website is /tasks. Links require
+existing account authentication. Offline views may show cached data but
+mutations require connectivity.
+
+### Tasks RPC contract
+
+The `tasks` experiment gates desktop RPCs and agent tools. The website checks
+backend API 83 before calling these functions. A runner supplies its own key;
+clients cannot override credentials in an RPC. Paired browsers use their token
+with the same Convex functions. This is a single-owner deployment collection.
+
+- `tasks.list {after?, limit?}` returns `{items, next}`. Follow `next` as `after`
+  until null; limit defaults to 100 and is capped at 250. Ids order pagination,
+  while `position` controls display order.
+- `tasks.create {id?, title, notes?, status?, project?}` returns the id. Supply
+  the same id on retries. Repeating creation never overwrites an existing task.
+- `tasks.update {id, title?, notes?, status?, project?, position?}` patches only
+  supplied fields. A null project removes the association. Status is `backlog`,
+  `todo` or `done`; checking completes, unchecking sets `todo`.
+- `tasks.remove {id}` and `tasks.restore {id}` soft-delete and restore.
+- `tasks.projects {}` returns `{runnerId,id,title}[]`. A project argument can
+  also be its exact id or title; ambiguous names fail. `tasks.count {project}`
+  and `tasks.projectCount {project}` return `{count,more}` capped at 1000.
+- `tasks.preferences {}` returns defaultView, columnOrder, grouping
+  (`status`/`project`), sort (`manual`/`newest`/`oldest`/`title`), backgroundColor,
+  backgroundPhoto, photoPosition, fade and theme. `tasks.setPreferences` patches
+  those fields. Column order must contain each of the three statuses once.
+- `tasks.photo {}` returns an authenticated storage capability URL or null.
+  `tasks.uploadPhoto {}` returns an upload URL. `tasks.photoFile {path}` reads
+  a local image, uploads it and selects it. PNG/JPEG/WebP/GIF, at most 10 MB.
+- `tasks.updated {}` invalidates loaded tasks/preferences. It is not a row
+  snapshot: clients requery, coalesce concurrent refreshes and retain the last
+  successful snapshot on failure. There is no offline write queue.
+
+Titles are trimmed, required and at most 500 characters; notes are at most
+20,000. Times and positions here are numeric milliseconds, unlike thread ISO
+timestamps. Project references include both runner and project identity.
+The four agent tools are `list_tasks`, `create_task`, `update_task` and
+`delete_task` (with `undo:true` to restore).

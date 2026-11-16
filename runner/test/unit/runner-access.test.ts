@@ -135,7 +135,12 @@ test('every function in convex/sync.ts, relay.ts, mcp.ts, moves.ts and webhooks.
   const src = ['sync.ts', 'relay.ts', 'mcp.ts', 'moves.ts', 'webhooks.ts'].map((f) => fs.readFileSync(path.join(import.meta.dirname, '../../../convex', f), 'utf8')).join('\n');
   const exported = [...src.matchAll(/^export const (\w+) = (?:mutation|query)\(/gm)].map((m) => m[1]!);
   assert.ok(exported.length > 40, 'found the functions');
-  assert.deepEqual([...exported].sort(), Object.keys(ACCESS).sort());
+  // Tasks has one shared account policy for its token-or-runner auth helper.
+  // Its per-operation authentication is exercised in tasks-backend.test.ts.
+  assert.deepEqual([...exported, 'nativeTasks'].sort(), Object.keys(ACCESS).sort());
+  const tasks = fs.readFileSync(path.join(import.meta.dirname, '../../../convex/tasks.ts'), 'utf8');
+  assert.match(tasks, /runnerAuth\(ctx, auth.key, 'nativeTasks'\)/);
+  assert.equal(ACCESS.nativeTasks, 'shared');
   // Each function's body, up to the next export.
   const parts = src.split(/^(?=export const \w+ = (?:mutation|query|internalMutation)\()/m);
   for (const name of exported) {

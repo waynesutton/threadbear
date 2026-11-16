@@ -169,6 +169,7 @@ pub enum ShortcutCommand {
     /// ⌘6: your own notes over the main panel (notes_page.rs), while
     /// Settings > Experiments > Show Notes is on. The Swift app's key and name.
     ShowNotes,
+    ShowTasks,
     /// ⇧⌘[ and ⇧⌘]: a project's page tabs (Decisions, Project), as Safari's
     /// tabs go. Greyed out anywhere else.
     PreviousTab,
@@ -189,7 +190,7 @@ pub enum ShortcutCommand {
 pub const OPEN_ANYTHING_EXPERIMENT: &str = "openAnything";
 
 impl ShortcutCommand {
-    pub const ALL: [ShortcutCommand; 29] = [
+    pub const ALL: [ShortcutCommand; 30] = [
         Self::NewThread,
         Self::Archive,
         Self::Hibernate,
@@ -208,6 +209,7 @@ impl ShortcutCommand {
         Self::ShowArchived,
         Self::ShowSkills,
         Self::ShowNotes,
+        Self::ShowTasks,
         Self::PreviousTab,
         Self::NextTab,
         Self::ZoomIn,
@@ -241,6 +243,7 @@ impl ShortcutCommand {
             Self::ShowArchived => "showArchived",
             Self::ShowSkills => "showSkills",
             Self::ShowNotes => "showNotes",
+            Self::ShowTasks => "showTasks",
             Self::PreviousTab => "previousTab",
             Self::NextTab => "nextTab",
             Self::ZoomIn => "zoomIn",
@@ -279,6 +282,7 @@ impl ShortcutCommand {
             Self::ShowArchived => "Show Archived",
             Self::ShowSkills => "Show Skills",
             Self::ShowNotes => "Show Notes",
+            Self::ShowTasks => "Show Tasks",
             Self::PreviousTab => "Show Previous Tab",
             Self::NextTab => "Show Next Tab",
             Self::ZoomIn => "Zoom In",
@@ -300,6 +304,7 @@ impl ShortcutCommand {
         match self {
             Self::OpenAnything | Self::OpenAnythingAlso => Some(OPEN_ANYTHING_EXPERIMENT),
             Self::ShowSkills => Some(crate::skills::EXPERIMENT),
+            Self::ShowTasks => Some("tasks"),
             _ => None,
         }
     }
@@ -324,6 +329,7 @@ impl ShortcutCommand {
             Self::ShowLibrarian => Some(ShortcutKey::new("4")),
             Self::ShowSkills => Some(ShortcutKey::new("5")),
             Self::ShowNotes => Some(ShortcutKey::new("6")),
+            Self::ShowTasks => Some(ShortcutKey::new("7")),
             // ⌘= is the key under the + sign, so ⌘+ works without shift.
             Self::ZoomIn => Some(ShortcutKey::new("=")),
             Self::ZoomOut => Some(ShortcutKey::new("-")),
@@ -485,7 +491,7 @@ mod tests {
         let keys: Vec<ShortcutKey> = ShortcutCommand::ALL.iter().filter_map(|c| c.default_key()).collect();
         let unique: std::collections::HashSet<&ShortcutKey> = keys.iter().collect();
         assert_eq!(keys.len(), unique.len(), "two commands can't start on one key");
-        assert_eq!(ShortcutCommand::ALL.len(), 29);
+        assert_eq!(ShortcutCommand::ALL.len(), 30);
         // The Swift app's names and keys, as both apps read shortcuts.json.
         assert_eq!(ShortcutCommand::from_name("previousTab"), Some(ShortcutCommand::PreviousTab));
         assert_eq!(ShortcutCommand::PreviousTab.default_key(), Some(key("cmd+shift+[")));
@@ -497,6 +503,8 @@ mod tests {
         assert_eq!(ShortcutCommand::CollapseThreads.default_key(), Some(key("cmd+/")));
         assert_eq!(ShortcutCommand::from_name("showNotes"), Some(ShortcutCommand::ShowNotes));
         assert_eq!(ShortcutCommand::ShowNotes.default_key(), Some(key("cmd+6")));
+        assert_eq!(ShortcutCommand::ShowTasks.default_key(), Some(key("cmd+7")));
+        assert_eq!(ShortcutCommand::ShowTasks.experiment(), Some("tasks"));
         assert_eq!(ShortcutCommand::from_name("showSkills"), Some(ShortcutCommand::ShowSkills));
         assert_eq!(ShortcutCommand::ShowSkills.default_key(), Some(key("cmd+5")));
         assert_eq!(ShortcutCommand::ShowSkills.experiment(), Some("skillsStore"));

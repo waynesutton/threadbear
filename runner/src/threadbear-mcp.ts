@@ -173,7 +173,7 @@ export const ALWAYS_ASK_TOOLS = new Set([`mcp__${SERVER_NAME}__delete_thread`]);
 // Restart to Update asks only wake or file this thread, with the runner's
 // words, and the turn they start runs in its mode then, so they stay in.
 export const NEVER_ASK_TOOLS = new Set(
-  ['end_turn', 'list_threads', 'read_thread', 'list_accounts', 'list_schedules', 'list_projects', 'read_project', 'unpin', 'ask_secret', 'add_button', 'x_search', 'list_prints', 'read_print', 'list_pages', 'read_page'].map(
+  ['end_turn', 'list_tasks', 'list_threads', 'read_thread', 'list_accounts', 'list_schedules', 'list_projects', 'read_project', 'unpin', 'ask_secret', 'add_button', 'x_search', 'list_prints', 'read_print', 'list_pages', 'read_page'].map(
     (n) => `mcp__${SERVER_NAME}__${n}`,
   ),
 );
@@ -283,6 +283,7 @@ export function buildThreadbearTools(
     printPublisher?: () => PagePublisher | undefined;
     // Settings' Only make Prints when I ask (printsWhenAsked): create_print
     // asks first unless the user's latest message asked for one.
+    tasks?: () => import('./tasks.ts').Tasks | undefined;
     printsWhenAsked?: () => boolean;
   } = {},
 ) {
@@ -2025,6 +2026,12 @@ export function buildThreadbearTools(
     ...xSearchTools,
     ...pageTools,
     ...pocketTools,
+    ...(opts.tasks?.() ? [
+      tool('list_tasks', 'List synced Tasks. Follow next with after for more.', { after: z.string().optional() }, handle(async a => JSON.stringify({ ...(await opts.tasks!()!.call('list', a) as object), projects: await opts.tasks!()!.call('projects') }))),
+      tool('create_task', 'Add a synced task. Project is optional: its name, id, or runnerId/id from list_tasks. Supply id to retry safely.', { id: z.string().optional(), title: z.string(), notes: z.string().optional(), status: z.enum(['backlog', 'todo', 'done']).optional(), project: z.union([z.string(), z.object({ runnerId: z.string(), id: z.string() })]).optional() }, handle(async a => JSON.stringify(await opts.tasks!()!.call('create', a)))),
+      tool('update_task', 'Edit or move a synced task. Only supplied fields change; null project unassigns it.', { id: z.string(), title: z.string().optional(), notes: z.string().optional(), status: z.enum(['backlog', 'todo', 'done']).optional(), project: z.union([z.string(), z.object({ runnerId: z.string(), id: z.string() })]).nullable().optional(), position: z.number().optional() }, handle(async a => JSON.stringify(await opts.tasks!()!.call('update', a)))),
+      tool('delete_task', 'Delete a synced task, or restore it with undo.', { id: z.string(), undo: z.boolean().optional() }, handle(async ({ id, undo }) => JSON.stringify(await opts.tasks!()!.call(undo ? 'restore' : 'remove', { id })))),
+    ] : []),
     ...(schedules ? scheduleTools : []),
     ...(projects ? projectTools : []),
     tool(
@@ -2548,13 +2555,13 @@ export function serverInstructions(selfId: string, o: { one: boolean; bulletRepl
   );
 }
 
-export function threadbearMcpServer(control: ThreadControl, selfId: string, schedules?: ScheduleControl, projects?: ProjectControl, appRestarts?: AppRestartControl, bulletReplies: () => boolean = () => true, pocket?: () => PocketControl | undefined, oneReply: () => boolean = () => false, gateway?: () => string | undefined, gatewayHealth?: () => Promise<ConnectorService[] | undefined>, remote?: () => RemoteControl | undefined, xSearch?: () => { secretsDir: string } | undefined, pages?: () => Pages | undefined, printPublisher?: () => PagePublisher | undefined, printsWhenAsked?: () => boolean): McpSdkServerConfigWithInstance {
+export function threadbearMcpServer(control: ThreadControl, selfId: string, schedules?: ScheduleControl, projects?: ProjectControl, appRestarts?: AppRestartControl, bulletReplies: () => boolean = () => true, pocket?: () => PocketControl | undefined, oneReply: () => boolean = () => false, gateway?: () => string | undefined, gatewayHealth?: () => Promise<ConnectorService[] | undefined>, remote?: () => RemoteControl | undefined, xSearch?: () => { secretsDir: string } | undefined, pages?: () => Pages | undefined, printPublisher?: () => PagePublisher | undefined, printsWhenAsked?: () => boolean, tasks?: () => import('./tasks.ts').Tasks | undefined): McpSdkServerConfigWithInstance {
   const one = oneReply();
   const server = createSdkMcpServer({
     name: SERVER_NAME,
     version: RUNNER_VERSION,
     instructions: serverInstructions(selfId, { one, bulletReplies: bulletReplies(), pocket: Boolean(pocket?.()), projects: Boolean(projects) }),
-    tools: buildThreadbearTools(control, selfId, Date.now, schedules, projects, appRestarts, { bulletReplies, pocket, oneReply: () => one, gateway, gatewayHealth, remote, xSearch, pages, printPublisher, printsWhenAsked }),
+    tools: buildThreadbearTools(control, selfId, Date.now, schedules, projects, appRestarts, { bulletReplies, pocket, oneReply: () => one, gateway, gatewayHealth, remote, xSearch, pages, printPublisher, printsWhenAsked, tasks }),
   });
   server.tools = [...ALWAYS_ASK_TOOLS].map((name) => ({ name: name.split('__').at(-1)!, permission_policy: 'always_ask' as const }));
   return server;
