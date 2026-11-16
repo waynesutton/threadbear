@@ -4,7 +4,7 @@
 // is talking, and pulse while it gets ready or the agent works. And the pill
 // over the message box while Fn dictation listens (KeyDictationHUD).
 use super::keys::DictationPhase;
-use super::mode::NEW_THREAD;
+use super::mode::{Phase, NEW_THREAD};
 use crate::a11y::A11yRole as _;
 use crate::app::Threadbear;
 use gpui_kit::base::TestSupportExt as _;
@@ -93,29 +93,40 @@ fn bars(level: f32, busy: bool, size: Pixels) -> AnyElement {
 
 /// The pill over the message box while Fn dictation is on: what it's doing,
 /// the words so far, and how to finish or cancel. Takes no clicks.
-pub(crate) fn pill(app: &WeakEntity<Threadbear>, cx: &mut App) -> Option<AnyElement> {
+/// The same pill shows Voice mode on this box's thread too, in place of the
+/// Swift app's bear: what it's doing, and what you're saying as you say it.
+/// `thread` is the box's (None on the new-thread page).
+pub(crate) fn pill(thread: Option<&str>, cx: &mut App) -> Option<AnyElement> {
     let voice = super::existing(cx)?;
-    let _ = app;
     let v = voice.read(cx);
     let d = &v.keys;
-    if d.phase == DictationPhase::Off {
+    let (line, failed, heard, busy, level) = if d.phase != DictationPhase::Off {
+        let keys = v.prefs.keys();
+        let line = match &d.phase {
+            DictationPhase::Off => String::new(),
+            DictationPhase::Starting(status) => status.clone(),
+            DictationPhase::Finishing => if d.mode == threadbear_core::voice_keys::KeyMode::Command { "Sending…" } else { "Typing it in…" }.to_owned(),
+            DictationPhase::Failed(message) => message.clone(),
+            // The end of what he's saying, where it's growing.
+            DictationPhase::Hearing(words) => tail(words, 70),
+            DictationPhase::Listening => keys.listening_line(d.mode),
+        };
+        (line, matches!(d.phase, DictationPhase::Failed(_)), matches!(d.phase, DictationPhase::Hearing(_)), matches!(d.phase, DictationPhase::Starting(_) | DictationPhase::Finishing), d.level)
+    } else if v.mode.is_on_for(thread.unwrap_or(NEW_THREAD)) {
+        let line = match &v.mode.phase {
+            Phase::Starting(status) => status.clone(),
+            Phase::Listening => "Listening. Talk, then pause to send it.".to_owned(),
+            Phase::Hearing(words) => tail(words, 70),
+            Phase::Thinking => "Sent. It's working on it; talk any time.".to_owned(),
+            Phase::Speaking => "Reading the reply. Talk to stop it.".to_owned(),
+            Phase::Off | Phase::Failed(_) => return None,
+        };
+        (line, false, matches!(v.mode.phase, Phase::Hearing(_)), v.mode.busy(), v.mode.level)
+    } else {
         return None;
-    }
-    let keys = v.prefs.keys();
-    let failed = matches!(d.phase, DictationPhase::Failed(_));
-    let heard = matches!(d.phase, DictationPhase::Hearing(_));
-    let busy = matches!(d.phase, DictationPhase::Starting(_) | DictationPhase::Finishing);
-    let line = match &d.phase {
-        DictationPhase::Off => String::new(),
-        DictationPhase::Starting(status) => status.clone(),
-        DictationPhase::Finishing => if d.mode == threadbear_core::voice_keys::KeyMode::Command { "Sending…" } else { "Typing it in…" }.to_owned(),
-        DictationPhase::Failed(message) => message.clone(),
-        // The end of what he's saying, where it's growing.
-        DictationPhase::Hearing(words) => tail(words, 70),
-        DictationPhase::Listening => keys.listening_line(d.mode),
     };
     let dot = div().flex().flex_none().items_center().justify_center().size(px(24.)).rounded_full().bg(if failed { rgb(0xff9500).into() } else { red() });
-    let dot = if failed { dot.child(div().text_size(px(12.)).font_weight(FontWeight::BOLD).text_color(gpui_kit::white()).child("!")) } else { dot.child(bars(d.level, busy, px(12.))) };
+    let dot = if failed { dot.child(div().text_size(px(12.)).font_weight(FontWeight::BOLD).text_color(gpui_kit::white()).child("!")) } else { dot.child(bars(level, busy, px(12.))) };
     Some(
         div()
             .absolute()

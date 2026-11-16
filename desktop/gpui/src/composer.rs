@@ -1771,7 +1771,7 @@ impl Render for Composer {
                     // ran off the top of the window (Wayne, 14 Nov).
                     .absolute().inset_0().size_full())
                     .children(palette)
-                    .children(crate::voice::button::pill(&self.app, cx))
+                    .children(crate::voice::button::pill(self.thread_id.as_deref(), cx))
                     .children(bear_picker)
                     // The main panel's box, for the tour's first thread.
                     .children(crate::tour::mark_composer(self.thread_id.as_deref())),

@@ -62,6 +62,11 @@ pub(crate) struct ModeState {
     clock_start: Option<f64>,
     waiting_words: Vec<String>,
     making_thread: bool,
+    /// For the log when it ends: how many results came, how many were
+    /// taken for its own voice, and how many messages went. Never the words.
+    heard: u32,
+    dropped: u32,
+    sent: u32,
 }
 
 impl Default for ModeState {
@@ -85,6 +90,9 @@ impl Default for ModeState {
             clock_start: None,
             waiting_words: Vec::new(),
             making_thread: false,
+            heard: 0,
+            dropped: 0,
+            sent: 0,
         }
     }
 }
@@ -158,7 +166,7 @@ impl Voice {
         self.stop_listening(Listener::Mode, cx);
         let _ = self.tell(json!({ "cmd": "stopEngineSoon" }), cx);
         if let Some(thread) = &self.mode.thread {
-            log(&format!("off for {thread}"));
+            log(&format!("off for {thread}: {} results heard, {} taken for its own voice, {} sent", self.mode.heard, self.mode.dropped, self.mode.sent));
         }
         let start = self.mode.start + 1;
         self.mode = ModeState { start, ..ModeState::default() };
@@ -283,15 +291,23 @@ impl Voice {
             self.mode.clock_start = Some(start);
         }
         let heard = Heard::new(event["text"].as_str().unwrap_or(""), event["start"].as_f64().unwrap_or(0.0), event["end"].as_f64().unwrap_or(0.0), event["final"].as_bool().unwrap_or(false));
+        self.mode.heard += 1;
+        if self.mode.heard == 1 {
+            log("first words heard");
+        }
         // Without echo cancellation the microphone hears the agent: what it
         // hears while speaking, and just after, is its own voice. Headphones
         // don't leak, so he can still talk over it there. By when the words
         // were captured as well as now: the recogniser can hand over what
         // the microphone heard a while ago.
+        // Before it has said anything there's nothing of its own to hear, so
+        // a result with no audio time still counts then.
         if !self.mode.echo_cancels && event["headphones"].as_bool() != Some(true) {
             let helper_now = event["now"].as_f64().unwrap_or(f64::INFINITY);
             let captured = self.mode.clock_start.map(|s| s + heard.start);
-            if self.mode.speaking || helper_now < self.mode.quiet_until || captured.is_none_or(|c| c < self.mode.quiet_until) {
+            let has_spoken = self.mode.quiet_until > 0.0;
+            if self.mode.speaking || helper_now < self.mode.quiet_until || (has_spoken && captured.is_none_or(|c| c < self.mode.quiet_until)) {
+                self.mode.dropped += 1;
                 return;
             }
         }
@@ -414,6 +430,8 @@ impl Voice {
                 self.idle();
             }
             SpokenOutcome::Message => {
+                self.mode.sent += 1;
+                log("sent what was said");
                 self.send_to_pane(thread, text, cx);
                 self.mode.working = true;
                 self.mode.phase = Phase::Thinking;

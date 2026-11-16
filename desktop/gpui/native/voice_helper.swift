@@ -118,7 +118,12 @@ final class Helper {
         self.startId = startId
         let audio = VoiceAudio()
         self.audio = audio
+        var firstResult = true
         audio.onResult = { r, clockStart in
+            if firstResult {
+                firstResult = false
+                VoiceLog.write("first result from speech recognition\(clockStart == nil ? ", with no audio time" : "")")
+            }
             Out.send(["event": "heard", "session": session, "text": r.text, "start": r.start, "end": r.end, "final": r.isFinal, "clockStart": clockStart ?? NSNull(), "now": Out.now(), "headphones": VoiceAudio.outputIsHeadphones()])
         }
         audio.onInputLevel = { Out.send(["event": "inputLevel", "level": $0]) }
@@ -129,6 +134,10 @@ final class Helper {
                 try await audio.start(locale: Locale(identifier: locale), microphone: Microphones.device(uid: microphone), echoCancellation: echo)
                 guard self.startId == startId else { audio.stop(); return }
                 Out.send(["event": "listening", "session": session, "echoCancels": audio.echoCancels])
+                // Whether the microphone is really giving anything: a Mac that
+                // didn't let the app use it can give silence rather than an error.
+                try? await Task.sleep(for: .seconds(2))
+                if self.startId == startId { VoiceLog.write(audio.hasAudio ? "audio is coming from the microphone" : "no audio from the microphone after 2 s") }
             } catch {
                 guard self.startId == startId else { return }
                 self.audio = nil
@@ -220,6 +229,7 @@ final class VoiceAudio {
 
     private(set) var isSpeaking = false
     private let audioClock = AudioClock()
+    var hasAudio: Bool { audioClock.began_ }
 
     // MARK: Listening
 
@@ -634,6 +644,13 @@ final class AudioClock: @unchecked Sendable {
         lock.lock()
         defer { lock.unlock() }
         return first
+    }
+
+    /// Any audio at all has come from the microphone.
+    var began_: Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        return began
     }
 }
 

@@ -15,7 +15,7 @@
 pub(crate) mod button;
 mod helper;
 pub(crate) mod keys;
-mod mode;
+pub(crate) mod mode;
 
 use crate::app::Threadbear;
 use gpui_kit::*;

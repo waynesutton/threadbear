@@ -175,6 +175,9 @@ extern "C" fn on_key(kind: i32, code: u16, flags: u64, timestamp: f64, repeat: b
                 } else {
                     m.had_text_box = has_text_box();
                 }
+                if down {
+                    log(&format!("{} down, a text box {}", keys.trigger.display(), if m.had_text_box { "has the cursor" } else { "doesn't have the cursor" }));
+                }
                 m.run(if down { KeyEvent::TriggerDown(timestamp) } else { KeyEvent::TriggerUp(timestamp) });
                 // Shift held first, then the trigger: Shift + trigger.
                 if down && flags & FLAG_SHIFT != 0 {
@@ -298,6 +301,9 @@ impl Voice {
         let (keys, active) = (self.prefs.keys(), self.available(cx));
         MONITOR.with(|m| {
             if let Ok(mut m) = m.try_borrow_mut() {
+                if m.active != active {
+                    log(if active { "keys on" } else { "keys off" });
+                }
                 m.machine.keys = keys;
                 m.active = active;
             }
@@ -338,6 +344,7 @@ impl Voice {
             return;
         }
         if !self.available(cx) || self.mode.is_on() {
+            log("keyboard dictation not started: Voice is off, or talking with a thread");
             Self::machine_ended();
             return;
         }
