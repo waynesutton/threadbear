@@ -11,10 +11,6 @@ import ThreadbearCore
 /// was archived, still knows him.
 @MainActor
 enum BearChat {
-    /// Settings > General's switch for the sidebar's bear. Off only hides
-    /// the button: the bear's chats, memory and Voice carry on.
-    static let shownKey = "bearShown"
-
     static var folder: URL {
         FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("ThreadbearThreads/Bear", isDirectory: true)
     }

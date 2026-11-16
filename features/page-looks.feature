@@ -44,3 +44,26 @@ Feature: Customize the home pages
     Then its panel has the Layout and Cards sections
     When I turn off the Projects page customization
     Then the standard Projects page is shown and my Projects look is kept
+  @librarian.customize @swift-pending
+  Scenario: An animated background keeps both frames for playback
+    When I choose an animated Librarian background
+    Then both background frames are kept and the background is drawn
+
+  @profile.page @swift-pending
+  Scenario: Rapid profile edits save the latest draft and load again on reopening
+    When I quickly edit my profile page twice
+    Then the profile page has saved my latest name and bio
+    When I reopen the Librarian Customize panel
+    Then the profile page has loaded my latest name and bio
+
+  @profile.page @swift-pending
+  Scenario: A load started while typing cannot undo the completed save
+    When I quickly edit my profile page twice
+    Then the profile page has saved my latest name and bio
+    When I reopen the profile panel while my latest bio saves
+    Then the late load leaves my latest bio saved and on screen
+
+  @profile.page @swift-pending
+  Scenario: Opening profile controls keeps everything private until I change it
+    When I open my profile controls without editing them
+    Then no profile has been sent and all its public parts are off

@@ -14,6 +14,14 @@ rebuild, gets the trailer on a bookkeeping commit so it leaves the panel.
 Status: **to do**, **doing**, **done** (landed), **already** (the GPUI
 app does it), **nothing** (nothing to rebuild), **skip** (Wayne said no).
 
+
+Final audit (14 Nov 2026): 125 changes accounted for: 71 rebuilt, 23 already
+present, 12 with nothing to rebuild, and 19 Voice/Connectors changes skipped.
+The last two gaps were web addresses in inline code and the content floor
+inside narrow dock slots. Existing collapse, project New Thread, Settings
+and link behavior were checked with their GPUI scenarios. The instructions
+editor and delivery were checked against their 18 runner tests.
+
 ## Small changes
 
 | # | Commit | What it does | Status |
@@ -28,7 +36,7 @@ app does it), **nothing** (nothing to rebuild), **skip** (Wayne said no).
 | 93 | 41275129 | Line numbers and ⌘S, opened ready to type | done |
 | 98 | d28e38f4 | A saved plan opens in the side pane, with a link under the reply | done |
 | 43 | 3708b1c7 | Side pane find and replace, and search in folders | done |
-| 79 | 55498864 | Settings > Keyboard list full height | to do |
+| 79 | 55498864 | Settings > Keyboard list full height | done: fills embedded Settings, fixed search/footer |
 
 The approval and slash palette batch passed 33 UI scenarios and 24 core checks.
 Item 25 also has its optional Terminal rail button, opening the same drawer as
@@ -57,19 +65,19 @@ the keyboard shortcut.
 
 | # | Commit | What it does | Status |
 |---|---|---|---|
-| 34 | dbbf3fc2 | A Prints section on a project's page | to do |
-| 33 | 8e2d98be | Print menu, doc editor, versions | to do |
-| 29 | f5c9a15b | Pages are called Prints | to do |
-| 32 | 19aa34f1 | Print cards in replies, preview on top | to do |
-| 31 | efbfb928 | Download a Print as a PDF | to do |
-| 21 | f0d66f56 | Publish a Print to phone and web | to do |
-| 28 | 321c447c | Prints menus show icons | to do |
-| 19 | ed22d3ba | Diagram Prints | to do |
-| 16 | 76d2baba | Prints open in the side pane and follow versions | to do |
-| 15 | ae966880 | Prints in Highlights and on the rail | to do |
-| 17 | cf844799 | Make Prints only when asked (Settings switch) | to do |
-| 11 | 611d2564 | Todo list and kanban board Prints | to do |
-| 10 | 5d406b1f | Show in Finder and Delete on every Print menu | to do |
+| 34 | dbbf3fc2 | A Prints section on a project's page | done |
+| 33 | 8e2d98be | Print menu, doc editor, versions | done |
+| 29 | f5c9a15b | Pages are called Prints | done |
+| 32 | 19aa34f1 | Print cards in replies, preview on top | done |
+| 31 | efbfb928 | Download a Print as a PDF | done |
+| 21 | f0d66f56 | Publish a Print to phone and web | done (untried: needs sync and the alert) |
+| 28 | 321c447c | Prints menus show icons | done |
+| 19 | ed22d3ba | Diagram Prints | done |
+| 16 | 76d2baba | Prints open in the side pane and follow versions | done |
+| 15 | ae966880 | Prints in Highlights and on the rail | done |
+| 17 | cf844799 | Make Prints only when asked (Settings switch) | done |
+| 11 | 611d2564 | Todo list and kanban board Prints | done |
+| 10 | 5d406b1f | Show in Finder and Delete on every Print menu | done |
 
 ## Customizing pages
 
@@ -87,35 +95,35 @@ the keyboard shortcut.
 | 50 | 2b0a8dab | Photo picker as a sheet; drags from Photos | done |
 | 47 | 5b2e6d8e | Your own picture sticks | done |
 | 6 | 13069201 | Animated GIF backgrounds play | done |
-| 39 | 6f5cc154 | Customize the Scheduled page | to do |
-| 38 | 78be088e | Scheduled page parts move to their place | to do |
-| 37 | 84fad5ff | Customize the Projects page | to do |
+| 39 | 6f5cc154 | Customize the Scheduled page | done |
+| 38 | 78be088e | Scheduled page parts move to their place | done |
+| 37 | 84fad5ff | Customize the Projects page | done |
 
 ## Profile page
 
 | # | Commit | What it does | Status |
 |---|---|---|---|
-| 67 | cc34b08a | A public page about you at /@handle | to do |
-| 58 | 447a0aa9 | One page per site at /profile, saved as you change it | to do |
-| 61 | c1d618b4 | Reopening Customize loads the saved page | to do |
-| 46 | a4af95c0 | Open goes to the profile, Open Site to the front page | to do |
-| 45 | f389447e | Its addresses as two rows | to do |
-| 44 | cf99cf58 | A Changelog of public commits; View profile page button | to do |
-| 66 | 58dd86ef | Its info tip names no other app | to do |
+| 67 | cc34b08a | A public page about you at /@handle | done |
+| 58 | 447a0aa9 | One page per site at /profile, saved as you change it | done |
+| 61 | c1d618b4 | Reopening Customize loads the saved page | done |
+| 46 | a4af95c0 | Open goes to the profile, Open Site to the front page | done |
+| 45 | f389447e | Its addresses as two rows | done |
+| 44 | cf99cf58 | A Changelog of public commits; View profile page button | done |
+| 66 | 58dd86ef | Its info tip names no other app | done |
 | 53 | ee9966b7 | No background photo option | already |
 
 ## Notes (needs Notes itself first, 0f5c08f0 below)
 
 | # | Commit | What it does | Status |
 |---|---|---|---|
-| 41 | f6921eaa | Heading sizes, task boxes, Return continues lists | to do |
-| 42 | ffaaf7b4 | ⌘1 leaves Notes; the notes list folds away | to do |
-| 40 | aba5a97e | Note headings in text colour | to do |
-| 13 | dbf82191 | Notes save (no file protection) | to do |
-| 27 | 7ebe4e66 | Notes save (no file protection) | to do |
-| 90 | f1510297 | One Settings… (already); Notes never asks for the Mac password | to do |
+| 41 | f6921eaa | Heading sizes, task boxes, Return continues lists | done: headings bold, not sized |
+| 42 | ffaaf7b4 | ⌘1 leaves Notes; the notes list folds away | done |
+| 40 | aba5a97e | Note headings in text colour | done |
+| 13 | dbf82191 | Notes save (no file protection) | done |
+| 27 | 7ebe4e66 | Notes save (no file protection) | done |
+| 90 | f1510297 | One Settings… (already); Notes never asks for the Mac password | done |
 | 88 | 95cdefc8 | A code comment | nothing |
-| 64 | 1952b193 | Back and Forward (already); ⌘5 Skills and ⌘6 Notes | to do |
+| 64 | 1952b193 | Back and Forward (already); ⌘5 Skills and ⌘6 Notes | done: ⌘5 Skills and ⌘6 Notes; Back/Forward already present |
 
 ## Voice (skip)
 
@@ -176,27 +184,27 @@ against the GPUI app.
 | Commit | What it does | Status |
 |---|---|---|
 | 4d3524c6 | Closing the Terminal no longer leaves the thread blank | already |
-| 99b4038f | Panels stay inside their space in a narrow window | to check |
-| e19a3f06 | ⌘/ collapses the Threads panel | to check |
-| f248d332 | Quit asks first, with Don't ask again | to check |
-| 5e6c8146 | Attach Image takes Markdown files | to check |
-| 30fe46cd | Question card descriptions wrap | to check |
+| 99b4038f | Panels stay inside their space in a narrow window | done: clipped dock cells, 160-point content floor and opaque rails |
+| e19a3f06 | ⌘/ collapses the Threads panel | already: CollapseThreads on ⌘/, menu and persistent folded state |
+| f248d332 | Quit asks first, with Don't ask again | already: native quit prompt, Don't ask again and General switch |
+| 5e6c8146 | Attach Image takes Markdown files | already: both picture pickers accept all files; take_paths_in inserts Markdown paths |
+| 30fe46cd | Question card descriptions wrap | already: question descriptions use wrapping text without truncation |
 | bf73c636 | Markdown files open drawn, Preview / Markdown menu | already |
-| ed662aab | Settings > General > Experiments switches | to check |
-| b4370100 | New Thread on a project's page starts in the project | to check |
+| ed662aab | Settings > General > Experiments switches | already: General experiment switches use settings.update |
+| b4370100 | New Thread on a project's page starts in the project | already: new_thread_in_project sets project and first folder; UI scenario passes |
 | 1d47f50c | Files panel: clicking opens again | already |
-| b79385cb | Web addresses in inline code are links | to check |
-| ba5d5cfc | Standing instructions for every session | to check |
-| 58151848 | New Skill | to check |
-| 52e060a3 | Files and Terminal on the rail | to check |
-| 0f5c08f0 | Notes, and Voice/skills/notes switches | to do (Notes part) |
-| 3d531d54 | Skills page | to check |
-| f9f3c8e4 | Settings over the main panel | to check |
-| 1d311b94 | Your messages show basic Markdown | to check |
+| b79385cb | Web addresses in inline code are links | done: inline-code web links, common domains, file-path priority, fenced code unchanged |
+| ba5d5cfc | Standing instructions for every session | already: General instructions editor and runner standing-instruction delivery |
+| 58151848 | New Skill | done: write/edit with save errors retained |
+| 52e060a3 | Files and Terminal on the rail | done: Files rail; optional Terminal rail opens the same drawer |
+| 0f5c08f0 | Notes, and Voice/skills/notes switches | done: Notes and Skills; Voice skipped |
+| 3d531d54 | Skills page | done: behind skillsStore; import, suggested, Always on, New Skill and Edit, remove |
+| f9f3c8e4 | Settings over the main panel | done: in the main panel, X/Esc/Back/gear closes; no own-window option |
+| 1d311b94 | Your messages show basic Markdown | done: basic formatting, preserved breaks, plain fallback and skill links |
 | c3603b16 | The bear's chat has Voice | skip (Voice) |
-| 540cc171 | The bear: a chat at the top of the sidebar | to check |
+| 540cc171 | The bear: a chat at the top of the sidebar | done: text chat, local folder/memory instructions, menu and hide switch; Voice skipped |
 | 25510a20 | Voice avatar | skip (Voice) |
 | bcd71e48 | Voice approvals out loud | skip (Voice) |
 | f44b37c4 | Voice echo cancellation | skip (Voice) |
 | c2af85a6 | Voice mode | skip (Voice) |
-| 57a73caf | Appearance picker for Threadbear alone | to check |
+| 57a73caf | Appearance picker for Threadbear alone | already: app-only Appearance picker with System/Light/Dark choices |

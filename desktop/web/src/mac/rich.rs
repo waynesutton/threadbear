@@ -107,6 +107,18 @@ fn capped(width: f64, height: f64) -> f64 {
     (PICTURE_POINTS / (width * height).max(1.)).sqrt().min(1.)
 }
 
+/// A Print's html as a US Letter PDF at `path`, in the light look, as the
+/// Swift app's Download as PDF made it (PagePDF.swift). A page of its own,
+/// sealed and with scripts off, as a reply's page is drawn.
+pub async fn page_pdf(html: &str, path: &str) -> Result<(), String> {
+    // 8.5 inches at 96 CSS pixels each, the width it's printed at.
+    let (page, loaded) = Offscreen::open("about:blank", Options { javascript: false, width: 816, height: 1056, scale: 1. })?;
+    loaded.await.map_err(|_| "the page went away".to_owned())??;
+    call(&page, "Emulation.setEmulatedMedia", json!({ "features": [{ "name": "prefers-color-scheme", "value": "light" }] })).await?;
+    page.load(&data_url(&rich::html_page(html))).await.map_err(|_| "the page went away".to_owned())??;
+    page.print_pdf(path).await.map_err(|_| "the page went away".to_owned())?
+}
+
 /// Draws a diagram in both looks, at `zoom` percent of the transcript's type.
 pub async fn draw_diagram(source: &str, zoom: u32, scale: f32) -> Result<Drawn, String> {
     let view = diagram_view(scale).await?;

@@ -41,6 +41,7 @@ pub mod login_picker;
 pub mod logins;
 pub mod navigation;
 pub mod navigation_swipe;
+pub mod nested;
 pub mod shortcuts;
 pub mod skills;
 pub mod new_thread;
@@ -94,3 +95,9 @@ pub mod tour;
 pub mod wire;
 
 pub mod skill_mentions;
+
+pub mod user_markdown;
+
+pub mod bear_chat;
+
+pub mod code_web_address;

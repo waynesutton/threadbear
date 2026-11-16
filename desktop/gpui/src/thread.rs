@@ -307,6 +307,7 @@ impl ThreadPane {
         let _ = pane.feed.set_pending(outbox(&pane.summary.id));
         // Its diagrams and pages drawing, and the web runtime (rich_boxes.rs).
         pane._subs.extend(crate::rich_boxes::watch(cx));
+        pane._subs.extend(crate::print_cards::watch(cx));
         pane.load(cx);
         pane.load_buttons(cx);
         pane
@@ -349,6 +350,7 @@ impl ThreadPane {
             _subs: vec![],
         };
         pane._subs.extend(crate::rich_boxes::watch(cx));
+        pane._subs.extend(crate::print_cards::watch(cx));
         pane.load_subagent(cx);
         pane._poll = Some(cx.spawn(async move |this, cx| loop {
             cx.background_executor().timer(Duration::from_secs(3)).await;
@@ -371,6 +373,48 @@ impl ThreadPane {
     #[cfg(feature = "automation")]
     pub(crate) fn read_state(&self) -> (bool, bool, Option<String>, usize) {
         (self.loaded, self.subagent_missing, self.load_failed.clone(), self.feed.model().rows().len())
+    }
+
+    /// "Started by GPUI Port Coordinator · building the Browser pane": one
+    /// quiet line above the transcript of a thread another thread started
+    /// (the nestedThreads experiment), the starter's title a link to it.
+    /// Plain words, no label over it, as Mike's UI rules ask.
+    fn render_started_strip(&self, cx: &mut Context<Self>) -> Option<AnyElement> {
+        // `tipped!` calls `test_support`, which this trait gives.
+        use crate::sidebar::tipped;
+        use gpui_kit::base::TestSupportExt as _;
+        use gpui_kit::component::StyledExt as _;
+        if self.subagent_id.is_some() {
+            return None;
+        }
+        let app = self.app.upgrade()?;
+        let line = app.read(cx).started_line(&self.summary)?;
+        let secondary = crate::style::secondary_text(cx);
+        let title: AnyElement = match line.thread_id.clone() {
+            Some(id) => tipped!(div().cursor_pointer().font_medium().hover(move |s| s.underline().text_decoration_color(secondary)), ElementId::Name(format!("started-by-{id}").into()), format!("Open {}", line.title))
+                .child(line.title.clone())
+                .on_click(move |_, window, cx| {
+                    let id = id.clone();
+                    app.update(cx, |a, cx| a.open(id, window, cx));
+                })
+                .into_any_element(),
+            None => div().child(line.title.clone()).into_any_element(),
+        };
+        Some(
+            gpui_kit::component::h_flex()
+                .flex_none()
+                .min_w_0()
+                .px_7()
+                .pt(px(8.))
+                .pb(px(2.))
+                .gap(px(4.))
+                .text_size(px(12.))
+                .text_color(secondary)
+                .child(div().flex_none().child("Started by"))
+                .child(title)
+                .when_some(line.why.clone(), |s, why| s.child(div().min_w_0().truncate().child(format!("\u{b7} {why}"))))
+                .into_any_element(),
+        )
     }
 
     pub(crate) fn can_rewind(&self, cx: &App) -> bool {
@@ -1527,6 +1571,13 @@ impl ThreadPane {
                 // done card's later loose ends were cut off the dump, though
                 // drawn (the nightly parity run, 12 Nov).
                 let mut out = json!({ "id": row.id, "kind": row.kind().as_str(), "text": threadbear_core::reducer::RowDebug::excerpt(row, 300), "inGroup": row.in_group, "seq": row.seq, "onScreen": scroller.row_on_screen(index) });
+                if let RowContent::User(_) = &row.content {
+                    if let Some(document) = self.rows.documents.get(&format!("user-skills-{}",row.id)) {
+                        let rendered = document.read(cx).rendered_text();
+                        out["renderedText"] = json!(rendered.as_str());
+                        out["markdownSource"] = json!(rendered.source());
+                    }
+                }
                 if let Some(height) = scroller.row_height(index) {
                     out["height"] = json!(f32::from(height).round());
                 }
@@ -1555,8 +1606,8 @@ impl ThreadPane {
                     if let Some(rich) = crate::rich_boxes::dump(&item.text, cx) {
                         out["rich"] = rich;
                     }
-                    // Its Print cards (prints.rs).
-                    if let Some(prints) = crate::prints::dump(&item.text, cx) {
+                    // Its ```print cards (print_cards.rs).
+                    if let Some(prints) = crate::print_cards::dump(&item.text, cx) {
                         out["prints"] = prints;
                     }
                     if let Some(blocks) = crate::shell_blocks::dump_lines(&item.text, &self.summary.id, cx) {
@@ -1575,7 +1626,12 @@ impl ThreadPane {
                 out
             })
             .collect();
-        json!({ "threadId": self.summary.id, "state": self.load_state(), "error": self.error, "atBottom": scroller.at_bottom(), "hasMoreAbove": self.has_more_above(), "spinner": !self.loaded && self.error.is_none() && self.load_failed.is_none(), "timing": self.timing_json(), "rows": rows })
+        // The done card's loose ends as the summary has them and as the
+        // transcript took them, by the card's seq and count: which of the
+        // two lost them, when a card shows none (the nightly parity run).
+        let ends = |c: Option<&threadbear_core::reducer::LooseEnds>| c.map(|c| json!({ "seq": c.seq, "count": c.ends.len() }));
+        let loose_ends = json!({ "summary": ends(self.summary.loose_ends_check().as_ref()), "transcript": ends(self.feed.model().loose_ends()) });
+        json!({ "threadId": self.summary.id, "state": self.load_state(), "error": self.error, "atBottom": scroller.at_bottom(), "hasMoreAbove": self.has_more_above(), "spinner": !self.loaded && self.error.is_none() && self.load_failed.is_none(), "timing": self.timing_json(), "looseEnds": loose_ends, "rows": rows })
     }
 
     /// The Swift dump's names, a failure with its message.
@@ -1807,6 +1863,8 @@ impl Render for ThreadPane {
             // the pointer never lands in a click (reply_links.rs).
             .child(crate::reply_links::watch())
             .when_some(self.error.clone(), |s, e| s.child(div().px_7().py_1().text_sm().text_color(danger).child(e)))
+            // Which thread started it, above the transcript (nested threads).
+            .children(self.render_started_strip(cx))
             .map(|s| match self.load_failed.clone() {
                 // No record of it is a plain note, not something that failed.
                 Some(message) if !self.loaded && self.subagent_missing => s.child(div().flex_1().flex().items_center().justify_center().text_size(px(13.)).text_color(muted).child(message)),

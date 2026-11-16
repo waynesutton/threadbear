@@ -448,6 +448,21 @@ fn step(app: &Entity<Threadbear>, cmd: &Value, window: &mut Window, cx: &mut App
             if let Some(done) = crate::settings_window::automation(app, cmd, window, cx)? {
                 return Ok(done);
             }
+            // A picture of the Settings window itself, as `screenshot` takes
+            // the main one's.
+            if let Some(by) = cmd["scroll"].as_f64() {
+                crate::settings_window::scroll_down(app, by as f32, cx);
+            }
+            if let Some(path) = cmd["shot"].as_str() {
+                let handle = app.read(cx).settings_window.as_ref().map(|(h, _)| *h).ok_or("Settings isn't open")?;
+                let path = path.to_owned();
+                handle
+                    .update(cx, |_, window, cx| -> Result<(), String> {
+                        window.render_frame(cx);
+                        window.render_to_image().map_err(|e| e.to_string())?.save(&path).map_err(|e| e.to_string())
+                    })
+                    .map_err(|e| e.to_string())??;
+            }
             Ok(json!("ok"))
         }
         // Settings > Keyboard, as the Swift app's `shortcuts` (settings_window/keyboard.rs).
@@ -457,7 +472,7 @@ fn step(app: &Entity<Threadbear>, cmd: &Value, window: &mut Window, cx: &mut App
         "skills" => crate::skills_page::automation(app, cmd, window, cx),
         // The sidebar's commands (sidebar.rs). Guarded ones only take the forms
         // that name a section, a row or a tip; the others fall through below.
-        "hover" | "sort" | "archive-more" | "star" | "unstar" | "unarchive" | "realMenu" | "menu-popover" => crate::sidebar::automation(app, cmd, window, cx),
+        "hover" | "sort" | "archive-more" | "star" | "unstar" | "unarchive" | "realMenu" | "menu-popover" | "group" => crate::sidebar::automation(app, cmd, window, cx),
         "new" | "options" => crate::new_thread::automation(app, cmd, window, cx),
         // A threadbear:// link handed over as macOS hands one (deep_links.rs).
         "open-url" => crate::deep_links::automation(app, cmd, window.window_handle(), cx),
@@ -486,6 +501,7 @@ fn step(app: &Entity<Threadbear>, cmd: &Value, window: &mut Window, cx: &mut App
         // The activity bar's panels, as the Swift app's commands of these names.
         "runners" => crate::runners_panel::automation(app, cmd, window, cx),
         "look" => crate::looks::automation(app, cmd, cx),
+        "profile" => crate::profile_page::automation(app, cmd, cx),
         "updates" => crate::updates_panel::automation(app, cmd, window, cx),
         "connectors" => crate::connectors_panel::automation(app, cmd, cx),
         "usage" => crate::usage::automation(app, cmd, cx),
@@ -504,6 +520,7 @@ fn step(app: &Entity<Threadbear>, cmd: &Value, window: &mut Window, cx: &mut App
         // Projects (projects.rs): a project's page, its parent, the Projects
         // page's search, and the sidebar's folded project rows.
         "project" | "projectParent" => crate::projects::automation(app, cmd, window, cx),
+        "print" => crate::prints::automation(app, cmd, window, cx),
         "decision" => crate::project_decisions::automation(app, cmd, window, cx),
         "projectTab" => crate::project_decisions::tab_automation(app, cmd, cx),
         "search" if cmd["projects"].as_bool() == Some(true) => crate::projects::automation(app, cmd, window, cx),

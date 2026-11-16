@@ -29,6 +29,9 @@ use crate::tips::Tip as _;
 pub(crate) const HIGHLIGHTS: &str = "threadbear.highlights";
 pub(crate) const PATCHES: &str = "threadbear.patches";
 pub(crate) const FILES: &str = "threadbear.files";
+/// Every Print, with its projects (prints.rs): shown while Prints is on and
+/// there's at least one, for this Mac's threads.
+pub(crate) const PRINTS: &str = "threadbear.prints";
 /// The Browser pane (agent_browser.rs).
 pub(crate) const BROWSER: &str = crate::agent_browser::BROWSER;
 
@@ -566,7 +569,7 @@ impl SidePane {
     /// there, else Highlights (`paneSection`). Previews open over it.
     pub(crate) fn section_for(&self, thread: &ThreadSummary) -> String {
         let remembered = self.chosen.get(&thread.id).cloned().unwrap_or_else(|| HIGHLIGHTS.to_owned());
-        let exists = remembered == HIGHLIGHTS || remembered == FILES || remembered == BROWSER || (remembered == PATCHES && thread.patches.as_ref().is_some_and(|p| !p.is_empty())) || thread.panels().iter().any(|p| p.id == remembered);
+        let exists = remembered == HIGHLIGHTS || remembered == FILES || remembered == BROWSER || (remembered == PRINTS && !thread.is_remote()) || (remembered == PATCHES && thread.patches.as_ref().is_some_and(|p| !p.is_empty())) || thread.panels().iter().any(|p| p.id == remembered);
         if exists {
             remembered
         } else {
@@ -581,6 +584,9 @@ impl SidePane {
         ids.extend(thread.panels().into_iter().map(|p| p.id));
         ids.push(BROWSER.to_owned());
         ids.push(FILES.to_owned());
+        if !thread.is_remote() {
+            ids.push(PRINTS.to_owned());
+        }
         if thread.patches.as_ref().is_some_and(|p| !p.is_empty()) {
             ids.push(PATCHES.to_owned());
         }
@@ -674,7 +680,7 @@ impl SidePane {
     pub(crate) fn section_shown(&mut self, id: &str, thread_id: &str, cx: &mut Context<Self>) {
         if id == FILES {
             self.load_folder_for_files(thread_id, cx);
-        } else if id != HIGHLIGHTS && id != PATCHES && id != BROWSER {
+        } else if id != HIGHLIGHTS && id != PATCHES && id != BROWSER && id != PRINTS {
             self.refresh_panel(thread_id, id, cx);
         }
     }
@@ -1467,7 +1473,8 @@ impl SidePane {
         let asks = thread.asks.clone().unwrap_or_default();
         let tools: HashSet<String> = thread.patches().into_iter().filter(|p| !p.matched.clone().unwrap_or_default().is_empty()).map(|p| p.id).collect();
         let tool_panels: Vec<Panel> = thread.panels().into_iter().filter(|panel| tools.contains(&panel.patch)).collect();
-        if sections.is_empty() && asks.is_empty() && projects.is_empty() && tool_panels.is_empty() && scheduled.is_empty() && subagents.is_empty() && started.is_empty() {
+        let prints = self.prints_made_by(thread, cx);
+        if sections.is_empty() && asks.is_empty() && projects.is_empty() && tool_panels.is_empty() && scheduled.is_empty() && subagents.is_empty() && started.is_empty() && prints.is_empty() {
             return crate::files::pane_note("Nothing here yet. Files, links and commits from this thread show up here as it works.", p).into_any_element();
         }
         let flags = self.flags.get(&thread.id).copied().unwrap_or_default();
@@ -1609,6 +1616,17 @@ impl SidePane {
             if !folded {
                 for item in &sections.pinned {
                     list = list.child(self.highlight_row(item, thread, "pinned", p, cx));
+                }
+            }
+        }
+        // The Prints this thread made (Wayne, 11 Nov), each with the projects
+        // it's in. A click opens it in this pane.
+        if !prints.is_empty() {
+            let folded = self.is_folded(PRINTS_FOLD);
+            list = list.child(self.heading(Heading { key: PRINTS_FOLD.to_owned(), title: "Prints".into(), icon: Some(icon("doc.richtext", 11., p.secondary).into_any_element()), count: Some(prints.len()), folded, foldable: true, accessory: None }, p, cx));
+            if !folded {
+                for page in &prints {
+                    list = list.child(self.print_row(page, "hl", p, cx));
                 }
             }
         }
@@ -1882,6 +1900,7 @@ impl SidePane {
                 PATCHES => (self.render_patches(&thread, cx), "patches".to_owned()),
                 FILES => (self.render_files_panel(&thread, window, cx), "files".to_owned()),
                 BROWSER => (self.render_browser_panel(&thread, window, cx), "browser".to_owned()),
+                PRINTS => (self.render_prints_list(cx), "prints".to_owned()),
                 id => (self.render_panel(&thread, id, window, cx), format!("panel {id}")),
             }
         };
@@ -2052,7 +2071,7 @@ impl SidePane {
         let asks = thread.asks.clone().unwrap_or_default();
         let tools: HashSet<String> = thread.patches().into_iter().filter(|p| !p.matched.clone().unwrap_or_default().is_empty()).map(|p| p.id).collect();
         let tool_panels: Vec<Panel> = thread.panels().into_iter().filter(|panel| tools.contains(&panel.patch)).collect();
-        if sections.is_empty() && asks.is_empty() && projects.is_empty() && tool_panels.is_empty() && scheduled.is_empty() && subagents.is_empty() && started.is_empty() {
+        if sections.is_empty() && asks.is_empty() && projects.is_empty() && tool_panels.is_empty() && scheduled.is_empty() && subagents.is_empty() && started.is_empty() && self.prints_made_by(thread, cx).is_empty() {
             pane.insert("empty".into(), json!("Nothing here yet. Files, links and commits from this thread show up here as it works."));
             return;
         }
@@ -2124,6 +2143,12 @@ impl SidePane {
         };
         if !sections.pinned.is_empty() {
             add(fold::PINNED, "Pinned", sections.pinned.len(), sections.pinned.iter().map(&item_row).collect(), &mut out);
+        }
+        let prints = self.prints_made_by(&thread, cx);
+        if !prints.is_empty() {
+            let titles = self.project_titles(cx);
+            let rows = prints.iter().map(|p| json!({ "title": p.title, "trailing": threadbear_core::prints::rows::kind_and_version(p), "detail": threadbear_core::prints::rows::projects(p, &titles), "symbol": p.symbol() })).collect();
+            add(PRINTS_FOLD, "Prints", prints.len(), rows, &mut out);
         }
         if !sections.files.is_empty() {
             add(fold::FILES, "Files", sections.files.len(), sections.files.iter().map(&item_row).collect(), &mut out);
@@ -2276,4 +2301,68 @@ fn highlight_command(side: &Entity<SidePane>, thread: &ThreadSummary, cmd: &Valu
         return Ok(json!(format!("ok {copied}")));
     }
     Err("highlight needs tick, edited, showAll, open, menu or choose".into())
+}
+
+// ---------------------------------------------------------------- Prints
+
+/// The fold key of Highlights' Prints (`HighlightFold.prints`).
+const PRINTS_FOLD: &str = "prints";
+
+impl SidePane {
+    /// The Prints a thread made, newest first, while Prints is on; none for
+    /// another Mac's thread (its Prints are there).
+    pub(crate) fn prints_made_by(&self, thread: &ThreadSummary, cx: &App) -> Vec<threadbear_core::prints::Page> {
+        let Some(app) = self.app.upgrade() else { return vec![] };
+        let app = app.read(cx);
+        if !app.prints_on() || thread.is_remote() {
+            return vec![];
+        }
+        threadbear_core::prints::rows::made_by(&thread.id, &app.prints.list)
+    }
+
+    fn project_titles(&self, cx: &App) -> HashMap<String, String> {
+        self.app.upgrade().map(|a| a.read(cx).projects.list.iter().map(|p| (p.id.clone(), p.title.clone())).collect()).unwrap_or_default()
+    }
+
+    /// `PrintRow`: its kind's icon, title, kind and version, and the
+    /// projects it's in. A click opens it beside the thread, where it
+    /// follows new versions; its menu has the rest.
+    fn print_row(&mut self, page: &threadbear_core::prints::Page, index: &str, p: Palette, cx: &mut Context<Self>) -> AnyElement {
+        let titles = self.project_titles(cx);
+        let (open, menu) = (page.id.clone(), page.id.clone());
+        PaneRow::new(SharedString::from(format!("print-{index}-{}", page.id)), page.title.clone())
+            .icon(page.symbol())
+            .trailing(Some(threadbear_core::prints::rows::kind_and_version(page)))
+            .detail(Some(threadbear_core::prints::rows::projects(page, &titles)))
+            .tip(format!("Open {} beside the thread", page.title))
+            .on_click(move |this, window, cx| {
+                if let Some(app) = this.app.upgrade() {
+                    let id = open.clone();
+                    app.update(cx, |a, cx| a.open_print_here(&id, window, cx));
+                }
+            })
+            .on_menu(move |this, pos, window, cx| {
+                if let Some(app) = this.app.upgrade() {
+                    let id = menu.clone();
+                    app.update(cx, |a, cx| a.open_print_menu(&id, true, pos, window, cx));
+                }
+            })
+            .render(p, cx)
+            .into_any_element()
+    }
+
+    /// The rail's Prints: every Print, newest first, each saying which
+    /// projects it's in. A click opens it in the pane; Back comes back.
+    fn render_prints_list(&mut self, cx: &mut Context<Self>) -> AnyElement {
+        let p = palette(cx);
+        let all = self.app.upgrade().map(|a| threadbear_core::prints::rows::all(&a.read(cx).prints.list)).unwrap_or_default();
+        if all.is_empty() {
+            return crate::files::pane_note(threadbear_core::prints::words::RAIL_EMPTY, p).into_any_element();
+        }
+        let mut list = v_flex().py(px(8.));
+        for page in &all {
+            list = list.child(self.print_row(page, "rail", p, cx));
+        }
+        div().id("prints-list").size_full().overflow_y_scroll().child(list).into_any_element()
+    }
 }

@@ -11,6 +11,10 @@ pub enum Event {
     /// Loading started or stopped, going back became possible or not, or the
     /// title or address changed.
     Changed,
+    /// A click on a `threadbear-print:` link in a previewed page (a todo
+    /// list's box, a board card's arrow): never followed, but handed to the
+    /// app, which acts on it only for a page in the runner's Prints folder.
+    Print(String),
 }
 
 /// Whose page it is, which decides where its links may go.

@@ -68,6 +68,15 @@ fn cache_file(user: &str, year: i32) -> std::path::PathBuf {
     crate::looks::folder().join(format!("github-{}-{year}.json", github_user_clean(user).to_lowercase()))
 }
 
+/// Whether showing the card should fetch, independent of its network call.
+fn year_needs_fetch(state: Option<&Fetched>, year: i32, current_year: i32, last_attempt: Option<std::time::Instant>, now: std::time::Instant) -> bool {
+    match state {
+        None => true,
+        Some(Fetched::Loaded(_)) if year == current_year => last_attempt.is_none_or(|at| now.saturating_duration_since(at) >= std::time::Duration::from_secs(3600)),
+        _ => false,
+    }
+}
+
 /// One fetch, off the main thread: the year, or what to say.
 fn fetch(user: &str, year: i32) -> (Result<GitHubContributions, String>, Option<Vec<u8>>) {
     let Some(url) = GitHubContributions::url(user, year) else { return (Err("That isn't a GitHub user name.".into()), None) };
@@ -120,6 +129,9 @@ impl Threadbear {
             self.cards.years.insert(k.clone(), Fetched::Loading);
         }
         self.cards.fetching.insert(k.clone());
+        // A failed refresh keeps the calendar, with an hour before another
+        // automatic attempt. Refresh still retries immediately.
+        self.cards.fetched_at.insert(k.clone(), std::time::Instant::now());
         cx.notify();
         cx.spawn(async move |this, cx| {
             let who = user.clone();
@@ -157,7 +169,7 @@ impl Threadbear {
         let name = github_user_clean(user);
         let year = self.cards.github_year.unwrap_or_else(this_year);
         let k = year_key(&name, year);
-        if !self.cards.years.contains_key(&k) && !self.cards.fetching.contains(&k) {
+        if !self.cards.fetching.contains(&k) && year_needs_fetch(self.cards.years.get(&k), year, this_year(), self.cards.fetched_at.get(&k).copied(), std::time::Instant::now()) {
             // Asked for once it's drawn, as the Swift card's `.task`.
             let me = cx.entity().downgrade();
             let user = name.clone();
@@ -401,6 +413,19 @@ fn thousands(n: i64) -> String {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn current_calendar_refreshes_after_an_hour_without_retrying_errors_on_each_draw() {
+        let now = std::time::Instant::now();
+        let loaded = super::Fetched::Loaded(threadbear_core::looks::github::GitHubContributions { year: 2026, total: 0, days: vec![] });
+        assert!(super::year_needs_fetch(None, 2026, 2026, None, now));
+        assert!(!super::year_needs_fetch(Some(&loaded), 2026, 2026, Some(now), now));
+        let later = now + std::time::Duration::from_secs(3601);
+        assert!(super::year_needs_fetch(Some(&loaded), 2026, 2026, Some(now), later));
+        assert!(!super::year_needs_fetch(Some(&loaded), 2025, 2026, Some(now), later));
+        assert!(!super::year_needs_fetch(Some(&super::Fetched::Failed("offline".into())), 2026, 2026, None, later));
+        assert!(!super::year_needs_fetch(Some(&super::Fetched::Loading), 2026, 2026, None, later));
+    }
+
     #[test]
     fn thousands_has_commas() {
         assert_eq!(super::thousands(0), "0");

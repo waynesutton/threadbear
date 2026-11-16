@@ -60,3 +60,57 @@ Then('the side pane shows version {int} of {string}', async function (this: Thre
 When('the thread saves version {int} of {string}', async function (this: ThreadbearWorld, _version: number, id: string) {
   await this.app.do({ cmd: 'mock', method: 'savePage', params: { pageId: id } });
 });
+
+// Prints on a project's page, in Highlights and on the rail, and the GPUI
+// app's `print` command for a Print's menu, sheets and side pane (prints.rs).
+type PrintRow = { id: string; title: string; detail: string };
+type PrintsDump = { list: PrintRow[]; projectPage?: string[] | null; sheet?: { error?: string | null; loaded?: boolean } | null };
+type Loose = { prints?: PrintsDump | null; panels?: { pane?: { sections?: { title: string; rows: { title: string; detail?: string }[] }[] } }; rails?: { right?: { title: string; badge?: number }[] } };
+const loose = (d: unknown) => d as Loose;
+
+When('I open the project page for {string}', async function (this: ThreadbearWorld, title: string) {
+  await this.until('the Prints listed', (d) => (loose(d).prints?.list.length ?? 0) > 0);
+  await this.app.do({ cmd: 'project', title });
+  await this.until(`${title}'s page`, (d) => Array.isArray(loose(d).prints?.projectPage));
+});
+
+Then('its Prints section lists {string}', async function (this: ThreadbearWorld, start: string) {
+  await this.until(`"${start}" on the project page`, (d) => loose(d).prints?.projectPage?.some((l) => l.startsWith(start)));
+});
+
+Then('its Prints section doesn\'t list {string}', async function (this: ThreadbearWorld, title: string) {
+  await this.until(`${title} left off the project page`, (d) => loose(d).prints?.projectPage?.every((l) => !l.startsWith(`${title} `)));
+});
+
+Then('Highlights lists the Print {string} in {string}', async function (this: ThreadbearWorld, title: string, projects: string) {
+  await this.until(`"${title}" under Prints in Highlights`, (d) => loose(d).panels?.pane?.sections?.some((g) => g.title === 'Prints' && g.rows.some((r) => r.title === title && r.detail === projects)));
+});
+
+Then('the rail shows Prints with a count of {int}', async function (this: ThreadbearWorld, count: number) {
+  await this.until(`Prints on the rail with ${count}`, (d) => loose(d).rails?.right?.some((b) => b.title === 'Prints' && b.badge === count));
+});
+
+When('I edit the text of the Print {string} to {string}', async function (this: ThreadbearWorld, title: string, text: string) {
+  await this.app.do({ cmd: 'print', id: title, do: 'edit' });
+  await this.until('its source loaded', (d) => loose(d).prints?.sheet?.loaded);
+  await this.app.do({ cmd: 'print', do: 'type', text: text.replace(/\\n/g, '\n') });
+  await this.app.do({ cmd: 'print', do: 'save' });
+});
+
+Then('the Print editor says {string}', async function (this: ThreadbearWorld, words: string) {
+  await this.until(`"${words}" in the editor`, (d) => loose(d).prints?.sheet?.error?.startsWith(words));
+});
+
+When('I open the Print {string} beside the thread', async function (this: ThreadbearWorld, title: string) {
+  await this.app.do({ cmd: 'print', id: title, do: 'here' });
+  await this.until('it open beside the thread', (d) => previewLine(d)?.endsWith('/index.html') ?? false);
+});
+
+When('I click the todo list\'s item {int} in version {int}', async function (this: ThreadbearWorld, item: number, version: number) {
+  // What the page's link sends when it's clicked (web_panels.rs).
+  await this.app.do({ cmd: 'print', do: 'link', url: `threadbear-print:toggle?v=${version}&item=${item}` });
+});
+
+Then('the Print {string} reads {string}', async function (this: ThreadbearWorld, title: string, detail: string) {
+  await this.until(`"${title}" reading "${detail}"`, (d) => loose(d).prints?.list.some((p) => p.title === title && p.detail.startsWith(detail)));
+});

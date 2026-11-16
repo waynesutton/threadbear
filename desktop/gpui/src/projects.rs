@@ -204,6 +204,7 @@ impl Threadbear {
         self.projects.open = Some(id.to_owned());
         self.shows_home = false;
         self.note_navigation();
+        self.load_deleted_prints(cx);
         cx.notify();
     }
 
@@ -962,6 +963,11 @@ pub(crate) fn automation(app: &Entity<Threadbear>, cmd: &Value, window: &mut Win
             let key = cmd["id"].as_str().or(cmd["title"].as_str()).ok_or_else(|| format!("give an id: {}", ids(cx)))?;
             let id = find(cx, key).ok_or_else(|| format!("no project {key}; there are {}", ids(cx)))?;
             app.update(cx, |t, cx| t.open_project_page(&id, cx));
+            // Its page scrolled to the end (its Prints and Patches), for a shot.
+            if cmd["scroll"].as_str() == Some("bottom") {
+                let handle = app.read(cx).projects.page_scroll.clone();
+                window.on_next_frame(move |_, _| handle.scroll_to_bottom());
+            }
             if cmd["newThread"].as_bool() == Some(true) {
                 app.update(cx, |t, cx| t.new_thread_in_project(&id, cx));
                 let t = app.read(cx);

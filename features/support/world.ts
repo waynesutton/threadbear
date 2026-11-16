@@ -57,7 +57,8 @@ export class ThreadbearWorld extends World {
 
   thread(d: Dump, title: string): Thread | undefined {
     for (const s of d.sidebar.sections) {
-      const t = s.threads.find((x) => x.title === title);
+      // Or nested under the thread that started it, in its open group.
+      const t = s.threads.find((x) => x.title === title) ?? s.threads.flatMap((x) => x.group?.threads ?? []).find((x) => x.title === title);
       if (t) return t;
     }
     return undefined;
@@ -124,12 +125,21 @@ After({ tags: '@picture-loading' }, () => {
 Before({ tags: '@bears.tile or @bears.colour or @bears.mention or @bears.tablepage' }, () => { process.env.TB_MOCK_BEARS = '1'; });
 After({ tags: '@bears.tile or @bears.colour or @bears.mention or @bears.tablepage' }, () => { delete process.env.TB_MOCK_BEARS; });
 
+const startingCommandsDelay = process.env.THREADBEAR_MOCK_COMMANDS_DELAY_MS;
+Before({ tags: '@slash-catalog-loading' }, () => {
+  process.env.THREADBEAR_MOCK_COMMANDS_DELAY_MS = '1800';
+});
+After({ tags: '@slash-catalog-loading' }, () => {
+  if (startingCommandsDelay === undefined) delete process.env.THREADBEAR_MOCK_COMMANDS_DELAY_MS;
+  else process.env.THREADBEAR_MOCK_COMMANDS_DELAY_MS = startingCommandsDelay;
+});
+
 Before(async function (this: ThreadbearWorld, { pickle }) {
   // A scenario about paging needs a thread longer than one page of events.
   const long = pickle.tags.some((t) => t.name === '@long-thread');
   if (long) process.env.TB_MOCK_FIXTURES = longThreadFolder();
   else if (startingFixtures === undefined) delete process.env.TB_MOCK_FIXTURES;
-  // A scenario about other machines needs the mock's bruce threads, which
+  // A scenario about other machines needs the mock's mac-mini threads, which
   // both drivers leave out otherwise (TB_MOCK_NO_REMOTE in gpui.ts, swift.ts).
   if (pickle.tags.some((t) => t.name === '@remote-threads')) process.env.TB_MOCK_REMOTE = '1';
   else delete process.env.TB_MOCK_REMOTE;
@@ -146,6 +156,13 @@ Before(async function (this: ThreadbearWorld, { pickle }) {
   // Open Anything's experiment off: the mock's hello leaves it out.
   if (pickle.tags.some((t) => t.name === '@open-anything-off')) process.env.TB_MOCK_OPEN_ANYTHING_OFF = '1';
   else delete process.env.TB_MOCK_OPEN_ANYTHING_OFF;
+  // Nested threads: the mock's coordinator and the threads it started, with
+  // the nestedThreads experiment on, or off with @nested-threads-off.
+  const nestedOff = pickle.tags.some((t) => t.name === '@nested-threads-off');
+  if (nestedOff || pickle.tags.some((t) => t.name === '@nested-threads')) process.env.TB_MOCK_NESTED = '1';
+  else delete process.env.TB_MOCK_NESTED;
+  if (nestedOff) process.env.TB_MOCK_NESTED_OFF = '1';
+  else delete process.env.TB_MOCK_NESTED_OFF;
   // Parts of a project: Photo sync as a part of Threadbear.
   if (pickle.tags.some((t) => t.name === '@project-parts')) process.env.TB_MOCK_PARTS = '1';
   else delete process.env.TB_MOCK_PARTS;

@@ -689,6 +689,29 @@ pub(crate) fn wanted(store: &Entity<RichStore>, block: &RichBlock, picture: bool
     (state, picture)
 }
 
+/// Where a picture of a page has got to, for a box of someone else's (a
+/// Print's card, print_cards.rs) that shows only the picture.
+pub(crate) enum Thumb {
+    /// Drawn: the picture for this look, and its size in points.
+    Picture(Arc<Image>, f32, f32),
+    Waiting,
+    /// The web runtime isn't here (or was turned down): nothing will draw.
+    NoRuntime,
+    Failed(String),
+}
+
+/// A block's picture through `wanted`, without the box around it.
+pub(crate) fn thumb(block: &RichBlock, window: &mut Window, cx: &mut App) -> Thumb {
+    let Some(store) = store(cx) else { return Thumb::NoRuntime };
+    let asked = store.read(cx).asked.contains(&block.key(style::zoom_percent()));
+    match wanted(&store, block, true, window, cx) {
+        (Some(Drawing::Drawn { width, height, .. }), Some(picture)) => Thumb::Picture(picture, width, height),
+        (Some(Drawing::Failed(why)), _) => Thumb::Failed(why),
+        (None, _) if asked => Thumb::NoRuntime,
+        _ => Thumb::Waiting,
+    }
+}
+
 /// The Diagram (or Preview) / Source switch.
 fn switch(block: &RichBlock, shows_source: bool, store: &Entity<RichStore>, cx: &App) -> AnyElement {
     let (label, secondary, track, thumb) = (style::label_text(cx), style::secondary_label(cx), switch_track(cx), switch_thumb(cx));

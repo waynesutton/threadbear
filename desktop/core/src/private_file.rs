@@ -39,6 +39,23 @@ pub fn write(path: &Path, data: &[u8]) -> std::io::Result<()> {
     write_with_mode(path, data, 0o600)
 }
 
+/// Creates a private complete file only when no file already has its name.
+/// Returns false without changing an existing file or following its symlink.
+pub fn write_if_absent(path: &Path, data: &[u8]) -> std::io::Result<bool> {
+    let dir=path.parent().filter(|p|!p.as_os_str().is_empty()).unwrap_or_else(||Path::new("."));
+    make_dir(dir)?;
+    let (mut file,temp)=new_file(dir,path,0o600)?;
+    let written=file.write_all(data).and_then(|()|file.sync_all());
+    drop(file);
+    let result=written.and_then(|()| std::fs::hard_link(&temp,path));
+    let _=std::fs::remove_file(&temp);
+    match result {
+        Ok(())=>Ok(true),
+        Err(e) if e.kind()==std::io::ErrorKind::AlreadyExists=>Ok(false),
+        Err(e)=>Err(e),
+    }
+}
+
 /// `write`, with the file's mode given: 0o700 for a script only this user
 /// may run. Group and other bits are never set, whatever's asked.
 pub fn write_with_mode(path: &Path, data: &[u8], mode: u32) -> std::io::Result<()> {
@@ -174,6 +191,15 @@ fn clone_file(from: &std::fs::File, path: &Path) -> std::io::Result<bool> {
     Ok(true)
 }
 
+/// A copy made by `snapshot` that's a program, made runnable by this user
+/// alone and still read-only (0500), for running the checked copy rather
+/// than the path it came from (open_policy's `checked_copy`).
+#[cfg(unix)]
+pub fn make_runnable(path: &Path) -> std::io::Result<()> {
+    use std::os::unix::fs::PermissionsExt as _;
+    std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o500))
+}
+
 /// `len` bytes of `from` from its start into `to`, read at their offsets so
 /// whatever else reads `from` keeps its place.
 fn copy_all(from: &std::fs::File, to: &mut std::fs::File, len: u64) -> std::io::Result<()> {
@@ -301,6 +327,21 @@ mod tests {
 
     fn mode(path: &Path) -> u32 {
         std::fs::symlink_metadata(path).unwrap().permissions().mode() & 0o777
+    }
+
+    #[test]
+    fn a_write_once_file_is_private_and_never_replaced() {
+        let dir=scratch("write-once");let path=dir.join("CLAUDE.md");
+        assert!(write_if_absent(&path,b"original").unwrap());
+        assert_eq!(mode(&path),0o600);
+        assert!(!write_if_absent(&path,b"replacement").unwrap());
+        assert_eq!(std::fs::read(&path).unwrap(),b"original");
+        std::fs::remove_file(&path).unwrap();
+        let target=dir.join("user-file");write(&target,b"keep").unwrap();
+        std::os::unix::fs::symlink(&target,&path).unwrap();
+        assert!(!write_if_absent(&path,b"replacement").unwrap());
+        assert_eq!(std::fs::read(&target).unwrap(),b"keep");
+        std::fs::remove_dir_all(dir).unwrap();
     }
 
     #[test]

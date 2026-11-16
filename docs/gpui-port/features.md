@@ -59,7 +59,7 @@ It comes from reading code, not from running anything, so "(unverified)" means n
 
 | ID | Feature | What it does | How in GPUI | Route | Size | Swift |
 |---|---|---|---|---|---|---|
-| `dock.layout` | Layout tree | Splits and tab groups, tidied and saved | Port the pure tree and its tests into the BearDock crate, with old saved layouts still loading. | build | M | `DockLayout` |
+| `dock.layout` | Layout tree | Splits and tab groups, tidied and saved; content keeps a 160-point floor and clips inside narrow slots | Port the pure tree and its tests into the BearDock crate, with old saved layouts still loading. | build | M | `DockLayout` |
 | `dock.bars` | Panel bars and tabs | Title, tabs, × to close, buttons | Drawn in the BearDock crate. | build | M | `DockView` |
 | `dock.drag` | Panel drag | Title or tab drags now, elsewhere after a 350 ms hold, shrunken ghost, dashed hole, Esc | GPUI mouse events in the BearDock crate, keeping the press rules and springs with `with_spring`. | build | L | `DockController`, `DragOverlay` |
 | `dock.drop` | Drop targets | Tab slot, side split, compass (arrows, tab, Swap, Window), window edge | Port the hit-test order and draw the targets in the crate. | build | M | `DockController`, `DragOverlay` |
@@ -105,6 +105,8 @@ It comes from reading code, not from running anything, so "(unverified)" means n
 | `sidebar.row.hoverbuttons` | Hover buttons | Star, Hibernate, Archive or Unarchive, Trash | Drawn on hover, with the busy pattern. | build | S | `SidebarView` |
 | `sidebar.row.menu` | Row context menu | Star, Hibernate, Archive, Move to, Projects, Rename, Open in New Panel, Copy thread id, Ask the librarian to look, Delete… | gpui-kit menu with submenus, in-window. | kit | M | `SidebarView` |
 | `sidebar.subagents` | Sub-agent tree | Indented sub-agents with a drawn trunk, click to read | Custom rows with a drawn trunk. | build | M | `SubagentViews`, `SubagentRows` |
+| `sidebar.bearchat` | Bear chat | Sidebar mascot reopens a local personal chat, or aims a new draft at its folder; always shown | Ordinary local thread, private instructions written once | build | M | `BearChat`, `BearButton` |
+| `sidebar.nested` | Nested threads | Experiment `nestedThreads`: threads another thread started sit indented under it (one level, a grandchild under the top), in the section of the group's most urgent member; open by itself while one waits on Mike, folded otherwise, the starter's count ("1 needs you · 5 working") opening or folding it; a child's question in orange or where it's up to; archived ones as "N finished"; Move Out From Under and Put Back Under in the row menu; the Projects view nests the same way. Dragging rows in or out is planned, after a motion mockup | Rules in `core/src/nested.rs`; rows drawn as the inbox's own, indented with a guide line. | build | M | none (GPUI only) |
 | `sidebar.archived.paging` | Archived paging | Recent few, then Show more; the open thread is always included | Port the rule and draw a Show more row. | build | S | `SidebarView` (`ArchiveRows`) |
 | `sidebar.archived.foot` | Archived pinned to foot | Not present: tried 8 Nov, undone 9 Nov (cfbf3cb3); Archived sits directly under the other sections | Not ported: the Swift app no longer has it. | drop | none | none |
 | `sidebar.skeleton` | Loading skeleton | Pulsing grey rows until the first list lands | Drawn rows with `Animation`. | build | S | `SidebarView` (`LoadingRows`) |
@@ -123,6 +125,7 @@ It comes from reading code, not from running anything, so "(unverified)" means n
 | ID | Feature | What it does | How in GPUI | Route | Size | Swift |
 |---|---|---|---|---|---|---|
 | `header.title` | Title line | Title in the panel bar, click to rename inline | Text that becomes an `Input` on click. | build | S | `DetailView` (`HeaderTitle`, `ThreadTitleField`) |
+| `thread.startedby` | Started by | Experiment `nestedThreads`: a thread another thread started opens with one quiet line above its transcript, "Started by <starter>" (a link that opens it) and its `startedBy.why` | A line over the transcript in `thread.rs`. | build | S | none (GPUI only) |
 | `header.projectchip` | Project chip menu | In a project, take out, keep, add to another | gpui-kit menu. | kit | S | `DetailView` |
 | `header.schedulechip` | Schedule chip | Booked message in the header | Drawn chip. | build | S | `DetailView` (`ScheduleChip`) |
 | `header.backforward` | Back and forward | ‹ › with hover destination | Drawn buttons with `Tooltip`. | build | S | `HistoryButtons`, `Navigation`, `NavigationHistory` |
@@ -191,13 +194,17 @@ It comes from reading code, not from running anything, so "(unverified)" means n
 
 | ID | Feature | What it does | How in GPUI | Route | Size | Swift |
 |---|---|---|---|---|---|---|
-| `rich.inline` | Inline Markdown | Bold, italic, strike, inline code pills, bare URLs | `TextView` (unverified that its inline code can match our pill). | kit | M | `MarkdownRenderer`, `TextKit` |
+| `rich.inline` | Inline Markdown | Bold, italic, strike, inline code pills, bare and inline-code URLs; user messages preserve typed line breaks | `TextView` (unverified that its inline code can match our pill). | kit | M | `MarkdownRenderer`, `TextKit` |
 | `rich.blocks` | Headings, lists, quotes | Block styles and list markers | `TextView`, styled through the theme. | kit | M | `MarkdownRenderer` |
 | `rich.codebox` | Code boxes | Rounded box behind code | `TextView` code blocks, with long ones capped and scrolled inside as Ghostex does. | kit | S | `MarkdownRenderer`, `TextKit` |
 | `rich.table` | Tables | Natural widths, scales down to fit | TextView with our opt-in natural-width style; wide tables still fit or scroll inside the column. | kit | M | `MarkdownRenderer` (`renderTable`) |
 | `rich.localpicture` | Local pictures | `![](/path)` drawn in the flow, blocked for other Macs' threads | Our own image block, keeping the block for other runners' threads. | build | M | `MarkdownRenderer` (`picture`), `ImageLayout` |
 | `rich.mermaid` | Mermaid diagrams | Drawn with Pele in the app's colours, disk cached | Run `pele.js` in the web runtime and cache the picture on disk, showing the source when the runtime isn't installed; offscreen capture from CEF is (unverified). | web | L | `RichBlocks`, `RichRenderer`, `pele.js` |
-| `prints.diagram` | Diagram Prints | Mermaid source editing, saved versions, restore and project assignment | Reuse the Print store protocol and the rich preview; source editor and Print menus remain pending in GPUI. | web | M | `Pages`, `PageSheets`, `PageCardCell`, `EditDocSheet` |
+| `prints.project` | Prints on a project's page | A project's Prints, newest first, each with its kind, version, age and summary, opening in a window; Recently deleted for 7 days | `prints.rs` `render_prints_section`, from `pages.list` and `pages.updated`. | build | M | `PagesSection`, `PageRow`, `Pages` |
+| `prints.menu` | A Print's menu and sheets | Open, Show in Finder, Refresh, Edit with Agent, Edit Text, Download, Versions, Projects, Publish and Delete, with icons; the two sheets | One menu built in `prints.rs` (`print_menu_rows`) for every place a Print shows, and `PrintSheet`. | build | M | `PageMenu`, `PageMenuBuilder`, `AskPageSheet`, `EditDocSheet` |
+| `prints.pdf` | Download a Print as a PDF | US Letter, light look, shown in the Finder | CEF's own `PrintToPDF` on a sealed offscreen page (`threadbear_web::page_pdf`). | web | S | `PagePDF`, `RichRenderer.pagePDF` |
+| `prints.publish` | Publish a Print | Asks first, sends it to the backend, copies its link; Copy Link, Open on the Web and Unpublish after | `pages.publish` and `pages.unpublish` from the menu, after the system alert. | runner | S | `publishPage`, `unpublishPage` |
+| `prints.diagram` | Diagram Prints | Mermaid source editing, saved versions, restore and project assignment | Edit Text sends `pages.saveDiagram` and shows the runner's reason when it can't be drawn; Versions and Projects are the Print menu's. | runner | S | `Pages`, `PageSheets`, `PageCardCell`, `EditDocSheet` |
 | `prints.whenasked` | Prints only when asked | Settings switch; an unasked `create_print` waits on an approval card | The runner does the asking, so GPUI needs only the switch in its Settings and the existing approval card. | runner | S | `SettingsView`, `RunnerSettings` |
 | `prints.card` | Print card in a reply | A ```print block drawn as the Print: a picture of its top, title, kind, version and age, Open and Refresh; it moves to each new version | A block plugin in the reply's text (`prints.rs`), its picture drawn by the web runtime as an html block is, the store fed by `pages.list` and `pages.updated`. The ⋯ menu is `prints.menu`. | runner | M | `PageCards`, `PageCardCell`, `PageFence` |
 | `prints.pane` | Prints in the side pane | A reply's Print card opens in the thread's side pane, which follows new versions | Open the Print's newest file in the GPUI side pane and swap it when `pages.updated` brings a newer version of the one shown. | runner | S | `openPageHere`, `followPageVersions`, `PagePath` |
@@ -366,6 +373,7 @@ It comes from reading code, not from running anything, so "(unverified)" means n
 | `projects.icon` | Project icon | Choose or librarian's | GPUI path prompt, with Reveal going through the open gate. | kit | S | `ProjectPage`, `ProjectIconView` |
 | `projects.tasks` | Tasks board page | Status columns from Notion | Drawn columns. | build | M | `ProjectPage` (`TasksSection`) |
 | `projects.newthread` | New thread in project | "In" chip | Drawn chip. | build | S | `DetailView` (`NewThreadProjectChip`) |
+| `profile.page` | Profile page | Saved draft, publish controls and public page links | Existing runner RPC. | build | M | `ProfilePageSection` |
 | `librarian.customize` | Customize Librarian | Picture, background, layout, greeting, quote and activity | Shared look models and native Customize panel. | build | M | `LibrarianLookEditor`, `CustomizedLibrarianPage` |
 | `librarian.page` | Librarian page | Picture, tiles, Look at threads, Runs on | Drawn. | build | S | `LibrarianHome`, `HomePage` |
 | `looks.librarian` | Customize the Librarian page | Settings > General > Look's switch, then Customize: greeting, picture, background with Position and Fade, quote of the day, layout, title parts, numbers, GitHub and Threadbear activity | Drawn page and panel (`librarian_look.rs`, `look_cards.rs`, `profile_page.rs`); looks kept in the Swift app's JSON. | build | L | `LibrarianHome`, `LibrarianLookEditor`, `LookEditorSections`, `Looks` |

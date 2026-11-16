@@ -125,3 +125,63 @@ Then('the standard Projects page is shown and my Projects look is kept', async f
   assert.deepEqual(projects(d).projects.hiddenCardParts, ['art']);
   await this.app.do({ cmd: 'label-point', label: 'Search projects' });
 });
+const animation = Buffer.from('47494638396101000100800000ce33443355dd21ff0b4e45545343415045322e30030100000021f90400230000002c000000000100010000020244010021f90400230000002c00000000010001000002024c01003b', 'hex');
+When('I choose an animated Librarian background', async function(this: ThreadbearWorld) {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'look-animation-'));
+  const file = path.join(dir, 'motion.gif');
+  fs.writeFileSync(file, animation);
+  try {
+    await this.app.do({ cmd: 'mode', mode: 'librarian' });
+    await this.app.do({ cmd: 'look', page: 'librarian', on: true, background: file });
+    await this.until('the animated background copied', d => looks(d).librarian.background?.endsWith('.gif'));
+  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+});
+Then('both background frames are kept and the background is drawn', async function(this: ThreadbearWorld) {
+  const file = looks(await this.app.dump()).librarian.background!;
+  const home = String(await this.app.do({ cmd: 'data-dir' })).replace(/^ok /, '');
+  assert.deepEqual(fs.readFileSync(path.join(home, 'looks', file)), animation);
+  await this.app.do({ cmd: 'label-point', label: 'Page background photo' });
+});
+When('I quickly edit my profile page twice', async function(this: ThreadbearWorld) {
+  await this.app.do({ cmd: 'mode', mode: 'librarian' });
+  await this.app.do({ cmd: 'look', page: 'librarian', on: true, customize: true });
+  await this.until('profile loaded', d => profile(d).loaded && profile(d).draft);
+  await this.app.do({ cmd: 'profile', set: { name: 'Wayne first', bio: 'First draft' } });
+  await this.app.do({ cmd: 'profile', set: { name: 'Wayne latest', bio: 'Makes things with agents' } });
+});
+type ProfileDump = { loaded: boolean; saving: boolean; draft?: { name: string; bio: string; published: boolean; home: boolean; show: string[] }; saved?: { name: string; bio: string }; };
+const profile = (d: Dump) => (d as unknown as { profilePage: ProfileDump }).profilePage;
+Then('the profile page has saved my latest name and bio', async function(this: ThreadbearWorld) {
+  await this.until('latest profile saved through the runner', d => !profile(d).saving && profile(d).saved?.name === 'Wayne latest' && profile(d).saved?.bio === 'Makes things with agents');
+});
+When('I reopen the Librarian Customize panel', async function(this: ThreadbearWorld) {
+  await this.app.do({ cmd: 'look', page: 'librarian', customize: false });
+  await this.app.do({ cmd: 'look', page: 'librarian', customize: true });
+});
+Then('the profile page has loaded my latest name and bio', async function(this: ThreadbearWorld) {
+  await this.until('latest profile loaded', d => profile(d).loaded && profile(d).draft?.name === 'Wayne latest' && profile(d).draft?.bio === 'Makes things with agents');
+});
+
+When('I reopen the profile panel while my latest bio saves', async function(this: ThreadbearWorld) {
+  await this.app.do({ cmd: 'profile', set: { bio: 'The newest bio' } });
+  await this.app.do({ cmd: 'profile', load: true, delayMs: 4000 });
+});
+Then('the late load leaves my latest bio saved and on screen', async function(this: ThreadbearWorld) {
+  const d = await this.until('the delayed load completed', d => profile(d).loaded && !profile(d).saving && d);
+  assert.equal(profile(d).saved?.bio, 'The newest bio');
+  assert.equal(profile(d).draft?.bio, 'The newest bio');
+});
+
+When('I open my profile controls without editing them', async function(this: ThreadbearWorld) {
+  await this.app.do({ cmd: 'mode', mode: 'librarian' });
+  await this.app.do({ cmd: 'look', page: 'librarian', on: true, customize: true });
+  await this.until('profile controls loaded', d => profile(d).loaded && profile(d).draft);
+});
+Then('no profile has been sent and all its public parts are off', async function(this: ThreadbearWorld) {
+  const state = profile(await this.app.dump());
+  assert.equal(state.saved, null);
+  assert.equal(state.saving, false);
+  assert.equal(state.draft?.published, false);
+  assert.equal(state.draft?.home, false);
+  assert.deepEqual(state.draft?.show, []);
+});

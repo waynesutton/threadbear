@@ -237,3 +237,15 @@ Feature: The slash command palette
     When I press Return
     Then the composer says "use /deslop "
     And the palette is closed
+
+  # The frozen Swift palette sends an empty match while its catalog is loading.
+  @composer.slash @slash-catalog-loading @swift-pending
+  Scenario: Return waits for commands to load before picking or sending
+    When I type "/cle" in the composer
+    And I press Return
+    Then the composer says "/cle"
+    And the transcript doesn't show my message "/cle"
+    And the palette's pick is "/clear"
+    When I press Return
+    Then the composer says "/clear "
+    And the palette is closed

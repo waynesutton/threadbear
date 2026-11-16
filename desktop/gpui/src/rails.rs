@@ -409,6 +409,7 @@ impl Threadbear {
             .flex_none()
             .w(px(BAR_WIDTH))
             .h_full()
+            .bg(cx.theme().sidebar)
             // Starts under the title bar strip: the traffic lights are wider
             // than the bar, so a full-height line cut between the yellow and
             // green dots (ActivityBar).
@@ -443,6 +444,7 @@ impl Threadbear {
         let showing = |panel: &str| dock.controller.is_showing(panel);
         let highlights_shown = showing(shell::HIGHLIGHTS);
         let files_shown = showing(shell::FILES);
+        let prints_shown = showing(shell::PRINTS);
         let patches_shown = showing(shell::PATCHES);
         let browser_shown = showing(shell::BROWSER);
         // The accent dot while the last turn's asks aren't all ticked.
@@ -484,6 +486,12 @@ impl Threadbear {
                 column.push(rail_button(RailButton::new("rail-terminal", "terminal", "Terminal", self.dock.read(cx).controller.is_showing(shell::TERMINAL)), |this, window, cx| crate::terminal::toggle(this, window, cx), cx));
             }
         }
+        // Every Print, under Files (Wayne, 11 Nov), with how many.
+        if self.shows_prints_rail(&thread) {
+            let mut b = RailButton::new("rail-prints", "doc.richtext", "Every Print, and the projects each is in", prints_shown);
+            b.badge = Some(threadbear_core::prints::rows::all(&self.prints.list).len());
+            column.push(rail_button(b, |this, _, cx| this.click_rail(shell::PRINTS, cx), cx));
+        }
         let patches = thread.patches.as_ref().map_or(0, Vec::len);
         let hairline = cx.theme().border;
         let mut rail = v_flex().size_full().items_center().pt(px(4.)).pb(px(10.)).gap(px(4.)).children(column).child(div().flex_1().min_h(px(8.)));
@@ -492,7 +500,7 @@ impl Threadbear {
             b.badge = Some(patches);
             rail = rail.child(rail_button(b, |this, _, cx| this.click_rail(shell::PATCHES, cx), cx));
         }
-        div().relative().flex_none().w(px(BAR_WIDTH)).h_full().child(div().absolute().top(px(4.)).bottom(px(4.)).left_0().w(gpui_kit::px(1.)).bg(hairline.opacity(0.7))).child(rail).into_any_element()
+        div().relative().flex_none().w(px(BAR_WIDTH)).h_full().bg(cx.theme().sidebar).child(div().absolute().top(px(4.)).bottom(px(4.)).left_0().w(gpui_kit::px(1.)).bg(hairline.opacity(0.7))).child(rail).into_any_element()
     }
 
     /// The rails as `dump` reports them, with the fields the Swift app's has.
@@ -541,6 +549,9 @@ impl Threadbear {
                 if self.settings.saved.rail_terminal.unwrap_or(false) {
                     right.push(json!({ "title": "Terminal", "active": showing(shell::TERMINAL) }));
                 }
+            }
+            if self.shows_prints_rail(&thread) {
+                right.push(json!({ "title": "Prints", "badge": threadbear_core::prints::rows::all(&self.prints.list).len(), "active": showing(shell::PRINTS) }));
             }
             if thread.patches.as_ref().is_some_and(|p| !p.is_empty()) {
                 right.push(json!({ "title": "Patches", "badge": thread.patches.as_ref().map(Vec::len), "active": showing(shell::PATCHES) }));

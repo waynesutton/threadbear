@@ -23,6 +23,7 @@ pub(crate) const THREADS: &str = "threadbear.threads";
 pub(crate) const MAIN: &str = "threadbear.thread";
 pub(crate) const HIGHLIGHTS: &str = "threadbear.highlights";
 pub(crate) const FILES: &str = "threadbear.files";
+pub(crate) const PRINTS: &str = crate::highlights::PRINTS;
 pub(crate) const PATCHES: &str = "threadbear.patches";
 pub(crate) const BROWSER: &str = crate::agent_browser::BROWSER;
 pub(crate) const USAGE: &str = "threadbear.usage";
@@ -262,6 +263,7 @@ fn panel_symbol(panel: &str) -> Option<&'static str> {
         TERMINAL => "terminal",
         HIGHLIGHTS => "pin",
         FILES => "folder",
+        PRINTS => "doc.richtext",
         BROWSER => "globe",
         PATCHES => "square.dashed",
         // A thread in a panel of its own, as the main panel's.
@@ -457,6 +459,7 @@ impl Threadbear {
             TERMINAL => "Terminal".into(),
             HIGHLIGHTS => "Highlights".into(),
             FILES => "Files".into(),
+            PRINTS => "Prints".into(),
             BROWSER => "Browser".into(),
             PATCHES => "Patches".into(),
             _ => self.pane_thread().and_then(|t| t.panels.iter().flatten().find(|p| p["id"].as_str() == Some(panel)).and_then(|p| p["title"].as_str()).map(String::from)).unwrap_or_else(|| panel.to_string()),
@@ -527,6 +530,7 @@ impl Threadbear {
         let Some(thread) = self.pane_thread() else { return !project_page };
         match panel {
             HIGHLIGHTS | FILES => !project_page,
+            PRINTS => self.shows_prints_rail(&thread),
             // While BrowserBear is on this Mac, as the rail's button.
             BROWSER => !project_page && self.browser_rail(&thread.id, cx).is_some(),
             PATCHES => thread.patches.as_ref().is_some_and(|p| !p.is_empty()),
@@ -845,6 +849,8 @@ impl Threadbear {
                 self.sidebar_settings_changed(cx);
             }
         }
+        // A nested thread's group opens so its row is there to see.
+        self.open_group_of(id, cx);
         self.mode = SidebarMode::Inbox;
         // Its row in view, wherever the list was scrolled to.
         self.reveal_row(id, cx);
@@ -1226,7 +1232,14 @@ impl Threadbear {
 
     /// The window's title (Window menu, Mission Control), as `windowTitle`.
     pub(crate) fn sync_window_title(&mut self, window: &mut Window) {
-        let title = self.main_panel_title();
+        let mut title = self.main_panel_title();
+        // A scripted copy anyone can see says so wherever macOS names the
+        // window (Mission Control, the Window menu, Activity Monitor's
+        // windows): someone running a fork found one with the mock's demo
+        // threads and took it for a leak of someone's real setup (15 Nov).
+        if crate::scripted::labelled() {
+            title.push_str(crate::scripted::TITLE_LABEL);
+        }
         if title != self.last_window_title {
             window.set_window_title(&title);
             self.last_window_title = title;
@@ -1646,7 +1659,7 @@ impl Threadbear {
     /// Whether a panel is one of the side pane's sections: Highlights, Files,
     /// Patches or one of the thread's patch panels (highlights.rs).
     fn is_side_section(&self, panel: &str) -> bool {
-        matches!(panel, HIGHLIGHTS | FILES | PATCHES | BROWSER) || self.pane_thread().is_some_and(|t| t.panels.iter().flatten().any(|p| p["id"].as_str() == Some(panel)))
+        matches!(panel, HIGHLIGHTS | FILES | PATCHES | BROWSER | PRINTS) || self.pane_thread().is_some_and(|t| t.panels.iter().flatten().any(|p| p["id"].as_str() == Some(panel)))
     }
 
     /// One section of the side pane, drawn by a view of its own so two side

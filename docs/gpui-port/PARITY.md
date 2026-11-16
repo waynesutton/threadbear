@@ -5038,9 +5038,11 @@ Fixes from Codex's review of the slice before:
 
 `prints.list` has one manual scenario in `features/prints.feature`: Prints in Highlights and the rail's Prints list, with their projects. `PrintRows` is covered by `PageTests`.
 
-`prints.card` and `prints.pane` (slice 2.1a): a ```print block in a reply is the Print's card in the GPUI app (`desktop/gpui/src/prints.rs`, a block plugin like the rich boxes; the pure parts in `desktop/core/src/prints.rs` with tests): the top of its newest index.html drawn by the web runtime as an html block is (`rich_boxes::wanted`), or a line saying why there's none, then the kind's glyph, title, "Chart · v1 · 1h ago", Open and Refresh, with "New version" and the accent ring for a version newer than the first made in the last 15 minutes. Open puts the newest file in the thread's side pane through the local-page path (`file.htmlpreview`), and `pages.updated` moves a pane showing the newest on to the new one (`SidePane::follow_print_versions`, `PagePath.newer`'s rule: an older version opened on purpose stays). Differences from the Swift card: the picture is drawn 720 points wide (the html block's width) rather than 1080, its relative assets don't load (it's drawn from the file's text), and a few kinds' glyphs are the nearest the app has. Left: the ⋯ menu (2.1c, `prints.menu`); a Print opened from a thread on another Mac. Three scenarios (`@swift-pending`: the Swift dump has no cards, and its Open goes to a window): the card, the block as code with `@pages-off`, and Open with the pane following version 2. Verification: `TB_APP=gpui cucumber-js` on Wayne's Mac (14 Nov), all three passed; dev-app shots of the card drawn and of the pane open on version 2 (the pane's page is a native Chromium view, which the app's own shot doesn't include).
+`prints.card` and `prints.pane` (slice 2.1a): a ```print block in a reply is the Print's card in the GPUI app (`desktop/gpui/src/print_cards.rs`, a block plugin like the rich boxes; the pure parts in `desktop/core/src/prints.rs` with tests): the top of its newest index.html drawn by the web runtime as an html block is (`rich_boxes::wanted`), or a line saying why there's none, then the kind's glyph, title, "Chart · v1 · 1h ago", Open and Refresh, with "New version" and the accent ring for a version newer than the first made in the last 15 minutes. Open puts the newest file in the thread's side pane through the local-page path (`file.htmlpreview`), and `pages.updated` moves a pane showing the newest on to the new one (`SidePane::follow_print_versions`, `PagePath.newer`'s rule: an older version opened on purpose stays). Differences from the Swift card: the picture is drawn 720 points wide (the html block's width) rather than 1080, its relative assets don't load (it's drawn from the file's text), and a few kinds' glyphs are the nearest the app has. Left: the ⋯ menu (2.1c, `prints.menu`); a Print opened from a thread on another Mac. Three scenarios (`@swift-pending`: the Swift dump has no cards, and its Open goes to a window): the card, the block as code with `@pages-off`, and Open with the pane following version 2. Verification: `TB_APP=gpui cucumber-js` on Wayne's Mac (14 Nov), all three passed; dev-app shots of the card drawn and of the pane open on version 2 (the pane's page is a native Chromium view, which the app's own shot doesn't include).
 
 `prints.diagram` has three manual behavior scenarios in `features/prints.feature` for source editing, invalid edits and project assignment. The Swift flow was checked with an isolated dev runner; automated shared-driver coverage and GPUI support remain pending. The recorded results above are preserved until a shared spec run produces new reports.
+Prints in the GPUI app, the rest of Wayne's Swift changes (14 Nov 2026, thread e7a66546; `features/prints.feature`): the project page's section (`prints.project`), the menu and its sheets (`prints.menu`), Edit Text on a diagram (`prints.diagram`), Highlights and the rail (`prints.list`), and a todo tick that the side pane follows (`prints.todo`) each have a scenario on the mock runner's seeded Prints, passing on the GPUI app on Wayne's Mac mini and `@swift-pending` (the Swift driver has no `print` command or `prints` dump). What needs the web runtime (a card's picture, a click in the page itself, Download as PDF) or a person (Publish's alert) is `@manual`. With the runtime installed (14 Nov) the card's picture drew, a click in a todo list's page saved v2 and the pane followed, and Download as PDF wrote US Letter in the light look; Publish is still `@gpui-pending`.
+
 ### 2026-11-13 Other Macs and the audit's smaller leftovers
 
 - A move keeps the sidebar row as the destination Mac's until its first
@@ -5276,3 +5278,65 @@ Fixes from Codex's review of the slice before:
   part this app doesn't: `f6921eaa` (headings sized by level), `1952b193`
   (⌘5 Skills), `a7c523ea` (dictating into a note) and `0f5c08f0` (Voice and
   Skills switches, skill commands as links).
+
+### 2026-11-15 Nested threads (`sidebar.nested`, `thread.startedby`)
+
+- Experiment `nestedThreads` (docs/protocol.md, "Nested threads"), GPUI app
+  only; the frozen Swift app shows these threads as before, so both specs are
+  `@swift-pending` there. A thread another thread started sits indented under
+  it in the sidebar, like a sub-agent, one level deep, in the section of the
+  group's most urgent member. The group opens by itself while one of its
+  threads waits on Mike and folds otherwise; the count on the starter's row
+  opens or folds it, remembered while the app runs. Folded, the starter carries
+  the group's needs-you dot. A nested row's second line is its question in
+  orange, else its byline or last reply. Archived ones are one "N finished"
+  line, which opens the starter with Highlights ("Threads it started"). The row
+  menu has Move Out From Under and Put Back Under (`threads.update`'s
+  `detached`, optimistic with rollback). The Projects view nests the same way
+  within a project. A thread a thread started opens with "Started by
+  <starter> · why" above its transcript. Dragging rows in or out waits for a
+  motion mockup (AGENTS.md).
+- Rules and their tests: `desktop/core/src/nested.rs`, `inbox::sections_nested`.
+  Drawing: `desktop/gpui/src/{sidebar,projects_list,thread,app,shell}.rs`.
+  The mock's `TB_MOCK_NESTED` demo set, `features/nested-threads.feature`.
+
+### 2026-11-15 Files open with the app that was checked (`file.open`)
+
+- Daybreak 125: the open gate looked at a file by its path, then handed the
+  path to the system, which looked it up again; whatever writes the project
+  could swap the document (or a folder above it) for an app in between, and
+  it launched with no question. Now each open looks again right before
+  (same real path, same file on disk by device and inode, same kind, same
+  app), and then opens the file it looked at rather than its path. On a Mac
+  that's a file reference URL (`file:///.file/id=<volume>.<inode>`, both
+  checked against the look) handed to the app that was checked
+  (NSWorkspace's openURLs:withApplicationAtURL:); tried on Tinker Desk, an
+  app or script moved into the path after the reference was made never ran,
+  and a confirmed script ran the one asked about. A plain folder is shown
+  selected in Finder rather than opened in a window of its own: a Finder
+  window rooted at a path, or Finder asked to open it, launched an app
+  swapped in there; revealing it didn't. A document package (`.rtfd`,
+  `.xcodeproj`) still opens in its app. The opener is the real app (links
+  followed), handed over by a reference too; one that isn't installed where
+  apps go (directly in `/Applications` or `~/Applications` or their
+  Utilities, the system's folders, `~/Library/Application Support`), as an
+  app in the project made a file's opener by its own "open with" setting
+  would be, means a question first, as a program does. The looked-at file
+  is held open until it opens, so its inode can't pass to a file made in
+  its place. A disk with no file references (ExFAT, a network share) opens
+  a file from a private copy in `~/Library/Caches/Threadbear/opened`, and
+  doesn't open a folder.
+  The Swift app (frozen) still opens by path.
+- Windows and Linux can't name the app or hold a file through the system's
+  opener, so a file (a document, or a program once said yes to) opens from a
+  private, read-only copy of the checked file, read from the handle held
+  since the look (Linux), or one that must be the file looked at (Windows:
+  its volume and file ID),
+  in `~/.cache/threadbear/opened` or `%LOCALAPPDATA%\Threadbear\opened`,
+  cleared after a day. Edits made there don't reach the original. A plain
+  folder still goes to the file manager by its path with a slash on the
+  end, after the look, so only a folder is found there; a bundle folder
+  isn't opened.
+- Rules and their tests: `desktop/core/src/open_policy.rs` (`Opener`,
+  `still_same`, `checked_copy`), the gate: `desktop/gpui/src/open_gate.rs`
+  (`open_checked`), `desktop/core/tests/open_gate_source.rs`.

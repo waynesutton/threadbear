@@ -97,8 +97,6 @@ struct SidebarView: View {
 private struct InboxList: View {
     @Environment(AppModel.self) private var app
 
-    @AppStorage(BearChat.shownKey) private var bearShown = true
-
     var body: some View {
         // The search at the top cuts every section down to its matches.
         let query = app.searchQuery.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -131,9 +129,8 @@ private struct InboxList: View {
             HStack(spacing: zoomed(6)) {
                 ThreadSearch()
                 NewThreadButton()
-                // The bear, always there at the top right (BearChat),
-                // unless it's hidden in Settings > General.
-                if bearShown { BearButton() }
+                // The bear, always there at the top right (BearChat).
+                BearButton()
             }
             .fixedSize(horizontal: false, vertical: true)
             .padding(.horizontal, SidebarMetrics.outerInset)

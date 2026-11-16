@@ -129,6 +129,8 @@ pub struct Threadbear {
     /// The bears this Mac's runner lists, for the @ list and a table's page
     /// (bears.rs).
     pub(crate) bear_list: crate::bears::BearList,
+    /// Prints (prints.rs), with the pages experiment on.
+    pub(crate) prints: crate::prints::PrintsState,
     pub(crate) done_note: Option<String>,
     pub(crate) done_task: Option<Task<()>>,
     /// CLI updates that failed and were dismissed from the banner, by
@@ -169,6 +171,7 @@ pub struct Threadbear {
     /// (`showsScheduledHome` and friends), not the selected thread. Picking a
     /// thread puts the thread back.
     pub(crate) shows_home: bool,
+    pub(crate) bear_preparing: bool,
     /// Back or Forward is putting a place back (`navigationPending`): the
     /// steps on the way aren't recorded.
     pub(crate) restoring_place: bool,
@@ -176,6 +179,7 @@ pub struct Threadbear {
     pub(crate) librarian: crate::librarian::LibrarianState,
     /// The Look parts: Customize panels and background photos (looks.rs).
     pub(crate) looks: crate::looks::LooksState,
+    pub(crate) profile: crate::profile_page::ProfileState,
     /// The Librarian page's year calendars (look_cards.rs).
     pub(crate) cards: crate::look_cards::CardsState,
     /// The customized Librarian page's boxes and clock (librarian_look.rs).
@@ -400,8 +404,6 @@ impl Threadbear {
         cx.set_global(crate::reply_buttons::PressHook(Rc::new(move |thread: String, id: String, window: &mut Window, cx: &mut App| {
             press_app.update(cx, |this, cx| this.press_reply_button(thread, id, window, cx)).ok();
         })));
-        // The Print cards in replies (prints.rs), which open in this app's side pane.
-        crate::prints::init(app.clone(), cx);
         let dock = cx.new(|_| {
             let mut model = DockModel::new(layout);
             let app = app.clone();
@@ -540,6 +542,7 @@ impl Threadbear {
             connection_error: None,
             busy_notes: Vec::new(),
             bear_list: Default::default(),
+            prints: Default::default(),
             done_note: None,
             done_task: None,
             dismissed_cli_failures: HashSet::new(),
@@ -563,9 +566,11 @@ impl Threadbear {
             scheduled,
             schedule_editor: None,
             shows_home: false,
+            bear_preparing: false,
             restoring_place: false,
             librarian: crate::librarian::LibrarianState::new(),
             looks: Default::default(),
+            profile: Default::default(),
             cards: Default::default(),
             librarian_look: Default::default(),
             librarian_pokes: crate::home_page::Pokes::new(crate::home_page::Art::Librarian),
@@ -866,7 +871,6 @@ impl Threadbear {
                 if let Status::Connected { hello, .. } = &status {
                     self.logins = RunnerLogins::from_hello(hello);
                     self.remote.experiments = hello["experiments"].as_array().into_iter().flatten().filter_map(|e| e.as_str().map(str::to_owned)).collect();
-                    crate::prints::connected(self.client.clone(), &self.remote.experiments, cx);
                     self.runner_version = hello["runnerVersion"].as_str().unwrap_or("").to_owned();
                     self.upstream_on = hello["updates"]["upstream"]["state"].as_str().is_some_and(|s| s != "off");
                     self.upstream_checkout = hello["updates"]["upstream"]["checkout"].as_str().filter(|c| !c.is_empty()).map(str::to_owned);
@@ -905,6 +909,7 @@ impl Threadbear {
                     self.load_projects(cx);
                     self.load_runner_settings(cx);
                     self.load_schedules(cx);
+                    self.load_prints(cx);
                     self.load_remote(cx);
                     self.load_clis(cx);
                     self.load_connectors(cx);
@@ -949,6 +954,13 @@ impl Threadbear {
                         if let Some(pane) = self.kept.get(&t.id, cx) {
                             pane.update(cx, |p, cx| p.summary_changed(&t, cx));
                         }
+                        // Into the other runners' list as well, which is
+                        // put back over these whenever this Mac's own list
+                        // comes in (RemoteThreads::take_update).
+                        if t.is_remote() {
+                            self.remote.index.take_update(&t);
+                            self.remote.recent.note(&t);
+                        }
                         let before = self.threads.insert(t.id.clone(), Arc::new(t.clone()));
                         self.note_failed_account(before.as_deref(), &t);
                         self.thread_changed_outside(before.as_deref(), &t, cx);
@@ -973,6 +985,7 @@ impl Threadbear {
                         self.close_thread_panel(id, cx);
                         self.threads.remove(id);
                         self.failed_on_account.remove(id);
+                        self.remote.recent.forget(id);
                         self.refresh_dock_badge();
                     } else {
                         self.apply_remote_index(cx);
@@ -1004,12 +1017,6 @@ impl Threadbear {
                         self.skills_page = None;
                     }
                 }
-                // Every Print card shows the newest, and a pane showing one follows it.
-                // Deferred: the side pane reads the app, which this is inside.
-                "pages.updated" => {
-                    let (params, side) = (params.clone(), self.side.clone());
-                    cx.defer(move |cx| crate::prints::updated(&params, &side, cx));
-                }
                 // A login appearing or going, its models once asked, its
                 // usage; and the pools after a save: both replace `hello`'s.
                 "accounts.updated" => self.logins.set_accounts(&params["accounts"]),
@@ -1030,6 +1037,8 @@ impl Threadbear {
                     self.side.update(cx, |side, cx| side.schedules_updated(&params["schedules"], cx));
                 }
                 "remoteThreads.updated" => self.receive_remote(&params, cx),
+                // The whole list of Prints, as `pages.list` gives it.
+                "pages.updated" => self.receive_prints(threadbear_core::prints::Page::list(&params["pages"]), cx),
                 "clis.updated" => self.clis_updated(&params),
                 "runner.updates" => self.runner_updates_changed(&params),
                 "connectors.updated" => self.connectors_updated(&params),
@@ -1539,6 +1548,10 @@ impl Threadbear {
     /// A thread named by the start of its id, as the Swift app's automation has it.
     #[cfg(feature = "automation")]
     pub(crate) fn thread_id_from(&self, start: &str) -> Result<String, String> {
+        // A whole id is that thread, though another's id starts with it.
+        if self.threads.contains_key(start) {
+            return Ok(start.to_owned());
+        }
         let mut found = self.threads.keys().filter(|id| id.starts_with(start));
         match (found.next(), found.next()) {
             (Some(id), None) => Ok(id.clone()),
@@ -1647,6 +1660,8 @@ impl Threadbear {
         dump["notesPage"] = self.notes_dump(cx);
         dump["looks"] = self.looks_dump();
         dump["skillsPage"] = self.skills_dump(cx);
+        dump["bearChat"] = self.bear_chat_dump();
+        dump["profilePage"] = self.profile_dump();
         // Panels pinned to their threads (pinned_panels.rs).
         dump["pinnedPanels"] = self.pinned_panels_dump(cx);
         // The tour or a page's intro on show, and Finish setting up (tour.rs, setup_panel.rs).
@@ -1674,6 +1689,7 @@ impl Threadbear {
         // The small motions, as last seen (juice.feature): the row a click
         // last slid off (row_swipe.rs), and the card that last arrived in
         // the box while it was on screen (composer_card.rs).
+        dump["prints"] = crate::prints::dump(self, cx);
         dump["juice"] = json!({
             "slidOff": self.sidebar.gestures.last_slid(),
             "cardArrived": self.composer(cx).and_then(|c| c.read(cx).card_arrival.last),
@@ -1757,18 +1773,33 @@ impl Threadbear {
         let query = self.search.read(cx).value().trim().to_lowercase();
         let wakes = inbox::wakes(&self.scheduled.list);
         let changes = self.threads.changes();
+        // Nested threads (nested.rs) only with the experiment on, and not
+        // while searching: a search lists what it found, each on its own row.
+        let nested = query.is_empty() && self.nested_threads_on();
         if let Some(c) = self.sections_cache.borrow().as_ref() {
-            if c.changes == changes && c.query == query && c.order == self.sidebar.order && c.wakes == wakes && c.from <= now && now < c.until {
+            if c.changes == changes && c.query == query && c.order == self.sidebar.order && c.wakes == wakes && c.nested == nested && c.from <= now && now < c.until {
                 return c.sections.clone();
             }
         }
+        let nesting = nested.then(|| Rc::new(threadbear_core::nested::Nesting::build(self.threads.values(), now, &wakes)));
         // Shared rows: working them out again copies pointers (thread_map.rs).
-        let sections = Rc::new(inbox::sections_ordered(self.threads.values().filter(|t| query.is_empty() || inbox::matches(t, &query)), now, self.sidebar.order, &wakes));
+        let shown = self.threads.values().filter(|t| query.is_empty() || inbox::matches(t, &query));
+        let sections = Rc::new(match &nesting {
+            Some(n) => inbox::sections_nested(shown, now, self.sidebar.order, &wakes, n),
+            None => inbox::sections_ordered(shown, now, self.sidebar.order, &wakes),
+        });
         // Until the next snooze runs out, when a thread moves out of
         // Hibernating; nothing else in the sorting goes by the clock.
         let until = self.threads.values().map(|t| &**t).filter_map(|t| t.snoozed_until_ms()).filter(|at| *at > now).min().unwrap_or(i64::MAX);
-        *self.sections_cache.borrow_mut() = Some(SectionsCache { changes, query, order: self.sidebar.order, wakes, from: now, until, sections: sections.clone() });
+        *self.sections_cache.borrow_mut() = Some(SectionsCache { changes, query, order: self.sidebar.order, wakes, nested, from: now, until, sections: sections.clone(), nesting });
         sections
+    }
+
+    /// Which threads nest under which, as the sections were last worked out:
+    /// None with the experiment off or while searching.
+    pub(crate) fn shown_nesting(&self, cx: &App, now: i64) -> Option<Rc<threadbear_core::nested::Nesting>> {
+        self.shown_sections(cx, now);
+        self.sections_cache.borrow().as_ref().and_then(|c| c.nesting.clone())
     }
 
     /// The connection as the Swift app tells it (`ConnectionState`). While it
@@ -1898,4 +1929,7 @@ struct SectionsCache {
     from: i64,
     until: i64,
     sections: Rc<Vec<inbox::Section<Arc<ThreadSummary>>>>,
+    /// Worked out with nested threads, and which nest under which.
+    nested: bool,
+    nesting: Option<Rc<threadbear_core::nested::Nesting>>,
 }

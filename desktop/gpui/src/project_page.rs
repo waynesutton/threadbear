@@ -54,6 +54,8 @@ impl Threadbear {
             .child(self.render_text_section(&project, TextField::Notes, window, cx))
             .child(self.render_folders_section(&project, cx))
             .child(self.render_threads_section(&project, &threads, cx))
+            // Its Prints, with the pages experiment on (prints.rs).
+            .children(self.render_prints_section(&project.id, cx))
             .child(self.render_patches_section(&project, &threads, cx));
         self.project_page_scroller(&project, column)
     }

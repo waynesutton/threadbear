@@ -5,6 +5,8 @@
 // Read-outs that exist only for the scripted control (`automation.rs`).
 #![cfg_attr(not(feature = "automation"), allow(dead_code, unused_imports))]
 mod a11y;
+mod print_cards;
+mod prints;
 mod activity;
 mod activity_panels;
 mod agent_browser;
@@ -18,10 +20,11 @@ mod app_update;
 mod automation;
 #[cfg(feature = "automation")]
 mod automation_compat;
+mod bears;
+mod bear_chat;
+mod bear_picker;
 #[cfg(any(test, feature = "automation"))]
 mod automation_screenshot;
-mod bears;
-mod bear_picker;
 mod chips;
 mod colour_space;
 mod composer_media;
@@ -103,7 +106,6 @@ mod remote_pictures;
 mod reply_buttons;
 mod reply_links;
 mod review_window;
-mod prints;
 mod rich_boxes;
 mod rich_window;
 mod row_motion;
@@ -286,6 +288,7 @@ fn main() {
         web_runtime::init(cx);
         // The diagrams and pages in replies, drawn through it.
         rich_boxes::init(cx);
+        print_cards::init(cx);
         // And the panels' pages, the Convex dashboard's among them.
         web_panels::init(cx);
         // Videos and PDFs in the system's views: their calls back (a PDF's
@@ -319,7 +322,8 @@ fn main() {
                 window_min_size: Some(size(px(760.), px(480.))),
                 app_id: Some("threadbear".into()),
                 focus,
-                show: !hidden,
+                // A dev-app.sh copy is ordered in unseen (scripted.rs).
+                show: !hidden && !scripted::unseen(),
                 ..Default::default()
             },
             cx,
@@ -330,7 +334,7 @@ fn main() {
         // window is in front (window_menu.rs).
         window.update(cx, |_, w, cx| window_menu::install(w, cx)).ok();
         if scripted::keep_behind() {
-            window.update(cx, |_, w, _| scripted::send_behind(w)).ok();
+            window.update(cx, |_, w, _| scripted::place(w)).ok();
         }
         if hidden {
             window.update(cx, |_, w, _| handover::conceal(w)).ok();

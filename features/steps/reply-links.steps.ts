@@ -105,12 +105,12 @@ Then("the clipboard holds that file's path", async function (this: LinkWorld) {
 
 Then('the pane is showing that file', async function (this: LinkWorld) {
   const want = `file ${file(this).replaceAll('\\', '/')}`;
-  await this.until(`the pane showing ${want}`, (d) => previewLine(d) === want);
+  await this.until(`the pane showing ${want}`, (d) => previewLine(d)?.replace(/ \(editing\)$/, '') === want);
 });
 
 Then("the pane isn't showing that file", async function (this: LinkWorld) {
   const d = await this.app.dump();
-  assert.notEqual(previewLine(d), `file ${file(this).replaceAll('\\', '/')}`, 'the pane is showing it');
+  assert.notEqual(previewLine(d)?.replace(/ \(editing\)$/, ''), `file ${file(this).replaceAll('\\', '/')}`, 'the pane is showing it');
 });
 
 /** What the app would have handed the system to open, since last asked. */

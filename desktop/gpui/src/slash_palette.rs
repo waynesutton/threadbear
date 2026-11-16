@@ -231,7 +231,9 @@ impl Composer {
         let Some(view) = self.palette_open(&text, cx) else { return false };
         let matches = slash::matches(&view.all, &view.query, self.palette.category, &view.recent);
         // Return with nothing to pick sends what's typed, as words.
-        if key == PaletteKey::Enter && matches.is_empty() {
+        // While the list loads, Return waits rather than sending a command
+        // that isn't listed yet as words.
+        if key == PaletteKey::Enter && matches.is_empty() && !view.loading {
             // From the search field it's the search's, not the box's words.
             return self.palette_search_focused(window, cx);
         }

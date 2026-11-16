@@ -314,7 +314,10 @@ impl Threadbear {
         *self.look_slot(L::PAGE) = Some(new.to_value());
         remove_unused(&old, &new);
         if L::PAGE == Page::Librarian {
-            self.librarian_look_changed(cx);
+            let (mut old_value, mut new_value) = (old.to_value(), new.to_value());
+            old_value["profileButton"] = Value::Null;
+            new_value["profileButton"] = Value::Null;
+            if old_value != new_value { self.librarian_look_changed(cx); }
         }
         self.save_settings_soon(cx);
         cx.notify();
@@ -505,7 +508,8 @@ impl Threadbear {
                 .left_0()
                 .size_full()
                 .overflow_hidden()
-                .when(drawn.is_some(), |d| d.child(div().id("look-background-image").test_support().role(Role::Image).aria_label("Page background photo").absolute().left(px(x)).top(px(y)).w(px(w)).h(px(h)).child(img(path).size_full().object_fit(ObjectFit::Fill))))
+                // The id keeps the image's frame state between renders, so a GIF plays.
+                .when(drawn.is_some(), |d| d.child(div().id("look-background-image").test_support().role(Role::Image).aria_label("Page background photo").absolute().left(px(x)).top(px(y)).w(px(w)).h(px(h)).child(img(path).id(SharedString::from(format!("backdrop-{}-{file}", slot_name(slot)))).size_full().object_fit(ObjectFit::Fill))))
                 .child(div().absolute().top_0().left_0().size_full().bg(wash))
                 // The size it's drawn at, for the next frame and for Position.
                 .child(
@@ -578,6 +582,7 @@ impl Threadbear {
         let customize = (!editing).then(|| {
             kit_button(format!("customize-{}", page.name()), "Customize", Some("paintbrush"), customize_tip, false, false, cx.listener(move |this, _, _, cx| {
                 this.looks.editing = Some(page);
+                if page == Page::Librarian { this.load_profile_page(cx); }
                 cx.notify();
             }))
         });
@@ -1136,6 +1141,7 @@ pub(crate) fn automation(app: &Entity<Threadbear>, cmd: &Value, cx: &mut App) ->
         }
         if let (Some(open), Slot::Page(page)) = (cmd["customize"].as_bool(), slot) {
             t.looks.editing = open.then_some(page);
+            if open && page == Page::Librarian { t.load_profile_page(cx); }
         }
         if let Some(on) = cmd["mainOn"].as_bool() {
             t.edit_main_background(cx, |b| b.on = on);

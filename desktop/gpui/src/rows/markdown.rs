@@ -409,7 +409,7 @@ fn escape_work_links(text: &str) -> String {
 /// (`FilePathRefs.looksLikePath`) becomes a link to it, kept looking like code.
 /// Only single-backtick spans on one line outside fenced code count, as cmark
 /// would find them; the kit draws the pill and the link colour.
-fn link_code_paths(text: &str) -> String {
+pub(crate) fn link_code_paths(text: &str) -> String {
     if !text.contains('`') {
         return text.to_owned();
     }
@@ -466,6 +466,8 @@ fn link_spans_in_line(line: &str, out: &mut String) {
             out.push_str("](tbpath:?p=");
             out.push_str(&encode_component(code));
             out.push(')');
+        } else if let Some(url)= (run == 1 && !in_link).then(||threadbear_core::code_web_address::url(code)).flatten() {
+            out.push('[');out.push_str(span);out.push_str("](<");out.push_str(&url.replace('\\',"%5C"));out.push_str(">)");
         } else {
             out.push_str(span);
         }
@@ -501,7 +503,7 @@ pub(crate) fn looks_like_path(text: &str) -> bool {
 }
 
 /// Endings that are web addresses far more often than files.
-const DOMAIN_ENDINGS: [&str; 9] = ["com", "org", "net", "io", "dev", "co", "ai", "au", "uk"];
+const DOMAIN_ENDINGS: &[&str] = threadbear_core::code_web_address::ENDINGS;
 
 /// `spacedPathOK`: single spaces only, after the first folder, no flags or
 /// shell punctuation, and a spaced last part needs an extension.
@@ -762,6 +764,13 @@ mod tests {
         assert!(!looks_like_path("./check.sh --app"));
     }
 
+    #[test]
+    fn code_web_addresses_become_links_but_files_and_fences_stay_distinct() {
+        assert_eq!(prepare("See `github.com/owner/repo`", "t"),"See [`github.com/owner/repo`](<https://github.com/owner/repo>)");
+        assert_eq!(prepare("`threadbear.mikecann.app`", "t"),"[`threadbear.mikecann.app`](<https://threadbear.mikecann.app>)");
+        assert_eq!(prepare("```\n`https://example.com`\n```","t"),"```\n`https://example.com`\n```");
+        assert_eq!(prepare("[`https://example.com`](https://other.com)","t"),"[`https://example.com`](https://other.com)");
+    }
     #[test]
     fn code_paths_become_links_outside_fences_and_links() {
         assert_eq!(prepare("see `src/a.rs` here", "t"), "see [`src/a.rs`](tbpath:?p=src/a.rs) here");
