@@ -1,3 +1,4 @@
+import { fileURLToPath } from 'node:url';
 import { When, Then } from '@cucumber/cucumber';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -53,7 +54,8 @@ Then('my Librarian picture is still drawn', async function(this: ThreadbearWorld
 });
 
 When('I choose a Librarian background', async function(this: ThreadbearWorld) {
-  const file = new URL('../../app/Sources/Threadbear/Resources/Art/librarian.png', import.meta.url).pathname;
+  // fileURLToPath, not .pathname: on Windows that's /D:/... and no file.
+  const file = fileURLToPath(new URL('../../app/Sources/Threadbear/Resources/Art/librarian.png', import.meta.url));
   await this.app.do({ cmd: 'look', page: 'librarian', background: file });
   await this.until('background copied', d => looks(d).librarian.background);
 });

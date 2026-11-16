@@ -2346,6 +2346,14 @@ async function dispatch(client, method, p) {
       t.approvalWaiters.set(approvalId, () => setStatus(t.summary.id, 'idle', false));
       return { approvalId };
     }
+    case 'mock.approvals': {
+      // Each approval the thread asked for, by its title, and how it was
+      // answered (null while it waits): an answered card folds away within
+      // a second, too fast for a spec to catch it reading "(allow)".
+      const t = need(p.threadId);
+      const decided = new Map(t.events.filter((e) => e.type === 'approval.resolved').map((e) => [e.approvalId, e.decision]));
+      return { approvals: t.events.filter((e) => e.type === 'approval.requested').map((e) => ({ approvalId: e.approvalId, title: e.title, decision: decided.get(e.approvalId) ?? null })) };
+    }
     default:
       throw rpcError(-32601, `Unknown method ${method}`);
   }

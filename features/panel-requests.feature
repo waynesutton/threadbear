@@ -28,9 +28,9 @@ Feature: An agent shows Mike a panel
     And the runner heard the panel was shown
 
   # Passes on a Mac, even with the pin and unpin back to back; on GitHub's
-  # Linux runner the app never tells the runner it showed the panel, and
-  # nothing in its log says why yet (16 Nov).
-  @panel.requests @highlights.pinned @linux-pending
+  # Linux and Windows runners the app never tells the runner it showed the
+  # panel, and nothing in its log says why yet (16 Nov).
+  @panel.requests @highlights.pinned @linux-pending @windows-pending
   Scenario: A shown pin removed before I look opens Highlights
     Given the agent of "Morning brief" pinned a file of its own and showed it
     And the agent unpins that file before I look

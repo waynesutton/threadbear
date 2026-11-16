@@ -355,10 +355,21 @@ When('I choose the Terminal tab {string}', async function (this: ThreadbearWorld
   await this.app.do({ cmd: 'terminal', tab });
 });
 When('I rename the current Terminal tab to {string}', async function (this: ThreadbearWorld, name: string) {
-  const d = await this.app.dump();
-  const tab = d.terminal?.tabs?.find(t => t.current)?.title;
-  assert.ok(tab);
-  await this.app.do({ cmd: 'terminal', tab, clicks: 2 });
+  // A new tab's shell can retitle it between the dump and the click
+  // (PowerShell on Windows: "Terminal 2" became its own name, 16 Nov), so
+  // the title is read again and the click tried again when it's moved on.
+  for (let attempt = 1; ; attempt += 1) {
+    const d = await this.app.dump();
+    const tab = d.terminal?.tabs?.find(t => t.current)?.title;
+    assert.ok(tab);
+    try {
+      await this.app.do({ cmd: 'terminal', tab, clicks: 2 });
+      break;
+    } catch (e) {
+      if (attempt === 5 || !String(e).includes('no tab called')) throw e;
+      await new Promise((resolve) => setTimeout(resolve, 400));
+    }
+  }
   await this.app.do({ cmd: 'terminal', name });
   await this.until('renamed tab', d => d.terminal?.tabs?.some(t => t.title === name && t.current));
 });
