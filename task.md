@@ -9,6 +9,8 @@ Status and gap list: prds/prints-status.md
 
 ## In Progress
 
+- [ ] 2026-11-16 21:38 UTC Desktop CI: give Linux the same 60-minute job budget as Mac and Windows after two 45-minute cancellations. Run 43945110205 passed Linux tests and its release build before upload timed out; run 43948148837 expired during specs. All 12 workflow pinning and landing-gate tests pass; landing checks and a complete GitHub run remain required.
+
 - [x] Realtime Tasks local draft (2026-11-16T11:03:00Z): native build and six UI scenarios (77 steps), 14 backend/runner tests, two web draft tests, typechecks and web build pass. Real local-backend browser save/photo and touch drag verified; native card/column drag and light/dark inspected. Not deployed or landed. prds/realtime-tasks.md
 
 - [ ] Land verified Settings review fixes when the Mac is quiet, then verify the installed update.
