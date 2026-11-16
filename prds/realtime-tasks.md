@@ -34,6 +34,8 @@ Verification follow-up 2026-11-16 21:10 UTC: the broad check caught four new Tas
 
 ## Architecture
 
+Verification follow-up 2026-11-16 21:46 UTC: the broad quick check finished. Runner unit tests passed after the built-in retry of 52 tests; typechecks, web tests, feature pairing, desktop app check and mock tests passed. The only remaining failure was `a11y_roles_source`: seven custom Tasks controls/containers lacked roles. Added labelled button roles for opening tasks/cards, folding sections/projects, showing Done and choosing colors; fold state is exposed, the editor is a labelled dialog, and its dismiss backdrop is explicitly a container. All four accessibility source tests now pass. GPUI compilation is queued behind the machine build lock (`.fixtures/tasks/v2/a11y-cargo-check.log`, exec99227). No full-suite rerun is needed before this focused result; landing will run its required checks. CI remains held: Linux timed out, Mac lacked capacity, Windows still running. CI helper thread1b046499 is landing the Linux timeout fix.
+
 New task and preference tables, authenticated with existing paired browser tokens and runner authentication. Deployment is the existing single-owner account boundary. Project identity includes runnerId plus project id. Convex owns tasks, browser subscribes directly, desktop uses runner subscription bridge. Keep existing project mirror ownership intact. Field-specific updates, retry-safe creates, timestamp-based initial ordering and persistent manual order.
 
 Agent tools list/create/update/move/delete tasks and resolve projects without silently selecting ambiguous names. Uploaded backgrounds require authenticated access. Additive protocol changes; old clients remain compatible. New experiment off by default.

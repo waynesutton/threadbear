@@ -2,6 +2,7 @@
 // once and roll back with the error; the editor keeps its draft through a
 // failed save, so nothing typed is lost to a dropped connection.
 use crate::tips::Tip as _;
+use crate::a11y::A11yRole as _;
 use crate::{app::Threadbear, call, icons, style::{self, px}};
 use gpui_kit::base::{TestSupportExt as _, TestTextExt as _};
 use gpui_kit::component::button::{Button, ButtonVariants as _};
@@ -759,6 +760,8 @@ impl TasksPage {
             .child(
                 h_flex()
                     .id(SharedString::from(format!("edit-{id}")))
+                    .role(Role::Button)
+                    .aria_label(SharedString::from(format!("Open {}", task.title)))
                     .flex_1()
                     .min_w_0()
                     .gap(px(6.))
@@ -780,6 +783,8 @@ impl TasksPage {
         let done = task.status == "done";
         v_flex()
             .id(SharedString::from(format!("card-{id}")))
+            .role(Role::Button)
+            .aria_label(SharedString::from(format!("Open {}", task.title)))
             .group("task-card")
             .gap(px(6.))
             .p(px(10.))
@@ -812,11 +817,14 @@ impl TasksPage {
             })
             .into_any_element()
     }
-    fn fold(&self, key: String, label: AnyElement, count: usize, cx: &mut Context<Self>) -> AnyElement {
+    fn fold(&self, key: String, name: String, label: AnyElement, count: usize, cx: &mut Context<Self>) -> AnyElement {
         let folded = self.collapsed.contains(&key);
         let k = key.clone();
         h_flex()
             .id(SharedString::from(format!("fold-{key}")))
+            .role(Role::Button)
+            .aria_label(SharedString::from(name))
+            .aria_expanded(!folded)
             .gap(px(8.))
             .cursor_pointer()
             .tip(if folded { "Show" } else { "Hide" })
@@ -852,7 +860,7 @@ impl TasksPage {
             .on_drag(StatusDrag(status.to_string()), |drag, _, _, cx| cx.new(|_| Ghost(status_name(&drag.0).into())))
             .drag_over::<StatusDrag>(move |s, _, _, _| s.border_t_2().border_color(accent))
             .on_drop(cx.listener(move |this, drag: &StatusDrag, _, cx| this.drop_status(drag, &s2, true, cx)))
-            .child(self.fold(key.clone(), label, items.len(), cx));
+            .child(self.fold(key.clone(), status_name(status).into(), label, items.len(), cx));
         let mut section = v_flex()
             .id(SharedString::from(key.clone()))
             .mb(px(14.))
@@ -884,7 +892,7 @@ impl TasksPage {
             .on_drag(ProjectDrag(group.to_string(), name), |drag, _, _, cx| cx.new(|_| Ghost(drag.1.clone())))
             .drag_over::<ProjectDrag>(move |s, _, _, _| s.border_t_2().border_color(accent))
             .on_drop(cx.listener(move |this, drag: &ProjectDrag, _, cx| this.drop_project(drag, &target, cx)))
-            .child(self.fold(format!("project:{group}"), label, count, cx))
+            .child(self.fold(format!("project:{group}"), self.key_name(group), label, count, cx))
             .into_any_element()
     }
     fn list_view(&self, rows: &[TaskRow], cx: &mut Context<Self>) -> AnyElement {
@@ -933,6 +941,8 @@ impl TasksPage {
             out = out.child(
                 h_flex()
                     .id("tasks-show-done")
+                    .role(Role::Button)
+                    .aria_label(SharedString::from(format!("Show {done} done tasks")))
                     .gap(px(6.))
                     .cursor_pointer()
                     .text_color(style::secondary_label(cx))
@@ -1115,6 +1125,9 @@ impl TasksPage {
             swatches = swatches.child(
                 div()
                     .id(("tasks-swatch", i))
+                    .role(Role::Button)
+                    .aria_label(SharedString::from(if color.is_empty() { "Use the theme background".to_string() } else { format!("Use {color}") }))
+                    .aria_selected(chosen)
                     .size(px(24.))
                     .rounded_full()
                     .border_1()
@@ -1211,6 +1224,8 @@ impl TasksPage {
         let editing = self.editing_baseline.as_ref().map(|r| r.id.clone());
         let sheet = v_flex()
             .id("task-editor")
+            .role(Role::Dialog)
+            .aria_label(if editing.is_some() { "Edit task" } else { "New task" })
             .w(px(600.))
             .max_w_full()
             .gap(px(8.))
@@ -1248,6 +1263,7 @@ impl TasksPage {
             );
         div()
             .id("task-editor-backdrop")
+            .a11y_role(Role::GenericContainer)
             .absolute()
             .inset_0()
             .flex()
