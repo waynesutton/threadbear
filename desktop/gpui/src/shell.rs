@@ -899,6 +899,15 @@ impl Threadbear {
         NavPlace { mode: self.mode, thread: self.selected.clone(), home: self.home_page().is_some(), project: self.projects.open.clone() }
     }
 
+    /// Where the window is, for the activity log: the page in place of a
+    /// thread as it names it, or `over`, a page over the main panel
+    /// (Settings), which isn't a place Back goes to.
+    pub(crate) fn note_activity_place(&self, over: Option<&str>) {
+        let place = self.place();
+        let page = over.or_else(|| (place.home && place.mode != SidebarMode::Inbox).then(|| place.mode.name()));
+        crate::activity::view(place.mode.name(), place.thread.as_deref(), self.subagent.as_ref().map(|(_, id)| id.as_str()), place.project.as_deref(), page);
+    }
+
     /// `noteNavigation`: one step per place the window has been. Not while
     /// Back or Forward is putting a place back: the steps on the way (the
     /// thread opened before its page goes back over it) aren't places, and
@@ -908,9 +917,7 @@ impl Threadbear {
             return;
         }
         let place = self.place();
-        // The page in place of a thread, as the activity log names it.
-        let page = (place.home && place.mode != SidebarMode::Inbox).then(|| place.mode.name());
-        crate::activity::view(place.mode.name(), place.thread.as_deref(), self.subagent.as_ref().map(|(_, id)| id.as_str()), place.project.as_deref(), page);
+        self.note_activity_place(None);
         // ⌘K's Recent: the thread or project page now in the main panel.
         let recent = match (&place.project, &place.thread) {
             (Some(project), _) => Some(threadbear_core::open_anything::project_key(project)),

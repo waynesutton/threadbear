@@ -114,7 +114,9 @@ Feature: The slash command palette
   # settings.feature), so this one is driven on the GPUI app.
   @composer.slash.keys @swift-pending
   Scenario: With Return sends a command right away on, Return runs the picked command
-    When I press "Off: Return puts the command in the box" in Settings
+    When I open Settings on "general"
+    And I press "Off: Return puts the command in the box" in Settings
+    And I close the slash settings window
     And I type "/cle" in the composer
     Then the palette's pick is "/clear"
     When I press Return

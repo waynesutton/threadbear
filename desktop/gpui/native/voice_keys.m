@@ -43,7 +43,9 @@ static id<NSTextInputClient> tb_client(void) {
 }
 
 static uint32_t tb_char_at(id<NSTextInputClient> client, NSUInteger at) {
-    if (![client respondsToSelector:@selector(attributedSubstringForProposedRange:actualRange:)]) return 0;
+    // Through id: NSTextInputClient doesn't take in NSObject, and a newer SDK
+    // refuses respondsToSelector: on it (the fork's Mac CI, 16 Nov).
+    if (![(id)client respondsToSelector:@selector(attributedSubstringForProposedRange:actualRange:)]) return 0;
     NSAttributedString *text = [client attributedSubstringForProposedRange:NSMakeRange(at, 1) actualRange:NULL];
     if (text.length == 0) return 0;
     NSString *s = text.string;

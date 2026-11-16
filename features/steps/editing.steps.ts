@@ -1,7 +1,6 @@
 // Editing one of Mike's messages (features/editing.feature).
 import { Given, Then, When } from '@cucumber/cucumber';
 import assert from 'node:assert/strict';
-import { sleep } from '../support/driver.ts';
 import type { ThreadbearWorld } from '../support/world.ts';
 
 const edited = new WeakMap<ThreadbearWorld, { seq: number; text: string }>();
@@ -33,18 +32,6 @@ Then('the transcript has my message {string}', async function (this: ThreadbearW
 Then('the composer is still editing my first message', async function (this: ThreadbearWorld) {
   const want = edited.get(this)!;
   await this.until('the edit still under way', (d) => d.composer.editing === want.seq);
-});
-
-// Long enough for an allow to have reached the mock runner and the card to
-// have gone, as it does in a second after a click on Allow.
-Then('the approval for {string} is still waiting', async function (this: ThreadbearWorld, command: string) {
-  await sleep(2_000);
-  const d = await this.app.dump();
-  // An answered one stays a row for a moment, its text then ending in
-  // "(allow)" or "(deny)", before the work it let run folds it away.
-  const row = d.transcript.rows.find((r) => r.kind === 'approval' && r.text.includes(command));
-  assert.ok(row, `the approval for "${command}" was answered and has gone`);
-  assert.doesNotMatch(row.text, /\((allow|deny|answered)\)\s*$/, `the approval for "${command}" was answered`);
 });
 
 // mock.cardAnswer: a daily brief's shape (thread 3fdaaeec, 12 Nov). A card,

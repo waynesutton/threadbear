@@ -31,12 +31,6 @@ Then('the approval for {string} says it was allowed', async function (this: Thre
   await this.until(`"${command}" allowed`, (d) => d.transcript.rows.some((r) => r.kind === 'approval' && r.text.includes(command) && r.text.endsWith('(allow)')));
 });
 
-Then('the approval for {string} is still waiting', async function (this: ThreadbearWorld, command: string) {
-  const d = await this.app.dump();
-  const row = d.transcript.rows.find((r) => r.kind === 'approval' && r.text.includes(command));
-  assert.ok(row && !/\((allow|deny|allowAlways)\)$/.test(row.text), `"${command}" was answered: ${row?.text}`);
-});
-
 Then('a question card asks {string}', async function (this: ThreadbearWorld, question: string) {
   await this.until(`a question "${question}"`, (d) => d.transcript.rows.some((r) => r.kind === 'question' && r.text === question));
 });
@@ -84,10 +78,6 @@ Then('a review card says {string}', async function (this: ThreadbearWorld, words
 
 When('the agent asks for two approvals', async function (this: ThreadbearWorld) {
   await this.app.do({ cmd: 'send', text: 'Please ask for two approvals' });
-});
-
-Then('the approval for {string} says it was allowed', async function (this: ThreadbearWorld, command: string) {
-  await this.until(`"${command}" allowed`, (d) => d.transcript.rows.some((r) => r.kind === 'approval' && r.text.includes(command) && r.text.endsWith('(allow)')));
 });
 
 When('I select the earlier reply in the transcript', async function (this: ThreadbearWorld) {

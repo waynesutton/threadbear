@@ -497,8 +497,7 @@ impl Threadbear {
 /// control with that tip (without pressing it), `"key": "n"` with
 /// `"command": true` presses a key through the app's own dispatch, so a menu
 /// item's key comes back as its item, and `"window": "settings"` opens
-/// Settings and has its window come to the front as the window server
-/// says, through the same path (a scripted app's windows never do). It
+/// Settings over the main window, which notes it as a page. It
 /// says whether it's on, how many lines today has and the last few
 /// (`"last": N`).
 #[cfg(feature = "automation")]
@@ -527,12 +526,9 @@ pub(crate) async fn automation(app: &WeakEntity<Threadbear>, window: AnyWindowHa
     .map_err(|e| e.to_string())??;
     if cmd["window"] == "settings" {
         app.update(cx, |t, cx| t.open_settings(None, cx)).map_err(|e| e.to_string())?;
-        // The window opens once that update is over.
+        // The page opens once that update is over, and notes itself then.
         cx.background_executor().timer(Duration::from_millis(300)).await;
-        let handle = app.read_with(cx, |t, _| t.settings_window.as_ref().map(|(w, _)| *w)).map_err(|e| e.to_string())?.ok_or("Settings didn't open")?;
-        // As its window's activation observer does (settings_window.rs):
-        // inside the app's own update.
-        app.update(cx, |t, cx| t.looking_changed(handle.window_id().as_u64(), true, cx)).map_err(|e| e.to_string())?;
+        app.read_with(cx, |t, _| t.settings_window.is_some()).map_err(|e| e.to_string())?.then_some(()).ok_or("Settings didn't open")?;
     }
     // A key's line waits for its dispatch to finish, as the Swift app's waits a turn.
     cx.background_executor().timer(Duration::from_millis(300)).await;

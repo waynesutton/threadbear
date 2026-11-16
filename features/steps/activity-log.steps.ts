@@ -7,7 +7,7 @@ import assert from 'node:assert/strict';
 import { sleep } from '../support/driver.ts';
 import type { ThreadbearWorld } from '../support/world.ts';
 
-type Line = { kind: string; target?: string; panel?: string; thread?: string; new?: boolean; window?: string };
+type Line = { kind: string; target?: string; panel?: string; thread?: string; new?: boolean; window?: string; page?: string };
 
 /** What the log has today: "ok on 3 lines today | {...} | {...}". */
 async function today(world: ThreadbearWorld): Promise<{ on: boolean; count: number; lines: Line[]; text: string }> {
@@ -51,12 +51,12 @@ Then('the activity log has a click on {string} in the {word} panel', async funct
   assert.equal(l.window, 'main');
 });
 
-When('the Settings window comes to the front, for the activity log', async function (this: ThreadbearWorld) {
+When('I open Settings, for the activity log', async function (this: ThreadbearWorld) {
   await this.app.do({ cmd: 'activity', window: 'settings' });
 });
 
-Then('the activity log has the window {string}', async function (this: ThreadbearWorld, name: string) {
-  await line(this, `the window "${name}" coming to the front`, (x) => x.kind === 'window' && x.window === name);
+Then('the activity log has the page {string}', async function (this: ThreadbearWorld, name: string) {
+  await line(this, `the page "${name}" opened`, (x) => x.kind === 'view' && x.page === name);
 });
 
 Then('the activity log has a message sent in {string}', async function (this: ThreadbearWorld, title: string) {
