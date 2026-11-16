@@ -489,7 +489,9 @@ impl Threadbear {
     /// and dark. Cropped around `focus`: bottom centre unless moved, so the
     /// photo's bottom edge stays on the window's as it resizes. An animated
     /// GIF plays, and holds still with Reduce Motion on (GPUI's own picture
-    /// does both). Nothing when the picture's gone; it takes no clicks.
+    /// does both, but only for an `img` with its own id: without one it
+    /// keeps no frame state and stays on the first frame). Nothing when the
+    /// picture's gone; it takes no clicks.
     pub(crate) fn render_backdrop(&self, slot: Slot, file: &str, dim: f64, focus: BackdropFocus, cx: &mut Context<Self>) -> Option<AnyElement> {
         let path = path(file)?;
         let image = dims(file)?;
@@ -505,7 +507,7 @@ impl Threadbear {
                 .left_0()
                 .size_full()
                 .overflow_hidden()
-                .when(drawn.is_some(), |d| d.child(div().id("look-background-image").test_support().role(Role::Image).aria_label("Page background photo").absolute().left(px(x)).top(px(y)).w(px(w)).h(px(h)).child(img(path).size_full().object_fit(ObjectFit::Fill))))
+                .when(drawn.is_some(), |d| d.child(div().id("look-background-image").test_support().role(Role::Image).aria_label("Page background photo").absolute().left(px(x)).top(px(y)).w(px(w)).h(px(h)).child(img(path).size_full().object_fit(ObjectFit::Fill).id(SharedString::from(format!("look-background-frames-{}", slot_name(slot)))))))
                 .child(div().absolute().top_0().left_0().size_full().bg(wash))
                 // The size it's drawn at, for the next frame and for Position.
                 .child(
