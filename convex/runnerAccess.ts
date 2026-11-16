@@ -166,6 +166,7 @@ export const ACCESS: Record<string, Access> = {
   // another. A runner key's scheduler lists only its own runner.
   runnersList: 'owner',
   issueToken: 'owner',
+  issuePairingCode: 'owner',
   listTokens: 'owner',
   revokeToken: 'owner',
   // Outside agents' keys (mcp.ts): only the main Mac makes or ends them.

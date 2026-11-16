@@ -1382,7 +1382,7 @@ impl TranscriptModel {
     pub(crate) fn is_work_row(row: &Row) -> bool {
         match &row.content {
             RowContent::Tool(tool) => !Self::is_taken_end_turn(tool),
-            RowContent::Note(_) if row.content.is_wake_note() || row.content.is_login_note() || row.content.is_linked_note() => false,
+            RowContent::Note(_) if row.content.is_wake_note() || row.content.is_login_note() || row.content.is_linked_note() || row.content.is_saved_message_note() => false,
             RowContent::Reasoning(_) | RowContent::Note(_) => true,
             RowContent::Approval(item) => item.is_allowed(),
             _ => false,
@@ -1700,7 +1700,7 @@ impl TranscriptModel {
     /// the work carried on. The note an edit of Mike's leaves stays.
     fn stays_out(&self, k: usize, replies: &HashSet<usize>) -> bool {
         let item = &self.items[k];
-        if replies.contains(&k) || item.id.starts_with("rw:") || item.content.is_wake_note() || item.content.is_login_note() || item.content.is_linked_note() {
+        if replies.contains(&k) || item.id.starts_with("rw:") || item.content.is_wake_note() || item.content.is_login_note() || item.content.is_linked_note() || item.content.is_saved_message_note() {
             return true;
         }
         match &item.content {
