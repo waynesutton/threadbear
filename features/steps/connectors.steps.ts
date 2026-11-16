@@ -29,6 +29,13 @@ Then('the outside-agent refresh leaves no error banner', async function (this: T
   assert.equal((await this.app.dump()).error, null);
 });
 
+// The sheet slides in for a quarter of a second (the kit's dialog
+// ANIMATION_DURATION), and a click on a Mac during that missed its buttons.
+Then("the command's sheet has come up", async function (this: ThreadbearWorld) {
+  await this.until('the command in the sheet', (d) => d.connectors?.lines.includes('uvx mcp-for-blender@2.2.7'));
+  await new Promise((done) => setTimeout(done, 400));
+});
+
 Then('the connector setup thread is open', async function (this: ThreadbearWorld) {
   await this.until('the returned setup thread is open', (d) => d.selection?.id === 'demo_upload_resume');
 });

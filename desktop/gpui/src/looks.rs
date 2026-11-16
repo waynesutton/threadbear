@@ -954,7 +954,9 @@ pub(crate) fn panel_section(title: impl Into<SharedString>, info: Option<(&'stat
         }
     }
     let title: SharedString = title.into();
-    let mut heading = h_flex().px(px(4.)).gap(px(6.)).items_center().child(div().text_size(px(style::size::LABEL)).line_height(px(16.)).font_semibold().child(title));
+    // Named as a heading, so a screen reader and a script find the section.
+    let name = div().id(SharedString::from(format!("panel-section-{title}"))).test_support().a11y_role(Role::Heading).aria_label(title.clone());
+    let mut heading = h_flex().px(px(4.)).gap(px(6.)).items_center().child(name.text_size(px(style::size::LABEL)).line_height(px(16.)).font_semibold().child(title));
     if let Some((id, text)) = info {
         heading = heading.child(info_tip(id, text, cx));
     }
