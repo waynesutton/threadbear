@@ -338,3 +338,14 @@ test('empty unattended runs finish with { "needs": "nothing", "quiet": true }, i
   assert.ok(schedules.rows[0].text.includes(exact), 'the tidy routine');
   assert.match(schedules.rows[0].text, /report any failure or question normally/);
 });
+
+test('refresh brings a tidy in the 16 Nov wording up to the exact quiet finish', async () => {
+  const { bears, schedules } = setup();
+  const b = await bears.create({ name: 'Older' });
+  const earlier = 'Tidy your memory. Change only memory/ and, if you own it, ../memory/. Merge duplicates, refresh memory/summary.md so it stays one page, and delete anything the user said not to keep. Read memory/told.md to avoid repeating a report. Drop completed memory/tasks/*.md files and their summary links; keep unfinished tasks and their next step. Commit only the memory files you changed, never unrelated work. If nothing needs reporting, end_turn with needs "nothing" and quiet true. Otherwise say what changed in one line.';
+  schedules.rows[0].text = earlier;
+  const custom = await schedules.create({ text: 'My own Monday report', cron: '0 9 * * 1', cwd: b.folder });
+  await bears.refreshRules(b.id);
+  assert.ok(schedules.rows[0].text.includes('{ "needs": "nothing", "quiet": true }'));
+  assert.equal(custom.text, 'My own Monday report', 'a custom routine is left alone');
+});

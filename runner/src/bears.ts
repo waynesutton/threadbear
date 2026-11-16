@@ -284,6 +284,9 @@ ${ALWAYS_ON_TEXT}
 }
 
 const LEGACY_TIDY_TEXT = `Tidy your memory. Merge duplicates in memory/, refresh memory/summary.md so it stays one page, and delete anything Wayne said not to keep. If you own the shared memory (../memory/), tidy that too. Commit the changes with git in this folder. Keep it short and say what changed in one line.`;
+// The tidy's wording from 16 Nov, before the quiet finish was spelled out:
+// still a built-in tidy, so a refresh brings it up to date.
+const ALWAYS_ON_TIDY_TEXT = `Tidy your memory. Change only memory/ and, if you own it, ../memory/. Merge duplicates, refresh memory/summary.md so it stays one page, and delete anything the user said not to keep. Read memory/told.md to avoid repeating a report. Drop completed memory/tasks/*.md files and their summary links; keep unfinished tasks and their next step. Commit only the memory files you changed, never unrelated work. If nothing needs reporting, end_turn with needs "nothing" and quiet true. Otherwise say what changed in one line.`;
 const TIDY_TEXT = `Tidy your memory. Change only memory/ and, if you own it, ../memory/. Merge duplicates, refresh memory/summary.md so it stays one page, and delete anything the user said not to keep. Read memory/told.md to avoid repeating a report. Drop completed memory/tasks/*.md files and their summary links; keep unfinished tasks and their next step. Commit only the memory files you changed, never unrelated work. If nothing needs reporting, finish with end_turn { "needs": "nothing", "quiet": true }. Otherwise say what changed in one line, and report any failure or question normally.`;
 
 const ALWAYS_ON_START = '<!-- bear-always-on: start -->';
@@ -553,7 +556,7 @@ export class Bears {
       fs.mkdirSync(path.join(b.folder, 'memory', 'tasks'), { recursive: true });
       writeIfMissing(path.join(b.folder, 'memory', 'told.md'), '# What I told the user\n');
       for (const s of this.schedulesList()) {
-        if (!s.threadId && s.cwd && path.resolve(expandHome(s.cwd)) === b.folder && s.cron === TIDY_CRON && [LEGACY_TIDY_TEXT, TIDY_TEXT].includes(s.text)) {
+        if (!s.threadId && s.cwd && path.resolve(expandHome(s.cwd)) === b.folder && s.cron === TIDY_CRON && [LEGACY_TIDY_TEXT, ALWAYS_ON_TIDY_TEXT, TIDY_TEXT].includes(s.text)) {
           if (s.text !== TIDY_TEXT || s.permissionMode !== tidyMode(b)) await this.d.schedules?.()?.update({ scheduleId: s.id, text: TIDY_TEXT, permissionMode: tidyMode(b) });
         }
       }
