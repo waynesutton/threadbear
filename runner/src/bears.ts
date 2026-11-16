@@ -284,7 +284,7 @@ ${ALWAYS_ON_TEXT}
 }
 
 const LEGACY_TIDY_TEXT = `Tidy your memory. Merge duplicates in memory/, refresh memory/summary.md so it stays one page, and delete anything Wayne said not to keep. If you own the shared memory (../memory/), tidy that too. Commit the changes with git in this folder. Keep it short and say what changed in one line.`;
-const TIDY_TEXT = `Tidy your memory. Change only memory/ and, if you own it, ../memory/. Merge duplicates, refresh memory/summary.md so it stays one page, and delete anything the user said not to keep. Read memory/told.md to avoid repeating a report. Drop completed memory/tasks/*.md files and their summary links; keep unfinished tasks and their next step. Commit only the memory files you changed, never unrelated work. If nothing needs reporting, end_turn with needs "nothing" and quiet true. Otherwise say what changed in one line.`;
+const TIDY_TEXT = `Tidy your memory. Change only memory/ and, if you own it, ../memory/. Merge duplicates, refresh memory/summary.md so it stays one page, and delete anything the user said not to keep. Read memory/told.md to avoid repeating a report. Drop completed memory/tasks/*.md files and their summary links; keep unfinished tasks and their next step. Commit only the memory files you changed, never unrelated work. If nothing needs reporting, finish with end_turn { "needs": "nothing", "quiet": true }. Otherwise say what changed in one line, and report any failure or question normally.`;
 
 const ALWAYS_ON_START = '<!-- bear-always-on: start -->';
 const ALWAYS_ON_END = '<!-- bear-always-on: end -->';
@@ -298,9 +298,10 @@ export const ALWAYS_ON_TEXT = `${ALWAYS_ON_START}
 - Keep each unfinished job in memory/tasks/<task>.md: what is done, what
   is left, and the next step. Link it from memory/summary.md. The tidy
   removes completed tasks. Keep secrets out of both files.
-- If an unattended run finds nothing new to report, use end_turn with
-  needs "nothing" and quiet true. Keep useful reports in the inbox.
-  A quiet completion never means hiding a failure or an unanswered question.
+- If a scheduled or other unattended run finds nothing new to report,
+  finish with end_turn { "needs": "nothing", "quiet": true }. Anything
+  useful, a question for the user or a failure is a normal reply instead:
+  quiet never hides one.
 ${ALWAYS_ON_END}`;
 
 function tidyMode(b: { model?: string; state?: BearState }): PermissionMode {

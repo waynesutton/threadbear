@@ -329,3 +329,12 @@ test("tb bears access says Auto works like Ask on a Codex bear, and nothing othe
   assert.equal(autoNote({ name: 'Writer', model: 'sonnet', state: { permissionMode: 'auto' } }), undefined);
   assert.equal(autoNote({ name: 'Designer', model: 'gpt-6-astra', state: { permissionMode: 'ask' } }), undefined);
 });
+
+test('empty unattended runs finish with { "needs": "nothing", "quiet": true }, in the rules and the tidy', async () => {
+  const { bears, schedules } = setup();
+  const b = await bears.create({ name: 'Quiet', tidy: true });
+  const exact = '{ "needs": "nothing", "quiet": true }';
+  for (const f of ['CLAUDE.md', 'AGENTS.md']) assert.ok(fs.readFileSync(path.join(b.folder, f), 'utf8').includes(exact), f);
+  assert.ok(schedules.rows[0].text.includes(exact), 'the tidy routine');
+  assert.match(schedules.rows[0].text, /report any failure or question normally/);
+});

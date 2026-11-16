@@ -61,7 +61,7 @@ Routines, webhooks and mentions share a busy unattended worker; personal chats s
 
 A mention cannot cross its caller's sandbox boundary. Routines with explicit login, pool, model or effort choices wait if those differ from the worker; their settings are never silently replaced by the worker's.
 
-Read `memory/told.md` before unattended work; append one dated line after a report so the next run knows what the user has heard. Track unfinished jobs in `memory/tasks/<task>.md`, linked from the summary. The tidy removes completed tasks and limits edits to memory. When an unattended run finds nothing new, call `end_turn` with `needs: "nothing", quiet: true`; the runner checks unfinished work before archiving. Useful reports and earlier reports in a shared thread stay in the inbox. Older runners without `quiet` need an explicit archive instruction in the routine; do not assume “needs nothing” means empty.
+Read `memory/told.md` before unattended work; append one dated line after a report so the next run knows what the user has heard. Track unfinished jobs in `memory/tasks/<task>.md`, linked from the summary. The tidy removes completed tasks and limits edits to memory. When a scheduled or other unattended run finds nothing new, finish with `end_turn` `{ "needs": "nothing", "quiet": true }`; the runner checks unfinished work before archiving. Useful reports and earlier reports in a shared thread stay in the inbox. Older runners without `quiet` need an explicit archive instruction in the routine; do not assume “needs nothing” means empty.
 
 ## Faces
 
