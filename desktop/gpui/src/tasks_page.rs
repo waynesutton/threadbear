@@ -302,6 +302,7 @@ impl TasksPage {
     fn focus_composer(&self, window: &mut Window, cx: &mut Context<Self>) {
         if self.view_name() == "list" && !self.editor_open {
             self.composer.update(cx, |c, cx| c.focus(window, cx));
+            crate::web_panels::keyboard_to_app(window);
         }
     }
     fn refresh(&mut self, cx: &mut Context<Self>) {
@@ -599,8 +600,10 @@ impl TasksPage {
         self.notes.update(cx, |f, cx| f.set_value(task.notes.clone(), window, cx));
         if notes_first {
             self.notes.update(cx, |f, cx| f.focus(window, cx));
+            crate::web_panels::keyboard_to_app(window);
         } else {
             self.title.update(cx, |f, cx| f.focus(window, cx));
+            crate::web_panels::keyboard_to_app(window);
         }
         cx.notify();
     }
@@ -978,6 +981,7 @@ impl TasksPage {
                             this.column_input.update(cx, |c, cx| {
                                 c.set_value("", window, cx);
                                 c.focus(window, cx);
+                                crate::web_panels::keyboard_to_app(window);
                             });
                             cx.notify();
                         })),

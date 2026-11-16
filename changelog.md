@@ -9,7 +9,7 @@ How Prints work today, what's missing and what's next: [Prints status](https://g
 ### Changed
 
 - Desktop CI has 60 minutes on Linux and Mac, and 90 on Windows, to finish tests, the release build and artifact upload.
-- Tasks opens on a quick-add list: type a task, press Return, tick it off. Done tasks leave the list with Undo. The board gains a Doing column, title-only cards and drag to reorder columns, list sections and project groups. Each task has a ⋯ menu to add a note, move it to a project or change its status. The web photo picker is a real button now.
+- Tasks opens on a quick-add list: type a task, press Return, tick it off. Done tasks leave the list with Undo. The board gains a Doing column, title-only cards and drag to reorder columns, list sections and project groups. Each task has a ⋯ menu to add a note, move it to a project or change its status. The web photo picker is a real button now. Focusing a task field returns keyboard control from web panels to the app.
 - GPUI Settings opens inside the main window. Back, Esc or Close returns to the previous view with its thread draft intact.
 
 ### Added
