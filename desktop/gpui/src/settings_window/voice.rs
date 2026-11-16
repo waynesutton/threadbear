@@ -45,6 +45,12 @@ impl SettingsWindow {
         if !available && prefs.enabled() {
             first.push(row_with(label("This build has no Voice: it was built without the macOS 26 SDK."), div().into_any_element(), cx));
         }
+        first.push(row_with(label("Use with Notes"), switch(self, "settings-voice-notes", prefs.in_notes(), "Show a microphone in Notes, to talk and have what you say typed into the note on this Mac".to_owned(), |p, on| p.in_notes = Some(on), cx), cx));
+        first.push(row_with(
+            label("Pause before sending"),
+            self.voice_picker("settings-voice-pause", rules::pause_title(prefs.pause()), "How long you can pause mid-sentence before what you said goes to the thread", rules::PAUSES.iter().map(|&s| (rules::pause_title(s), s == prefs.pause(), Rc::new(move |p: &mut VoicePrefs| p.pause = Some(s)) as Edit)).collect(), &voice, cx),
+            cx,
+        ));
         first.push(row_with(
             label("Button icon"),
             self.voice_picker("settings-voice-icon", prefs.icon().title().to_owned(), "The icon on the Voice button beside Send", VoiceIcon::ALL.iter().map(|&i| (i.title().to_owned(), i == prefs.icon(), Rc::new(move |p: &mut VoicePrefs| p.icon = Some(i.name().to_owned())) as Edit)).collect(), &voice, cx),

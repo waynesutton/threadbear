@@ -2838,10 +2838,15 @@ settings are in Settings (⌘,) > Voice & Audio: Use Voice, the button's
 icon, Command Mode, the key the shortcuts use and which of them are on,
 the voice, speed, language and microphone. The bear doesn't sit over the
 message box there: the button's bars move with whoever's talking, and
-pulse while it gets ready or the thread works. If it can't start, a note
-over the button says why; click it to close it. Fn dictation works the
-same, with its pill just above the message box. Talking into a note isn't
-in the GPUI app yet.
+pulse while it gets ready or the thread works, and a line just above the
+message box shows what it heard as you talk. It sends once you pause for
+1.5 seconds; Pause before sending in Settings > Voice & Audio makes that
+1, 2 or 3. If it can't start, a note over the button says why; click it
+to close it. Fn dictation works the same, with its pill just above the
+message box. Use with Notes there adds a microphone beside the note's bin:
+press it and talk, and each time you pause what you said is typed in at
+the note's cursor, with the words you're saying under the note until they
+go in. Press it again, or open another note, to stop.
 
 ### The bear
 
