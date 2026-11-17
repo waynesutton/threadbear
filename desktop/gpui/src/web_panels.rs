@@ -281,6 +281,8 @@ fn sweep(frame: u64, menu_at: Option<Point<Pixels>>, popover: bool, window: &mut
     let mut covered_any = false;
     let mut kit_covered = false;
     for kept in &panels.read(cx).pages {
+        // Hidden pages follow too, so returning to one cannot show an old theme.
+        kept.page.set_dark(cx.theme().is_dark());
         let (stamp, b) = kept.drawn.get();
         // A menu opens down and to the right of where it was asked for, about
         // this wide: one reaching the page's column covers it.
@@ -359,6 +361,7 @@ impl WebPanels {
         }
         match PanelPage::open(parent, &url, kind) {
             Ok((page, mut events)) => {
+                page.set_dark(cx.theme().is_dark());
                 let named = key.clone();
                 let task = cx.spawn(async move |this, cx| {
                     while let Some(event) = events.next().await {

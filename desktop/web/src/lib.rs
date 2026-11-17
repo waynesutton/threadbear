@@ -166,6 +166,7 @@ mod elsewhere {
             rx
         }
         pub fn load(&self, _url: &str) {}
+        pub fn set_dark(&self, _dark: bool) {}
         pub fn reload(&self) {}
         pub fn can_go_back(&self) -> bool {
             false

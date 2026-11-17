@@ -24,6 +24,21 @@ const pages = (d: Dump) => ((d as { webPanels?: { pages: PageInfo[] } }).webPane
 /** A page loading the first time starts Chromium as well. */
 const LOADED_MS = 60_000;
 
+When('I set the panel host appearance to {string}', async function (this: ThreadbearWorld, mode: string) {
+  assert.ok(mode === 'light' || mode === 'dark');
+  const before = web(await this.app.dump())?.page?.loads;
+  if (before !== undefined) loadsBefore = before;
+  await this.app.do({ cmd: 'appearance', mode });
+});
+
+Then('the panel page prefers {string} appearance', async function (this: ThreadbearWorld, mode: string) {
+  assert.ok(mode === 'light' || mode === 'dark');
+  // Read Chromium's actual media query, not a cached app theme field.
+  const query = JSON.stringify(`(prefers-color-scheme: ${mode})`);
+  const out = await this.app.do({ cmd: 'webPanel', do: 'eval', js: `new Promise(resolve => { const until = Date.now() + 5000; const check = () => { const matches = matchMedia(${query}).matches; if (matches || Date.now() >= until) resolve(matches); else setTimeout(check, 50); }; check(); })` });
+  assert.equal((JSON.parse(okValue(out)) as { value: boolean }).value, true);
+});
+
 async function threadId(world: ThreadbearWorld): Promise<string> {
   const d = await world.app.dump();
   assert.ok(d.selection?.id, 'a thread should be open');

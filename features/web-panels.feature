@@ -15,6 +15,21 @@ Feature: Web pages in a thread's panels
     Given the app is connected to a runner with the demo threads
 
   @panel.web @web-runtime @swift-pending
+  Scenario: An open web panel follows app appearance without reloading
+    Given the web runtime is installed
+    When I set the panel host appearance to "dark"
+    And I open the thread "Add dark mode to the dashboard"
+    And the thread's url panel shows the page server
+    And I show the "mock.page" section of the pane
+    Then the panel shows the page "Panel home"
+    And the panel page prefers "dark" appearance
+    When I set the panel host appearance to "light"
+    Then the panel page prefers "light" appearance
+    And the panel shows the page "Panel home" without loading it again
+    When I set the panel host appearance to "dark"
+    Then the panel page prefers "dark" appearance
+
+  @panel.web @web-runtime @swift-pending
   Scenario: A url panel shows its page, and keeps it between visits
     Given the web runtime is installed
     When I open the thread "Add dark mode to the dashboard"

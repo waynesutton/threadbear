@@ -125,6 +125,7 @@ pub struct PanelPage {
     /// which the flip to AppKit's coordinates depends on.
     frame: Cell<(f32, f32, f32, f32, f32)>,
     hidden: Cell<bool>,
+    dark: Cell<Option<bool>>,
     /// The panel's own page, which Reload goes back to.
     url: RefCell<String>,
     shared: Arc<Shared>,
@@ -243,6 +244,7 @@ impl PanelPage {
             parent: Cell::new(parent),
             frame: Cell::new((0., 0., 0., 0., 0.)),
             hidden: Cell::new(true),
+            dark: Cell::new(None),
             url: RefCell::new(url.to_owned()),
             shared,
             next: AtomicI32::new(1),
@@ -306,6 +308,17 @@ impl PanelPage {
             }
         }
         rx
+    }
+
+    /// Follow the host app, including an app-only appearance override. Media
+    /// emulation changes CSS without reloading the page or enabling scripts.
+    pub fn set_dark(&self, dark: bool) {
+        if self.dark.replace(Some(dark)) == Some(dark) {
+            return;
+        }
+        let _ = self.devtools("Emulation.setEmulatedMedia", json!({
+            "features": [{ "name": "prefers-color-scheme", "value": if dark { "dark" } else { "light" } }]
+        }));
     }
 
     /// Loads `url` as the panel's own page.
