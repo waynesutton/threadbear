@@ -37,7 +37,7 @@ earlier four-platform run.
 
 <!-- parity:start -->
 
-282 of 382 features have a spec so far, across 780 scenarios.
+281 of 381 features have a spec so far, across 784 scenarios.
 
 Scenarios passing: Swift: not run, Mac: not run, Windows: not run, Linux: not run.
 
@@ -431,7 +431,6 @@ Scenarios passing: Swift: not run, Mac: not run, Windows: not run, Linux: not ru
 | `voice.talk` Talking with a thread (`voiceMode`) | pending | pending | pending | pending |
 | `voice.approvals` Spoken approvals (`voiceMode`) | pending | pending | pending | pending |
 | `voice.keys` Fn dictation (`voiceMode`) | pending | pending | pending | pending |
-| `voice.notes` Talking into a note (`voiceMode`) | pending | pending | pending | pending |
 | `voice.settings` Settings > Voice (`voiceMode`) | pending | pending | pending | pending |
 
 <!-- parity:end -->
