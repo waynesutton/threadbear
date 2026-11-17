@@ -56,7 +56,8 @@ jobs:
     # Leave time for the release build and upload after the behaviour specs:
     # Linux exhausted 45 minutes; Windows passed specs at 52 minutes and
     # hit its old 60-minute limit during the release build (16 Nov).
-    timeout-minutes: ${{ matrix.os == 'windows-latest' && 90 || 60 }}
+    # Intel Mac setup/tests took 30 minutes before specs; keep room for specs and release.
+    timeout-minutes: ${{ matrix.name == 'Mac' && 120 || matrix.name == 'Windows' && 90 || 60 }}
     strategy:
       fail-fast: false
       matrix:
