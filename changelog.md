@@ -23,6 +23,7 @@ How Prints work today, what's missing and what's next: [Prints status](https://g
 
 ### Added
 
+- GPUI desktop: ⌘Z brings back archived threads, newest first, up to the last seven, outside a text box or in an empty message box. The Archived note has an x and goes away with a sideways trackpad swipe.
 - Clearer thread completion experiment: task progress across turns on the composer card, separate runner loose-end checks, and neutral action buttons with an amber left edge. Archive remains manual. Mirror support requires backend API 85.
 - GPUI Voice waits 1.5 seconds before sending, so a short pause mid-sentence doesn't cut you off; Settings > Voice & Audio > Pause before sending changes it.
 
