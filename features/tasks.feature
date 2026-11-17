@@ -107,3 +107,10 @@ Feature: Tasks
     When I choose the Tasks List view
     And I drag the "backlog" section onto "doing"
     Then the list's sections are "backlog, doing, todo, done"
+
+  @tasks.page
+  Scenario: Tasks can be closed in a narrow window
+    When I open Tasks
+    And I narrow the Tasks window
+    And I close and reopen Tasks
+    Then Tasks shows the "list" view

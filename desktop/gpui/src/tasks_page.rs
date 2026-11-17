@@ -1295,7 +1295,7 @@ impl Render for TasksPage {
                 cx.notify();
             })));
         }
-        let mut actions = h_flex().gap(px(6.)).child(segment).child(self.display_menu(cx));
+        let mut actions = h_flex().flex_1().min_w_0().flex_wrap().justify_end().gap(px(6.)).child(segment.flex_none()).child(self.display_menu(cx));
         actions = actions.child(Button::new("tasks-customize").label("Background").small().outline().selected(self.customize).tooltip("Background color and photo").on_click(cx.listener(|this, _, window, cx| {
             this.customize = !this.customize;
             if this.customize {
@@ -1322,7 +1322,6 @@ impl Render for TasksPage {
             .when(view == "list", |d| d.w_full().max_w(px(880.)).mx_auto())
             .child(div().text_size(px(20.)).font_weight(FontWeight::SEMIBOLD).child(title.clone().test_text(title)))
             .child(div().text_size(px(13.)).text_color(style::tertiary_label(cx)).child(format!("{open} open")))
-            .child(div().flex_1())
             .child(actions);
 
         let body = if view == "list" { self.list_view(&rows, cx) } else { self.board_view(&rows, cx) };

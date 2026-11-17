@@ -112,3 +112,7 @@ Then("the board's columns are {string}", async function (this: ThreadbearWorld, 
 Then("the list's sections are {string}", async function (this: ThreadbearWorld, order: string) {
   await this.until(`sections ${order}`, (d) => tasks(d)?.listOrder?.join(', ') === order);
 });
+
+When('I narrow the Tasks window', async function (this: ThreadbearWorld) {
+  await this.app.do({ cmd: 'resize', w: 1000, h: 700 });
+});
