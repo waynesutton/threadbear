@@ -62,7 +62,9 @@ jobs:
       matrix:
         include:
           - { name: Linux, os: ubuntu-24.04 }
-          - { name: Mac, os: macos-26 }
+          # arm64 hosted capacity cancelled four attempts before setup (17 Nov).
+          # Same macOS and full checks on GitHub's standard Intel pool.
+          - { name: Mac, os: macos-26-intel }
           - { name: Windows, os: windows-latest }
     defaults:
       run:
