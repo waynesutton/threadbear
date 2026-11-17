@@ -1,5 +1,11 @@
 # Files
 
+## Scheduled follow-up details
+
+- `desktop/gpui/src/rows.rs`: collapsed scheduled headings and selectable Markdown details using existing row expansion state.
+- `features/reading-a-thread.feature`: scheduled disclosure behavior alongside transcript reading checks.
+- `prds/collapsed-scheduled-followups.md`: scope, display-only behavior and verification checkpoint.
+
 ## Clearer thread completion
 
 - `runner/src/completion.ts`: bounded task updates merged by stable ID across turns.

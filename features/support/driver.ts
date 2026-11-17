@@ -15,6 +15,8 @@ export type Row = {
   onScreen?: boolean;
   /** What the row's buttons say, on the apps that report them. */
   buttons?: string[];
+  /** Whether a scheduled message's original body is currently drawn (GPUI). */
+  detailsVisible?: boolean;
   /** A reply's ```slack, ```email and ```draft boxes as drawn: the label, each
    * line, each formatted piece ("bold: Hi", "link: docs <https://x.dev>") and
    * what Copy says ("Copy" or "Copied"). */

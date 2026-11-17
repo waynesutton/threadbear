@@ -16,6 +16,17 @@ export type Scenario = { name: string; play: (p: Play) => void; shows: string[] 
 
 export const SCENARIOS: Scenario[] = [
   {
+    name: 'scheduled follow-up instructions and origin survive every route',
+    shows: ['Finish verification', 'The follow-up is recorded.'],
+    play: (p) => {
+      p.queuedReminder('[Scheduled: "Finish verification", Once, tomorrow]\n\n## Remaining work\n\n- Check the release\n- Keep the original instructions available', 'disclosure-check');
+      p.say('The current turn is finished.');
+      p.endTurn({ needs: 'nothing' });
+      p.say('The follow-up is recorded.');
+      p.endTurn({ needs: 'nothing' });
+    },
+  },
+  {
     name: 'whole-request task progress survives a second turn on every surface',
     shows: ['All 2 tasks completed', 'Build the card', 'Verify the card'],
     play: (p) => {

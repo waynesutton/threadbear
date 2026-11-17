@@ -37,7 +37,7 @@ earlier four-platform run.
 
 <!-- parity:start -->
 
-281 of 381 features have a spec so far, across 784 scenarios.
+282 of 381 features have a spec so far, across 785 scenarios.
 
 Scenarios passing: Swift: not run, Mac: not run, Windows: not run, Linux: not run.
 
@@ -137,6 +137,7 @@ Scenarios passing: Swift: not run, Mac: not run, Windows: not run, Linux: not ru
 | `transcript.user` Your bubble | pending | pending | pending | pending |
 | `transcript.pending` Pending states | pending | pending | pending | pending |
 | `transcript.edit` Edit pencil | pending | pending | pending | pending |
+| `transcript.notes` Runner and schedule notes | pending | pending | pending | pending |
 | `transcript.agentmessage` Agent message card | pending | pending | pending | pending |
 | `transcript.reply` Assistant reply | pending | pending | pending | pending |
 | `transcript.thinking` Thinking line | pending | pending | pending | pending |

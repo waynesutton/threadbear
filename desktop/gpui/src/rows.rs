@@ -20,6 +20,7 @@ use crate::thread::ThreadPane;
 use crate::tips::Tip as _;
 use gpui_kit::base::{SelectableText, TextView};
 use gpui_kit::component::menu::ContextMenuExt as _;
+use gpui_kit::component::button::{Button, ButtonVariants as _};
 use gpui_kit::component::{h_flex, v_flex, Sizable as _};
 use gpui_kit::prelude::*;
 use gpui_kit::*;
@@ -251,7 +252,7 @@ impl ThreadPane {
     /// each question small and quiet with his answer under it.
     fn user_row(&mut self, ix: usize, row: &Row, message: &UserMessage, window: &Window, cx: &mut Context<Self>) -> AnyElement {
         if message.shows_as_note() {
-            return self.runner_note_row(message, cx);
+            return self.runner_note_row(ix, row, message, cx);
         }
         if let Some(header) = message.agent_header() {
             return self.agent_message_row(ix, row, &header, cx);
@@ -374,23 +375,44 @@ impl ThreadPane {
         Some(threadbear_core::juice::send_lift(now - at, reduce))
     }
 
-    /// `runnerMessageText` and `scheduledMessageText`: a centred quiet note
-    /// saying where the message came from, then the message itself.
-    fn runner_note_row(&mut self, message: &UserMessage, cx: &mut Context<Self>) -> AnyElement {
+    /// Scheduled instructions use a local disclosure; runner restart notes
+    /// retain their quiet presentation. Neither changes the stored message.
+    fn runner_note_row(&mut self, ix: usize, row: &Row, message: &UserMessage, cx: &mut Context<Self>) -> AnyElement {
         let faint = style::faint_text(cx);
         let quiet = style::quiet_text(cx);
-        let (mut header, body) = if message.is_from_schedule() {
-            match message.scheduled_header() {
-                Some(h) => (format!("Scheduled: {} · {}", h.title, h.when_text), h.body),
-                None => ("Sent by a schedule".to_owned(), message.text.clone()),
-            }
-        } else {
-            ("Sent by the runner after it restarted".to_owned(), message.text.clone())
-        };
         if message.is_from_schedule() {
-            // Clock glyph in the text's place (`symbol("clock", ...)`).
-            header.insert_str(0, "\u{23F2}\u{FE0E} ");
+            let scheduled = message.scheduled_header();
+            let heading = scheduled.as_ref().map(|h| format!("Scheduled follow-up · {}", h.title)).unwrap_or_else(|| "Scheduled follow-up".to_owned());
+            let body = scheduled.as_ref().map(|h| h.body.as_str()).unwrap_or(&message.text).trim();
+            let expanded = self.row_open(row);
+            let mut title = v_flex().flex_1().min_w_0()
+                .child(div().text_size(px(size::LABEL)).text_color(quiet).truncate().child(heading));
+            if let Some(schedule) = &scheduled {
+                title = title.child(div().text_size(px(size::SMALL)).text_color(faint).truncate().child(schedule.when_text.clone()));
+            }
+            let mut header = h_flex().w_full().items_center().gap(px(8.))
+                .child(crate::icons::symbol("clock").with_size(px(14.)).text_color(faint))
+                .child(title);
+            if !body.is_empty() {
+                let row = row.clone();
+                let label = if expanded { "Hide details" } else { "Show details" };
+                header = header.child(Button::new(("scheduled-details", ix)).label(label).small().ghost()
+                    .tooltip(if expanded { "Hide scheduled follow-up details" } else { "Show scheduled follow-up details" })
+                    .on_click(cx.listener(move |this, _, _, cx| this.toggle_row(&row, cx))));
+            }
+            let mut column = v_flex().w_full().pt(px(RUNNER_TOP)).pb(px(RUNNER_BOTTOM)).child(header);
+            // Parsing and layout happen only when requested; the full original
+            // message stays in the model and still reaches the agent.
+            if expanded && !body.is_empty() {
+                let key = format!("scheduled-details-{}", row.id);
+                let doc = self.markdown_state(&key, body, cx);
+                let text_style = self.reading_style(cx).with_foreground(quiet);
+                column = column.child(div().w_full().mt(px(10.)).child(self.linked_text(&doc, &row.id, cx)
+                    .selectable(true).style(text_style).shared_code_block_highlighter(plain_code_blocks())));
+            }
+            return row_wrap(row, column).into_any_element();
         }
+        let (header, body) = ("Sent by the runner after it restarted".to_owned(), message.text.clone());
         let body = body.trim().to_owned();
         let col = v_flex()
             .pt(px(RUNNER_TOP))

@@ -153,7 +153,7 @@ It comes from reading code, not from running anything, so "(unverified)" means n
 | `transcript.user` | Your bubble | Right aligned, 80% column, with images and chips | Custom row with `TextView` inside `MessageScroller`. | build | M | `Cells` (`TextRowCell`), `RowRenderer` |
 | `transcript.pending` | Pending states | Faded plus spinner, clock when queued, waiting-for-runner note | Drawn states on the bubble. | build | S | `Cells` (`PendingMark`), `PendingMessage` |
 | `transcript.edit` | Edit pencil | Hover, puts text back in the composer, rewinds on send, warns on background jobs | Hover button, with a gpui-kit dialog for the warning. | build | M | `Cells`, `AppModel+ThreadActions` |
-| `transcript.notes` | Runner and schedule notes | Centred quiet line, schedule name header | Drawn. | build | S | `RowRenderer` |
+| `transcript.notes` | Runner and schedule notes | Schedule title and time with Show details; runner notes stay quiet | Scheduled bodies start collapsed; Show details opens selectable, left-aligned Markdown and Hide details closes it. Runner notes retain their existing display. | build | S | `RowRenderer` |
 | `transcript.agentmessage` | Agent message card | Another thread's agent wrote it | Drawn card. | build | S | `RowRenderer` (`agentMessageText`) |
 | `transcript.answered` | Answered bubble | Your picks shown as question and answer; review pick likewise | Drawn. | build | S | `RowRenderer` (`userWords`), `AnswerChips` |
 | `transcript.reply` | Assistant reply | Streaming Markdown in the reading column | `TextView` in `MessageScroller` with follow-tail, as Ghostex does with `gpui::list`, re-rendering only the open block. | kit | L | `Cells` (`TextRowCell`), `RowRenderer` |

@@ -6,6 +6,17 @@ Feature: Reading a thread
   Background:
     Given the app is connected to a runner with the demo threads
 
+  # The Swift app is frozen; this local disclosure is GPUI-only.
+  @transcript.notes @swift-pending
+  Scenario: Scheduled follow-ups keep their details closed until requested
+    When I open the thread "Tidy the imports in the uploader"
+    And a scheduled follow-up arrives
+    Then the scheduled follow-up details are closed
+    When I show the scheduled follow-up details
+    Then the scheduled follow-up details are open
+    When I hide the scheduled follow-up details
+    Then the scheduled follow-up details are closed
+
   @transcript.user @transcript.reply
   Scenario: The conversation reads top to bottom
     When I open the thread "Make uploads resume after a crash"

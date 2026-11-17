@@ -1330,6 +1330,12 @@ folded one shows how many are under it. Its page
 says what's coming up next with a few numbers: how many are on, due in the
 next day, repeating, set by threads, paused, and how often they've run.
 
+In the Mac app’s conversation, a scheduled follow-up starts with its title,
+time and **Show details**. Its instructions stay collapsed until you open
+them; **Hide details** closes them again. Expanded details use left-aligned
+Markdown and can be selected and copied. This only changes the display: the
+agent still receives the complete scheduled message.
+
 With Customize the Scheduled page on (Settings › General › Look, off by
 default), the page gets a Customize button at its top right, like the
 Librarian page's. Its panel keeps the bear, uses a picture of your own or

@@ -2265,6 +2265,16 @@ async function dispatch(client, method, p) {
       persist(thread.summary.id, { type: 'assistant.text', itemId: before.itemId, text: String(p.text ?? '') }, before.turnId);
       return { itemId: before.itemId };
     }
+    case 'mock.scheduleNote': {
+      const t = need(p.threadId);
+      const turn = `turn_scheduled_${t.summary.lastSeq + 1}`;
+      const text = p.text ?? '[Scheduled: "Finish verification", Once, tomorrow]\n\n## Remaining work\n\n- Check the release\n- Keep the original instructions available';
+      persist(t.summary.id, { type: 'user.message', text, images: [], origin: p.origin ?? 'schedule' }, turn);
+      persist(t.summary.id, { type: 'turn.started' }, turn);
+      persist(t.summary.id, { type: 'assistant.text', itemId: `${turn}_reply`, text: 'The follow-up is ready.', final: true }, turn);
+      persist(t.summary.id, { type: 'turn.completed', outcome: 'completed', durationMs: 1000, needs: 'nothing' }, turn);
+      return {};
+    }
     case 'mock.stream':
       return startStream(need(p.threadId).summary.id, p);
     // A thread with the id and title given, idle with nothing in it, for a
