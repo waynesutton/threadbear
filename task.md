@@ -9,7 +9,6 @@ Status and gap list: prds/prints-status.md
 
 ## In Progress
 
-- [ ] Restore GPUI Prints navigation and make embedded Print/Git panels follow app appearance. prds/prints-navigation-and-panel-theme.md. Native build and 4 Prints scenarios (41 steps) pass; live Chromium Print/Git HTML dark/light switches preserve one load. Landing and installed verification pending.
 
 
 - [ ] 2026-11-16 21:53 UTC Desktop CI: Linux's 60-minute budget landed as 7f2ba41e after 12 focused tests and the 505-second quick check passed. Run 43948148837 also passed all Windows specs before its release build hit 60 minutes; give Windows 90 minutes, keeping Linux/Mac at 60. Windows follow-up checks and a complete GitHub run remain required.
@@ -21,6 +20,8 @@ Status and gap list: prds/prints-status.md
 - [ ] Land verified Settings review fixes when the Mac is quiet, then verify the installed update.
 
 ## Completed
+
+- [x] 2026-11-17 16:00 UTC Restore Prints navigation and synchronize embedded Print/Git appearance. Native build, four Prints scenarios (41 steps), manual Chromium light/dark switches without reload, and 573-second landing check passed. Installed d14386f3 visually verified dark Print/Git, rail below Files and Highlights metadata. prds/prints-navigation-and-panel-theme.md
 
 - [x] 2026-11-17 09:25 UTC Scheduled follow-up disclosure1dcad0fb is installed and running. Normal landing check passed689s; native build, actual Show/Hide clicks, edge cases and22 cross-route scenarios pass. Real exported thread: all8 loaded scheduled messages start collapsed, original text is retained, and Show/Hide works. Installed build.json, process19187 and desktop.log09:08:47/09:14:56 confirm1dcad0fb. prds/collapsed-scheduled-followups.md
 

@@ -27,4 +27,4 @@ The full Prints navigation port landed in main at 7f375555; this branch adds pan
 
 Windows CI run 44049768051 exposed a test that compared joined paths as literal Unix strings. The assertion now compares filesystem paths so Windows separators are valid.
 
-Landing checks and installed-app verification remain pending.
+Landing checks passed in 573 seconds. On 2026-11-17 at 16:00 UTC, installed GPUI d14386f3 was visually verified: Git and the existing CI Print display dark backgrounds; the Prints rail button appears below Files with its count; Highlights lists the thread Print with kind, version and No project. The Print was left open as a real example. Light/dark switching without reload was verified in the isolated native app, not by changing the live app setting.
