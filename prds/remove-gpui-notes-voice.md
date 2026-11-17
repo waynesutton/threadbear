@@ -23,3 +23,8 @@ Wayne wants the Notes voice controls removed unless Mike currently ships them. F
 2026-11-17 00:10 UTC: implementation verified. All 61 tests in `cargo test -p threadbear-core --test voice` pass, including keyboard dictation and legacy preference decoding. `cargo check -p threadbear-gpui`, `git diff --check`, and `node features/verify-pairing.mjs` pass (92 feature files). Evidence: `/tmp/threadbear-remove-notes-voice-check.log`, exit 0. Landed as `5592339e` after the combined `./check.sh --quick` passed in 787 seconds.
 
 2026-11-17 02:32 UTC: release build passed in 9m33s and staged `5592339e`. Staged metadata confirms removal ancestry. Binary checks find neither `Use with Notes` nor `settings-voice-notes`; `Pause before sending`, `settings-voice-enabled`, and `settings-voice-hold` remain. Running GPUI is still `1300ba08`; automatic restart is waiting to preserve an unsent draft. Installed verification remains pending. The completion-feature thread is preparing a newer descendant build; avoid duplicate staging.
+
+
+## Installed verification
+
+2026-11-17 06:05 UTC: complete. Installed GPUI `06337397d683532bd073e4c8030e8aca4fc877d9` includes removal `5592339e`. Process PID 9065 runs the installed GPUI executable; `desktop.log` records `06:03:52.918 app started 06337397`. Installed binary checks confirm `Use with Notes` and `settings-voice-notes` absent; `Pause before sending`, `settings-voice-enabled`, and `settings-voice-hold` present. Corresponding Settings, Notes page and Voice entity source has no dedicated Notes controls/listener. This verifies deployment and compiled controls; it is not a new microphone or visual UI test. No force restart, draft change, push or upstream PR was needed.

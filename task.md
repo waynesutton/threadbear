@@ -9,8 +9,6 @@ Status and gap list: prds/prints-status.md
 
 ## In Progress
 
-- [ ] Verify GPUI Notes voice removal in the running app after automatic restart. Build5592339e is staged; current app1300ba08 waits on an unsent draft. prds/remove-gpui-notes-voice.md
-
 - [ ] 2026-11-16 21:53 UTC Desktop CI: Linux's 60-minute budget landed as 7f2ba41e after 12 focused tests and the 505-second quick check passed. Run 43948148837 also passed all Windows specs before its release build hit 60 minutes; give Windows 90 minutes, keeping Linux/Mac at 60. Windows follow-up checks and a complete GitHub run remain required.
 
 - [ ] Tasks list and board polish (2026-11-17 00:56 UTC): quick-add list as default, Doing column, row menu, drag to reorder columns, sections and projects, photo button. API 84. Final native 10 scenarios/131 steps pass after keyboard and accessibility fixes; four accessibility guards, serialized cargo check/build, 17 focused backend/runner checks, web tests/typechecks/build and Rust ordering tests pass. Real local backend sync and browser save/retry/ordering verified. Broad quick check completed; its remaining accessibility failure is fixed and verified. Landing awaits Desktop CI run43988092381, owned by thread1b046499. Coordinated deployment and installed verification pending. prds/realtime-tasks.md
@@ -22,6 +20,8 @@ Status and gap list: prds/prints-status.md
 - [ ] Land verified Settings review fixes when the Mac is quiet, then verify the installed update.
 
 ## Completed
+
+- [x] 2026-11-17 06:05 UTC Verify Notes voice removal in installed GPUI06337397: build ancestry includes5592339e, running PID9065 and desktop.log confirm this app, and installed binary lacks Use with Notes/settings-voice-notes while retaining thread Voice, Fn dictation and Pause before sending. Matching source has no Notes listener or controls. No new microphone test or visual UI inspection performed. prds/remove-gpui-notes-voice.md
 
 - [x] 2026-11-17 02:32 UTC Remove GPUI Notes mic, caption, setting and dedicated listener, preserving thread Voice, keyboard dictation and pause settings. Landed5592339e; 61 Voice tests, GPUI check, feature pairing, 787-second landing check and release build pass. Staged binary confirms removed/retained settings; running-app verification tracked above. desktop/core/src/voice.rs, desktop/gpui/src/voice/, notes_page.rs, settings_window/voice.rs. prds/remove-gpui-notes-voice.md
 
