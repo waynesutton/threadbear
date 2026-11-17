@@ -13,7 +13,6 @@ Status and gap list: prds/prints-status.md
 
 - [ ] Tasks list and board polish (2026-11-17 00:56 UTC): quick-add list as default, Doing column, row menu, drag to reorder columns, sections and projects, photo button. API 84. Final native 10 scenarios/131 steps pass after keyboard and accessibility fixes; four accessibility guards, serialized cargo check/build, 17 focused backend/runner checks, web tests/typechecks/build and Rust ordering tests pass. Real local backend sync and browser save/retry/ordering verified. Broad quick check completed; its remaining accessibility failure is fixed and verified. Landing awaits Desktop CI run43988092381, owned by thread1b046499. Coordinated deployment and installed verification pending. prds/realtime-tasks.md
 
-- [ ] Clearer thread completion: source and native rendering verified (2026-11-17T00:58:12Z), including partial/complete/off states, It works and Archive clicks. Runner suite, native core/client tests, GPUI all-targets automation check, web/Convex checks, Swift mock and phone-kit tests pass; original native checks timed out on the build lock and passed explicit retries. Awaiting normal landing, enablement and installed verification. prds/clearer-thread-completion.md
 
 - [x] Realtime Tasks local draft (2026-11-16T11:03:00Z): native build and six UI scenarios (77 steps), 14 backend/runner tests, two web draft tests, typechecks and web build pass. Real local-backend browser save/photo and touch drag verified; native card/column drag and light/dark inspected. Not deployed or landed. prds/realtime-tasks.md
 
@@ -21,7 +20,10 @@ Status and gap list: prds/prints-status.md
 
 ## Completed
 
+- [x] 2026-11-17 06:11 UTC Clearer completion landed as ee1e9967..06337397 after the 559-second landing check passed. Installed and running GPUI06337397 and runner06337397 verified; clearerCompletion enabled for Wayne. Actual native partial/complete/off cards, It works and Archive clicks pass; live demo61db70e8 reports completed/pending tasks through the real end_turn tool. Archive remains manual. API85 cloud mirror source and iOS source/model checks are included; no cloud deployment or phone install performed. prds/clearer-thread-completion.md
+
 - [x] 2026-11-17 06:05 UTC Verify Notes voice removal in installed GPUI06337397: build ancestry includes5592339e, running PID9065 and desktop.log confirm this app, and installed binary lacks Use with Notes/settings-voice-notes while retaining thread Voice, Fn dictation and Pause before sending. Matching source has no Notes listener or controls. No new microphone test or visual UI inspection performed. prds/remove-gpui-notes-voice.md
+
 
 - [x] 2026-11-17 02:32 UTC Remove GPUI Notes mic, caption, setting and dedicated listener, preserving thread Voice, keyboard dictation and pause settings. Landed5592339e; 61 Voice tests, GPUI check, feature pairing, 787-second landing check and release build pass. Staged binary confirms removed/retained settings; running-app verification tracked above. desktop/core/src/voice.rs, desktop/gpui/src/voice/, notes_page.rs, settings_window/voice.rs. prds/remove-gpui-notes-voice.md
 
