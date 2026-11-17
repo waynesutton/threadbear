@@ -2843,10 +2843,8 @@ message box shows what it heard as you talk. It sends once you pause for
 1.5 seconds; Pause before sending in Settings > Voice & Audio makes that
 1, 2 or 3. If it can't start, a note over the button says why; click it
 to close it. Fn dictation works the same, with its pill just above the
-message box. Use with Notes there adds a microphone beside the note's bin:
-press it and talk, and each time you pause what you said is typed in at
-the note's cursor, with the words you're saying under the note until they
-go in. Press it again, or open another note, to stop.
+message box. Notes has no dedicated microphone or Voice setting in the
+GPUI app; keyboard dictation still works in its text boxes.
 
 ### The bear
 

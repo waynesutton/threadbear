@@ -769,9 +769,6 @@ pub struct VoicePrefs {
     pub command_mode: Option<bool>,
     #[serde(rename = "voiceKeyCommand", skip_serializing_if = "Option::is_none")]
     pub key_command: Option<String>,
-    /// Use with Notes: a microphone in Notes. Off until turned on.
-    #[serde(rename = "voiceInNotes", skip_serializing_if = "Option::is_none")]
-    pub in_notes: Option<bool>,
     /// How long a pause sends what was said, in seconds. The GPUI app's own:
     /// the Swift app always waited 1, which cut Wayne off mid-sentence.
     #[serde(rename = "voicePause", skip_serializing_if = "Option::is_none")]
@@ -806,10 +803,6 @@ impl VoicePrefs {
 
     pub fn language(&self) -> VoiceLanguage {
         language(self.language.as_deref())
-    }
-
-    pub fn in_notes(&self) -> bool {
-        self.in_notes.unwrap_or(false)
     }
 
     /// The saved pause, clamped to one that's offered.

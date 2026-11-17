@@ -138,7 +138,6 @@ impl Voice {
         // The microphone is one thing at a time.
         self.cancel_dictation(cx);
         let start = self.mode.start + 1;
-        self.stop_note(true, cx);
         // How long a pause sends it: Settings > Voice & Audio's.
         let tracker = UtteranceTracker::new(self.prefs.pause());
         self.mode = ModeState { start, thread: Some(thread.to_owned()), started_at: Some(threadbear_core::chrono::Utc::now()), phase: Phase::Starting("Getting ready…".to_owned()), tracker, ..ModeState::default() };

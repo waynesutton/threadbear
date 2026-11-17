@@ -234,8 +234,6 @@ impl NotesPage {
     fn pick(&mut self, id: Option<String>, window: &mut Window, cx: &mut Context<Self>) {
         self.flush(cx);
         self.selection = id.filter(|id| self.store.get(id).is_some());
-        // Talking into the last note stops with it (voice/notes.rs).
-        crate::voice::note_shown(self.selection.as_deref(), cx);
         let (title, body) = self.open_note().map_or((String::new(), String::new()), |n| (n.title.clone(), n.body.clone()));
         self.title.update(cx, |t, cx| t.set_value(title, window, cx));
         // Setting the text isn't typing: the subscription hears neither.
@@ -362,36 +360,6 @@ impl NotesPage {
             })
             .ok();
         });
-    }
-
-    /// What was said into this note (voice/notes.rs), typed in at the
-    /// editor's cursor, over a selection, spaced from the text either side,
-    /// through the editor's own edit so it saves and undoes as typing does.
-    /// Nothing if the note isn't the one showing any more.
-    pub(crate) fn insert_dictated(&mut self, note: &str, words: &str, window: &mut Window, cx: &mut Context<Self>) {
-        if self.selection.as_deref() != Some(note) {
-            return;
-        }
-        let editor = self.editor.read(cx);
-        let range = editor.selected_range();
-        let text = editor.value().to_string();
-        let (start, end) = (range.start.min(text.len()), range.end.min(text.len()));
-        let before = text.get(..start).and_then(|t| t.chars().next_back());
-        let after = text.get(end..).and_then(|t| t.chars().next());
-        let Some(typed) = threadbear_core::voice::insertion(words, before, after) else { return };
-        self.editor.update(cx, |e, cx| e.replace(typed, window, cx));
-        self.body_typed(cx);
-    }
-
-    /// The microphone beside the bin, while Voice and Use with Notes are on:
-    /// red with bars while it listens to this note.
-    fn note_mic(&self, note: &str, cx: &mut Context<Self>) -> Option<AnyElement> {
-        let voice = crate::voice::get(&self.app, cx);
-        if !voice.read(cx).notes_available(cx) {
-            return None;
-        }
-        let page = cx.entity().downgrade();
-        Some(crate::voice::button::note_mic(&voice, note, page, cx))
     }
 
     // The box's typing help (`NoteEditing`).
@@ -566,8 +534,6 @@ impl NotesPage {
         };
         let id = note.id.clone();
         let changed = notes::date_label(note.updated_at, true);
-        let mic = self.note_mic(&id, cx);
-        let caption = crate::voice::button::note_caption(&id, cx);
         let hover = style::primary_opacity(cx, 0.08);
         let bin = tipped(div().id("notes-delete").size(px(24.)).rounded(px(5.)).flex().items_center().justify_center().cursor_pointer().text_color(secondary).hover(move |s| s.bg(hover)), "Delete this note")
             .on_click(cx.listener(move |this, _, window, cx| this.ask_delete(id.clone(), window, cx)))
@@ -585,7 +551,6 @@ impl NotesPage {
             .border_color(style::hairline(cx))
             .child(title)
             .child(div().flex_none().text_size(px(style::size::SMALL)).text_color(style::tertiary_label(cx)).whitespace_nowrap().child(changed))
-            .children(mic)
             .child(bin);
         let editor = Editor::new(&self.editor)
             .h_full()
@@ -613,7 +578,7 @@ impl NotesPage {
             })
             .child(editor);
         let _ = window;
-        v_flex().flex_1().min_w_0().h_full().child(header).child(body).children(caption).into_any_element()
+        v_flex().flex_1().min_w_0().h_full().child(header).child(body).into_any_element()
     }
 }
 

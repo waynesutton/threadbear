@@ -88,17 +88,6 @@ Feature: Voice
     And I can pick the Voice, Speed, Language and Microphone
     And Play a Sample reads a line in the chosen voice
 
-  @voice.notes @manual @swift-pending
-  Scenario: Talk into a note
-    Given Use with Notes is on in Settings > Voice & Audio
-    When I open a note and press the microphone beside its bin
-    And I say "buy milk" and pause
-    Then "Buy milk" is typed in at the note's cursor
-    When I say "new line" and pause
-    Then a line break is typed in
-    When I open another note
-    Then the microphone stops listening
-
   @voice.talk @manual @swift-pending
   Scenario: A short pause doesn't send half a sentence
     Given Voice is on for a thread

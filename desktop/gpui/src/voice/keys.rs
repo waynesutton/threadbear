@@ -343,7 +343,7 @@ impl Voice {
             cx.notify();
             return;
         }
-        if !self.available(cx) || self.mode.is_on() || self.note.is_on() {
+        if !self.available(cx) || self.mode.is_on() {
             log("keyboard dictation not started: Voice is off, or talking with a thread");
             Self::machine_ended();
             return;

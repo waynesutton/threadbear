@@ -15,7 +15,6 @@
 pub(crate) mod button;
 mod helper;
 pub(crate) mod keys;
-pub(crate) mod notes;
 pub(crate) mod mode;
 
 use crate::app::Threadbear;
@@ -33,7 +32,6 @@ pub(crate) const EXPERIMENT: &str = "voiceMode";
 enum Listener {
     Mode,
     Keys,
-    Note,
 }
 
 pub(crate) struct Voice {
@@ -49,7 +47,6 @@ pub(crate) struct Voice {
     session: i64,
     pub(crate) mode: mode::ModeState,
     pub(crate) keys: keys::Dictation,
-    pub(crate) note: notes::NoteDictation,
     /// The Mac's microphones for Settings, as uid and name, once asked for.
     pub(crate) microphones: Vec<(String, String)>,
     mics_asked: bool,
@@ -71,7 +68,7 @@ pub(crate) fn get(app: &WeakEntity<Threadbear>, cx: &mut App) -> Entity<Voice> {
         if let Some(entity) = app.upgrade() {
             cx.observe(&entity, |voice: &mut Voice, app, cx| voice.app_changed(app, cx)).detach();
         }
-        Voice { app, prefs: load_prefs(), helper: None, helper_gen: 0, mics_asked: false, listener: None, session: 0, mode: mode::ModeState::default(), keys: keys::Dictation::default(), note: notes::NoteDictation::default(), microphones: Vec::new(), preview_status: None }
+        Voice { app, prefs: load_prefs(), helper: None, helper_gen: 0, mics_asked: false, listener: None, session: 0, mode: mode::ModeState::default(), keys: keys::Dictation::default(), microphones: Vec::new(), preview_status: None }
     });
     cx.set_global(VoiceGlobal(voice.clone()));
     keys::install(voice.downgrade(), cx);
@@ -159,9 +156,6 @@ impl Voice {
             self.stop_mode(cx);
             self.cancel_dictation(cx);
         }
-        if !self.prefs.in_notes() || !self.prefs.enabled() {
-            self.stop_note(true, cx);
-        }
         if before.language != self.prefs.language || before.microphone != self.prefs.microphone {
             self.mode_restart(cx);
         }
@@ -172,10 +166,6 @@ impl Voice {
     fn app_changed(&mut self, app: Entity<Threadbear>, cx: &mut Context<Self>) {
         let selected = app.read(cx).selected.clone();
         self.mode_selection_changed(selected, cx);
-        // Notes closed: dictating into one stops.
-        if app.read(cx).notes_page.is_none() {
-            self.notes_changed(None, cx);
-        }
         self.sync_keys(cx);
     }
 
@@ -238,14 +228,12 @@ impl Voice {
                     log("the helper stopped");
                     self.mode_failed("Voice stopped unexpectedly. Try again.", cx);
                     self.dictation_failed("Voice stopped unexpectedly. Try again.", cx);
-                    self.note_failed("Voice stopped unexpectedly. Try again.", cx);
                 }
             }
             "status" | "engineReady" | "engineFailed" => self.mode_engine(&event, cx),
             "listening" | "listenFailed" | "heard" => match self.listening_for(&event) {
                 Some(Listener::Mode) => self.mode_listening(&event, cx),
                 Some(Listener::Keys) => self.dictation_listening(&event, cx),
-                Some(Listener::Note) => self.note_listening(&event, cx),
                 None => {}
             },
             "inputLevel" | "outputLevel" => {
@@ -254,7 +242,6 @@ impl Voice {
                 match self.listener.map(|(w, _)| w) {
                     Some(Listener::Mode) => self.mode_level(level, output, cx),
                     Some(Listener::Keys) if !output => self.dictation_level(level, cx),
-                    Some(Listener::Note) if !output => self.note_level(level, cx),
                     _ => {}
                 }
             }
@@ -309,14 +296,5 @@ impl Voice {
             this.update(cx, |v, cx| then(v, cx)).ok();
         })
         .detach();
-    }
-}
-
-/// The Notes page now shows `note` (or none): dictation for another stops
-/// (notes_page.rs, `pick`).
-pub(crate) fn note_shown(note: Option<&str>, cx: &mut App) {
-    if let Some(voice) = existing(cx) {
-        let note = note.map(str::to_owned);
-        voice.update(cx, |v, cx| v.notes_changed(note, cx));
     }
 }
