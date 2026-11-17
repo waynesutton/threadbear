@@ -292,6 +292,8 @@ pub(crate) enum MenuAction {
     Wake,
     Hibernate(&'static str),
     HibernateUntilRestart,
+    /// No time: back when something messages it (`snoozedUntil: "needed"`).
+    HibernateUntilNeeded,
     PickTime,
     WakeWhen,
     Delete,
@@ -832,6 +834,25 @@ impl Threadbear {
         self.leave_selection(&id, next, window, cx);
     }
 
+    /// Hibernate with no time (`snoozedUntil: "needed"`): back when a
+    /// message comes, from Mike, a schedule or another thread.
+    pub(crate) fn snooze_until_needed(&mut self, id: String, window: &mut Window, cx: &mut Context<Self>) {
+        let next = self.neighbour_of(&id, cx, now_ms());
+        self.launch_flight(&id, crate::archive_flight::Destination::Hibernate, cx);
+        self.update_thread(
+            &id,
+            |t| {
+                t.snoozed_until = Some("9999-12-31T00:00:00.000Z".into());
+                t.snoozed_until_restart = None;
+                t.wake_when = None;
+                t.waiting_on = None;
+            },
+            json!({ "snoozedUntil": "needed" }),
+            cx,
+        );
+        self.leave_selection(&id, next, window, cx);
+    }
+
     /// Hibernate until when Mike said, in his words (`AppModel.hibernateWhen`):
     /// away at once, saying Thinking… until the runner works out when; back
     /// with the runner's reason if it can't.
@@ -971,7 +992,7 @@ impl Threadbear {
             _ => {}
         }
         let Some(id) = thread else { return };
-        if confirm_busy && matches!(action, MenuAction::Hibernate(_) | MenuAction::HibernateUntilRestart | MenuAction::PickTime | MenuAction::WakeWhen) {
+        if confirm_busy && matches!(action, MenuAction::Hibernate(_) | MenuAction::HibernateUntilRestart | MenuAction::HibernateUntilNeeded | MenuAction::PickTime | MenuAction::WakeWhen) {
             let (inner_id, inner_action) = (id.clone(), action.clone());
             self.confirm_if_busy(&id, false, window, cx, move |this, window, cx| this.run_row_action(inner_id.clone(), inner_action.clone(), window, cx));
             return;
@@ -990,6 +1011,7 @@ impl Threadbear {
                 self.snooze_row(id, until, window, cx);
             }
             MenuAction::HibernateUntilRestart => self.snooze_until_restart(id, window, cx),
+            MenuAction::HibernateUntilNeeded => self.snooze_until_needed(id, window, cx),
             MenuAction::PickTime => self.open_pick_time(id, window, cx),
             MenuAction::WakeWhen => self.open_wake_when(id, window, cx),
             MenuAction::Delete => self.delete_row(id, window, cx),
@@ -1044,7 +1066,7 @@ impl Threadbear {
             MenuRow::separator(),
             MenuRow::item("Rename", "pencil", MenuAction::Rename),
             if t.is_starred() { MenuRow::item("Remove Star", "star.slash", MenuAction::Star(false)) } else { MenuRow::item("Star", "star", MenuAction::Star(true)) },
-            MenuRow::submenu("Hibernate", "moon.zzz", self.snooze_menu_rows()),
+            MenuRow::submenu("Hibernate", "moon.zzz", self.snooze_menu_rows(Some(t))),
         ];
         if t.snoozed_until.is_some() {
             rows.push(MenuRow::item("Wake", "sun.max", MenuAction::Wake));
@@ -1102,9 +1124,16 @@ impl Threadbear {
     }
 
     /// `SnoozeMenuItems`/`SnoozeNSMenu`: the presets, then Pick a time and Wake when.
-    fn snooze_menu_rows(&self) -> Vec<MenuRow> {
+    /// A bear's thread on this Mac also gets Until needed first: a bear's
+    /// work comes when asked, so a time to come back is often a guess.
+    fn snooze_menu_rows(&self, t: Option<&ThreadSummary>) -> Vec<MenuRow> {
         let now = rows::local_now();
-        let mut items: Vec<MenuRow> = rows::snooze_presets(&now).into_iter().map(|p| MenuRow::item(p.title, p.symbol(), MenuAction::Hibernate(p.id))).collect();
+        let mut items: Vec<MenuRow> = Vec::new();
+        if t.is_some_and(|t| t.bear.is_some() && !t.is_remote()) {
+            items.push(MenuRow::item(rows::SNOOZE_UNTIL_NEEDED, "zzz", MenuAction::HibernateUntilNeeded));
+            items.push(MenuRow::separator());
+        }
+        items.extend(rows::snooze_presets(&now).into_iter().map(|p| MenuRow::item(p.title, p.symbol(), MenuAction::Hibernate(p.id))));
         // Only while a restart is waiting, so a thread holding it up can go
         // away now and come back after (`app.restartPending`).
         if self.client.restart().is_pending() {
@@ -1148,7 +1177,7 @@ impl Threadbear {
     }
 
     pub(crate) fn open_hibernate_menu(&mut self, id: String, position: Point<Pixels>, window: &mut Window, cx: &mut Context<Self>) {
-        let menu_rows = self.snooze_menu_rows();
+        let menu_rows = self.snooze_menu_rows(self.threads.get(&id).map(|t| &**t));
         self.open_menu(Some(id), menu_rows, position, true, window, cx);
     }
 

@@ -454,6 +454,16 @@ fn wake_time(t: &ThreadSummary) -> Option<i64> {
     t.snoozed_until_ms().filter(|&until| until < FAR_OFF)
 }
 
+/// Hibernating with no time and nothing to wait for (the runner's
+/// `snoozedUntil: "needed"`): only a message brings it back.
+pub fn until_needed(t: &ThreadSummary) -> bool {
+    t.snoozed_until.is_some()
+        && wake_time(t).is_none()
+        && t.snoozed_until_restart != Some(true)
+        && t.wake_when.is_none()
+        && t.waiting_on.as_ref().is_none_or(|w| w.is_empty())
+}
+
 /// What a Hibernating row shows where its time would be, and the tooltip
 /// with the rest (`WakeWords.row`): a topic, or Thinking… while the runner
 /// works out when. Nil for one hibernated the ordinary way.
@@ -473,6 +483,9 @@ pub fn wake_row<Tz: TimeZone>(t: &ThreadSummary, now: &DateTime<Tz>) -> Option<(
             tip += &format!(", or {} at the latest", until_words(time, now));
         }
         return Some((format!("Waiting on {names}"), format!("{tip}.")));
+    }
+    if until_needed(t) {
+        return Some((SNOOZE_UNTIL_NEEDED.into(), UNTIL_NEEDED_TIP.into()));
     }
     let wake: WakeWhen = crate::wire::read(t.wake_when.clone()?)?;
     if wake.pending {
@@ -643,6 +656,9 @@ impl SnoozePreset {
 /// `Snooze.untilRestartTitle`, shown only while a runner restart is waiting.
 pub const SNOOZE_UNTIL_RESTART: &str = "Until the runner restarts";
 pub const SNOOZE_PICK_TITLE: &str = "Pick a time…";
+/// A bear's thread, put away with no time: back when something messages it.
+pub const SNOOZE_UNTIL_NEEDED: &str = "Until needed";
+pub const UNTIL_NEEDED_TIP: &str = "Back when it's needed: a message from you, a schedule or another thread wakes it.";
 
 /// The snooze menu: 1 hour, this evening 6 pm, tomorrow 9 am, next Monday
 /// 9 am (`Snooze.presets`).
@@ -1082,6 +1098,14 @@ mod tests {
 
         let restart = thread(json!({ "snoozedUntil": "9999-12-31T00:00:00.000Z", "snoozedUntilRestart": true }));
         assert_eq!(trailing(&restart, &RowLook::PLAIN, RowMode::Hibernating, &now, None).text, "Back on restart");
+
+        // No time, no topic, nothing waited on: only a message wakes it.
+        let needed = thread(json!({ "snoozedUntil": "9999-12-31T00:00:00.000Z" }));
+        assert!(until_needed(&needed));
+        assert!(!until_needed(&restart) && !until_needed(&topic) && !until_needed(&sleeping));
+        let out = trailing(&needed, &RowLook::PLAIN, RowMode::Hibernating, &now, None);
+        assert_eq!(out.text, "Until needed");
+        assert_eq!(out.tip.as_deref(), Some(UNTIL_NEEDED_TIP));
         // Under Hibernating for its schedule rather than a snooze: when that
         // messages it next.
         let wake = crate::inbox::Wake { at_ms: now.timestamp_millis() + 3_600_000, when_text: "Weekdays at 9:00".into() };
