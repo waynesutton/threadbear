@@ -393,4 +393,5 @@
 //    keep projectOrder and listOrder; a columnOrder saved before Doing comes
 //    back with it.
 // 85: clearer completion task summaries on thread cards (experiment clearerCompletion).
-export const API_VERSION = 85;
+// 86: Tasks custom columns and ordered sections, with a retry-safe thread launch command.
+export const API_VERSION = 86;

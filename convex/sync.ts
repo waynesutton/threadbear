@@ -2830,6 +2830,16 @@ export const finishCommand = mutation({
       const started = await ctx.db.query('agentThreads').withIndex('by_command', (q) => q.eq('commandId', commandId)).first();
       if (started) await ctx.db.patch(started._id, { threadId: made });
     }
+    const task = await ctx.db.query('tasks').withIndex('by_thread_command', q => q.eq('threadCommandId', commandId)).first();
+    if (task) {
+      const thread = made ? await ctx.db.query('threads').withIndex('by_threadId', q => q.eq('threadId', made!)).unique() : null;
+      const latest = await ctx.db.query('tasks').withIndex('by_updated').order('desc').first();
+      await ctx.db.patch(task._id, {
+        ...(thread ? { thread: { runnerId: thread.runnerId, id: thread.threadId } } : {}),
+        ...(!thread && !task.thread ? { threadError: said ?? 'The runner did not return a thread. Open Threads to check before trying again.' } : { threadError: undefined }),
+        updatedAt: Math.max(Date.now(), (latest?.updatedAt ?? 0) + 1),
+      });
+    }
     // Its words, and a secret's sealed answer (docs/protocol.md, "Secrets"), have
     // done their job: see finishedArgs.
     await ctx.db.patch(commandId, { args: finishedArgs(c.args) });

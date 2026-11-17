@@ -119,6 +119,9 @@ impl Threadbear {
             let count = self.task_counts.get(&id).copied().flatten();
             bar = bar.child(crate::highlights::tipped(div().id("project-native-tasks"), "Open this project’s synced tasks")
                 .px(px(10.)).py(px(5.)).rounded(px(6.)).cursor_pointer()
+                .text_size(px(style::size::LABEL)).line_height(px(16.))
+                .text_color(style::secondary_text(cx))
+                .hover(|s| s.bg(style::sidebar_hover(cx)))
                 .child(match count { Some(0) => "Add task".into(), Some(n) => format!("Tasks {n}"), None => "Tasks".into() })
                 .on_click(cx.listener(move |this, _: &ClickEvent, window, cx| this.open_project_tasks(id.clone(), window, cx))));
         }

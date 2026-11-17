@@ -4100,3 +4100,20 @@ test("handover: an entry with no events doesn't stop the cards after it", async 
   f.sync.release();
   await f.sync.stop();
 });
+
+
+test('commands: Tasks creation preserves its title and does not launch twice', async () => {
+  const { h, sync, calls, push, applied } = setupFull();
+  sync.start();
+  await sync.flushNow();
+  const command: Command = { commandId: 'task-launch', kind: 'create', args: { text: 'Task title\n\nTask notes', title: 'Task title', cwd: h.cfg.defaults.cwd, accountId: 'claude-3' }, createdAt: 1 };
+  push([command]);
+  await tick(20);
+  push([command]);
+  await tick(20);
+  const finished = calls.find(c => c.fn === 'sync:finishCommand' && c.args.commandId === command.commandId);
+  assert.equal(finished?.args.ok, true);
+  assert.equal(h.runner.get(finished!.args.resultThreadId as string).title, 'Task title');
+  assert.equal(applied.filter(a => a.startsWith('create ')).length, 1);
+  await sync.stop();
+});

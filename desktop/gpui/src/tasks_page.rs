@@ -7,13 +7,15 @@ use crate::{app::Threadbear, call, icons, style::{self, px}};
 use gpui_kit::base::{TestSupportExt as _, TestTextExt as _};
 use gpui_kit::component::button::{Button, ButtonVariants as _};
 use gpui_kit::component::checkbox::Checkbox;
+use gpui_kit::component::dialog::DialogButtonProps;
 use gpui_kit::component::input::{Input, InputEvent, InputState, Textarea, TextareaState};
 use gpui_kit::component::menu::{DropdownMenu as _, PopupMenu, PopupMenuItem};
-use gpui_kit::component::{h_flex, v_flex, ActiveTheme as _, Disableable as _, Icon, Selectable as _, Sizable as _};
+use gpui_kit::component::{h_flex, v_flex, ActiveTheme as _, Disableable as _, Icon, Selectable as _, Sizable as _, WindowExt as _};
 use gpui_kit::prelude::*;
 use gpui_kit::*;
 use serde_json::{json, Value};
-use std::collections::HashSet;
+use std::collections::{HashSet, HashMap};
+use std::{cell::RefCell, rc::Rc};
 use threadbear_core::task_order;
 
 actions!(tasks_page, [CloseTasks]);
@@ -25,10 +27,19 @@ struct TaskRow {
     title: String,
     notes: String,
     status: String,
+    #[serde(default)]
+    column_id: Option<String>,
+    #[serde(default)]
+    thread: Option<Value>,
+    #[serde(default)]
+    thread_command_id: Option<String>,
+    #[serde(default)]
+    thread_error: Option<String>,
     project: Option<Value>,
     position: f64,
     created_at: f64,
 }
+fn column_id(row: &TaskRow) -> &str { row.column_id.as_deref().unwrap_or(&row.status) }
 #[derive(Clone)]
 struct TaskDrag {
     id: String,
@@ -162,9 +173,12 @@ impl Threadbear {
             "projectOrder":page.map(|p| p.prefs["projectOrder"].clone()),
             "showDone":page.map(|p| p.show_done),
             "editorOpen":page.map(|p| p.editor_open),
+            "selectedTask":page.and_then(|p| p.selected_task.clone()),
+            "hasPhoto":page.is_some_and(|p| p.photo.is_some()),
+            "photoLoaded":page.is_some_and(|p| p.photo_image.is_some()),
             "quickDraft":page.map(|p| p.composer.read(cx).value().to_string()),
             "toast":page.and_then(|p| p.toast.as_ref().map(|t| t.0.clone())),
-            "tasks":page.map(|p| p.rows.iter().map(|t| json!({"id":t.id,"title":t.title,"status":t.status,"notes":t.notes,"project":project_key(&t.project)})).collect::<Vec<_>>()),
+            "tasks":page.map(|p| p.rows.iter().map(|t| json!({"id":t.id,"title":t.title,"status":t.status,"columnId":column_id(t),"thread":t.thread,"notes":t.notes,"project":project_key(&t.project)})).collect::<Vec<_>>()),
             "error":page.and_then(|p| p.error.clone())})
     }
     pub(crate) fn render_tasks_page(&self) -> AnyElement {
@@ -183,23 +197,25 @@ pub(crate) struct TasksPage {
     // The editor sheet: title, note, status and project of one task.
     title: Entity<InputState>,
     notes: Entity<TextareaState>,
-    color: Entity<InputState>,
     composer: Entity<TextareaState>,
     column_input: Entity<InputState>,
     adding_in: Option<(String, String)>,
     projects: Vec<Value>,
     filter: Value,
     photo: Option<String>,
+    photo_image: Option<(std::sync::Arc<Image>, (f32, f32))>,
     customize: bool,
     refresh_again: bool,
     draft_id: String,
     project_filter_id: Option<String>,
     focus: FocusHandle,
+    selected_task: Option<String>,
     editing: Option<String>,
     editing_baseline: Option<TaskRow>,
     status: String,
     project: Option<Value>,
     editor_open: bool,
+    send_after_save: bool,
     view: Option<String>,
     busy: bool,
     loading: bool,
@@ -210,6 +226,9 @@ pub(crate) struct TasksPage {
     toast: Option<(String, &'static str, Value)>,
     toast_timer: Option<Task<()>>,
     scroll: ScrollHandle,
+    scrolls: RefCell<HashMap<String, ScrollHandle>>,
+    task_bounds: Rc<RefCell<HashMap<String, Bounds<Pixels>>>>,
+    viewport_height: f32,
     background_size: (f32, f32),
     _subscriptions: Vec<Subscription>,
 }
@@ -245,23 +264,25 @@ impl TasksPage {
             prefs: json!({}),
             title: cx.new(|cx| InputState::new(window, cx).placeholder("Task title")),
             notes: cx.new(|cx| TextareaState::new(window, cx).placeholder("Add a note…").auto_grow(3, 10)),
-            color: cx.new(|cx| InputState::new(window, cx).placeholder("#1b1d22")),
             composer,
             column_input,
             adding_in: None,
             projects: vec![],
             filter: json!("all"),
             photo: None,
+            photo_image: None,
             customize: false,
             refresh_again: false,
             draft_id: threadbear_core::notes::new_id(),
             project_filter_id: None,
             focus,
+            selected_task: None,
             editing: None,
             editing_baseline: None,
             status: "todo".into(),
             project: None,
             editor_open: false,
+            send_after_save: false,
             view: None,
             busy: false,
             loading: false,
@@ -271,6 +292,9 @@ impl TasksPage {
             toast: None,
             toast_timer: None,
             scroll: ScrollHandle::new(),
+            scrolls: RefCell::new(HashMap::new()),
+            task_bounds: Rc::new(RefCell::new(HashMap::new())),
+            viewport_height: 600.,
             background_size: (0., 0.),
             _subscriptions: subs,
         }
@@ -278,11 +302,52 @@ impl TasksPage {
     fn view_name(&self) -> String {
         self.view.as_deref().or(self.prefs["defaultView"].as_str()).unwrap_or("list").to_string()
     }
-    fn board_order(&self) -> Vec<String> {
-        task_order::full_order(&strings(&self.prefs["columnOrder"]), &task_order::BOARD)
+    fn definitions(&self) -> Vec<Value> {
+        let mut out = self.prefs["columns"].as_array().cloned().unwrap_or_default();
+        for id in task_order::BOARD {
+            if !out.iter().any(|c| c["id"] == id) { out.push(json!({"id":id,"name":status_name(id),"status":id})); }
+        }
+        out
     }
-    fn list_order(&self) -> Vec<String> {
-        task_order::full_order(&strings(&self.prefs["listOrder"]), &task_order::LIST)
+    fn column_name(&self, id: &str) -> String {
+        self.definitions().iter().find(|c| c["id"] == id).and_then(|c| c["name"].as_str()).unwrap_or("Todo").to_string()
+    }
+    fn canonical(&self, id: &str) -> String {
+        self.definitions().iter().find(|c| c["id"] == id).and_then(|c| c["status"].as_str()).unwrap_or("todo").to_string()
+    }
+    fn column_order(&self, list: bool) -> Vec<String> {
+        let field = if list { "sectionOrder" } else { "boardColumnOrder" };
+        let mut saved = strings(&self.prefs[field]);
+        if self.prefs[field].is_null() { saved = task_order::full_order(&strings(&self.prefs[if list { "listOrder" } else { "columnOrder" }]), if list { &task_order::LIST } else { &task_order::BOARD }); }
+        let ids: Vec<String> = self.definitions().iter().filter_map(|c| c["id"].as_str().map(String::from)).collect();
+        let mut out = Vec::new();
+        for id in saved.into_iter().chain(ids.iter().cloned()) { if ids.contains(&id) && !out.contains(&id) { out.push(id); } }
+        out
+    }
+    fn board_order(&self) -> Vec<String> { self.column_order(false) }
+    fn list_order(&self) -> Vec<String> { self.column_order(true) }
+    fn edit_column(&mut self, id: Option<String>, window: &mut Window, cx: &mut Context<Self>) {
+        if self.busy { return; }
+        let name = id.as_ref().map(|id| self.column_name(id)).unwrap_or_default();
+        let field = cx.new(|cx| InputState::new(window, cx).placeholder("Column name").default_value(name));
+        let (page, typed) = (cx.entity().downgrade(), field.clone());
+        window.open_alert_dialog(cx, move |dialog, _, _| {
+            let (page, field, id) = (page.clone(), typed.clone(), id.clone());
+            dialog.title(if id.is_some() { "Rename column" } else { "Add column" }).width(px(340.)).child(Input::new(&typed))
+                .button_props(DialogButtonProps::default().ok_text("Save").show_cancel(true)).on_ok(move |_, _, cx| {
+                    let name = field.read(cx).value().trim().to_owned();
+                    if name.is_empty() || name.chars().count() > 80 { return false; }
+                    page.update(cx, |this, cx| {
+                        let mut columns = this.definitions();
+                        if let Some(id) = &id { for c in &mut columns { if c["id"] == *id { c["name"] = json!(name); } } }
+                        else if columns.len() < 32 { columns.push(json!({"id":threadbear_core::notes::new_id(),"name":name,"status":"todo"})); }
+                        this.set_pref("columns", json!(columns), cx);
+                    }).ok();
+                    true
+                })
+        });
+        field.update(cx, |f, cx| f.focus(window, cx));
+        crate::web_panels::keyboard_to_app(window);
     }
     fn manual(&self) -> bool {
         self.prefs["sort"].as_str().unwrap_or("manual") == "manual"
@@ -296,7 +361,7 @@ impl TasksPage {
         let typed = !self.composer.read(cx).value().trim().is_empty();
         typed || !self.column_input.read(cx).value().trim().is_empty()
             || match self.editing_baseline.as_ref() {
-                Some(row) => title != row.title || notes != row.notes || self.status != row.status || self.project != row.project,
+                Some(row) => title != row.title || notes != row.notes || self.status != column_id(row) || self.project != row.project,
                 None => !title.is_empty() || !notes.is_empty(),
             }
     }
@@ -305,6 +370,33 @@ impl TasksPage {
             self.composer.update(cx, |c, cx| c.focus(window, cx));
             crate::web_panels::keyboard_to_app(window);
         }
+    }
+    // GPUI has no HTTP client in this app. Fetch storage bytes off the UI
+    // thread, then use the same in-memory image path as other native pictures.
+    fn load_photo(&mut self, url: String, cx: &mut Context<Self>) {
+        let source = url.clone();
+        let fetch = cx.background_executor().spawn(async move {
+            let agent: ureq::Agent = ureq::Agent::config_builder()
+                .timeout_global(Some(std::time::Duration::from_secs(20))).build().into();
+            let mut response = agent.get(&source).call().map_err(|e| e.to_string())?;
+            let bytes = response.body_mut().with_config().limit(10 * 1024 * 1024).read_to_vec().map_err(|e| e.to_string())?;
+            let format = crate::viewer::format_of("", &bytes).ok_or("Unsupported picture format")?;
+            let reader = image::ImageReader::new(std::io::Cursor::new(&bytes)).with_guessed_format().map_err(|e| e.to_string())?;
+            let (w, h) = reader.into_dimensions().map_err(|e| e.to_string())?;
+            Ok::<_, String>((std::sync::Arc::new(Image::from_bytes(format, bytes)), (w as f32, h as f32)))
+        });
+        cx.spawn(async move |this, cx| {
+            let result = fetch.await;
+            this.update(cx, |this, cx| {
+                // An earlier request must not replace a newer photo or removal.
+                if this.photo.as_deref() != Some(url.as_str()) { return; }
+                match result {
+                    Ok(image) => this.photo_image = Some(image),
+                    Err(_) => this.error = Some("Could not load the background photo. Choose it again to retry.".into()),
+                }
+                cx.notify();
+            }).ok();
+        }).detach();
     }
     fn refresh(&mut self, cx: &mut Context<Self>) {
         if self.loading {
@@ -343,7 +435,12 @@ impl TasksPage {
                     Ok((prefs, rows, projects, photo)) => {
                         this.prefs = prefs;
                         this.projects = projects.as_array().cloned().unwrap_or_default();
-                        this.photo = photo.as_str().map(String::from);
+                        let photo = photo.as_str().map(String::from);
+                        if this.photo != photo {
+                            this.photo = photo.clone();
+                            this.photo_image = None;
+                            if let Some(url) = photo { this.load_photo(url, cx); }
+                        }
                         if let Some(id) = this.project_filter_id.take() {
                             if let Some(p) = this.projects.iter().find(|p| p["id"] == id) {
                                 this.filter = json!({"runnerId":p["runnerId"],"id":p["id"]});
@@ -413,6 +510,7 @@ impl TasksPage {
         if let Some(row) = self.rows.iter_mut().find(|r| r.id == id) {
             if let Some(s) = patch["status"].as_str() {
                 row.status = s.into();
+                row.column_id = Some(patch["columnId"].as_str().unwrap_or(s).into());
             }
             if let Some(p) = patch["position"].as_f64() {
                 row.position = p;
@@ -480,8 +578,26 @@ impl TasksPage {
     }
     fn complete(&mut self, task: &TaskRow, cx: &mut Context<Self>) {
         let next = if task.status == "done" { "todo" } else { "done" };
-        let undo = (next == "done").then(|| (format!("Done: {}", task.title), json!({"id": task.id, "status": task.status})));
+        let undo = (next == "done").then(|| (format!("Done: {}", task.title), json!({"id": task.id, "status": task.status,"columnId":column_id(task)})));
         self.patch(&task.id.clone(), json!({"status": next}), undo, cx);
+    }
+    fn ask_delete(&mut self, id: String, window: &mut Window, cx: &mut Context<Self>) {
+        if self.busy { return; }
+        let Some(title) = self.rows.iter().find(|r| r.id == id).map(|r| r.title.clone()) else { return };
+        let page = cx.entity().downgrade();
+        window.open_alert_dialog(cx, move |alert, _, _| {
+            let (page, id) = (page.clone(), id.clone());
+            alert.title(format!("Delete {title}?"))
+                .description("You can undo this afterward.")
+                .button_props(DialogButtonProps::default().ok_text("Delete task").cancel_text("Keep task").show_cancel(true))
+                .on_ok(move |_, window, cx| {
+                    page.update(cx, |this, cx| {
+                        this.delete(&id, cx);
+                        if this.editing.as_deref() == Some(id.as_str()) { this.close_editor(window, cx); }
+                    }).ok();
+                    true
+                })
+        });
     }
     fn delete(&mut self, id: &str, cx: &mut Context<Self>) {
         let before = self.rows.clone();
@@ -499,13 +615,13 @@ impl TasksPage {
             return;
         }
         let project = if group != "all" { self.group_project(group) } else if self.filter.is_object() { self.filter.clone() } else { Value::Null };
-        let position = self.rows.iter().filter(|r| r.status == status).map(|r| r.position).min_by(f64::total_cmp).map_or(crate::now_ms() as f64, |p| p - 1000.);
+        let position = self.rows.iter().filter(|r| column_id(r) == status).map(|r| r.position).min_by(f64::total_cmp).map_or(crate::now_ms() as f64, |p| p - 1000.);
         let id = threadbear_core::notes::new_id();
-        self.rows.push(TaskRow { id: id.clone(), title: title.clone(), notes: notes.clone(), status: status.into(), project: (!project.is_null()).then(|| project.clone()), position, created_at: crate::now_ms() as f64 });
+        self.rows.push(TaskRow { id: id.clone(), title: title.clone(), notes: notes.clone(), status: self.canonical(status), column_id: Some(status.into()), thread: None, thread_command_id: None, thread_error: None, project: (!project.is_null()).then(|| project.clone()), position, created_at: crate::now_ms() as f64 });
         self.busy = true;
         self.error = None;
         cx.notify();
-        let args = json!({"id": id, "title": title, "notes": notes, "status": status, "project": project, "position": position});
+        let args = json!({"id": id, "title": title, "notes": notes, "status": self.canonical(status), "columnId":status, "project": project, "position": position});
         let client = self.client.clone();
         // Keep the input until the server accepts it; a rejected quick-add is retryable.
         cx.spawn_in(window, async move |this, cx| {
@@ -544,11 +660,11 @@ impl TasksPage {
         if title.trim().is_empty() {
             return;
         }
-        let mut args = json!({"title": title, "notes": self.notes.read(cx).value().to_string(), "status": self.status, "project": self.project});
+        let mut args = json!({"title": title, "notes": self.notes.read(cx).value().to_string(), "status": self.canonical(&self.status), "columnId":self.status, "project": self.project});
         let method = if self.editing_baseline.is_some() { "tasks.update" } else { "tasks.create" };
         if let Some(base) = &self.editing_baseline {
             // Send only what changed here, so another device's edits survive.
-            let original = json!({"title":base.title,"notes":base.notes,"status":base.status,"project":base.project});
+            let original = json!({"title":base.title,"notes":base.notes,"status":base.status,"columnId":column_id(base),"project":base.project});
             args.as_object_mut().unwrap().retain(|key, value| original[key] != *value);
         }
         args["id"] = json!(self.editing.as_ref().unwrap_or(&self.draft_id));
@@ -566,10 +682,15 @@ impl TasksPage {
                 this.busy = false;
                 match result {
                     Ok(_) => {
+                        if this.send_after_save {
+                            this.send_after_save = false;
+                            let id = this.editing.clone().unwrap_or_else(|| this.draft_id.clone());
+                            this.change("tasks.startThread", json!({"id":id}), cx);
+                        }
                         this.close_editor(window, cx);
                         this.refresh(cx);
                     }
-                    Err(e) => this.error = Some(e.message),
+                    Err(e) => { this.send_after_save = false; this.error = Some(e.message); },
                 }
                 cx.notify();
             })
@@ -584,7 +705,7 @@ impl TasksPage {
         self.draft_id = threadbear_core::notes::new_id();
         self.title.update(cx, |f, cx| f.set_value("", window, cx));
         self.notes.update(cx, |f, cx| f.set_value("", window, cx));
-        self.focus_composer(window, cx);
+        window.focus(&self.focus, cx);
     }
     fn open_editor(&mut self, task: &TaskRow, notes_first: bool, window: &mut Window, cx: &mut Context<Self>) {
         if self.busy || (self.editor_open && self.draft_dirty_editor(cx)) {
@@ -593,9 +714,10 @@ impl TasksPage {
             return;
         }
         self.editor_open = true;
+        self.selected_task = Some(task.id.clone());
         self.editing = Some(task.id.clone());
         self.editing_baseline = Some(task.clone());
-        self.status = task.status.clone();
+        self.status = column_id(task).to_string();
         self.project = task.project.clone();
         self.title.update(cx, |f, cx| f.set_value(task.title.clone(), window, cx));
         self.notes.update(cx, |f, cx| f.set_value(task.notes.clone(), window, cx));
@@ -612,7 +734,7 @@ impl TasksPage {
         let title = self.title.read(cx).value().to_string();
         let notes = self.notes.read(cx).value().to_string();
         match self.editing_baseline.as_ref() {
-            Some(row) => title != row.title || notes != row.notes || self.status != row.status || self.project != row.project,
+            Some(row) => title != row.title || notes != row.notes || self.status != column_id(row) || self.project != row.project,
             None => !title.is_empty() || !notes.is_empty(),
         }
     }
@@ -637,6 +759,64 @@ impl TasksPage {
         });
         rows
     }
+    // Navigate in the same group/column order that is drawn, skipping folded sections.
+    fn pane_scroll(&self, key: &str) -> ScrollHandle {
+        self.scrolls.borrow_mut().entry(key.to_string()).or_insert_with(ScrollHandle::new).clone()
+    }
+    fn bounds_marker(&self, key: String) -> AnyElement {
+        let bounds = self.task_bounds.clone();
+        canvas(move |rect, _, _| { bounds.borrow_mut().insert(key.clone(), rect); }, |_, _, _, _| {})
+            .absolute().inset_0().size_full().into_any_element()
+    }
+    fn reveal(&self, key: &str, scroll: &ScrollHandle, horizontal: bool) {
+        let Some(bounds) = self.task_bounds.borrow().get(key).copied() else { return };
+        let pane = scroll.bounds();
+        let mut offset = scroll.offset();
+        if horizontal {
+            if bounds.right() > pane.right() { offset.x -= bounds.right() - pane.right(); }
+            else if bounds.left() < pane.left() { offset.x += pane.left() - bounds.left(); }
+        } else {
+            if bounds.bottom() > pane.bottom() { offset.y -= bounds.bottom() - pane.bottom(); }
+            else if bounds.top() < pane.top() { offset.y += pane.top() - bounds.top(); }
+        }
+        scroll.set_offset(offset);
+    }
+    fn navigate_task(&mut self, key: &str, window: &mut Window, cx: &mut Context<Self>) {
+        let rows = self.visible();
+        let board = self.view_name() == "board";
+        let order = if board { self.board_order() } else { self.list_order() };
+        let mut visible = Vec::new();
+        for group in self.groups(&rows) {
+            if self.collapsed.contains(&format!("project:{group}")) { continue; }
+            for column in &order {
+                if !board && ((!self.show_done && self.canonical(column) == "done") || self.collapsed.contains(&format!("status:{group}:{column}"))) { continue; }
+                visible.extend(rows.iter().filter(|r| column_id(r) == column && (group == "all" || project_key(&r.project) == group)).cloned());
+            }
+        }
+        if visible.is_empty() { return; }
+        let current = visible.iter().position(|t| Some(&t.id) == self.selected_task.as_ref());
+        if key == "enter" {
+            if let Some(index) = current { self.open_editor(&visible[index], false, window, cx); }
+        } else {
+            let index = match (key, current) {
+                ("up", Some(i)) => i.saturating_sub(1),
+                ("up", None) => visible.len() - 1,
+                (_, Some(i)) => (i + 1).min(visible.len() - 1),
+                _ => 0,
+            };
+            let selected = &visible[index];
+            self.selected_task = Some(selected.id.clone());
+            if board {
+                let group = if self.by_project() { project_key(&selected.project) } else { "all".into() };
+                let column = format!("column:{group}:{}", column_id(selected));
+                self.reveal(&column, &self.scroll, false);
+                self.reveal(&column, &self.pane_scroll(&format!("board:{group}")), true);
+                self.reveal(&selected.id, &self.pane_scroll(&column), false);
+            } else { self.reveal(&selected.id, &self.scroll, false); }
+            window.focus(&self.focus, cx);
+            cx.notify();
+        }
+    }
     fn groups(&self, visible: &[TaskRow]) -> Vec<String> {
         if !self.by_project() {
             return vec!["all".into()];
@@ -649,8 +829,8 @@ impl TasksPage {
         if before == Some(drag.id.as_str()) {
             return;
         }
-        let peers: Vec<(String, f64)> = self.visible().into_iter().filter(|r| r.status == status && r.id != drag.id && (group == "all" || project_key(&r.project) == group)).map(|r| (r.id, r.position)).collect();
-        let mut patch = json!({"status": status});
+        let peers: Vec<(String, f64)> = self.visible().into_iter().filter(|r| column_id(r) == status && r.id != drag.id && (group == "all" || project_key(&r.project) == group)).map(|r| (r.id, r.position)).collect();
+        let mut patch = json!({"status": self.canonical(status),"columnId":status});
         if self.manual() {
             patch["position"] = json!(task_order::position_at(&peers, before, crate::now_ms() as f64));
         }
@@ -663,7 +843,7 @@ impl TasksPage {
         let order = if list { self.list_order() } else { self.board_order() };
         let next = task_order::move_to(&order, &drag.0, target);
         if next != order {
-            self.set_pref(if list { "listOrder" } else { "columnOrder" }, json!(next), cx);
+            self.set_pref(if list { "sectionOrder" } else { "boardColumnOrder" }, json!(next), cx);
         }
     }
     fn drop_project(&mut self, drag: &ProjectDrag, target: &str, cx: &mut Context<Self>) {
@@ -674,11 +854,19 @@ impl TasksPage {
         }
     }
 
+    fn send_task(&mut self, row: &TaskRow, window: &mut Window, cx: &mut Context<Self>) {
+        if let Some(id) = row.thread.as_ref().and_then(|v| v["id"].as_str()).map(String::from) {
+            let app = self.app.clone();
+            app.update(cx, |app, cx| { app.close_tasks(cx); app.open_thread_link(&id, window, cx); }).ok();
+        } else if let Some(error) = &row.thread_error { self.error = Some(error.clone()); cx.notify(); }
+        else if row.thread_command_id.is_none() && !self.busy { self.change("tasks.startThread", json!({"id":row.id}), cx); }
+    }
     fn more_menu(&self, task: &TaskRow, cx: &mut Context<Self>) -> AnyElement {
         let page = cx.entity().downgrade();
         let t = task.clone();
         let projects = self.project_choices();
         let statuses = if self.view_name() == "list" { self.list_order() } else { self.board_order() };
+        let labels: Vec<String> = statuses.iter().map(|s| self.column_name(s)).collect();
         Button::new(SharedString::from(format!("task-more-{}", task.id)))
             .icon(icons::symbol("ellipsis"))
             .ghost()
@@ -694,6 +882,9 @@ impl TasksPage {
                 menu = menu.item(PopupMenuItem::new(if t.notes.is_empty() { "Add Note" } else { "Edit Note" }).icon(icons::symbol("note.text")).on_click(move |_, window, cx| {
                     p.update(cx, |p, cx| p.open_editor(&row, true, window, cx)).ok();
                 }));
+                let (p, row) = (page.clone(), t.clone());
+                let label = if row.thread.is_some() { "View Thread" } else if row.thread_error.is_some() { "Thread Failed" } else if row.thread_command_id.is_some() { "Starting Thread…" } else { "Send to Thread" };
+                menu = menu.item(PopupMenuItem::new(label).on_click(move |_, window, cx| { p.update(cx, |p, cx| p.send_task(&row, window, cx)).ok(); }));
                 let (p, row, choices) = (page.clone(), t.clone(), projects.clone());
                 menu = menu.submenu_with_icon(Some(icons::symbol("square.stack")), "Move to Project", window, cx, move |sub, _, _| {
                     let mut sub = sub;
@@ -707,16 +898,16 @@ impl TasksPage {
                     sub
                 });
                 menu = menu.separator();
-                for status in &statuses {
+                for (index, status) in statuses.iter().enumerate() {
                     let (p, id, status) = (page.clone(), t.id.clone(), status.clone());
                     let icon = status_icon(&status, cx);
-                    menu = menu.item(PopupMenuItem::new(status_name(&status)).icon(icon).checked(t.status == status).on_click(move |_, _, cx| {
-                        p.update(cx, |p, cx| p.patch(&id, json!({"status": status}), None, cx)).ok();
+                    menu = menu.item(PopupMenuItem::new(labels[index].clone()).icon(icon).checked(column_id(&t) == status).on_click(move |_, _, cx| {
+                        p.update(cx, |p, cx| p.patch(&id, json!({"status": p.canonical(&status),"columnId":status}), None, cx)).ok();
                     }));
                 }
                 let (p, id) = (page.clone(), t.id.clone());
-                menu.separator().item(PopupMenuItem::new("Delete").icon(icons::symbol("trash")).on_click(move |_, _, cx| {
-                    p.update(cx, |p, cx| p.delete(&id, cx)).ok();
+                menu.separator().item(PopupMenuItem::new("Delete").icon(icons::symbol("trash")).on_click(move |_, window, cx| {
+                    p.update(cx, |p, cx| p.ask_delete(id.clone(), window, cx)).ok();
                 }))
             })
             .into_any_element()
@@ -732,12 +923,14 @@ impl TasksPage {
         let id = task.id.clone();
         let next = if task.status == "done" { "not done" } else { "done" };
         let (done, accent, hover) = (task.status == "done", style::accent(cx), style::hover_fill(cx));
-        let (drop_status, drop_group, drop_before) = (task.status.clone(), group.to_string(), task.id.clone());
+        let (drop_status, drop_group, drop_before) = (column_id(task).to_string(), group.to_string(), task.id.clone());
         let check_task = task.clone();
         let edit = task.clone();
         h_flex()
             .id(SharedString::from(format!("task-{id}")))
             .group("task-row")
+            .relative().child(self.bounds_marker(id.clone()))
+            .when(self.selected_task.as_deref() == Some(id.as_str()), |d| d.bg(style::accent(cx).opacity(0.12)))
             .items_start()
             .gap(px(8.))
             .px(px(6.))
@@ -778,7 +971,7 @@ impl TasksPage {
     fn card(&self, task: &TaskRow, group: &str, cx: &mut Context<Self>) -> AnyElement {
         let id = task.id.clone();
         let (accent, edge) = (style::accent(cx), style::card_border(cx));
-        let (drop_status, drop_group, drop_before) = (task.status.clone(), group.to_string(), task.id.clone());
+        let (drop_status, drop_group, drop_before) = (column_id(task).to_string(), group.to_string(), task.id.clone());
         let edit = task.clone();
         let done = task.status == "done";
         v_flex()
@@ -786,13 +979,14 @@ impl TasksPage {
             .role(Role::Button)
             .aria_label(SharedString::from(format!("Open {}", task.title)))
             .group("task-card")
+            .relative().child(self.bounds_marker(id.clone()))
             .gap(px(6.))
             .p(px(10.))
             .pl(px(12.))
             .mb(px(6.))
             .rounded(px(8.))
             .border_1()
-            .border_color(edge)
+            .border_color(if self.selected_task.as_deref() == Some(id.as_str()) { accent } else { edge })
             .bg(cx.theme().background).shadow_sm()
             .cursor_grab()
             .on_drag(TaskDrag { id: id.clone(), title: task.title.clone() }, |drag, _, _, cx| cx.new(|_| Ghost(drag.title.clone())))
@@ -840,14 +1034,15 @@ impl TasksPage {
             .into_any_element()
     }
     fn list_section(&self, status: &str, group: &str, rows: &[TaskRow], dragging: bool, cx: &mut Context<Self>) -> Option<AnyElement> {
-        let items: Vec<&TaskRow> = rows.iter().filter(|r| r.status == status && (group == "all" || project_key(&r.project) == group)).collect();
+        let items: Vec<&TaskRow> = rows.iter().filter(|r| column_id(r) == status && (group == "all" || project_key(&r.project) == group)).collect();
         if items.is_empty() && !dragging {
             return None;
         }
         let key = format!("status:{group}:{status}");
         let (accent, soft) = (style::accent(cx), style::accent(cx).opacity(0.08));
         let (s1, g1, s2) = (status.to_string(), group.to_string(), status.to_string());
-        let label = h_flex().gap(px(8.)).child(status_icon(status, cx)).child(status_name(status)).into_any_element();
+        let label = h_flex().gap(px(8.)).child(status_icon(&self.canonical(status), cx)).child(self.column_name(status)).into_any_element();
+        let drag_name = self.column_name(status);
         let header = h_flex()
             .id(SharedString::from(format!("section-{key}")))
             .h(px(32.))
@@ -857,10 +1052,10 @@ impl TasksPage {
             .text_size(px(13.))
             .font_weight(FontWeight::MEDIUM)
             .cursor_grab()
-            .on_drag(StatusDrag(status.to_string()), |drag, _, _, cx| cx.new(|_| Ghost(status_name(&drag.0).into())))
+            .on_drag(StatusDrag(status.to_string()), move |_, _, _, cx| cx.new(|_| Ghost(drag_name.clone())))
             .drag_over::<StatusDrag>(move |s, _, _, _| s.border_t_2().border_color(accent))
             .on_drop(cx.listener(move |this, drag: &StatusDrag, _, cx| this.drop_status(drag, &s2, true, cx)))
-            .child(self.fold(key.clone(), status_name(status).into(), label, items.len(), cx));
+            .child(self.fold(key.clone(), self.column_name(status), label, items.len(), cx));
         let mut section = v_flex()
             .id(SharedString::from(key.clone()))
             .mb(px(14.))
@@ -911,14 +1106,13 @@ impl TasksPage {
                 .border_1()
                 .border_color(style::card_border(cx))
                 .bg(style::card_background(cx))
-                .child(div().mt(px(5.)).size(px(14.)).rounded(px(4.)).border_1().border_dashed().border_color(style::tertiary_label(cx)))
                 .child(div().flex_1().child(Textarea::new(&self.composer).appearance(false).disabled(self.busy)))
                 .child(Button::new("tasks-add").icon(icons::symbol("arrow.up")).small().primary().loading(self.busy).disabled(self.busy).tooltip("Add task (Return)").on_click(cx.listener(|this, _, window, cx| this.submit_composer(window, cx)))),
         );
         if rows.is_empty() && !self.loading {
             return out.child(v_flex().items_center().gap(px(10.)).py(px(64.)).text_color(style::tertiary_label(cx)).child(status_icon("todo", cx)).child("Nothing here yet. Type a task above and press Return.")).into_any_element();
         }
-        let statuses: Vec<String> = self.list_order().into_iter().filter(|s| s != "done" || self.show_done).collect();
+        let statuses: Vec<String> = self.list_order().into_iter().filter(|s| self.canonical(s) != "done" || self.show_done).collect();
         for group in self.groups(rows) {
             let mut block = v_flex().mb(px(18.));
             if group != "all" {
@@ -958,12 +1152,13 @@ impl TasksPage {
         out.into_any_element()
     }
     fn board_columns(&self, group: &str, rows: &[TaskRow], cx: &mut Context<Self>) -> AnyElement {
-        let mut columns = h_flex().id(SharedString::from(format!("columns-{group}"))).items_start().gap(px(12.)).overflow_x_scroll().pb(px(8.));
+        let mut columns = h_flex().id(SharedString::from(format!("columns-{group}"))).items_start().w_full().min_w_0().max_w_full().gap(px(12.)).overflow_x_scroll().track_scroll(&self.pane_scroll(&format!("board:{group}"))).pb(px(8.));
         for status in self.board_order() {
-            let items: Vec<&TaskRow> = rows.iter().filter(|r| r.status == status && (group == "all" || project_key(&r.project) == group)).collect();
+            let items: Vec<&TaskRow> = rows.iter().filter(|r| column_id(r) == status && (group == "all" || project_key(&r.project) == group)).collect();
             let (accent, soft) = (style::accent(cx), style::accent(cx).opacity(0.08));
             let (s1, g1, s2, s3, g3) = (status.clone(), group.to_string(), status.clone(), status.clone(), group.to_string());
             let adding = self.adding_in.as_ref() == Some(&(group.to_string(), status.clone()));
+            let drag_name = self.column_name(&status);
             let header = h_flex()
                 .id(SharedString::from(format!("column-head-{group}-{status}")))
                 .h(px(34.))
@@ -973,11 +1168,11 @@ impl TasksPage {
                 .font_weight(FontWeight::MEDIUM)
                 .cursor_grab()
                 .tip("Drag to reorder columns")
-                .on_drag(StatusDrag(status.clone()), |drag, _, _, cx| cx.new(|_| Ghost(status_name(&drag.0).into())))
+                .on_drag(StatusDrag(status.clone()), move |_, _, _, cx| cx.new(|_| Ghost(drag_name.clone())))
                 .drag_over::<StatusDrag>(move |s, _, _, _| s.border_l_2().border_color(accent))
                 .on_drop(cx.listener(move |this, drag: &StatusDrag, _, cx| this.drop_status(drag, &s2, false, cx)))
-                .child(status_icon(&status, cx))
-                .child(status_name(&status))
+                .child(status_icon(&self.canonical(&status), cx))
+                .child(Button::new(SharedString::from(format!("rename-{group}-{status}"))).label(self.column_name(&status)).ghost().small().tooltip("Rename column").on_click({ let id = status.clone(); cx.listener(move |this, _, window, cx| this.edit_column(Some(id.clone()), window, cx)) }))
                 .child(div().text_color(style::tertiary_label(cx)).child(items.len().to_string()))
                 .child(div().flex_1())
                 .child(
@@ -985,7 +1180,7 @@ impl TasksPage {
                         .icon(icons::symbol("plus"))
                         .ghost()
                         .xsmall()
-                        .tooltip(format!("Add a task to {}", status_name(&status)))
+                        .tooltip(format!("Add a task to {}", self.column_name(&status)))
                         .on_click(cx.listener(move |this, _, window, cx| {
                             this.adding_in = Some((g3.clone(), s3.clone()));
                             this.column_input.update(cx, |c, cx| {
@@ -996,8 +1191,10 @@ impl TasksPage {
                             cx.notify();
                         })),
                 );
+            let column_key = format!("column:{group}:{status}");
             let mut column = v_flex()
                 .id(SharedString::from(format!("column-{group}-{status}")))
+                .relative().child(self.bounds_marker(column_key.clone()))
                 .flex_none()
                 .w(px(280.))
                 .min_h(px(160.))
@@ -1007,18 +1204,28 @@ impl TasksPage {
                 .drag_over::<TaskDrag>(move |s, _, _, _| s.bg(soft))
                 .on_drop(cx.listener(move |this, drag: &TaskDrag, _, cx| this.drop_task(drag, &s1, &g1, None, cx)))
                 .child(header);
+            let mut cards = v_flex().id(SharedString::from(format!("cards-{group}-{status}"))).min_h_0()
+                .max_h(px((self.viewport_height - 210.).max(140.))).overflow_y_scroll().track_scroll(&self.pane_scroll(&column_key));
             if adding {
-                column = column.child(div().mb(px(6.)).child(Input::new(&self.column_input).small().disabled(self.busy)));
+                cards = cards.child(div().mb(px(6.)).child(Input::new(&self.column_input).small().disabled(self.busy)));
             }
             for task in &items {
-                column = column.child(self.card(task, group, cx));
+                cards = cards.child(self.card(task, group, cx));
             }
-            if items.is_empty() && !adding {
-                column = column.child(div().py(px(18.)).text_center().text_size(px(12.)).text_color(style::tertiary_label(cx)).child("Drop tasks here"));
+            column = column.child(cards);
+            if !adding {
+                let (group, status) = (group.to_string(), status.clone());
+                column = column.child(Button::new(SharedString::from(format!("empty-add-{group}-{status}")))
+                    .label("Add a task").ghost().small().w_full().min_h(px(if items.is_empty() { 100. } else { 28. })).tooltip("Add a task in this column").disabled(self.busy)
+                    .on_click(cx.listener(move |this, _, window, cx| {
+                        this.adding_in = Some((group.clone(), status.clone()));
+                        this.column_input.update(cx, |input, cx| { input.set_value("", window, cx); input.focus(window, cx); });
+                        cx.notify();
+                    })));
             }
             columns = columns.child(column);
         }
-        columns.into_any_element()
+        columns.child(Button::new(SharedString::from(format!("new-column-{group}"))).label("Add column").small().ghost().tooltip("Add a board column").disabled(self.busy || self.definitions().len() >= 32).on_click(cx.listener(|this, _, window, cx| this.edit_column(None, window, cx)))).into_any_element()
     }
     fn board_view(&self, rows: &[TaskRow], cx: &mut Context<Self>) -> AnyElement {
         if !self.by_project() {
@@ -1104,41 +1311,49 @@ impl TasksPage {
             })
             .into_any_element()
     }
+    fn upload_photo(&mut self, path: std::path::PathBuf, cx: &mut Context<Self>) {
+        if self.busy { return; }
+        self.busy = true;
+        self.error = None;
+        cx.notify();
+        let client = self.client.clone();
+        cx.spawn(async move |this, cx| {
+            // Read in the process granted access by the picker, off the UI thread.
+            let image = cx.background_executor().spawn(async move {
+                let read = threadbear_core::local_files::read(&json!({"path":path,"maxBytes":10*1024*1024})).map_err(|e| format!("Could not read that photo: {e}"))?;
+                if read["truncated"] == true { return Err("Choose a photo under 10 MB.".to_string()); }
+                Ok(read["data"].clone())
+            }).await;
+            let result = match image {
+                Ok(base64) => call(client, "tasks.photoData", json!({"base64":base64})).await.map_err(|e| e.message),
+                Err(error) => Err(error),
+            };
+            this.update(cx, |this, cx| {
+                this.busy = false;
+                match result { Ok(_) => this.refresh(cx), Err(error) => this.error = Some(error) }
+                cx.notify();
+            }).ok();
+        }).detach();
+    }
     fn choose_photo(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         let paths = cx.prompt_for_paths(PathPromptOptions { files: true, directories: false, multiple: false, prompt: Some("Choose".into()) });
         cx.spawn_in(window, async move |this, cx| {
-            if let Ok(Ok(Some(paths))) = paths.await {
-                if let Some(path) = paths.first() {
-                    let path = path.to_string_lossy().to_string();
-                    this.update(cx, |this, cx| this.change("tasks.photoFile", json!({"path": path}), cx)).ok();
-                }
+            match paths.await {
+                Ok(Ok(Some(paths))) => if let Some(path) = paths.first() {
+                    this.update(cx, |this, cx| this.upload_photo(path.clone(), cx)).ok();
+                },
+                Ok(Ok(None)) => {},
+                _ => { this.update(cx, |this, cx| { this.error = Some("Could not open the photo picker. Try again, or drop a photo here.".into()); cx.notify(); }).ok(); }
             }
-        })
-        .detach();
+        }).detach();
     }
     fn customize_panel(&self, cx: &mut Context<Self>) -> AnyElement {
-        let current = self.prefs["backgroundColor"].as_str().unwrap_or("").to_string();
-        let mut swatches = h_flex().gap(px(6.)).flex_wrap();
-        for (i, color) in ["", "#f6f4ef", "#eef3f8", "#f3eef7", "#1b1d22", "#14211d", "#221a17"].into_iter().enumerate() {
-            let fill = u32::from_str_radix(color.trim_start_matches('#'), 16).ok().map(|c| Hsla::from(rgb(c)));
-            let chosen = current == color;
-            swatches = swatches.child(
-                div()
-                    .id(("tasks-swatch", i))
-                    .role(Role::Button)
-                    .aria_label(SharedString::from(if color.is_empty() { "Use the theme background".to_string() } else { format!("Use {color}") }))
-                    .aria_selected(chosen)
-                    .size(px(24.))
-                    .rounded_full()
-                    .border_1()
-                    .border_color(if chosen { style::accent(cx) } else { style::card_border(cx) })
-                    .when(chosen, |d| d.border_2())
-                    .bg(fill.unwrap_or(cx.theme().background))
-                    .when(fill.is_none(), |d| d.child(div().size_full().flex().items_center().justify_center().child(icons::symbol("circle.lefthalf.filled").with_size(px(14.)).text_color(style::secondary_label(cx)))))
-                    .cursor_pointer()
-                    .tip(if color.is_empty() { "Use the theme background".to_string() } else { format!("Use {color}") })
-                    .on_click(cx.listener(move |this, _, _, cx| this.set_pref("backgroundColor", json!(color), cx))),
-            );
+        let mut swatches = h_flex().gap(px(6.));
+        for (name, appearance) in [("Light", style::Appearance::Light), ("Dark", style::Appearance::Dark)] {
+            swatches = swatches.child(Button::new(SharedString::from(format!("task-theme-{name}"))).label(name).small().outline().tooltip(format!("Use {name} appearance in Tasks and the app")).on_click(cx.listener(move |this, _, window, cx| {
+                this.app.update(cx, |app, cx| app.set_appearance(appearance, window, cx)).ok();
+                this.change("tasks.setPreferences", json!({"theme":appearance.name(),"backgroundColor":""}), cx);
+            })));
         }
         let has_photo = self.photo.is_some();
         let mut panel = v_flex()
@@ -1153,20 +1368,17 @@ impl TasksPage {
             .shadow_lg()
             .on_drop(cx.listener(|this, paths: &ExternalPaths, _, cx| {
                 if let Some(path) = paths.paths().first() {
-                    this.change("tasks.photoFile", json!({"path":path.to_string_lossy()}), cx);
+                    this.upload_photo(path.clone(), cx);
                 }
             }))
-            .child(div().text_size(px(12.)).text_color(style::secondary_label(cx)).child("Color"))
+            .child(div().text_size(px(12.)).text_color(style::secondary_label(cx)).child("Appearance"))
             .child(swatches)
-            .child(h_flex().gap(px(6.)).child(div().flex_1().child(Input::new(&self.color).small().disabled(self.busy))).child(Button::new("tasks-color").label("Apply").small().outline().tooltip("Use this hex color, like #1b1d22").disabled(self.busy).on_click(cx.listener(|this, _, _, cx| {
-                let value = this.color.read(cx).value().to_string();
-                this.set_pref("backgroundColor", json!(value), cx);
-            }))))
+            .when_some(self.error.clone(), |d, error| d.child(div().text_size(px(12.)).text_color(style::failed_text(cx)).child(error)))
             .child(div().text_size(px(12.)).text_color(style::secondary_label(cx)).child("Photo"))
             .child(
                 h_flex()
                     .gap(px(6.))
-                    .child(div().flex_1().child(Button::new("tasks-photo").label(if has_photo { "Change Photo…" } else { "Choose Photo…" }).small().outline().w_full().tooltip("A PNG, JPEG, WebP or GIF under 10 MB. You can drop one here too.").disabled(self.busy).on_click(cx.listener(|this, _, window, cx| this.choose_photo(window, cx)))))
+                    .child(div().flex_1().child(Button::new("tasks-photo").label(if has_photo { "Change Photo…" } else { "Choose Photo…" }).loading(self.busy).small().outline().w_full().tooltip("A PNG, JPEG, WebP or GIF under 10 MB. You can drop one here too.").disabled(self.busy).on_click(cx.listener(|this, _, window, cx| this.choose_photo(window, cx)))))
                     .when(has_photo, |d| d.child(Button::new("tasks-reset-background").label("Remove").small().outline().tooltip("Remove the photo").disabled(self.busy).on_click(cx.listener(|this, _, _, cx| this.set_pref("backgroundPhoto", Value::Null, cx))))),
             );
         if has_photo {
@@ -1189,11 +1401,12 @@ impl TasksPage {
         let page = cx.entity().downgrade();
         let status = self.status.clone();
         let statuses = self.board_order();
-        let status_button = Button::new("task-status").label(status_name(&status)).icon(status_icon(&status, cx)).small().outline().tooltip("Status").dropdown_menu(move |menu: PopupMenu, _, cx| {
+        let labels: Vec<String> = statuses.iter().map(|s| self.column_name(s)).collect();
+        let status_button = Button::new("task-status").label(self.column_name(&status)).icon(status_icon(&status, cx)).small().outline().tooltip("Status").dropdown_menu(move |menu: PopupMenu, _, cx| {
             let mut menu = menu;
-            for s in &statuses {
+            for (index, s) in statuses.iter().enumerate() {
                 let (p, s) = (page.clone(), s.clone());
-                menu = menu.item(PopupMenuItem::new(status_name(&s)).icon(status_icon(&s, cx)).checked(status == s).on_click(move |_, _, cx| {
+                menu = menu.item(PopupMenuItem::new(labels[index].clone()).icon(status_icon(&s, cx)).checked(status == s).on_click(move |_, _, cx| {
                     p.update(cx, |p, cx| {
                         p.status = s.clone();
                         cx.notify();
@@ -1222,6 +1435,14 @@ impl TasksPage {
         });
         let app = self.app.clone();
         let editing = self.editing_baseline.as_ref().map(|r| r.id.clone());
+        let linked = self.editing.as_ref().and_then(|id| self.rows.iter().find(|r| &r.id == id));
+        let send_label = match linked {
+            Some(row) if row.thread.is_some() => "View Thread",
+            Some(row) if row.thread_error.is_some() => "Thread Failed",
+            Some(row) if row.thread_command_id.is_some() => "Starting Thread…",
+            _ => "Send to Thread",
+        };
+        let starting = linked.is_some_and(|r| r.thread_command_id.is_some() && r.thread.is_none() && r.thread_error.is_none());
         let sheet = v_flex()
             .id("task-editor")
             .role(Role::Dialog)
@@ -1253,11 +1474,16 @@ impl TasksPage {
                 h_flex()
                     .gap(px(8.))
                     .when_some(editing, |d, id| d.child(Button::new("task-delete").label("Delete").small().ghost().tooltip("Delete the task. You can undo it.").on_click(cx.listener(move |this, _, window, cx| {
-                        this.delete(&id, cx);
-                        this.close_editor(window, cx);
+                        this.ask_delete(id.clone(), window, cx);
                     }))))
                     .child(div().flex_1())
                     .when_some(self.error.clone(), |d, e| d.child(div().text_size(px(12.)).text_color(style::failed_text(cx)).child(e.clone().test_text(e))))
+                    .child(Button::new("task-send-thread").label(send_label).small().outline().tooltip("Save this task and start a thread with its title, notes and project").disabled(self.busy || starting).loading(starting).on_click(cx.listener(|this, _, window, cx| {
+                        if let Some(row) = this.editing.as_ref().and_then(|id| this.rows.iter().find(|r| &r.id == id)).cloned() {
+                            if row.thread.is_some() || row.thread_command_id.is_some() { this.send_task(&row, window, cx); return; }
+                        }
+                        this.send_after_save = true; this.save(window, cx);
+                    })))
                     .child(Button::new("task-cancel").label("Cancel").small().outline().tooltip("Close without saving").on_click(cx.listener(|this, _, window, cx| this.close_editor(window, cx))))
                     .child(Button::new("save-task").label("Save").small().primary().loading(self.busy).tooltip("Save the task to your account").disabled(self.busy).on_click(cx.listener(|this, _, window, cx| this.save(window, cx)))),
             );
@@ -1283,6 +1509,7 @@ impl TasksPage {
 
 impl Render for TasksPage {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        self.viewport_height = f32::from(window.viewport_size().height) / style::zoomed(1.);
         let view = self.view_name();
         let rows = self.visible();
         let open = rows.iter().filter(|r| r.status != "done").count();
@@ -1298,10 +1525,6 @@ impl Render for TasksPage {
         let mut actions = h_flex().flex_1().min_w_0().flex_wrap().justify_end().gap(px(6.)).child(segment.flex_none()).child(self.display_menu(cx));
         actions = actions.child(Button::new("tasks-customize").label("Background").small().outline().selected(self.customize).tooltip("Background color and photo").on_click(cx.listener(|this, _, window, cx| {
             this.customize = !this.customize;
-            if this.customize {
-                let color = this.prefs["backgroundColor"].as_str().unwrap_or("").to_string();
-                this.color.update(cx, |f, cx| f.set_value(color, window, cx));
-            }
             cx.notify();
         })));
         if let Some(url) = self.app.read_with(cx, |app, _| app.website_url.clone()).ok().flatten() {
@@ -1327,8 +1550,32 @@ impl Render for TasksPage {
         let body = if view == "list" { self.list_view(&rows, cx) } else { self.board_view(&rows, cx) };
         let mut page = v_flex()
             .id("tasks-content")
+            .size_full()
+            .px(px(28.))
+            .pt(px(24.))
+            .text_color(style::label_text(cx))
+            .child(header);
+        if let Some(error) = self.error.clone().filter(|_| !self.editor_open) {
+            page = page.child(div().mb(px(10.)).text_size(px(13.)).text_color(style::failed_text(cx)).child(error.clone().test_text(error)));
+        }
+        page = page.child(div().id("tasks-scroll").w_full().min_w_0().flex_1().min_h_0().overflow_y_scroll().track_scroll(&self.scroll).pb(px(80.)).child(body));
+
+        let bg = cx.theme().background;
+        // The page, the toast and the editor sheet are all read by the scripted control.
+        let mut shell = div().id("tasks-page").test_support().relative().size_full().overflow_hidden().bg(bg)
             .key_context("TasksPage")
             .track_focus(&self.focus)
+            .on_key_down(cx.listener(|this, event: &KeyDownEvent, window, cx| {
+                if this.editor_open || this.busy { return; }
+                let modifiers = &event.keystroke.modifiers;
+                if modifiers.platform || modifiers.control || modifiers.alt || modifiers.shift { return; }
+                let key = event.keystroke.key.as_str();
+                let empty_composer = this.composer.read(cx).value().is_empty() && this.composer.read(cx).focus_handle(cx).is_focused(window);
+                if (this.focus.is_focused(window) || (empty_composer && key == "down")) && matches!(key, "up" | "down" | "enter") {
+                    this.navigate_task(key, window, cx);
+                    cx.stop_propagation();
+                }
+            }))
             .on_action(cx.listener(|this, _: &CloseTasks, window, cx| {
                 if this.editor_open {
                     this.close_editor(window, cx);
@@ -1342,31 +1589,16 @@ impl Render for TasksPage {
                     })
                     .ok();
                 });
-            }))
-            .size_full()
-            .px(px(28.))
-            .pt(px(24.))
-            .text_color(style::label_text(cx))
-            .child(header);
-        if let Some(error) = self.error.clone().filter(|_| !self.editor_open) {
-            page = page.child(div().mb(px(10.)).text_size(px(13.)).text_color(style::failed_text(cx)).child(error.clone().test_text(error)));
-        }
-        page = page.child(div().id("tasks-scroll").flex_1().min_h_0().overflow_y_scroll().track_scroll(&self.scroll).pb(px(80.)).child(body));
-
-        let bg = self.prefs["backgroundColor"].as_str().and_then(|c| u32::from_str_radix(c.trim_start_matches('#'), 16).ok()).map(|c| Hsla::from(rgb(c))).unwrap_or(cx.theme().background);
-        // The page, the toast and the editor sheet are all read by the scripted control.
-        let mut shell = div().id("tasks-page").test_support().relative().size_full().overflow_hidden().bg(bg);
-        if let Some(url) = &self.photo {
-            let resource = Resource::Uri(url.clone().into());
-            if let Some(Ok(image)) = window.use_asset::<ImgResourceLoader>(&resource, cx) {
-                let size = image.size(0);
+            }));
+        if self.photo.is_some() {
+            if let Some((image, size)) = &self.photo_image {
                 let y = match self.prefs["photoPosition"].as_str() {
                     Some("top") => 0.,
                     Some("bottom") => 1.,
                     _ => 0.5,
                 };
-                let (x, y, w, h) = threadbear_core::looks::BackdropFocus::new(0.5, y).frame((u32::from(size.width) as f32, u32::from(size.height) as f32), self.background_size);
-                shell = shell.child(img(url.clone()).absolute().left(px(x)).top(px(y)).w(px(w)).h(px(h)).object_fit(ObjectFit::Fill).opacity((1. - self.prefs["fade"].as_f64().unwrap_or(0.85)) as f32));
+                let (x, y, w, h) = threadbear_core::looks::BackdropFocus::new(0.5, y).frame(*size, self.background_size);
+                shell = shell.child(img(ImageSource::Image(image.clone())).id("tasks-background-photo").absolute().left(px(x)).top(px(y)).w(px(w)).h(px(h)).object_fit(ObjectFit::Fill).opacity((1. - self.prefs["fade"].as_f64().unwrap_or(0.85)) as f32));
             }
             let page = cx.entity().downgrade();
             shell = shell.child(
@@ -1430,6 +1662,7 @@ pub(crate) fn automation(app: &Entity<Threadbear>, cmd: &Value, window: &mut Win
     }
     let page = app.read(cx).tasks_page.clone().ok_or("Tasks experiment is off")?;
     page.update(cx, |p, cx| {
+        if let Some(path) = cmd["photoPath"].as_str() { p.upload_photo(path.into(), cx); }
         // `quick` types into the list's quick-add box and presses Return.
         if let Some(text) = cmd["quick"].as_str() {
             p.composer.update(cx, |f, cx| f.set_value(text.to_owned(), window, cx));

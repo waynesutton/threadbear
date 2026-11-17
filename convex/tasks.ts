@@ -3,7 +3,8 @@
 import { ConvexError, v } from 'convex/values';
 import { mutation, query, type QueryCtx, type MutationCtx } from './_generated/server';
 import { checkPhoneToken, runnerAuth } from './lib';
-import { fullColumnOrder, listStatuses, taskFields, taskPreferenceFields, taskProject, taskStatus } from './taskFields';
+import { mainRunner, queue } from './phone';
+import { fullColumnOrder, taskStatuses, listStatuses, taskFields, taskPreferenceFields, taskProject, taskStatus } from './taskFields';
 import type { Infer } from 'convex/values';
 
 const authField = v.union(v.object({ token: v.string() }), v.object({ key: v.string() }));
@@ -94,6 +95,7 @@ export const create = mutation({
     title: v.string(),
     notes: v.optional(v.string()),
     status: v.optional(taskStatus),
+    columnId: v.optional(v.string()),
     project: v.optional(v.union(taskProject, v.null())),
     // Where it sorts; left out, it goes last. API 84.
     position: v.optional(v.number()),
@@ -109,7 +111,7 @@ export const create = mutation({
       id: a.id,
       title: title(a.title),
       notes: text(a.notes ?? '', 20000, 'Notes'),
-      status: a.status ?? 'todo',
+      ...(await columnFields(ctx, a.columnId, a.status)),
       project: a.project ?? null,
       position: a.position !== undefined && Number.isFinite(a.position) ? a.position : now,
       createdAt: now,
@@ -126,6 +128,7 @@ export const update = mutation({
     title: v.optional(v.string()),
     notes: v.optional(v.string()),
     status: v.optional(taskStatus),
+    columnId: v.optional(v.string()),
     project: v.optional(v.union(taskProject, v.null())),
     position: v.optional(v.number()),
   },
@@ -138,7 +141,8 @@ export const update = mutation({
     if (patch.title !== undefined) patch.title = title(patch.title);
     if (patch.notes !== undefined) text(patch.notes, 20000, 'Notes');
     if (patch.position !== undefined && !Number.isFinite(patch.position)) bad('Invalid position');
-    await ctx.db.patch(row._id, { ...patch, updatedAt: await changedAt(ctx) });
+    const column = patch.columnId !== undefined || patch.status !== undefined ? await columnFields(ctx, patch.columnId, patch.status) : {};
+    await ctx.db.patch(row._id, { ...patch, ...column, updatedAt: await changedAt(ctx) });
     return null;
   },
 });
@@ -167,6 +171,18 @@ const prefRow = (ctx: Ctx) =>
     .query('taskPreferences')
     .withIndex('by_name', (q) => q.eq('name', 'tasks'))
     .unique();
+async function columnFields(ctx: Ctx, columnId: string | undefined, status: Infer<typeof taskStatus> | undefined) {
+  if (columnId === '') bad('Choose a known column');
+  if (columnId === undefined || taskStatuses.includes(columnId as Infer<typeof taskStatus>)) {
+    const canonical = (columnId ?? status ?? 'todo') as Infer<typeof taskStatus>;
+    if (columnId && status && status !== canonical) bad('Column and status disagree');
+    return { status: canonical, columnId: canonical };
+  }
+  const column = (await prefRow(ctx))?.columns?.find(c => c.id === columnId);
+  if (!column) bad('That column is no longer available');
+  if (status && status !== column.status) bad('Column and status disagree');
+  return { status: column.status, columnId: column.id };
+}
 export const preferences = query({
   args: { auth: authField },
   returns: v.object(taskPreferenceFields),
@@ -192,6 +208,27 @@ export const setPreferences = mutation({
   returns: v.null(),
   handler: async (ctx, { auth, ...patch }) => {
     await authenticate(ctx, auth);
+    if (patch.columns) {
+      if (patch.columns.length < 4 || patch.columns.length > 32) bad('Use between 4 and 32 columns');
+      const ids = new Set<string>();
+      for (const c of patch.columns) {
+        if (!/^[a-zA-Z0-9_-]{1,80}$/.test(c.id) || ids.has(c.id)) bad('Use a unique column id');
+        ids.add(c.id);
+        c.name = c.name.trim();
+        if (!c.name || c.name.length > 80) bad('Use a column name under 81 characters');
+        if (taskStatuses.includes(c.id as Infer<typeof taskStatus>) && c.status !== c.id) bad('Keep built-in completion behavior');
+      }
+      if (taskStatuses.some(id => !ids.has(id))) bad('Keep the four built-in columns');
+      const existing = await prefRow(ctx);
+      if (existing?.columns?.some(c => !ids.has(c.id))) bad('Removing columns is not supported');
+      if (existing?.columns?.some(c => patch.columns!.find(next => next.id === c.id)?.status !== c.status)) bad('Keep the column completion behavior');
+    }
+    for (const order of [patch.boardColumnOrder, patch.sectionOrder]) {
+      if (!order) continue;
+      const definitions = patch.columns ?? (await prefRow(ctx))?.columns;
+      const ids = new Set<string>(definitions?.map(c => c.id) ?? taskStatuses);
+      if (order.length > 32 || new Set(order).size !== order.length || order.some(id => !ids.has(id))) bad('Use each known column once');
+    }
     if (patch.columnOrder) {
       if (new Set(patch.columnOrder).size !== patch.columnOrder.length) bad('Use each status once');
       patch.columnOrder = fullColumnOrder(patch.columnOrder);
@@ -263,5 +300,30 @@ export const count = query({
       .withIndex('by_project_deleted', (q) => q.eq('project.runnerId', a.project.runnerId).eq('project.id', a.project.id).eq('deleted', false))
       .take(1001);
     return { count: Math.min(rows.length, 1000), more: rows.length > 1000 };
+  },
+});
+
+// Queue through the same runner command path as the website's new-thread flow.
+// Keeping the command on the task makes retries (including a lost reply) harmless.
+export const startThread = mutation({
+  args: { auth: authField, id: v.string() },
+  returns: v.id('commands'),
+  handler: async (ctx, { auth, id }) => {
+    await authenticate(ctx, auth);
+    // Shared task access does not grant restricted runner keys remote command access.
+    if ('key' in auth) await runnerAuth(ctx, auth.key, 'queueCommand');
+    const row = await find(ctx, id);
+    if (!row || row.deleted) bad('Task no longer exists');
+    if (row.threadCommandId) return row.threadCommandId;
+    const project = row.project ? await ctx.db.query('projects').withIndex('by_runner_id', q => q.eq('runnerId', row.project!.runnerId).eq('id', row.project!.id)).unique() : null;
+    if (row.project && !project) bad('That project is no longer available');
+    const runnerId = project?.runnerId ?? await mainRunner(ctx);
+    const commandId = await queue(ctx, runnerId, 'create', undefined, {
+      text: row.title + (row.notes ? '\n\n' + row.notes : ''),
+      title: row.title,
+      ...(project ? { projectIds: [project.id], ...(project.folders[0] ? { cwd: project.folders[0] } : {}) } : {}),
+    });
+    await ctx.db.patch(row._id, { threadCommandId: commandId, updatedAt: await changedAt(ctx) });
+    return commandId;
   },
 });

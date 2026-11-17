@@ -898,4 +898,7 @@ uses authenticated runner queries/mutations and three live subscriptions; the
 paired browser reads and writes directly. Dropping a Tasks background image
 reads that selected file (up to 10 MB) and uploads it to Convex storage. No
 other folder is scanned. Photo URLs are storage capability links returned to
-authenticated clients. There is no offline edit queue or local task database.
+authenticated clients. The desktop app downloads the selected photo from that
+storage URL in the background (up to 10 MB, with a 20-second timeout) and
+keeps its image in memory while Tasks is open. There is no offline edit queue
+or local task database.

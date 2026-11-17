@@ -1002,3 +1002,14 @@
 .tasks-page .tasks-group-head .tasks-fold {
   padding-left: 4px;
 }
+
+/* Board scrolling belongs to its pane, including narrow split views. */
+.tasks-inner, .tasks-body, .tasks-lane { min-width: 0; }
+.tasks-columns { width: 100%; max-width: 100%; overscroll-behavior-x: contain; }
+.task-column { flex: 1 0 min(280px, 78vw); max-height: calc(100dvh - 180px); overflow-y: auto; }
+.task-row .task-title:focus-visible, .task-card .task-title:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.tasks-delete-backdrop { z-index: 80; }
+@media (max-width: 760px) { .tasks-shell > .main { min-height: 0; } }
+
+.tasks-page .task-column-name { border: 0; background: transparent; padding: 0; text-align: left; }
+.tasks-page .task-column-empty { flex: 1; min-height: 28px; }

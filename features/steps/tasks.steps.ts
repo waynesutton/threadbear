@@ -1,4 +1,5 @@
 import { Then, When } from '@cucumber/cucumber';
+import { sleep } from '../support/driver.ts';
 import type { ThreadbearWorld } from '../support/world.ts';
 type Tasks = {
   open: boolean;
@@ -90,6 +91,9 @@ When('I complete the task {string}', async function (this: ThreadbearWorld, titl
 });
 When('I delete the visible task', async function (this: ThreadbearWorld) {
   await this.app.do({ cmd: 'click', title: 'Delete' });
+  // The alert animates into place; click its final position, not the moving button.
+  await sleep(300);
+  await this.app.do({ cmd: 'click', title: 'Delete task' });
 });
 When('I press Undo', async function (this: ThreadbearWorld) {
   await this.app.do({ cmd: 'click', title: 'Undo' });
@@ -111,6 +115,45 @@ Then("the board's columns are {string}", async function (this: ThreadbearWorld, 
 });
 Then("the list's sections are {string}", async function (this: ThreadbearWorld, order: string) {
   await this.until(`sections ${order}`, (d) => tasks(d)?.listOrder?.join(', ') === order);
+});
+
+When('I press Escape in Tasks', async function (this: ThreadbearWorld) {
+  await this.app.do({ cmd: 'menu-key', key: 'escape' });
+});
+Then('the Tasks editor is closed', async function (this: ThreadbearWorld) {
+  await this.until('editor closed', d => (d as { tasksPage?: { editorOpen: boolean } }).tasksPage?.editorOpen === false);
+});
+Then('the Tasks editor is open', async function (this: ThreadbearWorld) {
+  await this.until('editor open', d => (d as { tasksPage?: { editorOpen: boolean } }).tasksPage?.editorOpen === true);
+});
+When('I cancel deleting the visible task', async function (this: ThreadbearWorld) {
+  await this.app.do({ cmd: 'click', title: 'Delete' });
+  // The alert animates into place; click its final position, not the moving button.
+  await sleep(300);
+  await this.app.do({ cmd: 'click', title: 'Keep task' });
+});
+
+When('I press {string} in Tasks', async function (this: ThreadbearWorld, key: string) {
+  await this.app.do({ cmd: 'menu-key', key });
+});
+Then('the selected task is {string}', async function (this: ThreadbearWorld, title: string) {
+  await this.until('selected task', d => (d as { tasksPage?: { selectedTask?: string } }).tasksPage?.selectedTask === task(d, title)?.id);
+});
+When('I send the visible task to a thread', async function (this: ThreadbearWorld) {
+  await this.app.do({ cmd: 'click', title: 'Send to Thread' });
+});
+Then('the task {string} has a thread', async function (this: ThreadbearWorld, title: string) {
+  await this.until('task thread linked', d => !!(task(d, title) as { thread?: { id?: string } } | undefined)?.thread?.id);
+});
+Then('Tasks offers View Thread', async function (this: ThreadbearWorld) {
+  await this.until('View Thread shown', d => drawn(d).includes('View Thread'));
+});
+
+When('I choose a Tasks photo', async function (this: ThreadbearWorld) {
+  await this.app.do({ cmd: 'tasks', photoPath: new URL('../../app/icons/threadbear.png', import.meta.url).pathname });
+});
+Then('the Tasks photo is displayed', async function (this: ThreadbearWorld) {
+  await this.until('photo decoded for display', d => (d as { tasksPage?: { photoLoaded?: boolean } }).tasksPage?.photoLoaded === true);
 });
 
 When('I narrow the Tasks window', async function (this: ThreadbearWorld) {

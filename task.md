@@ -10,6 +10,7 @@ Status and gap list: prds/prints-status.md
 ## In Progress
 
 
+- [ ] 2026-11-17 10:57 UTC Tasks interaction refinement verified locally:15 native scenarios/197 steps, backend/browser tests, photo display, Light/Dark and keyboard scrolling pass. Normal landing and coordinated rollout remain. prds/tasks-interaction-refinement.md
 
 - [ ] 2026-11-16 21:53 UTC Desktop CI: Linux's 60-minute budget landed as 7f2ba41e after 12 focused tests and the 505-second quick check passed. Run 43948148837 also passed all Windows specs before its release build hit 60 minutes; give Windows 90 minutes, keeping Linux/Mac at 60. Windows follow-up checks and a complete GitHub run remain required.
 

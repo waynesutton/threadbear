@@ -17,6 +17,8 @@ How Prints work today, what's missing and what's next: [Prints status](https://g
 ### Changed
 
 - Scheduled follow-ups in the GPUI transcript start collapsed, with Show details and Hide details. Expanded instructions use selectable, left-aligned Markdown; the agent still receives the original message.
+- Tasks adds keyboard navigation, deletion confirmation, renamed and custom columns, and Send to thread with a link back to the created thread. Boards scroll within narrow windows and phones. Appearance uses Light/Dark with matching text; native photos are read by the picker’s app before upload and downloaded for display. The project-page Tasks tab matches Project typography. Requires backend API 86.
+
 - Desktop CI has 60 minutes on Linux and Mac, and 90 on Windows, to finish tests, the release build and artifact upload.
 - Tasks opens on a quick-add list: type a task, press Return, tick it off. Done tasks leave the list with Undo. The board gains a Doing column, title-only cards and drag to reorder columns, list sections and project groups. Each task has a ⋯ menu to add a note, move it to a project or change its status. The web photo picker is a real button now. Focusing a task field returns keyboard control from web panels to the app.
 - GPUI Settings opens inside the main window. Back, Esc or Close returns to the previous view with its thread draft intact.

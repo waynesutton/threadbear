@@ -18,6 +18,7 @@
 // the real runner's data folder unless you pass it, so don't.
 
 import { WebSocketServer } from 'ws';
+import { createServer as createHttpServer } from 'node:http';
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import os from 'node:os';
@@ -613,6 +614,9 @@ async function handle(client, { id, method, params = {} }) {
 // Isolated task fixtures for native UI specs; never reaches Convex.
 const mockTasks = new Map();
 let tasksFailNext = false;
+let mockTaskPhoto = null;
+let mockTaskPhotoBytes;
+let mockTaskPhotoServer;
 const mockTaskPrefs = { defaultView: 'list', columnOrder: ['backlog','todo','doing','done'], listOrder: ['doing','todo','backlog','done'], grouping: 'status', sort: 'manual', fade: .85, theme: 'system' };
 async function dispatch(client, method, p) {
   if (method.startsWith('tasks.')) {
@@ -621,14 +625,24 @@ async function dispatch(client, method, p) {
     switch (method) {
       case 'tasks.list': return {items:[...mockTasks.values()].filter(t => !t.deleted),next:null};
       case 'tasks.preferences': return mockTaskPrefs;
-      case 'tasks.photo': return null;
+      case 'tasks.photo': return mockTaskPhoto;
       case 'tasks.projects': return projects.map(p => ({id:p.id,runnerId:'mock',title:p.title}));
       case 'tasks.count':
       case 'tasks.projectCount': return {count:[...mockTasks.values()].filter(t=>!t.deleted && t.project?.id === (p.project?.id ?? p.project)).length,more:false};
-      case 'tasks.create': if (!mockTasks.has(p.id)) mockTasks.set(p.id,{id:p.id,title:p.title,notes:p.notes??'',status:p.status??'todo',project:p.project??null,position:p.position??Date.now(),createdAt:Date.now(),updatedAt:Date.now(),deleted:false}); break;
-      case 'tasks.update': if (!mockTasks.has(p.id)) throw new Error('Task no longer exists'); Object.assign(mockTasks.get(p.id),p,{updatedAt:Date.now()}); break;
+      case 'tasks.create': if (!mockTasks.has(p.id)) mockTasks.set(p.id,{id:p.id,title:p.title,notes:p.notes??'',status:p.status??'todo',columnId:p.columnId??p.status??'todo',project:p.project??null,position:p.position??Date.now(),createdAt:Date.now(),updatedAt:Date.now(),deleted:false}); break;
+      case 'tasks.update': if (!mockTasks.has(p.id)) throw new Error('Task no longer exists'); Object.assign(mockTasks.get(p.id),p,...(p.status && !p.columnId ? [{columnId:p.status}] : []),{updatedAt:Date.now()}); break;
       case 'tasks.remove': if(mockTasks.has(p.id)) mockTasks.get(p.id).deleted=true; break;
       case 'tasks.restore': if(mockTasks.has(p.id)) mockTasks.get(p.id).deleted=false; break;
+      case 'tasks.photoData': {
+        mockTaskPhotoBytes = Buffer.from(p.base64, 'base64');
+        if (!mockTaskPhotoServer) {
+          mockTaskPhotoServer = createHttpServer((_req, res) => { res.writeHead(200, {'Content-Type':'image/png'}); res.end(mockTaskPhotoBytes); });
+          await new Promise(resolve => mockTaskPhotoServer.listen(0, '127.0.0.1', resolve));
+        }
+        mockTaskPhoto = `http://127.0.0.1:${mockTaskPhotoServer.address().port}/photo?v=${Date.now()}`;
+        break;
+      }
+      case 'tasks.startThread': if (!mockTasks.has(p.id)) throw new Error('Task no longer exists'); Object.assign(mockTasks.get(p.id), {threadCommandId:'mock-command-'+p.id, thread:{runnerId:'mock',id:'demo_upload'}}); break;
       case 'tasks.setPreferences': Object.assign(mockTaskPrefs,p); break;
       default: throw new Error('Unsupported mock task operation');
     }
@@ -1759,13 +1773,13 @@ async function dispatch(client, method, p) {
       if (p.complete) {
         const row = [...mockTasks.values()].find(t=>t.title===p.complete);
         if (!row) throw rpcError(-32602,'No mock task with that title');
-        row.status='done'; broadcast('tasks.updated',{});
+        row.status='done'; row.columnId='done'; broadcast('tasks.updated',{});
       }
       // Another device moving a task: {move: title, status}.
       if (p.move) {
         const row = [...mockTasks.values()].find(t=>t.title===p.move);
         if (!row) throw rpcError(-32602,'No mock task with that title');
-        row.status=p.status??'doing'; row.updatedAt=Date.now(); broadcast('tasks.updated',{});
+        row.status=p.status??'doing'; row.columnId=row.status; row.updatedAt=Date.now(); broadcast('tasks.updated',{});
       }
       return {};
     case 'mock.instructions':

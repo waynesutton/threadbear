@@ -109,6 +109,57 @@ Feature: Tasks
     Then the list's sections are "backlog, doing, todo, done"
 
   @tasks.page
+  Scenario: Escape closes a task editor and leaves Tasks open
+    When I open Tasks
+    And I add the task "Keyboard task"
+    Then Tasks contains "Keyboard task"
+    When I edit the task "Keyboard task"
+    And I press Escape in Tasks
+    Then the Tasks editor is closed
+    And Tasks shows the "list" view
+
+  @tasks.page
+  Scenario: Cancelling deletion keeps the task and editor
+    When I open Tasks
+    And I add the task "Keep this task"
+    Then Tasks contains "Keep this task"
+    When I edit the task "Keep this task"
+    And I cancel deleting the visible task
+    Then Tasks contains "Keep this task"
+    And the Tasks editor is open
+
+  @tasks.page
+  Scenario: Arrow navigation opens the next task without entering text
+    When I open Tasks
+    And I add the task "First keyboard task"
+    Then Tasks contains "First keyboard task"
+    When I add the task "Second keyboard task"
+    Then Tasks contains "Second keyboard task"
+    When I edit the task "First keyboard task"
+    And I press Escape in Tasks
+    And I press "down" in Tasks
+    And I press "enter" in Tasks
+    Then the Tasks editor is open
+    And the selected task is "Second keyboard task"
+
+  @tasks.page
+  Scenario: Sending a task shows its associated thread afterward
+    When I open Tasks
+    And I add the task "Start this task"
+    Then Tasks contains "Start this task"
+    When I edit the task "Start this task"
+    And I send the visible task to a thread
+    Then the task "Start this task" has a thread
+    When I edit the task "Start this task"
+    Then Tasks offers View Thread
+
+  @tasks.page
+  Scenario: A Tasks photo is read and displayed by the native app
+    When I open Tasks
+    And I choose a Tasks photo
+    Then the Tasks photo is displayed
+
+  @tasks.page
   Scenario: Tasks can be closed in a narrow window
     When I open Tasks
     And I narrow the Tasks window

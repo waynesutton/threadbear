@@ -3110,14 +3110,21 @@ The list runs Doing, Todo, Backlog, each a section you can fold.
 
 Switch to Board for columns: Backlog, Todo, Doing and Done. Cards show just the
 title, a note mark and the project; drag a card to move it, or use + on a column
-to add one there. Drag column headings, list sections and project groups to
-reorder them; the board and the list keep their own orders.
+to add one there. Add a task at the foot of a column does the same. Click a
+column name to rename it, or Add column to make another. Renaming keeps its
+tasks and completion behavior. Drag column headings, list sections and project
+groups to reorder them; the board and list keep their own orders. Narrow
+windows and phones scroll columns sideways within the board.
 
 Each task's ⋯ menu opens it, adds a note, moves it to a project, sets its status
-or deletes it (with Undo). Projects are optional, and their pages link to their
-tasks. Display picks a project, groups by status or project, sets the order,
-and makes the view you're in the one Tasks opens with. Background picks a color
-or a photo and its fade.
+or asks before deleting it (with Undo afterward). Send to thread starts a new
+thread with the task title, notes and project. It shows Starting while queued,
+then View thread; repeated clicks reuse the same request. Projects are optional,
+and their pages link to their tasks. Display picks a project, groups by status or project, sets the order,
+and makes the view you're in the one Tasks opens with. Background offers Light
+and Dark appearance, or a photo and its fade. Text follows the selected theme.
+Up and Down navigate tasks; Enter opens one, and Escape closes its editor.
+Arrow keys still edit text normally while a field has focus.
 
 Open on web goes to your private `/tasks` page with the usual browser pairing.
 Web task edits work while your Mac sleeps. Editing needs a connection; a change

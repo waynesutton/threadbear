@@ -7960,3 +7960,30 @@ Titles are trimmed, required and at most 500 characters; notes are at most
 timestamps. Project references include both runner and project identity.
 The four agent tools are `list_tasks`, `create_task`, `update_task` and
 `delete_task` (with `undo:true` to restore).
+
+### Tasks columns and thread launch (API 86)
+
+Tasks retain canonical `status` for old clients and completion. Optional
+`columnId` identifies a renamed or custom board column. Preferences optionally
+carry `columns: { id, name, status }[]`. Built-in ids retain their canonical
+status, and custom columns default to Todo semantics. A status-only write from
+an older client moves the task back to that canonical column. Title/notes-only
+writes preserve column membership. Names never serve as ids.
+
+Preferences also carry `boardColumnOrder` and `sectionOrder` as stable column ids;
+legacy enum orders remain accepted. `tasks.startThread {id}` queues a create
+command once per task, using its title, notes and project's runner/folder.
+Repeated requests return the same command id. Tasks expose `threadCommandId`,
+then `thread: {runnerId,id}` when the command finishes, or `threadError` on
+failure. Web and native both use this backend operation; no agent starts until
+the user presses Send to thread. Existing create-command permission defaults
+still apply. Key callers also require the existing owner-only queueCommand
+authorization; shared task editing never grants a restricted runner permission
+to launch work on another machine. Paired browser tokens remain supported.
+Agent create/update tools accept optional `columnId`; list_tasks
+includes column definitions in preferences.
+
+`tasks.photoData {base64}` uploads image bytes read by the native file picker’s
+process. The runner checks the decoded size (10 MB) and image signature before
+uploading; no file path permissions must cross between the app and runner.
+`tasks.photoFile {path}` remains supported for existing clients.

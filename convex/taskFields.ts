@@ -17,6 +17,10 @@ export const taskFields = {
   title: v.string(),
   notes: v.string(),
   status: taskStatus,
+  columnId: v.optional(v.string()),
+  threadCommandId: v.optional(v.id('commands')),
+  thread: v.optional(v.object({ runnerId: v.string(), id: v.string() })),
+  threadError: v.optional(v.string()),
   project: v.union(taskProject, v.null()),
   position: v.number(),
   createdAt: v.number(),
@@ -25,6 +29,9 @@ export const taskFields = {
 };
 export const taskPreferenceFields = {
   defaultView: v.optional(taskView),
+  boardColumnOrder: v.optional(v.array(v.string())),
+  sectionOrder: v.optional(v.array(v.string())),
+  columns: v.optional(v.array(v.object({ id: v.string(), name: v.string(), status: taskStatus }))),
   columnOrder: v.optional(v.array(taskStatus)),
   // The list's own section order: most active first, unlike the board.
   listOrder: v.optional(v.array(taskStatus)),

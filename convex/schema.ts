@@ -220,7 +220,7 @@ export const moveStates = ['asking', 'ready', 'packing', 'unpacking', 'claimed',
 
 export default defineSchema({
   // Cloud-owned tasks, not part of the runner's replaceable project mirror.
-  tasks: defineTable(taskFields).index('by_task_id', ['id']).index('by_deleted_id', ['deleted', 'id']).index('by_updated', ['updatedAt']).index('by_project_deleted', ['project.runnerId', 'project.id', 'deleted']),
+  tasks: defineTable(taskFields).index('by_thread_command', ['threadCommandId']).index('by_task_id', ['id']).index('by_deleted_id', ['deleted', 'id']).index('by_updated', ['updatedAt']).index('by_project_deleted', ['project.runnerId', 'project.id', 'deleted']),
   taskPreferences: defineTable({ name: v.string(), ...taskPreferenceFields }).index('by_name', ['name']),
   // One row per runner (the Mac, Tinker Desk later), written every minute.
   // A phone treats one not seen for 3 minutes as offline.

@@ -272,6 +272,6 @@ The `tasks` experiment adds a cloud collection, separate from Notion project
 boards and Mac Notes. Its parts are `convex/tasks.ts`, `taskFields.ts`, the
 `tasks`/`taskPreferences` schema tables, `runner/src/tasks.ts`, four MCP tools,
 `desktop/gpui/src/tasks_page.rs` and `web/src/tasks.tsx`. Desktop is off by
-default; the current list and board need API 84. Remove its route/navigation/protocol wiring with
+default; the current column and thread-launch controls need API 86. Remove its route/navigation/protocol wiring with
 those files to omit it. It uses the configured backend and no owner-specific
 service or account. Deploy the additive backend before shipping clients.

@@ -1,4 +1,5 @@
 // A thin bridge to cloud-owned Tasks. No second local database or write queue.
+import { sniffImage } from './media.ts';
 import { readReplyImage } from './share-images.ts';
 import { randomUUID } from 'node:crypto';
 import type { Post, Subscribe, Upload } from './sync.ts';
@@ -16,6 +17,10 @@ export type NativeTask = {
   title: string;
   notes: string;
   status: TaskStatus;
+  columnId?: string;
+  threadCommandId?: string;
+  thread?: { runnerId: string; id: string };
+  threadError?: string;
   project: { runnerId: string; id: string } | null;
   position: number;
   createdAt: number;
@@ -24,7 +29,7 @@ export type NativeTask = {
 };
 export type TaskPage = { items: NativeTask[]; next: string | null };
 const queries = new Set(['list', 'preferences', 'photo', 'projects', 'count']);
-const operations = new Set([...queries, 'create', 'update', 'remove', 'restore', 'setPreferences', 'uploadPhoto', 'projectCount', 'photoFile']);
+const operations = new Set([...queries, 'create', 'update', 'remove', 'restore', 'setPreferences', 'uploadPhoto', 'projectCount', 'photoFile', 'photoData', 'startThread']);
 export class Tasks {
   private stopWatch?: () => void;
   private watched?: { key: string; connection?: object };
@@ -48,6 +53,21 @@ export class Tasks {
       throw new Error('Tasks needs a connection to your Threadbear backend. Your draft has not been saved.');
     }
     if ((source.apiVersion ?? 84) < 84) throw new Error('Update the Threadbear backend to use Tasks.');
+    if (source.apiVersion !== undefined && source.apiVersion < 86 && (operation === 'startThread' || ['columnId', 'columns', 'boardColumnOrder', 'sectionOrder'].some(field => field in args)))
+      throw new Error('Update the Threadbear backend to use task columns and Send to thread.');
+    if (operation === 'photoData') {
+      const base64 = args.base64;
+      const limit = 10 * 1024 * 1024;
+      const invalid = () => new Error('Choose a PNG, JPEG, WebP or GIF under 10 MB.');
+      if (typeof base64 !== 'string' || base64.length > Math.ceil(limit / 3) * 4 || !/^[A-Za-z0-9+/]*={0,2}$/.test(base64)) throw invalid();
+      const bytes = Buffer.from(base64, 'base64');
+      const image = sniffImage(bytes);
+      if (!image || bytes.length > limit || !['image/jpeg', 'image/png', 'image/webp', 'image/gif'].includes(image.mediaType)) throw invalid();
+      if (!source.upload) throw new Error('Photo uploads are unavailable on this runner.');
+      const url = await this.call('uploadPhoto') as string;
+      const storageId = await source.upload(url, bytes, image.mediaType);
+      return this.call('setPreferences', { backgroundPhoto: storageId });
+    }
     if (operation === 'photoFile') {
       if (typeof args.path !== 'string' || !source.upload) throw new Error('Choose a photo on this Mac.');
       const image = readReplyImage(args.path);

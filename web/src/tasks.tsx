@@ -4,6 +4,7 @@ import type { FunctionReturnType } from 'convex/server';
 import type { Id } from '../../convex/_generated/dataModel';
 import { api } from '../../convex/_generated/api';
 import './tasks.css';
+import { columnDefinitions, orderedColumns, taskColumn } from './tasks-columns';
 import { go } from './route';
 import { applyTheme, readTheme } from './theme';
 import { taskDraftChanges } from './tasks-draft';
@@ -13,7 +14,6 @@ type Task = FunctionReturnType<typeof api.tasks.list>['items'][number];
 type Status = Task['status'];
 type Prefs = FunctionReturnType<typeof api.tasks.preferences>;
 type Project = { runnerId: string; id: string; title: string };
-const names: Record<Status, string> = { backlog: 'Backlog', todo: 'Todo', doing: 'Doing', done: 'Done' };
 const projectKey = (p: Task['project']) => (p ? `${p.runnerId}/${p.id}` : 'none');
 const NONE = 'none';
 
@@ -79,6 +79,7 @@ function TasksContent({ token, projectFilter = '' }: { token: string; projectFil
   const update = useMutation(api.tasks.update);
   const remove = useMutation(api.tasks.remove);
   const restore = useMutation(api.tasks.restore);
+  const startThread = useMutation(api.tasks.startThread);
   const setPrefs = useMutation(api.tasks.setPreferences);
   const upload = useMutation(api.tasks.uploadPhoto);
   const [tasks, setTasks] = useState<Task[]>([]);
@@ -92,10 +93,18 @@ function TasksContent({ token, projectFilter = '' }: { token: string; projectFil
   const [panel, setPanel] = useState<'display' | 'customize' | null>(null);
   const [toast, setToast] = useState<{ text: string; undo: () => Promise<unknown> } | null>(null);
   const [menu, setMenu] = useState<Menu | null>(null);
+  const [pendingDelete, setPendingDelete] = useState<Task | null>(null);
+  const deleteRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!pendingDelete) return;
+    const previous = document.activeElement as HTMLElement | null;
+    deleteRef.current?.querySelector<HTMLButtonElement>('button')?.focus();
+    return () => previous?.focus();
+  }, [pendingDelete]);
   const [showDone, setShowDone] = useState(() => localStorage.getItem('tasks.showDone') === '1');
   const [collapsed, setCollapsed] = useState<Set<string>>(() => new Set());
   const [draft, setDraft] = useState('');
-  const [columnDraft, setColumnDraft] = useState<{ group: string; status: Status; text: string } | null>(null);
+  const [columnDraft, setColumnDraft] = useState<{ group: string; status: string; text: string } | null>(null);
   const [drag, setDrag] = useState<Drag | null>(null);
   const [over, setOver] = useState<string | null>(null);
   const [ghost, setGhost] = useState<{ x: number; y: number; label: string } | null>(null);
@@ -104,8 +113,16 @@ function TasksContent({ token, projectFilter = '' }: { token: string; projectFil
   const view = currentView ?? prefs?.defaultView ?? 'list';
   const online = connection.isWebSocketConnected;
   const disabled = !online || saving > 0;
-  const columns = fullOrder(prefs?.columnOrder);
-  const listOrder = fullOrder(prefs?.listOrder, LIST_STATUSES);
+  const definitions = columnDefinitions(prefs?.columns);
+  const names = Object.fromEntries(definitions.map(c => [c.id, c.name]));
+  const canonical = (id: string): Status => definitions.find(c => c.id === id)?.status ?? 'todo';
+  const membership = (t: Task) => taskColumn(t, definitions);
+  const columns = orderedColumns(definitions, prefs?.boardColumnOrder ?? fullOrder(prefs?.columnOrder));
+  const listOrder = orderedColumns(definitions, prefs?.sectionOrder ?? fullOrder(prefs?.listOrder, LIST_STATUSES));
+  const [columnEditor, setColumnEditor] = useState<{ id: string; name: string; fresh: boolean } | null>(null);
+  const columnReturnFocus = useRef<HTMLElement | null>(null);
+  function closeColumnEditor() { setColumnEditor(null); requestAnimationFrame(() => columnReturnFocus.current?.focus()); }
+
   const order = view === 'list' ? listOrder : columns;
   const manual = (prefs?.sort ?? 'manual') === 'manual';
   const byProject = prefs?.grouping === 'project';
@@ -185,7 +202,7 @@ function TasksContent({ token, projectFilter = '' }: { token: string; projectFil
     }
   }
   const patchTask = (id: string, patch: Partial<Task>) => {
-    const fields = Object.fromEntries(Object.entries(patch).filter(([k]) => ['title', 'notes', 'status', 'project', 'position'].includes(k)));
+    const fields = Object.fromEntries(Object.entries(patch).filter(([k]) => ['title', 'notes', 'status', 'columnId', 'project', 'position'].includes(k)));
     return write(
       () => update({ auth, id, ...fields }),
       (rows) => rows.map((t) => (t.id === id ? { ...t, ...patch } : t)),
@@ -214,7 +231,8 @@ function TasksContent({ token, projectFilter = '' }: { token: string; projectFil
   const groups = byProject ? groupOrder(prefs?.projectOrder, visible.map((t) => projectKey(t.project)), filter) : ['all'];
   const inGroup = (t: Task, group: string) => group === 'all' || projectKey(t.project) === group;
 
-  function addTask(text: string, status: Status = 'todo', group = 'all') {
+  function addTask(text: string, columnId = 'todo', group = 'all') {
+    const status = canonical(columnId);
     const { title, notes } = splitDraft(text);
     if (!title) return Promise.resolve(false);
     const key = group !== 'all' ? group : filter;
@@ -223,10 +241,10 @@ function TasksContent({ token, projectFilter = '' }: { token: string; projectFil
     const peers = visible.filter((t) => t.status === status);
     const position = peers.length ? Math.min(...peers.map((t) => t.position)) - 1000 : Date.now();
     const now = Date.now();
-    const row: Task = { id, title, notes, status, project, position, createdAt: now, updatedAt: now, deleted: false };
+    const row: Task = { id, title, notes, status, columnId, project, position, createdAt: now, updatedAt: now, deleted: false };
     return write(
       // New tasks go on top, where the composer is.
-      () => create({ auth, id, title, notes, status, project, position }),
+      () => create({ auth, id, title, notes, status, columnId, project, position }),
       (rows) => [...rows, row],
     );
   }
@@ -241,29 +259,41 @@ function TasksContent({ token, projectFilter = '' }: { token: string; projectFil
     const was = t.status;
     const next: Status = was === 'done' ? 'todo' : 'done';
     void patchTask(t.id, { status: next }).then((ok) => {
-      if (ok && next === 'done') setToast({ text: `Done: ${t.title}`, undo: () => patchTask(t.id, { status: was }) });
+      if (ok && next === 'done') setToast({ text: `Done: ${t.title}`, undo: () => patchTask(t.id, { status: was, columnId: t.columnId ?? was }) });
     });
   }
-  function deleteTask(t: Task) {
+  function deleteTask(t: Task) { setPendingDelete(t); }
+  function confirmDelete(t: Task) {
     void write(
       () => remove({ auth, id: t.id }),
       (rows) => rows.filter((r) => r.id !== t.id),
     ).then((ok) => {
-      if (ok) setToast({ text: `Deleted: ${t.title}`, undo: () => write(() => restore({ auth, id: t.id }), (rows) => [...rows, t]) });
+      if (ok) {
+        setPendingDelete(null);
+        setEditing(null);
+        setToast({ text: `Deleted: ${t.title}`, undo: () => write(() => restore({ auth, id: t.id }), (rows) => [...rows, t]) });
+      }
     });
   }
+  async function sendTask(t: Task) {
+    if (t.thread) { go(`/t/${encodeURIComponent(t.thread.id)}`); return; }
+    if (t.threadCommandId) { if (t.threadError) setError(t.threadError); return; }
+    setMenu(null);
+    await write(() => startThread({ auth, id: t.id }));
+  }
+  function threadLabel(t: Partial<Task>) { return t.thread ? 'View thread' : t.threadError ? 'Thread failed' : t.threadCommandId ? 'Starting thread…' : 'Send to thread'; }
   async function saveEditor(e: FormEvent) {
     e.preventDefault();
     if (!editing?.id || !editing.title?.trim()) return;
-    const { id, title = '', notes = '', status = 'todo', project = null } = editing;
-    const patch = { id, title, notes, status, project: project ? { id: project.id, runnerId: project.runnerId } : null };
+    const { id, title = '', notes = '', status = 'todo', columnId, project = null } = editing;
+    const patch = { id, title, notes, status, columnId, project: project ? { id: project.id, runnerId: project.runnerId } : null };
     const base = editingBaseline.current;
     const ok = base
       ? await write(
           () => update({ auth, id, ...taskDraftChanges(base, patch) }),
           (rows) => rows.map((t) => (t.id === id ? { ...t, ...patch } : t)),
         )
-      : await addTask(notes ? `${title}\n${notes}` : title, status, patch.project ? projectKey(patch.project) : 'all');
+      : await write(() => create({ auth, ...patch }));
     if (ok) setEditing(null);
   }
   const openEditor = (t: Task, focusNotes = false) => {
@@ -273,23 +303,24 @@ function TasksContent({ token, projectFilter = '' }: { token: string; projectFil
   };
 
   // One drop handler for everything that moves: tasks, status sections and project groups.
-  function dropOn(target: { status?: Status; group?: string; before?: Task }) {
+  function dropOn(target: { status?: string; group?: string; before?: Task }) {
     const d = drag;
     setDrag(null);
     setOver(null);
     if (!d || disabled) return;
     if (d.kind === 'status' && target.status && target.status !== d.id) {
-      const next = moveTo(order, d.id as Status, target.status);
-      preference(view === 'list' ? { listOrder: next } : { columnOrder: next });
+      const next = moveTo(order, d.id, target.status);
+      preference(view === 'list' ? { sectionOrder: next } : { boardColumnOrder: next });
     } else if (d.kind === 'project' && target.group && target.group !== d.id) {
       preference({ projectOrder: moveTo(groups, d.id, target.group) });
     } else if (d.kind === 'task') {
       const task = tasks.find((t) => t.id === d.id);
       if (!task || target.before?.id === task.id) return;
-      const status = target.status ?? task.status;
+      const columnId = target.status ?? membership(task);
+      const status = canonical(columnId);
       const group = target.group ?? 'all';
-      const peers = visible.filter((t) => t.status === status && t.id !== task.id && inGroup(t, group));
-      const patch: Partial<Task> = { status, position: manual ? positionAt(peers, target.before?.id) : task.position };
+      const peers = visible.filter((t) => membership(t) === columnId && t.id !== task.id && inGroup(t, group));
+      const patch: Partial<Task> = { status, columnId, position: manual ? positionAt(peers, target.before?.id) : task.position };
       if (group !== 'all') patch.project = projectRef(group);
       if (status === task.status && group === 'all' && !manual) return;
       void patchTask(task.id, patch);
@@ -380,7 +411,7 @@ function TasksContent({ token, projectFilter = '' }: { token: string; projectFil
     },
   });
   function moveByKey(t: Task, direction: number, group: string) {
-    const items = visible.filter((r) => r.status === t.status && inGroup(r, group));
+    const items = visible.filter((r) => membership(r) === membership(t) && inGroup(r, group));
     const index = items.findIndex((r) => r.id === t.id);
     const target = items[index + direction];
     if (!target) return;
@@ -402,7 +433,7 @@ function TasksContent({ token, projectFilter = '' }: { token: string; projectFil
         key={t.id}
         className={`task-row ${t.status === 'done' ? 'is-done' : ''} ${drag?.id === t.id ? 'is-dragging' : ''} ${over === key ? 'is-over' : ''}`}
         {...dragProps({ kind: 'task', id: t.id, label: t.title }, manual)}
-        {...dropProps(key, ['task'], { status: t.status, group, before: t })}
+        {...dropProps(key, ['task'], { status: membership(t), group, before: t })}
       >
         <button
           className="task-grip"
@@ -443,7 +474,7 @@ function TasksContent({ token, projectFilter = '' }: { token: string; projectFil
         key={t.id}
         className={`task-card ${t.status === 'done' ? 'is-done' : ''} ${drag?.id === t.id ? 'is-dragging' : ''} ${over === key ? 'is-over' : ''}`}
         {...dragProps({ kind: 'task', id: t.id, label: t.title })}
-        {...dropProps(key, ['task'], { status: t.status, group, before: t })}
+        {...dropProps(key, ['task'], { status: membership(t), group, before: t })}
         {...touchGrip({ kind: 'task', id: t.id, label: t.title }, 350)}
         onContextMenu={(e) => ghost && e.preventDefault()}
         tabIndex={0}
@@ -497,8 +528,8 @@ function TasksContent({ token, projectFilter = '' }: { token: string; projectFil
       return next;
     });
 
-  function listSection(status: Status, group: string) {
-    const items = visible.filter((t) => t.status === status && inGroup(t, group));
+  function listSection(status: string, group: string) {
+    const items = visible.filter((t) => membership(t) === status && inGroup(t, group));
     if (!items.length && !(drag?.kind === 'task' && status !== 'done')) return null;
     const key = `status:${group}:${status}`;
     const folded = collapsed.has(key);
@@ -507,7 +538,7 @@ function TasksContent({ token, projectFilter = '' }: { token: string; projectFil
         <h2 title="Drag to reorder sections" {...dragProps({ kind: 'status', id: status, label: names[status] })} {...touchGrip({ kind: 'status', id: status, label: names[status] }, 350)}>
           <button className="tasks-fold" title={folded ? `Show ${names[status]}` : `Hide ${names[status]}`} aria-expanded={!folded} onClick={() => toggleFold(key)}>
             <span className={`chev ${folded ? '' : 'open'}`} aria-hidden="true" />
-            <StatusIcon status={status} />
+            <StatusIcon status={canonical(status)} />
             {names[status]}
             <span className="count">{items.length}</span>
           </button>
@@ -525,7 +556,7 @@ function TasksContent({ token, projectFilter = '' }: { token: string; projectFil
         </div>
       );
     return groups.map((group) => {
-      const statuses = order.filter((s) => s !== 'done' || showDone);
+      const statuses = order.filter((s) => canonical(s) !== 'done' || showDone);
       const count = (showDone ? visible : open).filter((t) => inGroup(t, group)).length;
       const body = statuses.map((s) => listSection(s, group));
       if (group === 'all') return <div key="all">{body}</div>;
@@ -541,11 +572,11 @@ function TasksContent({ token, projectFilter = '' }: { token: string; projectFil
     return (
       <div className="tasks-columns">
         {order.map((status) => {
-          const items = visible.filter((t) => t.status === status && inGroup(t, group));
+          const items = visible.filter((t) => membership(t) === status && inGroup(t, group));
           const key = `column:${group}:${status}`;
           const adding = columnDraft?.group === group && columnDraft.status === status;
           return (
-            <section key={status} className={`task-column ${over === key ? 'is-over' : ''}`} {...dropProps(key, ['task', 'status'], { status, group })}>
+            <section key={status} onClick={e => { if (e.target === e.currentTarget && !disabled) setColumnDraft({ group, status, text: '' }); }} className={`task-column ${over === key ? 'is-over' : ''}`} {...dropProps(key, ['task', 'status'], { status, group })}>
               <h2 title="Drag to reorder columns. Arrow keys move it." tabIndex={0} {...dragProps({ kind: 'status', id: status, label: names[status] })} {...touchGrip({ kind: 'status', id: status, label: names[status] })}
                 onKeyDown={(e) => {
                   if (!['ArrowLeft', 'ArrowRight'].includes(e.key)) return;
@@ -555,11 +586,11 @@ function TasksContent({ token, projectFilter = '' }: { token: string; projectFil
                   const target = index + (e.key === 'ArrowLeft' ? -1 : 1);
                   if (target < 0 || target >= next.length) return;
                   [next[index], next[target]] = [next[target], next[index]];
-                  preference({ columnOrder: next });
+                  preference({ boardColumnOrder: next });
                 }}
               >
-                <StatusIcon status={status} />
-                {names[status]}
+                <StatusIcon status={canonical(status)} />
+                <button className="task-column-name" title="Rename column" disabled={disabled} onClick={e => { columnReturnFocus.current = e.currentTarget; setColumnEditor({ id: status, name: names[status], fresh: false }); }}>{names[status]}</button>
                 <span className="count">{items.length}</span>
                 <button className="task-add-icon" title={`Add a task to ${names[status]}`} aria-label={`Add a task to ${names[status]}`} disabled={disabled} onClick={() => setColumnDraft({ group, status, text: '' })}>
                   +
@@ -590,10 +621,11 @@ function TasksContent({ token, projectFilter = '' }: { token: string; projectFil
                 </form>
               )}
               {items.map((t) => card(t, group))}
-              {!items.length && !adding && <p className="task-column-empty">Drop tasks here</p>}
+              {!adding && <button className="task-column-empty tasks-wide" title={`Add a task to ${names[status]}`} disabled={disabled} onClick={() => setColumnDraft({ group, status, text: '' })}>Add a task</button>}
             </section>
           );
         })}
+        <button className="tasks-add-column" title="Add a column" disabled={disabled || definitions.length >= 32} onClick={e => { columnReturnFocus.current = e.currentTarget; setColumnEditor({ id: crypto.randomUUID(), name: '', fresh: true }); }}>Add column</button>
       </div>
     );
   }
@@ -618,15 +650,23 @@ function TasksContent({ token, projectFilter = '' }: { token: string; projectFil
     });
   }
   const background = {
-    '--tasks-color': prefs?.backgroundColor || 'var(--bg)',
+    '--tasks-color': 'var(--bg)',
     '--tasks-photo': photo ? `url(${JSON.stringify(photo)})` : 'none',
     '--tasks-fade': prefs?.fade ?? 0.85,
     '--tasks-position': prefs?.photoPosition ?? 'center',
   } as CSSProperties;
-  const swatches = ['', '#f6f4ef', '#eef3f8', '#f3eef7', '#1b1d22', '#14211d', '#221a17'];
 
   return (
-    <section className={`tasks-page tasks-${view} ${photo ? 'has-photo' : ''}`} style={background} aria-label="Tasks">
+    <section className={`tasks-page tasks-${view} ${photo ? 'has-photo' : ''}`} style={background} aria-label="Tasks" onKeyDownCapture={(e) => {
+      if (!['ArrowUp', 'ArrowDown'].includes(e.key) || e.altKey || e.metaKey || e.ctrlKey) return;
+      const target = e.target as HTMLElement;
+      if (target.closest('input, textarea, select, [contenteditable="true"], .task-grip, [role="dialog"], [role="alertdialog"]')) return;
+      const titles = [...e.currentTarget.querySelectorAll<HTMLButtonElement>('.task-row .task-title, .task-card .task-title')];
+      const current = target.closest('.task-row, .task-card')?.querySelector('.task-title');
+      const index = titles.findIndex(t => t === current);
+      const next = index < 0 ? (e.key === 'ArrowDown' ? 0 : titles.length - 1) : Math.max(0, Math.min(titles.length - 1, index + (e.key === 'ArrowDown' ? 1 : -1)));
+      if (titles[next]) { e.preventDefault(); e.stopPropagation(); titles[next].focus(); titles[next].scrollIntoView({ block: 'nearest', inline: 'nearest' }); }
+    }}>
       <div className="tasks-inner">
         <header className="tasks-header">
           <h1>{filter ? projectName(filter) : 'Tasks'}</h1>
@@ -700,22 +740,9 @@ function TasksContent({ token, projectFilter = '' }: { token: string; projectFil
               </button>
               {panel === 'customize' && (
                 <div className="tasks-popover" role="dialog" aria-label="Background">
-                  <span className="tasks-label">Color</span>
-                  <div className="tasks-swatches">
-                    {swatches.map((c) => (
-                      <button
-                        key={c || 'theme'}
-                        className={`swatch ${!c ? 'swatch-theme' : ''}`}
-                        style={c ? { background: c } : undefined}
-                        title={c ? `Use ${c}` : 'Use the theme background'}
-                        aria-pressed={(prefs?.backgroundColor ?? '') === c}
-                        disabled={disabled}
-                        onClick={() => preference({ backgroundColor: c })}
-                      />
-                    ))}
-                    <label className="swatch swatch-custom" title="Pick any color">
-                      <input type="color" value={prefs?.backgroundColor || '#18191c'} disabled={disabled} onChange={(e) => preference({ backgroundColor: e.target.value })} />
-                    </label>
+                  <span className="tasks-label">Appearance</span>
+                  <div className="tasks-segment" role="group" aria-label="Appearance">
+                    {(['light', 'dark'] as const).map(theme => <button key={theme} title={`Use ${theme} mode`} disabled={disabled} aria-pressed={prefs?.theme === theme} onClick={() => preference({ theme, backgroundColor: '' })}>{theme === 'light' ? 'Light' : 'Dark'}</button>)}
                   </div>
                   <span className="tasks-label">Photo</span>
                   <div className="tasks-photo-row">
@@ -772,7 +799,6 @@ function TasksContent({ token, projectFilter = '' }: { token: string; projectFil
 
         {view === 'list' && (
           <form className="tasks-composer" onSubmit={submitComposer}>
-            <span className="tasks-composer-box" aria-hidden="true" />
             <textarea
               ref={composerRef}
               rows={1}
@@ -833,6 +859,7 @@ function TasksContent({ token, projectFilter = '' }: { token: string; projectFil
               <button role="menuitem" title="Open the task" onClick={() => openEditor(menu.task)}>
                 Open
               </button>
+              <button role="menuitem" title="Start a thread from this task" disabled={disabled || !!menu.task.threadCommandId && !menu.task.thread && !menu.task.threadError} onClick={() => void sendTask(menu.task)}>{threadLabel(menu.task)}</button>
               <button role="menuitem" title="Write a note on this task" onClick={() => openEditor(menu.task, true)}>
                 {menu.task.notes ? 'Edit note' : 'Add note'}
               </button>
@@ -846,14 +873,14 @@ function TasksContent({ token, projectFilter = '' }: { token: string; projectFil
                   <button
                     key={s}
                     role="menuitemradio"
-                    aria-checked={menu.task.status === s}
+                    aria-checked={membership(menu.task) === s}
                     title={`Move to ${names[s]}`}
                     onClick={() => {
-                      void patchTask(menu.task.id, { status: s });
+                      void patchTask(menu.task.id, { status: canonical(s), columnId: s });
                       setMenu(null);
                     }}
                   >
-                    <StatusIcon status={s} />
+                    <StatusIcon status={canonical(s)} />
                     <span>{names[s]}</span>
                   </button>
                 ))}
@@ -918,6 +945,39 @@ function TasksContent({ token, projectFilter = '' }: { token: string; projectFil
           {ghost.label}
         </div>
       )}
+      {columnEditor && <div className="task-editor-backdrop"><form className="task-editor" role="dialog" aria-modal="true" aria-label={columnEditor.fresh ? 'Add column' : 'Rename column'} onKeyDown={e => {
+        if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); if (!disabled) closeColumnEditor(); }
+        if (e.key === 'Tab') {
+          const controls = [...e.currentTarget.querySelectorAll<HTMLElement>('input:not(:disabled), button:not(:disabled)')];
+          const first = controls[0], last = controls.at(-1);
+          if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last?.focus(); }
+          if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first?.focus(); }
+        }
+      }} onSubmit={e => {
+        e.preventDefault();
+        if (!columnEditor.name.trim() || disabled) return;
+        const column = { id: columnEditor.id, name: columnEditor.name.trim(), status: canonical(columnEditor.id) };
+        const next = columnEditor.fresh ? [...definitions, column] : definitions.map(c => c.id === column.id ? column : c);
+        void write(() => setPrefs({ auth, columns: next })).then(ok => { if (ok) closeColumnEditor(); });
+      }}><h2>{columnEditor.fresh ? 'Add column' : 'Rename column'}</h2>{error && <p role="alert">{error}</p>}<input autoFocus aria-label="Column name" maxLength={80} value={columnEditor.name} onChange={e => setColumnEditor({ ...columnEditor, name: e.target.value })} /><footer><button type="button" onClick={() => closeColumnEditor()}>Cancel</button><button disabled={disabled || !columnEditor.name.trim()}>Save</button></footer></form></div>}
+      {pendingDelete && (
+        <div className="task-editor-backdrop tasks-delete-backdrop">
+          <div ref={deleteRef} className="task-editor" role="alertdialog" aria-modal="true" aria-labelledby="task-delete-heading" aria-describedby="task-delete-description" onKeyDown={e => {
+            if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); if (!saving) setPendingDelete(null); }
+            if (e.key === 'Tab') {
+              const buttons = [...e.currentTarget.querySelectorAll<HTMLButtonElement>('button:not(:disabled)')];
+              const first = buttons[0], last = buttons.at(-1);
+              if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last?.focus(); }
+              if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first?.focus(); }
+            }
+          }}>
+            <h2 id="task-delete-heading">Delete task?</h2>
+            <p id="task-delete-description">Delete “{pendingDelete.title}”? You can undo this afterward.</p>
+            {error && <p role="alert">{error}</p>}
+            <footer><button type="button" disabled={saving > 0} onClick={() => setPendingDelete(null)}>Cancel</button><button type="button" className="is-danger" disabled={disabled} onClick={() => confirmDelete(pendingDelete)}>Delete</button></footer>
+          </div>
+        </div>
+      )}
       {editing && (
         <div
           className="task-editor-backdrop"
@@ -962,7 +1022,7 @@ function TasksContent({ token, projectFilter = '' }: { token: string; projectFil
             <div className="task-editor-chips">
               <label className="task-pill" title="Status">
                 <StatusIcon status={editing.status ?? 'todo'} />
-                <select aria-label="Status" value={editing.status} onChange={(e) => setEditing({ ...editing, status: e.target.value as Status })}>
+                <select aria-label="Status" value={editing.columnId ?? editing.status} onChange={(e) => setEditing({ ...editing, status: canonical(e.target.value), columnId: e.target.value })}>
                   {order.map((s) => (
                     <option key={s} value={s}>
                       {names[s]}
@@ -993,12 +1053,24 @@ function TasksContent({ token, projectFilter = '' }: { token: string; projectFil
                   disabled={disabled}
                   onClick={() => {
                     deleteTask(editingBaseline.current!);
-                    setEditing(null);
                   }}
                 >
                   Delete
                 </button>
               )}
+              <button type="button" title="Save changes and start a thread" disabled={disabled || !editing.title?.trim()} onClick={() => {
+                const baseline = editingBaseline.current;
+                const live = tasks.find(t => t.id === editing.id) ?? baseline;
+                if (live?.thread || live?.threadCommandId) { void sendTask(live); return; }
+                if (!editing.id || !editing.title?.trim()) return;
+                const id = editing.id;
+                const fields = { title: editing.title, notes: editing.notes ?? '', status: editing.status ?? 'todo', columnId: editing.columnId, project: editing.project ?? null };
+                void write(async () => {
+                  if (baseline) await update({ auth, id, ...taskDraftChanges(baseline, fields) });
+                  else await create({ auth, id, ...fields });
+                  await startThread({ auth, id });
+                }).then(ok => { if (ok) setEditing(null); });
+              }}>{threadLabel(tasks.find(t => t.id === editing.id) ?? editingBaseline.current ?? editing)}</button>
               <span className="spacer" />
               <button type="button" title="Close without saving" onClick={() => setEditing(null)}>
                 Cancel
@@ -1017,7 +1089,7 @@ function TasksContent({ token, projectFilter = '' }: { token: string; projectFil
 export function TasksPage(props: { token: string; projectFilter?: string }) {
   const me = useQuery(api.phone.me, { token: props.token });
   if (!me) return <p className="pad">Loading Tasks…</p>;
-  if (me.apiVersion < 84) return <p className="pad">Update your Threadbear backend to use Tasks here.</p>;
+  if (me.apiVersion < 86) return <p className="pad">Update your Threadbear backend to use Tasks here.</p>;
   return <TasksContent key={props.projectFilter ?? ''} {...props} />;
 }
 
