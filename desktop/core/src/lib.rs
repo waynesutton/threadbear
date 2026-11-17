@@ -99,6 +99,5 @@ pub mod skill_mentions;
 
 pub mod user_markdown;
 
-pub mod bear_chat;
 
 pub mod code_web_address;

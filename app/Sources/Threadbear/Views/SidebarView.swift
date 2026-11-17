@@ -129,8 +129,8 @@ private struct InboxList: View {
             HStack(spacing: zoomed(6)) {
                 ThreadSearch()
                 NewThreadButton()
-                // The bear, always there at the top right (BearChat).
-                BearButton()
+                // No bear here: Wayne took it out on 17 Nov 2026 and asked
+                // that it stay out (BearButton is unused).
             }
             .fixedSize(horizontal: false, vertical: true)
             .padding(.horizontal, SidebarMetrics.outerInset)

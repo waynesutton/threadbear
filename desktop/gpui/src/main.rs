@@ -21,7 +21,6 @@ mod automation;
 #[cfg(feature = "automation")]
 mod automation_compat;
 mod bears;
-mod bear_chat;
 mod bear_picker;
 #[cfg(any(test, feature = "automation"))]
 mod automation_screenshot;

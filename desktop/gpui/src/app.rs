@@ -177,7 +177,6 @@ pub struct Threadbear {
     /// (`showsScheduledHome` and friends), not the selected thread. Picking a
     /// thread puts the thread back.
     pub(crate) shows_home: bool,
-    pub(crate) bear_preparing: bool,
     /// Back or Forward is putting a place back (`navigationPending`): the
     /// steps on the way aren't recorded.
     pub(crate) restoring_place: bool,
@@ -577,7 +576,6 @@ impl Threadbear {
             scheduled,
             schedule_editor: None,
             shows_home: false,
-            bear_preparing: false,
             restoring_place: false,
             librarian: crate::librarian::LibrarianState::new(),
             looks: Default::default(),
@@ -1683,7 +1681,6 @@ impl Threadbear {
         dump["notesPage"] = self.notes_dump(cx);
         dump["looks"] = self.looks_dump();
         dump["skillsPage"] = self.skills_dump(cx);
-        dump["bearChat"] = self.bear_chat_dump();
         dump["profilePage"] = self.profile_dump();
         // Panels pinned to their threads (pinned_panels.rs).
         dump["pinnedPanels"] = self.pinned_panels_dump(cx);

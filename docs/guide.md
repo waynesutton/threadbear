@@ -2874,20 +2874,6 @@ to close it. Fn dictation works the same, with its pill just above the
 message box. Notes has no dedicated microphone or Voice setting in the
 GPUI app; keyboard dictation still works in its text boxes.
 
-### The bear
-
-The bear at the top right of the sidebar is a chat for anything: a quick
-question, what to cook, planning your week, or real work. Click it to open
-your newest local chat with it. If there isn't an unarchived chat, it opens
-a new draft in `~/ThreadbearThreads/Bear`. These are ordinary threads with
-the same tools and approvals as any thread. The bear remembers by saving
-lasting information to its folder's agent memory.
-
-Its instructions are `CLAUDE.md` in that folder, written only the first
-time. Right-click the bear and choose Show the Bear's Folder to edit them.
-The bear shows a spinner while preparing its folder or working on your
-chat.
-
 ### Bears
 
 An experiment (Settings > General > Experiments, Bears). Bears are named

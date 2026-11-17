@@ -1450,7 +1450,7 @@ impl Threadbear {
             .size_full()
             .bg(p.side)
             // One line: search and New thread (Mike asked 30 Oct).
-            .child(h_flex().gap(px(6.)).px(px(OUTER_INSET)).pt(px(4.)).items_stretch().child(self.render_search(&p, cx)).child(self.render_new_thread(new_thread_active, &p, cx)).child(self.render_bear_chat(cx)))
+            .child(h_flex().gap(px(6.)).px(px(OUTER_INSET)).pt(px(4.)).items_stretch().child(self.render_search(&p, cx)).child(self.render_new_thread(new_thread_active, &p, cx)))
             // Nothing about the connection here: the banner over the thread
             // says it, as the Swift app's does, and only once it's worth
             // saying (`connection_banner`). The raw error showed here in the

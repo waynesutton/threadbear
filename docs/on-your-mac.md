@@ -372,10 +372,6 @@ activity from the GitHub Contributions API itself, and, with the Changelog
 on, opening it lists your public commits from GitHub's API (api.github.com,
 no token), so only the repo's name and your GitHub user name are sent for it. The page's font, Geist,
 is served from your own site (`web/public/fonts`), not a font service.
-The bear at the top right of the sidebar, the first time it's clicked,
-makes `~/ThreadbearThreads/Bear` with a `CLAUDE.md` of instructions for
-its chats (never rewritten once it's there); Claude Code keeps the bear's
-memory for that folder in `~/.claude/projects/`, as it does for any folder.
 `~/Library/Logs/Threadbear/voice.log`
 notes what Voice did (which microphone, whether echo cancellation
 started, errors), never what was said, and is started afresh past 256 KB.
