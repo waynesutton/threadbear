@@ -406,7 +406,9 @@ mod tests {
         assert_eq!(path::parse("/x/pg_a/v2/index.html"), None);
         assert_eq!(path::parse("/x/pages/pg_a/v0/index.html"), None);
         let v = |n: u32| page(json!({ "id": "pg_a", "title": "A", "version": n }));
-        assert_eq!(path::newer(file, &[v(2)], &[v(3)]).as_deref(), Some("/Users/me/Library/Application Support/Threadbear/pages/pg_a/v3/index.html"));
+        // Compare filesystem paths: Windows joins with backslashes even for slash input.
+        let newer = path::newer(file, &[v(2)], &[v(3)]).unwrap();
+        assert_eq!(std::path::Path::new(&newer), std::path::Path::new("/Users/me/Library/Application Support/Threadbear/pages/pg_a/v3/index.html"));
         // An older version opened on purpose stays.
         assert_eq!(path::newer(file, &[v(4)], &[v(5)]), None);
         assert_eq!(path::newer(file, &[v(2)], &[v(2)]), None);
