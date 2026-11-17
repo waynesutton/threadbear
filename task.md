@@ -9,7 +9,7 @@ Status and gap list: prds/prints-status.md
 
 ## In Progress
 
-- [ ] 2026-11-17 00:10 UTC GPUI Notes voice removal implemented; 61 Voice/keyboard tests, GPUI cargo check, spec pairing and diff check pass. Thread Voice and pause settings retained. Landing check and installed verification pending. prds/remove-gpui-notes-voice.md
+- [ ] Verify GPUI Notes voice removal in the running app after automatic restart. Build5592339e is staged; current app1300ba08 waits on an unsent draft. prds/remove-gpui-notes-voice.md
 
 - [ ] 2026-11-16 21:53 UTC Desktop CI: Linux's 60-minute budget landed as 7f2ba41e after 12 focused tests and the 505-second quick check passed. Run 43948148837 also passed all Windows specs before its release build hit 60 minutes; give Windows 90 minutes, keeping Linux/Mac at 60. Windows follow-up checks and a complete GitHub run remain required.
 
@@ -22,6 +22,8 @@ Status and gap list: prds/prints-status.md
 - [ ] Land verified Settings review fixes when the Mac is quiet, then verify the installed update.
 
 ## Completed
+
+- [x] 2026-11-17 02:32 UTC Remove GPUI Notes mic, caption, setting and dedicated listener, preserving thread Voice, keyboard dictation and pause settings. Landed5592339e; 61 Voice tests, GPUI check, feature pairing, 787-second landing check and release build pass. Staged binary confirms removed/retained settings; running-app verification tracked above. desktop/core/src/voice.rs, desktop/gpui/src/voice/, notes_page.rs, settings_window/voice.rs. prds/remove-gpui-notes-voice.md
 
 - [x] 2026-11-16 13:50 UTC Five always-on bear improvements landed: one shared unattended worker per bear, memory rules with told.md and tasks/, built-in tidies in Auto for Claude bears, quiet finishes for empty runs, and late answers (experiment). prds/bears-always-on.md. Rebased over 186 main commits; 291 focused tests and ./check.sh --quick passed (539 s); landed as 2876bbc2..897aa777 and pushed with scripts/sync-main.sh. bears.refreshRules ran on all four bears on the live runner (897aa777): personas and bear.json unchanged, one managed block added each, the four tidy routines kept their ids and times. PR #66 already carries the three fixes.
 
