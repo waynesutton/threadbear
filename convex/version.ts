@@ -392,4 +392,5 @@
 // 84: Tasks take a Doing status and a position on create, and preferences
 //    keep projectOrder and listOrder; a columnOrder saved before Doing comes
 //    back with it.
-export const API_VERSION = 84;
+// 85: clearer completion task summaries on thread cards (experiment clearerCompletion).
+export const API_VERSION = 85;

@@ -195,6 +195,16 @@ the card's top right collapses it to its heading, to read the reply behind
 it, and brings it back; the next card opens again. Once you reply, the
 card goes.
 
+With the **Clearer thread completion** experiment on (Settings > General >
+Experiments), the agent can report progress on every task in your request.
+The card shows how many are completed and which are pending or blocked,
+including work carried across turns. "Reported by the agent" labels that
+list. Threadbear checks loose ends separately; only a successful empty
+check says "No loose ends found". An unavailable check makes no such claim.
+Action buttons such as It works and Archive keep their neutral fill with
+a thin amber left edge. Archive stays manual. A thread without reported
+tasks keeps its usual card; turning the experiment off restores that view.
+
 To answer a Needs you card, click its buttons: your picks show on the
 card and go with your next message. To answer an ask in your own
 words, click Something else under it and write in the box that opens

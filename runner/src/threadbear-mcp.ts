@@ -269,6 +269,7 @@ export function buildThreadbearTools(
     provider?: 'claude' | 'codex';
     bulletReplies?: () => boolean;
     oneReply?: () => boolean;
+    clearerCompletion?: () => boolean;
     pocket?: () => PocketControl | undefined;
     gateway?: () => string | undefined;
     gatewayHealth?: () => Promise<ConnectorService[] | undefined>;
@@ -1716,11 +1717,18 @@ export function buildThreadbearTools(
   // a headline; the reply is the message the agent writes next. Nothing to
   // check for a reply, as it comes after; only a second call, a sign-in no
   // ask covers, and Restart to Update apply, as below.
+  const completionArgs: z.ZodRawShape = opts.clearerCompletion?.() ? {
+    completion: z.object({
+      tasks: z.array(z.object({ id: z.string().trim().min(1).max(64), title: z.string().trim().min(1).max(120), status: z.enum(['completed', 'pending', 'blocked']) })).max(30),
+      removeIds: z.array(z.string().trim().min(1).max(64)).max(30).optional(),
+    }).optional().describe('Report tasks for the whole request, with stable IDs across turns. Updates merge; omitted tasks stay. removeIds explicitly removes work no longer in scope. Completed means finished, including required checks. Use read_thread to recover the ledger. Never infer completion from a turn ending.'),
+  } : {};
   const oneReplyEndTurn = () =>
     tool(
       END_TURN_TOOL,
       endTurnDescription(codex ? 'codex' : 'claude', bulletReplies(), true),
       {
+        ...completionArgs,
         headline: z.string().optional().describe('One line, at most 80 characters, for the sidebar and notifications: the result, or what you need from them.'),
         needs: z.enum(['you', 'nothing']).optional().describe(`"you" when the user has to do something before this can go on (an approval, a decision, a key, something to look at, or trying what you made when only they can tell whether it works); "nothing" when it is done or still going by itself. ${WHOLE_JOB} Left out, it follows the asks.`),
         asks: z
@@ -1825,6 +1833,7 @@ export function buildThreadbearTools(
       END_TURN_TOOL,
       endTurnDescription(codex ? 'codex' : 'claude', bulletReplies()),
       {
+        ...completionArgs,
         needs: z.enum(['you', 'nothing']).optional().describe(`"you" when the user has to do something before this can go on; "nothing" when it is done. ${WHOLE_JOB} Left out, it follows the asks.`),
         summary: z
           .array(z.string())
@@ -2555,13 +2564,13 @@ export function serverInstructions(selfId: string, o: { one: boolean; bulletRepl
   );
 }
 
-export function threadbearMcpServer(control: ThreadControl, selfId: string, schedules?: ScheduleControl, projects?: ProjectControl, appRestarts?: AppRestartControl, bulletReplies: () => boolean = () => true, pocket?: () => PocketControl | undefined, oneReply: () => boolean = () => false, gateway?: () => string | undefined, gatewayHealth?: () => Promise<ConnectorService[] | undefined>, remote?: () => RemoteControl | undefined, xSearch?: () => { secretsDir: string } | undefined, pages?: () => Pages | undefined, printPublisher?: () => PagePublisher | undefined, printsWhenAsked?: () => boolean, tasks?: () => import('./tasks.ts').Tasks | undefined): McpSdkServerConfigWithInstance {
+export function threadbearMcpServer(control: ThreadControl, selfId: string, schedules?: ScheduleControl, projects?: ProjectControl, appRestarts?: AppRestartControl, bulletReplies: () => boolean = () => true, pocket?: () => PocketControl | undefined, oneReply: () => boolean = () => false, gateway?: () => string | undefined, gatewayHealth?: () => Promise<ConnectorService[] | undefined>, remote?: () => RemoteControl | undefined, xSearch?: () => { secretsDir: string } | undefined, pages?: () => Pages | undefined, printPublisher?: () => PagePublisher | undefined, printsWhenAsked?: () => boolean, tasks?: () => import('./tasks.ts').Tasks | undefined, clearerCompletion?: () => boolean): McpSdkServerConfigWithInstance {
   const one = oneReply();
   const server = createSdkMcpServer({
     name: SERVER_NAME,
     version: RUNNER_VERSION,
     instructions: serverInstructions(selfId, { one, bulletReplies: bulletReplies(), pocket: Boolean(pocket?.()), projects: Boolean(projects) }),
-    tools: buildThreadbearTools(control, selfId, Date.now, schedules, projects, appRestarts, { bulletReplies, pocket, oneReply: () => one, gateway, gatewayHealth, remote, xSearch, pages, printPublisher, printsWhenAsked, tasks }),
+    tools: buildThreadbearTools(control, selfId, Date.now, schedules, projects, appRestarts, { bulletReplies, pocket, oneReply: () => one, gateway, gatewayHealth, remote, xSearch, pages, printPublisher, printsWhenAsked, tasks, clearerCompletion }),
   });
   server.tools = [...ALWAYS_ASK_TOOLS].map((name) => ({ name: name.split('__').at(-1)!, permission_policy: 'always_ask' as const }));
   return server;

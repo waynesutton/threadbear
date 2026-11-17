@@ -141,6 +141,8 @@ Before(async function (this: ThreadbearWorld, { pickle }) {
   // The skills store: the skillsStore experiment on in the mock's hello, with its skills.
   if (pickle.tags.some((t) => t.name === '@native-tasks')) process.env.TB_MOCK_TASKS = '1';
   else delete process.env.TB_MOCK_TASKS;
+  if (pickle.tags.some((t) => t.name === '@clearer-completion')) process.env.TB_MOCK_COMPLETION = '1';
+  else delete process.env.TB_MOCK_COMPLETION;
   if (pickle.tags.some((t) => t.name === '@skills-store')) process.env.TB_MOCK_SKILLS = '1';
   else delete process.env.TB_MOCK_SKILLS;
   // The skills store: the skillsStore experiment on in the mock's hello.

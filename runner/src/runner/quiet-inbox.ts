@@ -15,6 +15,7 @@ import type { Runner, ThreadState } from '../runner.ts';
 import type { RunnerPart } from './part.ts';
 import type { LooseEnd } from '../protocol.ts';
 import { sentByAgent } from '../protocol.ts';
+import { completionOpen } from '../completion.ts';
 import { experimentOn } from '../experiments.ts';
 import { above } from '../threadbear-mcp.ts';
 
@@ -27,6 +28,7 @@ export const quietInboxPart = {
   // are Mike's to tick or leave.
   async settleQuietly(this: Runner, st: ThreadState, next: boolean, quiet = false): Promise<void> {
     const { rec, rt } = st;
+    if (experimentOn(this.cfg.home, 'clearerCompletion') && completionOpen(rec.completion)) return;
     const quietInbox = experimentOn(this.cfg.home, QUIET_INBOX);
     const bear = experimentOn(this.cfg.home, 'bears') && Boolean(this.bearOf?.(rec.cwd));
     const unattended = Boolean(rec.schedule || ['thread', 'schedule', 'tool'].includes(rec.startedBy?.kind ?? ''));

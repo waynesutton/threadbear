@@ -37,9 +37,9 @@ earlier four-platform run.
 
 <!-- parity:start -->
 
-280 of 380 features have a spec so far, across 774 scenarios.
+282 of 382 features have a spec so far, across 780 scenarios.
 
-Scenarios passing: Swift: not run, Mac: 6 of 774, Windows: not run, Linux: not run.
+Scenarios passing: Swift: not run, Mac: not run, Windows: not run, Linux: not run.
 
 
 ### 0. Foundations everything else needs
@@ -229,6 +229,7 @@ Scenarios passing: Swift: not run, Mac: 6 of 774, Windows: not run, Linux: not r
 | Feature | Swift | Mac | Windows | Linux |
 |---|---|---|---|---|
 | `card.done` Done card | pending | pending | pending | pending |
+| `clearer-completion` Clearer completion (`clearerCompletion`) | pending | pending | pending | pending |
 | `card.review` Review findings | pending | pending | pending | pending |
 | `card.needsyou` Needs you card | pending | pending | pending | pending |
 | `card.collapse` Collapse | pending | pending | pending | pending |
@@ -326,7 +327,7 @@ Scenarios passing: Swift: not run, Mac: 6 of 774, Windows: not run, Linux: not r
 | `looks.scheduled` Customize the Scheduled page | pending | pending | pending | pending |
 | `looks.projects` Customize the Projects page | pending | pending | pending | pending |
 | `librarian.log` Librarian log | pending | pending | pending | pending |
-| `tasks.page` Tasks page | pending | pass | pending | pending |
+| `tasks.page` Tasks page | pending | pending | pending | pending |
 | `notes.page` Notes page | pending | pending | pending | pending |
 | `skills.page` Skills page | pending | pending | pending | pending |
 | `schedule.page` Scheduled page | pending | pending | pending | pending |
@@ -430,6 +431,7 @@ Scenarios passing: Swift: not run, Mac: 6 of 774, Windows: not run, Linux: not r
 | `voice.talk` Talking with a thread (`voiceMode`) | pending | pending | pending | pending |
 | `voice.approvals` Spoken approvals (`voiceMode`) | pending | pending | pending | pending |
 | `voice.keys` Fn dictation (`voiceMode`) | pending | pending | pending | pending |
+| `voice.notes` Talking into a note (`voiceMode`) | pending | pending | pending | pending |
 | `voice.settings` Settings > Voice (`voiceMode`) | pending | pending | pending | pending |
 
 <!-- parity:end -->

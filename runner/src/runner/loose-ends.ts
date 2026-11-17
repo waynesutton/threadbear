@@ -7,6 +7,7 @@
 import type { Runner, ThreadState } from '../runner.ts';
 import type { RunnerPart } from './part.ts';
 import type { LooseEnd } from '../protocol.ts';
+import { completionOpen } from '../completion.ts';
 import { experimentOn } from '../experiments.ts';
 import { childLooseEnds, editedLooseEnds, runningLooseEnds, scheduleLooseEnds, worktreeLooseEnds, type ChildThread } from '../loose-ends.ts';
 
@@ -53,7 +54,7 @@ export const looseEndsPart = {
       const o = other.rec;
       if (o.startedBy?.threadId !== st.rec.id || o.archivedAt || other.rt.deleted) continue;
       const s = this.summary(other);
-      children.push({ id: o.id, title: o.title, working: o.status === 'running' || o.status === 'starting', needsYou: s.needsYou && s.needs !== 'nothing' });
+      children.push({ id: o.id, title: o.title, working: o.status === 'running' || o.status === 'starting' || (completionOpen(o.completion) && experimentOn(this.cfg.home, 'clearerCompletion')), needsYou: s.needsYou && s.needs !== 'nothing' });
     }
     return childLooseEnds(children);
   },
@@ -61,7 +62,7 @@ export const looseEndsPart = {
   // Checks the thread's loose ends for its done card and puts them on its
   // summary. Quiet on failure: a card that says nothing is today's card.
   async checkLooseEnds(this: Runner, st: ThreadState): Promise<void> {
-    if (!experimentOn(this.cfg.home, 'looseEnds')) return;
+    if (!experimentOn(this.cfg.home, 'looseEnds') && !experimentOn(this.cfg.home, 'clearerCompletion')) return;
     const seq = this.looseEndsCard(st);
     if (seq === undefined) return;
     const { rec, rt } = st;

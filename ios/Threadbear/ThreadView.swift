@@ -203,7 +203,7 @@ struct ThreadView: View {
                         WorkingLine(text: thread.working)
                             .id("working:\(thread.status == .running)")
                     } else if let asks = thread.asks, !asks.isEmpty, showsAsks(thread) {
-                        AsksCard(asks: asks, picks: $picks, busy: sendingCard) {
+                        AsksCard(asks: asks, completion: thread.completion, picks: $picks, busy: sendingCard) {
                             sendCard(thread, lastSeq: messages.last?.seq)
                         }
                         .onChange(of: thread.asksSeq, initial: true) {
@@ -218,7 +218,7 @@ struct ThreadView: View {
                     } else if isDone(thread, messages: messages) {
                         // Ticked follow-ups go from the card's Send on their
                         // own; anything typed stays in the box for later.
-                        DoneCard(next: thread.next ?? [], looseEnds: thread.looseEnds ?? [], openThread: { pushThread($0) }, picked: $nextPicks, busy: sendingCard) {
+                        DoneCard(next: thread.next ?? [], looseEnds: thread.looseEnds ?? [], completion: thread.completion, looseEndsChecked: thread.looseEnds != nil, openThread: { pushThread($0) }, picked: $nextPicks, busy: sendingCard) {
                             sendCard(thread, lastSeq: messages.last?.seq)
                         } archive: {
                             archive()

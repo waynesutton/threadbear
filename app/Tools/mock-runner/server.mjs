@@ -339,7 +339,10 @@ const settings = {
   // Every experiment, as the real runner lists them (runner/src/experiments):
   // only Prints here, on unless TB_MOCK_PAGES_OFF, so both apps' Prints
   // scenarios have a store to read (features/prints.feature).
-  experiments: [{ id: 'pages', name: 'Prints', does: 'Threads make Prints you keep: charts, dashboards, reports, docs and diagrams, with versions, in a reply as a card.', on: !process.env.TB_MOCK_PAGES_OFF }],
+  experiments: [
+    { id: 'pages', name: 'Prints', does: 'Threads make Prints you keep: charts, dashboards, reports, docs and diagrams, with versions, in a reply as a card.', on: !process.env.TB_MOCK_PAGES_OFF },
+    { id: 'clearerCompletion', name: 'Clearer completion', does: 'Shows task completion on the reply card.', on: Boolean(process.env.TB_MOCK_COMPLETION) },
+  ],
 };
 const pagesOn = () => settings.experiments.some((e) => e.id === 'pages' && e.on);
 /** Prints by id: { page, versions: number[], sources: Map(version -> { markdown?, mermaid? }) }. */
@@ -442,6 +445,7 @@ function mockExperiments() {
     ...(pagesOn() ? ['pages'] : []),
     ...(process.env.TB_MOCK_SKILLS ? ['skillsStore'] : []),
     ...(process.env.TB_MOCK_TASKS ? ['tasks'] : []),
+    ...(settings.experiments.some((e) => e.id === 'clearerCompletion' && e.on) ? ['clearerCompletion'] : []),
     // TB_MOCK_NESTED_OFF keeps its demo threads with the experiment off.
     ...(process.env.TB_MOCK_NESTED && !process.env.TB_MOCK_NESTED_OFF ? ['nestedThreads'] : []),
   ];

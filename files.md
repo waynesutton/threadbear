@@ -1,5 +1,13 @@
 # Files
 
+## Clearer thread completion
+
+- `runner/src/completion.ts`: bounded task updates merged by stable ID across turns.
+- `runner/src/experiments/clearerCompletion.md`: opt-in completion card and removal guidance.
+- `desktop/core/tests/completion_tests.rs`, `runner/test/unit/completion*.test.ts`: reducer, persistence, compatibility and mirror checks.
+- `web/src/completion.ts`, `web/src/completion.test.ts`: task summary labels and heading checks.
+- `prds/clearer-thread-completion.md`: approved appearance, contract and verification state.
+
 ## Realtime Tasks
 
 - `convex/tasks.ts`, `convex/taskFields.ts`: authenticated cloud-owned tasks and synced preferences.

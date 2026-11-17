@@ -112,6 +112,11 @@ export const threadFields = {
   // one shows as its text; threadId for a thread one, at (ISO) for a
   // booked check-in.
   looseEnds: v.optional(v.array(v.object({ kind: v.string(), text: v.string(), threadId: v.optional(v.string()), at: v.optional(v.string()) }))),
+  // Agent-reported task progress; independent of runner-checked loose ends (API 84).
+  completion: v.optional(v.object({ tasks: v.array(v.object({
+    id: v.string(), title: v.string(),
+    status: v.union(v.literal('completed'), v.literal('pending'), v.literal('blocked')),
+  })) })),
   // The turn (its id's first 8 characters, as message rows have it) that
   // the row's done-card fields describe, `review` and `looseEnds`, since
   // API 76: another Mac's relay puts them on that turn's end only, not on an

@@ -92,7 +92,8 @@ import { cleanUpWorktree, makeWorktree, sameSubfolder, worktreeInstructions } fr
 import { stripModelSuffix, type AccountRegistry, type LearnedAccountInfo } from './accounts.ts';
 import { pickAccount as pickByRoom, resetTime, type UsageReading } from './usage.ts';
 import { DEFAULT_POOL_FOLDERS, RUNNER_VERSION, expandHome, paths, peekRunnerJson, type Config } from './config.ts';
-import { experimentsOn } from './experiments.ts';
+import { mergeCompletion, completionOpen } from './completion.ts';
+import { experimentOn, experimentsOn } from './experiments.ts';
 import { WAIT_SLACK_MS, blockedUntil, limitWhy, loginOk, nextLogin, pickInPool, poolAccounts, poolForFolder, poolProviders, readPools, roomWait, validatePools } from './pools.ts';
 import { copyImageInto, imageRefFor } from './media.ts';
 import { isDirectory } from './fsutil.ts';
@@ -2737,6 +2738,10 @@ export class Runner {
       if (said.next) body.next = said.next;
       body.needsFrom = said.from;
     }
+    if (outcome === 'completed' && experimentOn(this.cfg.home, 'clearerCompletion')) {
+      rec.completion = mergeCompletion(rec.completion, turn.endTurn?.completion);
+      if (rec.completion) body.completion = rec.completion;
+    }
     // Here rather than only in end_turn's handler: a refused end_turn
     // leaves the asks in the reply's text, and that thread never heard
     // Mike had restarted (29 Oct 2026).
@@ -2801,7 +2806,7 @@ export class Runner {
     // turn counts (the one after a sub-agent or background job ends is
     // often where the report is), so this reads end_turn itself, not `away`.
     // Judged before endTurn, which starts any queued message.
-    const finished = outcome === 'completed' && said?.needs === 'nothing' && !rec.queue.length && !archive &&
+    const finished = outcome === 'completed' && !(experimentOn(this.cfg.home, 'clearerCompletion') && completionOpen(rec.completion)) && said?.needs === 'nothing' && !rec.queue.length && !archive &&
       !snoozeFromTool(turn.endTurn) && !waitForFromTool(turn.endTurn) &&
       !rec.subagents?.some((a) => a.status === 'running') && !rt.tasks.length && !rt.approvals.size &&
       // A job that ended mid-turn: the CLI's turn reading its result is next.
@@ -4123,6 +4128,7 @@ export class Runner {
     if (rec.share) s.share = { access: rec.share.access === 'link' ? 'link' : 'off', slug: rec.share.slug, updatedAt: rec.share.updatedAt };
     // Only for the card it was checked for: a new turn's card waits for its own.
     if (rec.looseEnds && this.looseEndsCard(st) === rec.looseEnds.seq) s.looseEnds = { seq: rec.looseEnds.seq, ends: rec.looseEnds.ends.map((e) => ({ ...e })), at: rec.looseEnds.at };
+    if (rec.completion && experimentOn(this.cfg.home, 'clearerCompletion') && !rec.archivedAt && (rec.status === 'running' || rec.status === 'starting' || (rec.status === 'idle' && rec.needs?.seq === rec.lastTurnCompletedSeq))) s.completion = structuredClone(rec.completion);
     if (rt.moving) s.moving = { ...rt.moving };
     const bear = this.bearOf?.(rec.cwd);
     if (bear) s.bear = bear;

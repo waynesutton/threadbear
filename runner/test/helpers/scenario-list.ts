@@ -16,6 +16,27 @@ export type Scenario = { name: string; play: (p: Play) => void; shows: string[] 
 
 export const SCENARIOS: Scenario[] = [
   {
+    name: 'whole-request task progress survives a second turn on every surface',
+    shows: ['All 2 tasks completed', 'Build the card', 'Verify the card'],
+    play: (p) => {
+      p.clearerCompletion();
+      p.say('The card is built. Please verify it.');
+      p.endTurn({ needs: 'you', asks: [{ action: 'Try the card', options: ['It works', 'Adjust it'] }], completion: { tasks: [{ id: 'build', title: 'Build the card', status: 'completed' }, { id: 'verify', title: 'Verify the card', status: 'pending' }] } });
+      p.send('It works');
+      p.say('The card is built and verified.');
+      p.endTurn({ needs: 'nothing', completion: { tasks: [{ id: 'verify', title: 'Verify the card', status: 'completed' }] } });
+    },
+  },
+  {
+    name: 'unfinished task progress stays beside the asks on every surface',
+    shows: ['1 of 2 tasks completed', 'Build the card', 'Verify the card'],
+    play: (p) => {
+      p.clearerCompletion();
+      p.say('The card is built. Please verify it.');
+      p.endTurn({ needs: 'you', asks: [{ action: 'Try the card', options: ['It works', 'Adjust it'] }], completion: { tasks: [{ id: 'build', title: 'Build the card', status: 'completed' }, { id: 'verify', title: 'Verify the card', status: 'pending' }] } });
+    },
+  },
+  {
     name: 'a late tool answer resumes as a message on every surface',
     shows: ['answered an expired tool card', 'allowed this request once', 'The old tool call was not replayed'],
     play: (p) => {

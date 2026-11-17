@@ -267,6 +267,7 @@ It comes from reading code, not from running anything, so "(unverified)" means n
 | ID | Feature | What it does | How in GPUI | Route | Size | Swift |
 |---|---|---|---|---|---|---|
 | `card.done` | Done card | Archive, Or carry on list, tick and ? | Drawn card with `TextView`. A card that arrives while the thread's on screen settles in from 6 points below, and the done card's tick draws itself on (`composer_card.rs` `CardArrival`, `drawn_tick`; Mike picked it 13 Nov). | build | M | `ComposerCard`, `RowRenderer` (`asksText`) |
+| `clearer-completion` | Clearer completion (`clearerCompletion`) | Agent-reported task progress beside the existing asks and Archive action | Optional completion ledger on the composer-attached card; neutral action buttons with amber left edges, independent of runner-checked loose ends. Off keeps the original card even for stored completion events. | build | none | none |
 | `card.review` | Review findings | Another lab's findings on the card, each with fixed, disputed or left, and a line opening the review thread | Added section in `card.done` and `card.needsyou`, from `turn.completed`'s `review`. | build | S | `RowRenderer` (`reviewText`) |
 | `card.needsyou` | Needs you card | Outlined asks, button rows | Drawn card with blocks for each ask, holding its thread identity (a security fix). | build | L | `ComposerCard`, `RowRenderer` |
 | `card.paging` | Paging | ‹ 1 of 3 ›, moves on after a pick | Drawn, with a slide from `Animation`. | build | S | `ComposerCard` (`CardDeck`) |

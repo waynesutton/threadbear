@@ -3741,6 +3741,30 @@ sub-agents, with no "coordinator" mark (mockups in
 Mac (GPUI) app only for now; the phone, the website and the Swift app show
 threads as before.
 
+## Clearer completion
+
+Experiment `clearerCompletion` adds an optional `completion` to `end_turn`,
+`turn.completed` and thread summaries. It contains `tasks`, at most 30
+`{ id, title, status }` entries. IDs are stable nonempty strings (64 chars),
+titles are nonempty (120 chars), and status is `completed`, `pending` or
+`blocked`. These are agent reports, shown separately from runner-checked
+loose ends. This feature never archives a thread automatically.
+
+The tool takes task updates, merging by ID in first-seen order. Omitted
+tasks retain their state; omitting completion preserves the whole ledger.
+`completion.removeIds` explicitly removes tasks no longer in scope (tool
+input only). The runner emits the merged snapshot, never removeIds. Empty
+ledgers are omitted. Failed or interrupted turns cannot update the ledger.
+With the experiment off the tool field and summary are absent; old callers
+remain valid. Stored progress survives restart. Incomplete tasks prevent a
+thread from being treated as finished by automatic helper archiving.
+
+The composer shows completed/total and task status on both Done and Needs
+you cards without replacing asks. Neutral action buttons have an amber left
+edge. Existing fonts and manual Archive remain. A missing loose-end check
+never means no loose ends; only a successful empty check makes that claim.
+API 85 mirrors the optional snapshot for other Macs, website and phone.
+
 ## A quiet inbox
 
 Experiment `quietInbox` (`runner/src/runner/quiet-inbox.ts`), off unless

@@ -465,6 +465,11 @@ function fitThread<T extends Record<string, any>>(t: T): T | undefined {
   for (const f of ['title', 'preview', 'cwd', 'working', 'asked']) if (typeof out[f] === 'string') out[f] = cutBytes(out[f], f === 'title' ? 300 : CAP.threadText);
   if (typeof out.recap === 'string') out.recap = cutBytes(out.recap, CAP.recap);
   if (Array.isArray(out.looseEnds)) out.looseEnds = out.looseEnds.slice(0, 10).map((e: any) => ({ ...e, text: cutBytes(String(e.text ?? ''), 300) }));
+  if (out.completion && Array.isArray(out.completion.tasks)) {
+    out.completion = { tasks: out.completion.tasks.slice(0, 30).map((task: any) => ({
+      id: cutBytes(String(task.id), 80), title: cutBytes(String(task.title), 300), status: task.status,
+    })) };
+  }
   if (out.review && Array.isArray(out.review.findings)) {
     const cut = (s: unknown, n: number) => (typeof s === 'string' ? cutBytes(s, n) : undefined);
     // Its counts held to small whole numbers (holdReviewNumbers, Daybreak 109).
@@ -495,7 +500,7 @@ function fitThread<T extends Record<string, any>>(t: T): T | undefined {
   }
   // Another lab's review goes first, then the done card's loose ends: the
   // Mac has both, and the card still says Done without them.
-  for (const f of ['review', 'looseEnds', 'asks', 'next', 'links', 'projects']) {
+  for (const f of ['review', 'completion', 'looseEnds', 'asks', 'next', 'links', 'projects']) {
     if (docBytes(out) <= CAP.threadDoc) break;
     delete out[f];
   }

@@ -18,7 +18,9 @@ How Prints work today, what's missing and what's next: [Prints status](https://g
 
 ### Added
 
+- Clearer thread completion experiment: task progress across turns on the composer card, separate runner loose-end checks, and neutral action buttons with an amber left edge. Archive remains manual. Mirror support requires backend API 85.
 - GPUI Voice waits 1.5 seconds before sending, so a short pause mid-sentence doesn't cut you off; Settings > Voice & Audio > Pause before sending changes it.
+
 - Draft Tasks experiment: account-synced tasks with Board/List views, explicit default view, projects and backgrounds on desktop (⌘7) and the authenticated web page. Locally built and verified on native desktop and responsive web; not released.
 
 - Customize in the GPUI app: Settings > General > Look turns on Customize for the Librarian and Scheduled pages and a background photo behind the main window, as in the Swift app. The Librarian panel has the greeting, your picture or none, a background photo you drag into place and fade, the quote of the day, the layout, the title parts, the numbers, and the GitHub and Threadbear activity calendars. What you set in the Swift app comes across the first time, with its pictures.

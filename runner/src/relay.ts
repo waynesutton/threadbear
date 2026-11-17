@@ -178,6 +178,7 @@ export type RelayThreadRow = {
   review?: LabReviewLedger;
   // The turn review and looseEnds are from (API 76): they go on its end only.
   cardTurn?: string;
+  completion?: import('./protocol.ts').ThreadCompletion;
   lastActivityAt?: string;
   // Whether it's shared (the threads row's `share`; the sidebar's table has none).
   share?: { access?: string; slug?: unknown };
@@ -398,6 +399,7 @@ export function relayEvents(threadId: string, rows: RelayRow[], row: RelayThread
           ...(last && row?.needs === 'nothing' && row.next?.length ? { next: row.next } : {}),
           // Only on the turn it's from: a newer turn's row can come before its rows.
           ...(last && row?.review && row.cardTurn === r.turn ? { review: row.review } : {}),
+          ...(last && row?.completion && row.cardTurn === r.turn ? { completion: row.completion } : {}),
         }),
       );
     }
@@ -597,6 +599,7 @@ export class Relay {
     const w = this.watches.get(threadId);
     const ends = w && this.looseEndsOf(w);
     if (ends) thread.looseEnds = ends;
+    if (w?.row?.completion) thread.completion = structuredClone(w.row.completion);
     return thread;
   }
 
