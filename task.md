@@ -9,7 +9,6 @@ Status and gap list: prds/prints-status.md
 
 ## In Progress
 
-- [ ] Collapse scheduled follow-up instructions behind Show details in the GPUI transcript. prds/collapsed-scheduled-followups.md
 
 - [ ] 2026-11-16 21:53 UTC Desktop CI: Linux's 60-minute budget landed as 7f2ba41e after 12 focused tests and the 505-second quick check passed. Run 43948148837 also passed all Windows specs before its release build hit 60 minutes; give Windows 90 minutes, keeping Linux/Mac at 60. Windows follow-up checks and a complete GitHub run remain required.
 
@@ -20,6 +19,8 @@ Status and gap list: prds/prints-status.md
 - [ ] Land verified Settings review fixes when the Mac is quiet, then verify the installed update.
 
 ## Completed
+
+- [x] 2026-11-17 09:25 UTC Scheduled follow-up disclosure1dcad0fb is installed and running. Normal landing check passed689s; native build, actual Show/Hide clicks, edge cases and22 cross-route scenarios pass. Real exported thread: all8 loaded scheduled messages start collapsed, original text is retained, and Show/Hide works. Installed build.json, process19187 and desktop.log09:08:47/09:14:56 confirm1dcad0fb. prds/collapsed-scheduled-followups.md
 
 - [x] 2026-11-17 06:11 UTC Clearer completion landed as ee1e9967..06337397 after the 559-second landing check passed. Installed and running GPUI06337397 and runner06337397 verified; clearerCompletion enabled for Wayne. Actual native partial/complete/off cards, It works and Archive clicks pass; live demo61db70e8 reports completed/pending tasks through the real end_turn tool. Archive remains manual. API85 cloud mirror source and iOS source/model checks are included; no cloud deployment or phone install performed. prds/clearer-thread-completion.md
 
