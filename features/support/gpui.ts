@@ -133,7 +133,9 @@ export class GpuiDriver implements Driver {
       // desktop settings and portals the app asks for.
       this.display ??= `:${100 + (process.pid % 400)}`;
       if (!this.children.some((c) => this.commands.get(c) === 'Xvfb')) {
-        this.child('Xvfb', [this.display, '-screen', '0', '1400x900x24'], {});
+        // Keep the display alive when relaunch closes its last X client.
+        // Xvfb's default reset races the next app's connection.
+        this.child('Xvfb', [this.display, '-noreset', '-screen', '0', '1400x900x24'], {});
         await sleep(400);
       }
       this.appProcess = this.child('dbus-run-session', ['--', binary], { ...env, DISPLAY: this.display, NO_AT_BRIDGE: '1', LIBGL_ALWAYS_SOFTWARE: '1' });
