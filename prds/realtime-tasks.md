@@ -32,6 +32,12 @@ Landing checkpoint 2026-11-16 20:47 UTC: `tb land` rebased the feature to `4eeb6
 
 Verification follow-up 2026-11-16 21:10 UTC: the broad check caught four new Tasks focus paths that did not return AppKit's keyboard from a web panel. Added the existing `keyboard_to_app` handoff after composer, title, notes and column-input focus. `gpui-focus-keyboard.test.ts` reproduced all four missing calls and now passes. The serialized GPUI automation cargo check also passes. The broad suite is still progressing, with remote-host withdrawal and dev-app lifecycle tests also awaiting its automatic retry. GitHub run `43948148837` has again cancelled Mac without acquiring a runner; Linux and Windows remain in progress. No deployment or landing yet.
 
+## Native verification checkpoint 2026-11-17 00:56 UTC
+
+Accessibility fix `90a429b3` passes all four source-role tests and the serialized GPUI cargo check. The automation app rebuild finished successfully; the final Tasks run passed all 10 scenarios and 131 steps in 1m 47s (`.fixtures/tasks/v2/a11y-native-tests.log`). Its app processes have exited. The broad quick check's only remaining failure is now fixed and verified; do not repeat passing suites before the required landing check.
+
+CI timeout fixes `7f2ba41e` and `9d1311f9` are on main. The CI owner reports fresh Desktop run `43988092381` has acquired runners on Mac, Linux and Windows and all three are running specs. Landing remains gated until it succeeds. Thread `1b046499` owns reruns and pushes; this thread must not duplicate them or bypass the gate. Tasks refinement remains unlanded and undeployed. Next: normal `tb land`, coordinated API 84/web rollout, list default, automatic restart watch and installed/live verification under the existing approval.
+
 ## Architecture
 
 Verification follow-up 2026-11-16 21:46 UTC: the broad quick check finished. Runner unit tests passed after the built-in retry of 52 tests; typechecks, web tests, feature pairing, desktop app check and mock tests passed. The only remaining failure was `a11y_roles_source`: seven custom Tasks controls/containers lacked roles. Added labelled button roles for opening tasks/cards, folding sections/projects, showing Done and choosing colors; fold state is exposed, the editor is a labelled dialog, and its dismiss backdrop is explicitly a container. All four accessibility source tests now pass. GPUI compilation is queued behind the machine build lock (`.fixtures/tasks/v2/a11y-cargo-check.log`, exec99227). No full-suite rerun is needed before this focused result; landing will run its required checks. CI remains held: Linux timed out, Mac lacked capacity, Windows still running. CI helper thread1b046499 is landing the Linux timeout fix.
@@ -46,7 +52,7 @@ Focused backend tests for auth, retries, updates, project ownership, ordering, U
 
 ## Delivery constraints
 
-Work only in this borrowed worktree. No production deployment, publishing or push. No changes to Swift app or ios. No package additions without approval. Record a motion preview before UI implementation and validate completed UI against it. Stop own development processes before ending work.
+Work only in this borrowed worktree. Wayne's deployment approval recorded below authorizes landing and coordinated backend, web and desktop rollout. No publishing or push from this thread; the CI helper owns its authorized CI pushes. No changes to Swift app or ios. No package additions without approval. Record a motion preview before UI implementation and validate completed UI against it. Stop own development processes before ending work.
 
 ## Implementation checkpoint 2026-11-16T09:28:00Z
 
