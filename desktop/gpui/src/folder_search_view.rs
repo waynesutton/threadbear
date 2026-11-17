@@ -195,7 +195,7 @@ impl SidePane {
     pub(crate) fn search_dump(&self, key: &str) -> Option<serde_json::Value> {
         let search = self.files.searches.get(key).filter(|s| !s.query.is_empty())?;
         let (summary, hits) = match &search.found {
-            Some(found) => (core_search::summary(found), found.hits.iter().map(|h| format!("{}:{}", core_search::relative(&h.path, &search.root), h.line)).collect::<Vec<_>>()),
+            Some(found) => (core_search::summary(found), found.hits.iter().map(|h| hit_name(&h.path, &search.root, h.line)).collect::<Vec<_>>()),
             None => ("Searching…".to_owned(), vec![]),
         };
         Some(serde_json::json!({ "query": search.query, "summary": summary, "hits": hits }))
@@ -206,7 +206,7 @@ impl SidePane {
     pub(crate) fn open_hit_named(&mut self, key: &str, named: &str, thread: &ThreadSummary, preview: &PanePreview, cx: &mut Context<Self>) -> Result<(), String> {
         let search = self.files.searches.get(key).ok_or("the folder has no search")?;
         let found = search.found.as_ref().ok_or("the search hasn't finished")?;
-        let hit = found.hits.iter().find(|h| format!("{}:{}", core_search::relative(&h.path, &search.root), h.line) == named).cloned().ok_or_else(|| format!("no match {named}"))?;
+        let hit = found.hits.iter().find(|h| hit_name(&h.path, &search.root, h.line) == named).cloned().ok_or_else(|| format!("no match {named}"))?;
         let query = search.query.clone();
         self.open_search_hit(key, &hit.path, hit.line, &query, thread, preview, cx);
         Ok(())
@@ -222,4 +222,11 @@ impl<T> MonoFont for Context<'_, T> {
         use gpui_kit::component::ActiveTheme as _;
         self.theme().mono_font_family.clone()
     }
+}
+
+/// A hit as scripts name it, "src/app.ts:2": with `/` on every system, so a
+/// spec reads the same on Windows.
+#[cfg(feature = "automation")]
+fn hit_name(path: &str, root: &str, line: usize) -> String {
+    format!("{}:{}", core_search::relative(path, root).replace('\\', "/"), line)
 }

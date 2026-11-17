@@ -1616,6 +1616,13 @@ impl ThreadPane {
                 }
                 // Sent in a Shift-Tab mode ("ask").
                 if let RowContent::User(message) = &row.content {
+                    if message.is_from_schedule() {
+                        let open = self.row_open(row);
+                        let body = message.scheduled_header().map(|h| h.body).unwrap_or_else(|| message.text.clone());
+                        out["expanded"] = json!(open);
+                        out["buttons"] = json!(if body.trim().is_empty() { Vec::<&str>::new() } else { vec![if open { "Hide details" } else { "Show details" }] });
+                        out["detailsVisible"] = json!(open && !body.trim().is_empty());
+                    }
                     if let Some(mode) = &message.mode {
                         out["mode"] = json!(mode);
                     }

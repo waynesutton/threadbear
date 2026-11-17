@@ -23,6 +23,8 @@ import { busy, Lists, ResizeHandle, type Row, useSidebarWidth } from './sidebar'
 import { Pop } from './menu';
 import { pastedOf } from './picture-chips';
 import { Rail } from './rail';
+import { TasksPage } from './tasks';
+import { completionHeading, type Completion } from './completion';
 import { NewThread, ProjectPage, ProjectsList, RunnerPage, RunnersList, ScheduledList, SchedulePage, UsageList, UsagePage } from './pages';
 import { duration, fold, isNote, splitTurns, type Item } from './turns';
 import { folderName, sender } from './format';
@@ -118,6 +120,7 @@ function Shell({ token, route }: { token: string; route: ReturnType<typeof useRo
   const shell = useRef<HTMLDivElement>(null);
   // On a phone there's one column: a list, or what's open from it.
   const open = !!selected || !!id || route.page === 'new';
+  if (route.page === 'tasks') return <div className="tasks-shell"><Rail token={token} route={route} /><main className="main"><TasksPage token={token} projectFilter={route.id ?? ''} /></main></div>;
   return (
     <div ref={shell} className={`shell ${open ? 'has-thread' : ''}`} style={{ '--sidebar-width': `${width}px` } as CSSProperties}>
       <Rail token={token} route={route} />
@@ -388,6 +391,7 @@ function Dock({ token, thread: t, lastSeq, onSent, onArchive }: { token: string;
   const by = picks.card === t.asksSeq ? picks.by : {};
   const finished = !busy(t) && !t.needsYou && !t.pendingApproval && !asks.length && !t.archivedAt && !t.working;
   const next = finished ? (t.next ?? []) : [];
+  const completion = !busy(t) && !t.pendingApproval && !t.archivedAt && t.completion?.tasks.length ? t.completion : undefined;
   // What the runner found still open (docs/protocol.md, "Loose ends"), as
   // on the Mac and the phone: open ones first, then booked check-ins.
   const ends = finished ? [...(t.looseEnds ?? []).filter((e) => e.kind !== 'scheduled'), ...(t.looseEnds ?? []).filter((e) => e.kind === 'scheduled')] : [];
@@ -407,7 +411,8 @@ function Dock({ token, thread: t, lastSeq, onSent, onArchive }: { token: string;
   const card = t.pendingApproval ? (
     <ApprovalCard token={token} threadId={t.threadId} approval={t.pendingApproval} onSent={onSent} />
   ) : asks.length ? (
-    <section className="card">
+    <section className={`card ${completion ? 'has-completion' : ''}`}>
+      {completion ? <CompletionSummary completion={completion} /> : null}
       <h2>
         ✋ {asks.length === 1 ? 'Decision needed' : 'Decisions needed'}
       </h2>
@@ -449,14 +454,16 @@ function Dock({ token, thread: t, lastSeq, onSent, onArchive }: { token: string;
         </Fragment>
       ))}
     </section>
-  ) : next.length || ends.length ? (
-    <section className="card">
+  ) : next.length || ends.length || (finished && completion) ? (
+    <section className={`card ${completion ? 'has-completion' : ''}`}>
       <h2>
-        Done
-        <button className="btn plain" style={{ marginLeft: 'auto' }} onClick={onArchive}>
+        {completionHeading(completion) ?? 'Done'}
+        <button title="Archive this thread" className="btn plain" style={{ marginLeft: 'auto' }} onClick={onArchive}>
           Archive
         </button>
       </h2>
+      {completion ? <CompletionSummary completion={completion} hideHeading /> : null}
+      {completion && finished && t.looseEnds?.length === 0 ? <div className="completion-check">No loose ends found <span>· Checked by Threadbear</span></div> : null}
       {ends.length ? (
         <div className="loose-ends">
           <div className="loose-label">{ends.some((e) => e.kind !== 'scheduled') ? 'Still open' : 'Coming back'}</div>
@@ -669,4 +676,18 @@ function ApprovalCard({ token, threadId, approval, onSent }: { token: string; th
 
 function originLabel(origin: string): string {
   return origin === 'schedule' ? 'Scheduled' : origin === 'runner' ? 'From Threadbear' : origin === 'agent' ? 'From another thread' : origin;
+}
+
+
+function CompletionSummary({ completion, hideHeading = false }: { completion: Completion; hideHeading?: boolean }) {
+  if (!completion.tasks.length) return null;
+  return <div className="completion-summary">
+    {!hideHeading ? <h2>{completionHeading(completion)}</h2> : null}
+    <div className="completion-source">Reported by the agent</div>
+    <ul>{completion.tasks.map((task) => <li key={task.id}>
+      <span className={`completion-mark ${task.status}`} aria-hidden>{task.status === 'completed' ? '✓' : '○'}</span>
+      <span>{task.title}</span>
+      <span className="completion-status">{task.status === 'completed' ? 'Completed' : task.status === 'blocked' ? 'Blocked' : 'Pending'}</span>
+    </li>)}</ul>
+  </div>;
 }

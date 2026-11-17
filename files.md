@@ -1,5 +1,30 @@
 # Files
 
+## Scheduled follow-up details
+
+- `desktop/gpui/src/rows.rs`: collapsed scheduled headings and selectable Markdown details using existing row expansion state.
+- `features/reading-a-thread.feature`: scheduled disclosure behavior alongside transcript reading checks.
+- `prds/collapsed-scheduled-followups.md`: scope, display-only behavior and verification checkpoint.
+
+## Clearer thread completion
+
+- `runner/src/completion.ts`: bounded task updates merged by stable ID across turns.
+- `runner/src/experiments/clearerCompletion.md`: opt-in completion card and removal guidance.
+- `desktop/core/tests/completion_tests.rs`, `runner/test/unit/completion*.test.ts`: reducer, persistence, compatibility and mirror checks.
+- `web/src/completion.ts`, `web/src/completion.test.ts`: task summary labels and heading checks.
+- `prds/clearer-thread-completion.md`: approved appearance, contract and verification state.
+
+## Realtime Tasks
+
+- `convex/tasks.ts`, `convex/taskFields.ts`: authenticated cloud-owned tasks and synced preferences.
+- `runner/src/tasks.ts`: desktop/agent bridge and realtime invalidation.
+- `desktop/gpui/src/tasks_page.rs`: native Tasks quick-add list, board, row menu, editor and background controls.
+- `web/src/tasks.tsx`, `web/src/tasks.css`: authenticated responsive Tasks route.
+- `web/src/tasks-draft.ts`, `web/src/tasks-draft.test.ts`: field-specific edits that preserve concurrent changes.
+- `web/src/tasks-order.ts`, `desktop/core/src/task_order.rs`: where dropped tasks, columns, list sections and project groups land, and how a quick-added line splits into title and note. Same rules on both, each with tests.
+- `runner/test/unit/tasks*.test.ts`, `features/tasks.feature`: backend/bridge and native behavior checks.
+- `prds/realtime-tasks.md`: scope, delivery constraints and verification checkpoint.
+
 ## GPUI Looks
 
 - `desktop/core/src/looks/` the Librarian, Scheduled and Projects pages' looks in the Swift app's JSON, the background's focus and crop, the greeting, GitHub contributions, Threadbear activity, the quote of the day and the profile page made from the Librarian's look.
@@ -21,7 +46,7 @@
 - `desktop/core/src/voice_keys.rs` the Fn key, its options and the machine that turns presses into dictation.
 - `desktop/core/tests/voice.rs` the Swift app's Voice tests, ported.
 - `desktop/gpui/src/voice/` the Voice entity (`mod.rs`), Voice mode (`mode.rs`), Fn dictation (`keys.rs`), the button and pill (`button.rs`) and the helper process (`helper.rs`).
-- `desktop/gpui/src/settings_window/voice.rs` Settings > Voice & Audio.
+- `desktop/gpui/src/settings_window/voice.rs` Settings > Voice & Audio for thread Voice, keyboard dictation and the pause before sending.
 - `desktop/gpui/native/voice_helper.swift` the microphone, SpeechAnalyzer, playback and pocket-tts, as a helper program the app carries.
 - `desktop/gpui/native/voice_keys.m` the app-local key monitor and typing into the focused box.
 - `desktop/gpui/native/voice_build.rs` builds both for build.rs.
@@ -48,8 +73,15 @@
 
 ## Bears, tables and webhooks
 
-- `runner/src/bears.ts` bear folders, the runner's bears.json, faces, quiet hours, Head Bear and the `bears.*` RPCs.
-- `runner/src/mentions.ts` routes `@Name` and `tb bears ask` to a bear and brings its reply back.
+- `runner/src/bears.ts` bear folders, access state, shared worker lookup, managed memory rules, tidy refresh and the `bears.*` RPCs.
+- `runner/src/mentions.ts` routes mentions within mode and sandbox boundaries and matches replies to each asking turn.
+- `runner/src/runner/late-answers.ts` resumes expired tool answers once using the persisted event log and existing permission checks.
+- `runner/src/runner/quiet-inbox.ts` checks unfinished work before archiving helpers or explicitly empty unattended bear runs.
+- `runner/src/experiments/lateAnswers.md` the off-by-default late-answer experiment and check-in.
+- `runner/test/unit/late-answers.test.ts` expiry, partial-start retries, replay prevention, restart and pending-card isolation.
+- `runner/test/unit/bears-always-on.test.ts` integrated routine, webhook and mention routing with replies matched to queued turns.
+- `prds/bears-always-on.md` the five runner improvements, safeguards and verification status.
+- `prds/bears-resources.md` source links supplied for bears, what they informed, and supporting implementation references.
 - `runner/src/tables.ts` tables as marked projects, their host folder and the `tables.*` RPCs.
 - `runner/src/webhooks.ts` webhook runs on the runner, its hook registry and the `webhooks.*` RPCs.
 - `runner/src/cli-bears.ts` `tb bears`, `tb tables` and `tb webhooks`, and the note that Auto works like Ask on a Codex bear.
@@ -68,6 +100,7 @@
 
 ## Runner checks
 
+- `.github/workflows/desktop.yml` runs desktop tests, behaviour specs, release builds and artifact uploads with 60-minute Linux/Mac and 90-minute Windows limits.
 - `runner/test/unit/net-probe.test.ts` checks proxy deadlines and response-size limits with controlled time, plus real TCP and TLS connections.
 - `runner/package.json` caps the updater's npm unit suite at four workers, with failed files still rerun one at a time.
 

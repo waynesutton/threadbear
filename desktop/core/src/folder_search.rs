@@ -174,8 +174,13 @@ fn read_text(path: &Path) -> Option<String> {
 
 /// The path under `root`, for the results list: `src/app.ts`.
 pub fn relative<'a>(path: &'a str, root: &str) -> &'a str {
-    let base = if root.ends_with('/') { root.to_owned() } else { format!("{root}/") };
-    path.strip_prefix(base.as_str()).unwrap_or(path)
+    // Either separator, as Windows' paths use `\\` (the fork's Windows CI,
+    // 16 Nov): the root, then the separator after it.
+    let root = root.trim_end_matches(['/', '\\']);
+    match path.strip_prefix(root) {
+        Some(rest) if rest.starts_with(['/', '\\']) => &rest[1..],
+        _ => path,
+    }
 }
 
 /// The hits a file at a time, in the order found: (the file, its hits).
@@ -265,7 +270,8 @@ mod tests {
         dir.write("logo.png", &[0, 1, 2, b'p', b'o', b'r', b't']);
         let root = dir.root();
         let found = search(&root, "port", DEFAULT_LIMIT, &AtomicBool::new(false));
-        let mut files: Vec<&str> = found.hits.iter().map(|h| relative(&h.path, &root)).collect();
+        // As `/` everywhere, so the list reads the same on Windows.
+        let mut files: Vec<String> = found.hits.iter().map(|h| relative(&h.path, &root).replace('\\', "/")).collect();
         files.dedup();
         assert_eq!(files, vec![".github/workflows/ci.yml", "README.md", "src/app.ts"]);
         assert_eq!(found.hits.iter().filter(|h| h.path.ends_with("app.ts")).map(|h| h.line).collect::<Vec<_>>(), vec![1, 2]);
@@ -306,5 +312,8 @@ mod tests {
         assert_eq!(relative("/x/y/src/a.ts", "/x/y"), "src/a.ts");
         assert_eq!(relative("/x/y/src/a.ts", "/x/y/"), "src/a.ts");
         assert_eq!(relative("/z/a.ts", "/x/y"), "/z/a.ts");
+        assert_eq!(relative("/x/yz/a.ts", "/x/y"), "/x/yz/a.ts");
+        assert_eq!(relative(r"C:\x\y\src\a.ts", r"C:\x\y"), r"src\a.ts");
+        assert_eq!(relative(r"C:\x\y\src\a.ts", r"C:\x\y\"), r"src\a.ts");
     }
 }

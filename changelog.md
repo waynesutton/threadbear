@@ -6,16 +6,31 @@ How Prints work today, what's missing and what's next: [Prints status](https://g
 
 ## [Unreleased]
 
+### Removed
+
+- GPUI Notes microphone and Use with Notes setting. Thread Voice, keyboard dictation and Pause before sending remain available.
+
 ### Changed
 
+- Scheduled follow-ups in the GPUI transcript start collapsed, with Show details and Hide details. Expanded instructions use selectable, left-aligned Markdown; the agent still receives the original message.
+- Desktop CI has 60 minutes on Linux and Mac, and 90 on Windows, to finish tests, the release build and artifact upload.
+- Tasks opens on a quick-add list: type a task, press Return, tick it off. Done tasks leave the list with Undo. The board gains a Doing column, title-only cards and drag to reorder columns, list sections and project groups. Each task has a ⋯ menu to add a note, move it to a project or change its status. The web photo picker is a real button now. Focusing a task field returns keyboard control from web panels to the app.
 - GPUI Settings opens inside the main window. Back, Esc or Close returns to the previous view with its thread draft intact.
 
 ### Added
+
+- Clearer thread completion experiment: task progress across turns on the composer card, separate runner loose-end checks, and neutral action buttons with an amber left edge. Archive remains manual. Mirror support requires backend API 85.
+- GPUI Voice waits 1.5 seconds before sending, so a short pause mid-sentence doesn't cut you off; Settings > Voice & Audio > Pause before sending changes it.
+
+- Tasks experiment: account-synced tasks with a quick-add list, four-column board, explicit default view, projects and backgrounds on desktop (⌘7) and the authenticated web page. Deployed and verified in the installed desktop app.
 
 - Customize in the GPUI app: Settings > General > Look turns on Customize for the Librarian and Scheduled pages and a background photo behind the main window, as in the Swift app. The Librarian panel has the greeting, your picture or none, a background photo you drag into place and fade, the quote of the day, the layout, the title parts, the numbers, and the GitHub and Threadbear activity calendars. What you set in the Swift app comes across the first time, with its pictures.
 - Notes in the GPUI app: the bar's Notes button and ⌘6 open your notes over the main window, the same encrypted notes the Swift app keeps. New Note, rename, delete, coloured Markdown, task boxes you tick with a click, and lists that carry on when you press Return. Settings > General > Show Notes hides them and keeps them.
 - Voice in the GPUI app, behind the voiceMode experiment: a microphone button beside Send to talk with a thread out loud and hear its replies, spoken yes or no for plain command cards, hold Fn (or Shift Fn, Fn Space, Fn Control) to dictate into any text box, and Settings > Voice & Audio for the icon, keys, voice, speed, language and microphone. No bear avatar.
 - The GPUI Connectors panel can set up a gateway, add services, connect outside agents with masked key fields, hide and restore rows, and review pinned local-server commands before adding them.
+- Bears share one unattended worker across routines, webhooks and mentions, with a separate reply for each mention. Memory rules track prior reports and unfinished tasks; `tb bears refresh-rules` updates existing bears without replacing their personas.
+- Built-in Claude memory tidies use Auto after direct creation or an authorized refresh; Codex and agent-created bears keep Ask. Empty runs can request a quiet finish without hiding useful reports or unfinished work.
+- Late answers, an experiment: answering a tool card within a day of expiry resumes the work once, without replaying the call or widening access. The deliberate late-answer button remains planned for GPUI.
 - A background picture can be an animated GIF, in the main window (Settings > General > Look) and behind the Librarian, Scheduled and Projects pages. It plays, and holds still with Reduce Motion on. Swift Mac app only.
 - A project with tables among its Parts lists each table's bears on its own Project tab.
 - A table's project page lists the bears at it, a bear's thread put in a table seats that bear, and new tables get a three-people icon.
@@ -33,6 +48,7 @@ How Prints work today, what's missing and what's next: [Prints status](https://g
 - Failed Instructions saves remain visible after leaving GPUI Settings, keep the edit for retry while the app is open, and hold automatic restarts until saved.
 
 - A temporary outside-agent list failure in the GPUI app keeps the last list and logs the error without repeatedly showing a banner.
+- Shared bear workers now enforce a mention sender's sandbox boundary and preserve routines' explicit login, pool, model and effort choices. Late answers retry a partially saved turn without losing the answer or duplicating its message.
 - Network probe checks no longer fail runner updates just because a busy Mac delays test execution.
 - Runner updates run at most four unit-test files at once, reducing contention on busy machines.
 

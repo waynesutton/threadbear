@@ -9,7 +9,7 @@
 // opened cold.
 import { useSyncExternalStore } from 'react';
 
-export type RailView = 'scheduled' | 'projects' | 'runners' | 'usage';
+export type RailView = 'tasks' | 'scheduled' | 'projects' | 'runners' | 'usage';
 export type Route = { page: 'list' } | { page: 'new' } | { page: 'thread'; threadId: string } | { page: 'share'; slug: string } | { page: 'print'; slug: string } | { page: 'profile' } | { page: 'signin' } | { page: RailView; id?: string };
 
 function parse(): Route {
@@ -22,7 +22,7 @@ function parse(): Route {
   const m = location.pathname.match(/^\/t\/([^/]+)\/?$/);
   if (m) return { page: 'thread', threadId: decodeURIComponent(m[1]) };
   if (/^\/new\/?$/.test(location.pathname)) return { page: 'new' };
-  const v = location.pathname.match(/^\/(scheduled|projects|runners|usage)(?:\/([^/]+))?\/?$/);
+  const v = location.pathname.match(/^\/(tasks|scheduled|projects|runners|usage)(?:\/([^/]+))?\/?$/);
   if (v) return { page: v[1] as RailView, ...(v[2] ? { id: decodeURIComponent(v[2]) } : {}) };
   return { page: 'list' };
 }

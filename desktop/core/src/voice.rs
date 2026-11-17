@@ -769,6 +769,19 @@ pub struct VoicePrefs {
     pub command_mode: Option<bool>,
     #[serde(rename = "voiceKeyCommand", skip_serializing_if = "Option::is_none")]
     pub key_command: Option<String>,
+    /// How long a pause sends what was said, in seconds. The GPUI app's own:
+    /// the Swift app always waited 1, which cut Wayne off mid-sentence.
+    #[serde(rename = "voicePause", skip_serializing_if = "Option::is_none")]
+    pub pause: Option<f64>,
+}
+
+/// The pauses Settings offers, in seconds.
+pub const PAUSES: [f64; 4] = [1.0, 1.5, 2.0, 3.0];
+pub const DEFAULT_PAUSE: f64 = 1.5;
+
+/// "1.5 seconds".
+pub fn pause_title(pause: f64) -> String {
+    if pause == 1.0 { "1 second".to_owned() } else { format!("{pause} seconds") }
 }
 
 impl VoicePrefs {
@@ -790,6 +803,12 @@ impl VoicePrefs {
 
     pub fn language(&self) -> VoiceLanguage {
         language(self.language.as_deref())
+    }
+
+    /// The saved pause, clamped to one that's offered.
+    pub fn pause(&self) -> f64 {
+        let Some(value) = self.pause.filter(|v| *v > 0.0) else { return DEFAULT_PAUSE };
+        PAUSES.iter().copied().min_by(|a, b| (a - value).abs().total_cmp(&(b - value).abs())).unwrap_or(DEFAULT_PAUSE)
     }
 
     pub fn microphone(&self) -> Option<&str> {

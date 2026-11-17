@@ -1295,6 +1295,7 @@ impl TranscriptModel {
                     if completion.outcome == TurnOutcome::Completed && completion.needs.as_deref() == Some("you") && !completion.asks.is_empty() {
                         let card_id = format!("ak:{seq}");
                         let mut card = AsksCard::new(seq, completion.asks.clone());
+                        card.completion = completion.completion.clone();
                         card.ticked = completion.asks.iter().enumerate().filter(|(_, ask)| ask.ticked).map(|(i, _)| i as i64).collect();
                         card.picks = self.ask_picks.get(&seq).cloned().unwrap_or_default();
                         card.notes = self.ask_notes.get(&seq).cloned().unwrap_or_default();
@@ -1306,6 +1307,7 @@ impl TranscriptModel {
                         // Mike replies or the next turn ends.
                         let card_id = format!("ak:{seq}");
                         let mut card = AsksCard::new(seq, Vec::new());
+                        card.completion = completion.completion.clone();
                         card.next = completion.next.clone();
                         card.picked_next = self.next_picks.get(&seq).cloned().unwrap_or_default();
                         card.explain_next = self.next_explains.get(&seq).cloned().unwrap_or_default();

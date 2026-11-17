@@ -22,6 +22,7 @@ let lastThread: string | undefined;
 
 export function Rail({ token, route }: { token: string; route: Route }) {
   const inbox = useInbox();
+  const account = useQuery(api.phone.me, { token });
   // The small rows, not phone:schedules: this is on screen all the time.
   const wakes = useLiveQuery(api.phone.wakes, { token });
   const runners = useLiveQuery(api.phone.runners, { token });
@@ -68,6 +69,7 @@ export function Rail({ token, route }: { token: string; route: Route }) {
       </a>
       {view('scheduled', 'Scheduled', <Icon.Clock />, active)}
       {view('projects', 'Projects', <Icon.Stack />)}
+      {(account?.apiVersion ?? 0) >= 83 && view('tasks', 'Tasks', <Icon.Checklist />)}
       <span className="grow" />
       {runnersShown(runners ?? [], now).map((r) => (
         <a

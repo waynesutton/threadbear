@@ -173,7 +173,7 @@ export const ALWAYS_ASK_TOOLS = new Set([`mcp__${SERVER_NAME}__delete_thread`]);
 // Restart to Update asks only wake or file this thread, with the runner's
 // words, and the turn they start runs in its mode then, so they stay in.
 export const NEVER_ASK_TOOLS = new Set(
-  ['end_turn', 'list_threads', 'read_thread', 'list_accounts', 'list_schedules', 'list_projects', 'read_project', 'unpin', 'ask_secret', 'add_button', 'x_search', 'list_prints', 'read_print', 'list_pages', 'read_page'].map(
+  ['end_turn', 'list_tasks', 'list_threads', 'read_thread', 'list_accounts', 'list_schedules', 'list_projects', 'read_project', 'unpin', 'ask_secret', 'add_button', 'x_search', 'list_prints', 'read_print', 'list_pages', 'read_page'].map(
     (n) => `mcp__${SERVER_NAME}__${n}`,
   ),
 );
@@ -269,6 +269,7 @@ export function buildThreadbearTools(
     provider?: 'claude' | 'codex';
     bulletReplies?: () => boolean;
     oneReply?: () => boolean;
+    clearerCompletion?: () => boolean;
     pocket?: () => PocketControl | undefined;
     gateway?: () => string | undefined;
     gatewayHealth?: () => Promise<ConnectorService[] | undefined>;
@@ -283,6 +284,7 @@ export function buildThreadbearTools(
     printPublisher?: () => PagePublisher | undefined;
     // Settings' Only make Prints when I ask (printsWhenAsked): create_print
     // asks first unless the user's latest message asked for one.
+    tasks?: () => import('./tasks.ts').Tasks | undefined;
     printsWhenAsked?: () => boolean;
   } = {},
 ) {
@@ -1715,11 +1717,18 @@ export function buildThreadbearTools(
   // a headline; the reply is the message the agent writes next. Nothing to
   // check for a reply, as it comes after; only a second call, a sign-in no
   // ask covers, and Restart to Update apply, as below.
+  const completionArgs: z.ZodRawShape = opts.clearerCompletion?.() ? {
+    completion: z.object({
+      tasks: z.array(z.object({ id: z.string().trim().min(1).max(64), title: z.string().trim().min(1).max(120), status: z.enum(['completed', 'pending', 'blocked']) })).max(30),
+      removeIds: z.array(z.string().trim().min(1).max(64)).max(30).optional(),
+    }).optional().describe('Report tasks for the whole request, with stable IDs across turns. Updates merge; omitted tasks stay. removeIds explicitly removes work no longer in scope. Completed means finished, including required checks. Use read_thread to recover the ledger. Never infer completion from a turn ending.'),
+  } : {};
   const oneReplyEndTurn = () =>
     tool(
       END_TURN_TOOL,
       endTurnDescription(codex ? 'codex' : 'claude', bulletReplies(), true),
       {
+        ...completionArgs,
         headline: z.string().optional().describe('One line, at most 80 characters, for the sidebar and notifications: the result, or what you need from them.'),
         needs: z.enum(['you', 'nothing']).optional().describe(`"you" when the user has to do something before this can go on (an approval, a decision, a key, something to look at, or trying what you made when only they can tell whether it works); "nothing" when it is done or still going by itself. ${WHOLE_JOB} Left out, it follows the asks.`),
         asks: z
@@ -1761,6 +1770,7 @@ export function buildThreadbearTools(
           .string()
           .optional()
           .describe('Only in a thread the user did not start (a tool, a schedule or another thread did): how it came out in about 6 plain words ("network blip, nothing to do"), shown when they hover its row, so they can tell how much it matters.'),
+        quiet: z.boolean().optional().describe('An unattended bear run found nothing new to report. With needs "nothing", archives only after checking for unfinished work.'),
         archive: z
           .boolean()
           .optional()
@@ -1823,6 +1833,7 @@ export function buildThreadbearTools(
       END_TURN_TOOL,
       endTurnDescription(codex ? 'codex' : 'claude', bulletReplies()),
       {
+        ...completionArgs,
         needs: z.enum(['you', 'nothing']).optional().describe(`"you" when the user has to do something before this can go on; "nothing" when it is done. ${WHOLE_JOB} Left out, it follows the asks.`),
         summary: z
           .array(z.string())
@@ -1863,6 +1874,7 @@ export function buildThreadbearTools(
           .string()
           .optional()
           .describe('Only in a thread the user did not start (a tool, a schedule or another thread did): how it came out in a few plain words, about 6 ("network blip, nothing to do"). The sidebar shows them when the user hovers the mark on its row, so they can tell how much it matters. Leave it out in a thread the user started.'),
+        quiet: z.boolean().optional().describe('An unattended bear run found nothing new to report. With needs "nothing", archives only after checking for unfinished work.'),
         archive: z
           .boolean()
           .optional()
@@ -2023,6 +2035,12 @@ export function buildThreadbearTools(
     ...xSearchTools,
     ...pageTools,
     ...pocketTools,
+    ...(opts.tasks?.() ? [
+      tool('list_tasks', 'List synced Tasks. Follow next with after for more.', { after: z.string().optional() }, handle(async a => JSON.stringify({ ...(await opts.tasks!()!.call('list', a) as object), projects: await opts.tasks!()!.call('projects') }))),
+      tool('create_task', 'Add a synced task. Project is optional: its name, id, or runnerId/id from list_tasks. Supply id to retry safely.', { id: z.string().optional(), title: z.string(), notes: z.string().optional(), status: z.enum(['backlog', 'todo', 'doing', 'done']).optional(), project: z.union([z.string(), z.object({ runnerId: z.string(), id: z.string() })]).optional() }, handle(async a => JSON.stringify(await opts.tasks!()!.call('create', a)))),
+      tool('update_task', 'Edit or move a synced task. Only supplied fields change; null project unassigns it.', { id: z.string(), title: z.string().optional(), notes: z.string().optional(), status: z.enum(['backlog', 'todo', 'doing', 'done']).optional(), project: z.union([z.string(), z.object({ runnerId: z.string(), id: z.string() })]).nullable().optional(), position: z.number().optional() }, handle(async a => JSON.stringify(await opts.tasks!()!.call('update', a)))),
+      tool('delete_task', 'Delete a synced task, or restore it with undo.', { id: z.string(), undo: z.boolean().optional() }, handle(async ({ id, undo }) => JSON.stringify(await opts.tasks!()!.call(undo ? 'restore' : 'remove', { id })))),
+    ] : []),
     ...(schedules ? scheduleTools : []),
     ...(projects ? projectTools : []),
     tool(
@@ -2546,13 +2564,13 @@ export function serverInstructions(selfId: string, o: { one: boolean; bulletRepl
   );
 }
 
-export function threadbearMcpServer(control: ThreadControl, selfId: string, schedules?: ScheduleControl, projects?: ProjectControl, appRestarts?: AppRestartControl, bulletReplies: () => boolean = () => true, pocket?: () => PocketControl | undefined, oneReply: () => boolean = () => false, gateway?: () => string | undefined, gatewayHealth?: () => Promise<ConnectorService[] | undefined>, remote?: () => RemoteControl | undefined, xSearch?: () => { secretsDir: string } | undefined, pages?: () => Pages | undefined, printPublisher?: () => PagePublisher | undefined, printsWhenAsked?: () => boolean): McpSdkServerConfigWithInstance {
+export function threadbearMcpServer(control: ThreadControl, selfId: string, schedules?: ScheduleControl, projects?: ProjectControl, appRestarts?: AppRestartControl, bulletReplies: () => boolean = () => true, pocket?: () => PocketControl | undefined, oneReply: () => boolean = () => false, gateway?: () => string | undefined, gatewayHealth?: () => Promise<ConnectorService[] | undefined>, remote?: () => RemoteControl | undefined, xSearch?: () => { secretsDir: string } | undefined, pages?: () => Pages | undefined, printPublisher?: () => PagePublisher | undefined, printsWhenAsked?: () => boolean, tasks?: () => import('./tasks.ts').Tasks | undefined, clearerCompletion?: () => boolean): McpSdkServerConfigWithInstance {
   const one = oneReply();
   const server = createSdkMcpServer({
     name: SERVER_NAME,
     version: RUNNER_VERSION,
     instructions: serverInstructions(selfId, { one, bulletReplies: bulletReplies(), pocket: Boolean(pocket?.()), projects: Boolean(projects) }),
-    tools: buildThreadbearTools(control, selfId, Date.now, schedules, projects, appRestarts, { bulletReplies, pocket, oneReply: () => one, gateway, gatewayHealth, remote, xSearch, pages, printPublisher, printsWhenAsked }),
+    tools: buildThreadbearTools(control, selfId, Date.now, schedules, projects, appRestarts, { bulletReplies, pocket, oneReply: () => one, gateway, gatewayHealth, remote, xSearch, pages, printPublisher, printsWhenAsked, tasks, clearerCompletion }),
   });
   server.tools = [...ALWAYS_ASK_TOOLS].map((name) => ({ name: name.split('__').at(-1)!, permission_policy: 'always_ask' as const }));
   return server;

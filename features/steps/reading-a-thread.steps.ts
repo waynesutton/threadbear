@@ -3,6 +3,26 @@ import assert from 'node:assert/strict';
 import type { ThreadbearWorld } from '../support/world.ts';
 import type { Row } from '../support/driver.ts';
 
+When('a scheduled follow-up arrives', async function (this: ThreadbearWorld) {
+  const d = await this.app.dump();
+  await this.app.do({ cmd: 'mock', method: 'scheduleNote', params: { threadId: d.selection?.id } });
+});
+
+Then('the scheduled follow-up details are {word}', async function (this: ThreadbearWorld, state: string) {
+  const open = state === 'open';
+  await this.until(`scheduled details ${state}`, (d) => d.transcript.rows.some((r) =>
+    r.kind === 'user' && r.text.includes('Finish verification') && r.expanded === open &&
+    r.detailsVisible === open && r.buttons?.includes(open ? 'Hide details' : 'Show details')));
+});
+
+When('I show the scheduled follow-up details', async function (this: ThreadbearWorld) {
+  await this.app.do({ cmd: 'click', title: 'Show details' });
+});
+
+When('I hide the scheduled follow-up details', async function (this: ThreadbearWorld) {
+  await this.app.do({ cmd: 'click', title: 'Hide details' });
+});
+
 Then('my message {string} comes before the reply {string}', async function (this: ThreadbearWorld, mine: string, reply: string) {
   const d = await this.app.dump();
   const a = d.transcript.rows.findIndex((r) => r.kind === 'user' && r.text.startsWith(mine));

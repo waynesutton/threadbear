@@ -1159,6 +1159,65 @@ impl TurnErrorKind {
     }
 }
 
+/// The agent's whole-request ledger, separate from runner-checked loose ends.
+#[derive(Clone, Debug, PartialEq)]
+pub struct CompletionSummary {
+    pub tasks: Vec<CompletionTask>,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct CompletionTask {
+    pub id: String,
+    pub title: String,
+    pub status: CompletionStatus,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum CompletionStatus {
+    Completed,
+    Pending,
+    Blocked,
+}
+
+impl CompletionStatus {
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::Completed => "Completed",
+            Self::Pending => "Pending",
+            Self::Blocked => "Blocked",
+        }
+    }
+}
+
+impl CompletionSummary {
+    fn decode(value: &Value) -> Option<Self> {
+        let tasks: Option<Vec<_>> = value.get("tasks")?.as_array()?.iter().map(|task| {
+            let id = task.get("id")?.as_str()?.trim();
+            let title = task.get("title")?.as_str()?.trim();
+            if id.is_empty() || title.is_empty() { return None; }
+            let status = match task.get("status")?.as_str()? {
+                "completed" => CompletionStatus::Completed,
+                "pending" => CompletionStatus::Pending,
+                "blocked" => CompletionStatus::Blocked,
+                _ => return None,
+            };
+            Some(CompletionTask { id: id.into(), title: title.into(), status })
+        }).collect();
+        let tasks = tasks?;
+        // An unknown row must not turn a partial request into "all completed".
+        (!tasks.is_empty()).then_some(Self { tasks })
+    }
+
+    pub fn heading(&self) -> String {
+        let total = self.tasks.len();
+        let completed = self.tasks.iter().filter(|task| task.status == CompletionStatus::Completed).count();
+        let noun = if total == 1 { "task" } else { "tasks" };
+        if completed == total && total == 1 { "1 task completed".to_owned() }
+        else if completed == total { format!("All {total} {noun} completed") }
+        else { format!("{completed} of {total} {noun} completed") }
+    }
+}
+
 #[derive(Clone, Debug, PartialEq, Default)]
 pub struct TurnCompletion {
     pub turn_id: String,
@@ -1177,6 +1236,7 @@ pub struct TurnCompletion {
     pub asks: Vec<Ask>,
     /// With needs "nothing": follow-ups the agent suggested.
     pub next: Vec<String>,
+    pub completion: Option<CompletionSummary>,
     /// On the turn that answered another lab's findings: the ledger
     /// (`review`, docs/protocol.md "Review by another lab").
     pub review: Option<LabReview>,
@@ -1201,6 +1261,7 @@ impl TurnCompletion {
             needs: string(c, "needs"),
             asks: lossy(c, "asks", Ask::decode),
             next: lossy_strings(c, "next"),
+            completion: c.get("completion").and_then(CompletionSummary::decode),
             review: c.get("review").and_then(LabReview::decode),
         }
     }

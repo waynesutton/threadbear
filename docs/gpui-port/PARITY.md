@@ -37,7 +37,7 @@ earlier four-platform run.
 
 <!-- parity:start -->
 
-271 of 370 features have a spec so far, across 732 scenarios.
+282 of 381 features have a spec so far, across 785 scenarios.
 
 Scenarios passing: Swift: not run, Mac: not run, Windows: not run, Linux: not run.
 
@@ -92,6 +92,7 @@ Scenarios passing: Swift: not run, Mac: not run, Windows: not run, Linux: not ru
 | `sidebar.row.hoverbuttons` Hover buttons | pending | pending | pending | pending |
 | `sidebar.row.menu` Row context menu | pending | pending | pending | pending |
 | `sidebar.subagents` Sub-agent tree | pending | pending | pending | pending |
+| `sidebar.nested` Nested threads | pending | pending | pending | pending |
 | `sidebar.archived.paging` Archived paging | pending | pending | pending | pending |
 | `sidebar.skeleton` Loading skeleton | pending | pending | pending | pending |
 | `sidebar.hibernate.presets` Hibernate presets | pending | pending | pending | pending |
@@ -108,6 +109,7 @@ Scenarios passing: Swift: not run, Mac: not run, Windows: not run, Linux: not ru
 | Feature | Swift | Mac | Windows | Linux |
 |---|---|---|---|---|
 | `header.title` Title line | pending | pending | pending | pending |
+| `thread.startedby` Started by | pending | pending | pending | pending |
 | `header.projectchip` Project chip menu | pending | pending | pending | pending |
 | `header.schedulechip` Schedule chip | pending | pending | pending | pending |
 | `header.backforward` Back and forward | pending | pending | pending | pending |
@@ -135,6 +137,7 @@ Scenarios passing: Swift: not run, Mac: not run, Windows: not run, Linux: not ru
 | `transcript.user` Your bubble | pending | pending | pending | pending |
 | `transcript.pending` Pending states | pending | pending | pending | pending |
 | `transcript.edit` Edit pencil | pending | pending | pending | pending |
+| `transcript.notes` Runner and schedule notes | pending | pending | pending | pending |
 | `transcript.agentmessage` Agent message card | pending | pending | pending | pending |
 | `transcript.reply` Assistant reply | pending | pending | pending | pending |
 | `transcript.thinking` Thinking line | pending | pending | pending | pending |
@@ -148,6 +151,7 @@ Scenarios passing: Swift: not run, Mac: not run, Windows: not run, Linux: not ru
 | `transcript.question` Question card | pending | pending | pending | pending |
 | `transcript.secret` Secret card | pending | pending | pending | pending |
 | `transcript.review` Review card | pending | pending | pending | pending |
+| `transcript.savedplan` Saved plan | pending | pending | pending | pending |
 | `transcript.turnfooter` Turn footer | pending | pending | pending | pending |
 | `transcript.error` Error row | pending | pending | pending | pending |
 | `transcript.workedfor` Worked-for group | pending | pending | pending | pending |
@@ -165,6 +169,7 @@ Scenarios passing: Swift: not run, Mac: not run, Windows: not run, Linux: not ru
 | `rich.mermaid` Mermaid diagrams | pending | pending | pending | pending |
 | `prints.diagram` Diagram Prints | pending | pending | pending | pending |
 | `prints.whenasked` Prints only when asked | pending | pending | pending | pending |
+| `prints.card` Print card in a reply | pending | pending | pending | pending |
 | `prints.pane` Prints in the side pane | pending | pending | pending | pending |
 | `prints.list` Prints in Highlights and on the rail | pending | pending | pending | pending |
 | `prints.todo` Todo lists and boards | pending | pending | pending | pending |
@@ -225,6 +230,7 @@ Scenarios passing: Swift: not run, Mac: not run, Windows: not run, Linux: not ru
 | Feature | Swift | Mac | Windows | Linux |
 |---|---|---|---|---|
 | `card.done` Done card | pending | pending | pending | pending |
+| `clearer-completion` Clearer completion (`clearerCompletion`) | pending | pending | pending | pending |
 | `card.review` Review findings | pending | pending | pending | pending |
 | `card.needsyou` Needs you card | pending | pending | pending | pending |
 | `card.collapse` Collapse | pending | pending | pending | pending |
@@ -293,6 +299,7 @@ Scenarios passing: Swift: not run, Mac: not run, Windows: not run, Linux: not ru
 | `folder.pathbar` Path bar | pending | pending | pending | pending |
 | `folder.keys` Finder keys | pending | pending | pending | pending |
 | `folder.menu` Folder menu | pending | pending | pending | pending |
+| `folder.search` Search in a folder | pending | pending | pending | pending |
 | `folder.filespanel` Files panel | pending | pending | pending | pending |
 
 ### 13. Terminal
@@ -302,6 +309,8 @@ Scenarios passing: Swift: not run, Mac: not run, Windows: not run, Linux: not ru
 | `terminal.panel` Terminal panel | pending | pending | pending | pending |
 | `terminal.putcommand` Put a command in the Terminal | pending | pending | pending | pending |
 | `terminal.lifecycle` Shell lifecycle | pending | pending | pending | pending |
+| `terminal.tabs` Terminal tabs | pending | pending | pending | pending |
+| `terminal.linkhover` Terminal link hover | pending | pending | pending | pending |
 
 ### 14. Projects, Librarian, Schedules, Usage, Runners, Connectors, Updates
 
@@ -314,10 +323,12 @@ Scenarios passing: Swift: not run, Mac: not run, Windows: not run, Linux: not ru
 | `projects.parts` Parts of a project | pending | pending | pending | pending |
 | `projects.tabs` Project page tabs | pending | pending | pending | pending |
 | `projects.newthread` New thread in project | pending | pending | pending | pending |
+| `librarian.customize` Customize Librarian | pending | pending | pending | pending |
 | `librarian.page` Librarian page | pending | pending | pending | pending |
-| `looks.librarian` Customize the Librarian page | pending | pending | pending | pending |
 | `looks.scheduled` Customize the Scheduled page | pending | pending | pending | pending |
+| `looks.projects` Customize the Projects page | pending | pending | pending | pending |
 | `librarian.log` Librarian log | pending | pending | pending | pending |
+| `tasks.page` Tasks page | pending | pending | pending | pending |
 | `notes.page` Notes page | pending | pending | pending | pending |
 | `skills.page` Skills page | pending | pending | pending | pending |
 | `schedule.page` Scheduled page | pending | pending | pending | pending |
@@ -5250,9 +5261,11 @@ Prints in the GPUI app, the rest of Wayne's Swift changes (14 Nov 2026, thread e
 - Wait-line tips include the local start and end times and all finished
   jobs. Sending and queued messages have Swift's tips, and review answers
   begin with the review icon.
-- Attach images filters supported image types in the Mac's native sheet.
-  On Windows and Linux the kit cannot filter the dialog; nonimage selections
-  are rejected before they can become attachments.
+- Attach images or Markdown filters to supported image types and Markdown
+  (`.md`, `.markdown`) in the Mac's native sheet. Pictures become chips; a
+  Markdown file goes in as its path, as a dropped file does. On Windows and
+  Linux the kit cannot filter the dialog; other selections are rejected
+  before they can become attachments.
 - Pick a time has a month calendar and a separate time field. A past time
   leaves the dialog open with its warning inside it.
 - A selected sidebar row dims from 8% to 6% when its window is behind.

@@ -62,6 +62,17 @@ fn emily_and_mike_come_first() {
 }
 
 #[test]
+fn pause_defaults_to_one_and_a_half_and_snaps_to_an_offer() {
+    assert_eq!(VoicePrefs::default().pause(), 1.5);
+    let prefs: VoicePrefs = serde_json::from_value(json!({ "voicePause": 2.2, "voiceInNotes": true })).unwrap();
+    assert_eq!(prefs.pause(), 2.0);
+    // A saved Notes preference from the removed feature cannot reset Voice.
+    assert!(serde_json::to_value(&prefs).unwrap().get("voiceInNotes").is_none());
+    assert_eq!(pause_title(1.0), "1 second");
+    assert_eq!(pause_title(1.5), "1.5 seconds");
+}
+
+#[test]
 fn speeds() {
     assert_eq!(speed_title(1.0), "1x");
     assert_eq!(speed_title(1.25), "1.25x");

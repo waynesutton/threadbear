@@ -195,6 +195,16 @@ the card's top right collapses it to its heading, to read the reply behind
 it, and brings it back; the next card opens again. Once you reply, the
 card goes.
 
+With the **Clearer thread completion** experiment on (Settings > General >
+Experiments), the agent can report progress on every task in your request.
+The card shows how many are completed and which are pending or blocked,
+including work carried across turns. "Reported by the agent" labels that
+list. Threadbear checks loose ends separately; only a successful empty
+check says "No loose ends found". An unavailable check makes no such claim.
+Action buttons such as It works and Archive keep their neutral fill with
+a thin amber left edge. Archive stays manual. A thread without reported
+tasks keeps its usual card; turning the experiment off restores that view.
+
 To answer a Needs you card, click its buttons: your picks show on the
 card and go with your next message. To answer an ask in your own
 words, click Something else under it and write in the box that opens
@@ -513,6 +523,9 @@ Shift-Return on an empty item ends the list. You can paste or drop images
 into the composer, or add them with +. Each one goes in where the cursor
 is as a small chip, "Picture 1", "Picture 2", with
 its thumbnail, and the agent gets each picture right there in your words.
+The + menu's Attach images or Markdown… also takes `.md` files: each
+goes in as its path, as a dropped file does, and the agent reads it from
+there.
 Let go of a file over the box's words and it goes in right there. You can
 also let go of it anywhere else over the thread: the thread's outlined while
 it'll take it, and the file goes in where the cursor is. A picture or file
@@ -1320,6 +1333,12 @@ in the list). Click a heading to fold it away (Done starts folded); a
 folded one shows how many are under it. Its page
 says what's coming up next with a few numbers: how many are on, due in the
 next day, repeating, set by threads, paused, and how often they've run.
+
+In the Mac app’s conversation, a scheduled follow-up starts with its title,
+time and **Show details**. Its instructions stay collapsed until you open
+them; **Hide details** closes them again. Expanded details use left-aligned
+Markdown and can be selected and copied. This only changes the display: the
+agent still receives the complete scheduled message.
 
 With Customize the Scheduled page on (Settings › General › Look, off by
 default), the page gets a Customize button at its top right, like the
@@ -2202,7 +2221,9 @@ draws its first 10 pictures; any past that show as their names.
 Skills give your agents extra know-how: how to draw a Mermaid diagram,
 build an isometric explainer, write in a house style. Click Skills in the
 bar on the left (under the Librarian), or press ⌘5, to see yours. The page opens over the
-main panel; its X or Esc puts you back where you were. Skills shows only
+main panel; its X or Esc puts you back where you were. With a long list,
+type part of a name in the search beside Your skills (rem finds every
+remotion one); it narrows Suggested too. Skills shows only
 while the Skills store experiment is on (below).
 
 To add one, paste its GitHub link in Import a skill and press Import: a
@@ -2837,10 +2858,13 @@ settings are in Settings (⌘,) > Voice & Audio: Use Voice, the button's
 icon, Command Mode, the key the shortcuts use and which of them are on,
 the voice, speed, language and microphone. The bear doesn't sit over the
 message box there: the button's bars move with whoever's talking, and
-pulse while it gets ready or the thread works. If it can't start, a note
-over the button says why; click it to close it. Fn dictation works the
-same, with its pill just above the message box. Talking into a note isn't
-in the GPUI app yet.
+pulse while it gets ready or the thread works, and a line just above the
+message box shows what it heard as you talk. It sends once you pause for
+1.5 seconds; Pause before sending in Settings > Voice & Audio makes that
+1, 2 or 3. If it can't start, a note over the button says why; click it
+to close it. Fn dictation works the same, with its pill just above the
+message box. Notes has no dedicated microphone or Voice setting in the
+GPUI app; keyboard dictation still works in its text boxes.
 
 ### The bear
 
@@ -2880,8 +2904,8 @@ Bears & Tables panel, if you have the home patch):
 
 - `tb bears new "Researcher" --does "Finds sources" --personality "dry and calm" --face round`
   makes one, with a daily "tidy memory" routine at 4:30. The routine runs
-  in Ask like every unattended run, so a tidy that changes a file waits
-  for your yes each morning until you raise the bear with `tb bears access`.
+  in Auto for Claude, where the reviewer checks tool calls, or Ask for
+  Codex. A bear created by another agent starts its tidy in Ask too.
 - `tb bears rename`, `set`, `pin`, `move`, `archive`, `delete`. Renaming
   keeps its memory, routines and old threads. Deleting moves its folder
   to the runner's trash.
@@ -2891,6 +2915,36 @@ Bears & Tables panel, if you have the home patch):
   webhooks, mentions) go past Ask. Only you can do that: a bear's own
   thread can't. Auto is Claude only: a bear on Codex (`--model gpt-...`)
   set to Auto still asks, and `tb bears access` says so.
+
+Routines, webhooks and mentions share one unattended job per bear. New
+work queues after the current turn, and each mention gets its own answer.
+A repeating routine skips while its previous run is busy. Work with
+different access or a different working folder waits (routines and webhooks), or asks you to retry
+(mentions). Chats you start yourself stay separate.
+
+Mentions also respect sandbox boundaries. A sandboxed thread cannot use a
+bear to send work outside its sandbox. A routine waits when its chosen
+login, pool, model or effort differs from the busy worker, then starts
+with its own settings once that worker finishes.
+
+New bears keep `memory/told.md`, a dated record of what they told you, and
+`memory/tasks/` for unfinished jobs. They read these before starting again
+so they can pick up the work without repeating the same report. These are
+instructions for the agent, not a guarantee that every model follows them.
+`tb bears refresh-rules` adds these rules to existing bears and updates
+their built-in tidies. It preserves your persona text, custom routines
+and paused schedules. A bear cannot run it to raise its own access.
+
+An unattended bear can mark an empty run with `end_turn`'s `quiet: true`.
+The runner archives it only after checking for unfinished work. Useful
+reports, questions, failures and threads you have touched stay visible.
+An empty final check cannot hide an earlier report in the same thread.
+
+The separate **Late answers** experiment lets an answer arriving within a
+day of a tool card expiring resume the thread. It passes your answer and
+the original request to the agent, without replaying the old call or
+changing access. The runner supports this now; a button for deliberately
+answering an expired card is still planned for the GPUI app.
 
 A bear on Codex can make pictures: Codex's own `image_gen` tool makes real
 PNGs (a Designer bear on `gpt-6-astra` made 1024 by 1024 ones on 13 Nov).
@@ -3048,3 +3102,33 @@ Each item ticks itself off once it's done, and the list's icon on the
 left-hand rail goes once they all have. Hide this list puts it away, and
 Help > Finish Setting Up brings it back. The phone and website items only
 show when your Threadbear has a Convex deployment for them to use.
+
+## Tasks (experiment)
+
+Tasks keeps a simple shared list for your account. Turn on Tasks in Settings >
+Experiments, then use Tasks below Notes or Command-7.
+
+It opens on the list. Type a task in the box at the top and press Return; Shift-Return
+starts a new line, and anything after the first line becomes the task's note.
+Tick a task's box to mark it done: it leaves the list, and Undo brings it back.
+Show Done Tasks in Display (or the "done" link at the bottom) shows them again.
+The list runs Doing, Todo, Backlog, each a section you can fold.
+
+Switch to Board for columns: Backlog, Todo, Doing and Done. Cards show just the
+title, a note mark and the project; drag a card to move it, or use + on a column
+to add one there. Drag column headings, list sections and project groups to
+reorder them; the board and the list keep their own orders.
+
+Each task's ⋯ menu opens it, adds a note, moves it to a project, sets its status
+or deletes it (with Undo). Projects are optional, and their pages link to their
+tasks. Display picks a project, groups by status or project, sets the order,
+and makes the view you're in the one Tasks opens with. Background picks a color
+or a photo and its fade.
+
+Open on web goes to your private `/tasks` page with the usual browser pairing.
+Web task edits work while your Mac sleeps. Editing needs a connection; a change
+that fails is put back with the reason, and a failed save in the task editor
+keeps its draft to retry. Notes remains local and encrypted; Tasks is stored in
+your configured Convex backend. Notion project boards stay separate. Ask a
+thread to "add a task to review the launch checklist" to use the same collection
+through its task tools.

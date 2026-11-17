@@ -103,6 +103,7 @@ impl Threadbear {
     /// All entry points share the main panel. Defer creation because the
     /// form observes and reads the app, which is borrowed by this update.
     pub(crate) fn open_settings(&mut self, tab: Option<Tab>, cx: &mut Context<Self>) {
+        self.close_tasks(cx);
         self.close_notes(cx);
         self.close_skills(cx);
         let (me, handle) = (cx.entity(), self.main_window);
@@ -120,6 +121,9 @@ impl Threadbear {
                 let view = cx.new(|cx| SettingsWindow::new(app, client, instructions, tab.unwrap_or(Tab::General), window, cx));
                 me.update(cx, |me, cx| {
                     me.settings_window = Some((handle, view));
+                    // Settings is a page over the main window now, not a
+                    // window of its own, so the log names it as a page.
+                    me.note_activity_place(Some("settings"));
                     me.sync_menus(cx);
                     cx.notify();
                 });
@@ -132,6 +136,7 @@ impl Threadbear {
     /// history. Flush debounced edits before releasing the form.
     pub(crate) fn close_settings(&mut self, cx: &mut Context<Self>) -> bool {
         let Some((_, view)) = self.settings_window.take() else { return false };
+        self.note_activity_place(None);
         view.update(cx, |view, cx| {
             view.commit_instructions(cx);
             view.stop_listening(cx);

@@ -198,6 +198,9 @@ pub struct Threadbear {
     /// so existing scripted Settings commands still target the same form.
     pub(crate) settings_window: Option<(AnyWindowHandle, Entity<crate::settings_window::SettingsWindow>)>,
     /// Notes over the main panel while it's up (notes_page.rs).
+    pub(crate) task_counts: std::collections::HashMap<String, Option<usize>>,
+    pub(crate) tasks_page: Option<Entity<crate::tasks_page::TasksPage>>,
+    pub(crate) tasks_draft_page: Option<Entity<crate::tasks_page::TasksPage>>,
     pub(crate) notes_page: Option<Entity<crate::notes_page::NotesPage>>,
     /// Skills over the main panel while it's up (skills_page.rs), and what the runner said.
     pub(crate) skills_page: Option<Entity<crate::skills_page::SkillsPage>>,
@@ -579,6 +582,9 @@ impl Threadbear {
             small_jobs: vec!["claude".into()],
             settings_window: None,
             notes_page: None,
+            tasks_page: None,
+            tasks_draft_page: None,
+            task_counts: std::collections::HashMap::new(),
             skills_page: None,
             skills: Default::default(),
             main_window: window.window_handle(),
@@ -776,14 +782,12 @@ impl Threadbear {
                     return;
                 }
             }
-            // Still fetching: what's in Highlights now may be a fetch that
-            // left before the pin, so it waits for the one asked for above. A
-            // saved plan's note comes just before its pin, and its fetch came
-            // back first, so the plan never opened (Wayne's d28e38f4).
-            if item.is_none() && self.side.read(cx).fetching.contains(&thread.id) {
-                self.panel_gate.release(&request.id);
-                return;
-            }
+            // Waiting for the fetch asked for above, not just any fetch: what
+            // was in Highlights may be from a fetch that left before the pin
+            // (a saved plan's note comes just before its pin, and the plan
+            // never opened, Wayne's d28e38f4). Waiting while anything was
+            // fetching never ended for a pin taken away during a busy turn,
+            // which fetches again and again.
             self.show_requested(&RequestedPanel::Section(requests::HIGHLIGHTS.to_owned()), &RequestedPlace::Usual, &thread, cx);
             // Only the pane: an agent showing a file never starts its app.
             // One unpinned since still opens Highlights.
@@ -1028,6 +1032,7 @@ impl Threadbear {
                     self.sidebar.projects = crate::sidebar::project_briefs(&params["projects"]);
                     self.all_projects = project_list(&params["projects"]);
                     self.receive_projects(&params["projects"]);
+                    self.tasks_updated(cx);
                     self.side.update(cx, |side, cx| side.projects_updated(&params["projects"], cx));
                 }
                 "schedules.updated" => {
@@ -1042,6 +1047,7 @@ impl Threadbear {
                 "clis.updated" => self.clis_updated(&params),
                 "runner.updates" => self.runner_updates_changed(&params),
                 "connectors.updated" => self.connectors_updated(&params),
+                "tasks.updated" => self.tasks_updated(cx),
                 "skills.updated" => self.skills_updated(&params, cx),
                 "thread.event" => {
                     // An open review window hears its review change whichever
@@ -1285,6 +1291,13 @@ impl Threadbear {
         crate::style::set_appearance(appearance, window, cx);
         self.settings.saved.appearance = (appearance != crate::style::Appearance::System).then(|| appearance.name().to_owned());
         self.save_settings_soon(cx);
+        if self.experiment_on("tasks") {
+            let client = self.client.clone();
+            let theme = appearance.name().to_owned();
+            cx.spawn(async move |_, _| {
+                let _ = call(client, "tasks.setPreferences", json!({"theme":theme})).await;
+            }).detach();
+        }
         cx.notify();
     }
 
@@ -1301,6 +1314,7 @@ impl Threadbear {
     /// (thread_panels.rs), which goes on reading it rather than reading it again.
     pub(crate) fn open_with(&mut self, id: String, moved: Option<Entity<ThreadPane>>, window: &mut Window, cx: &mut Context<Self>) {
         self.close_settings(cx);
+        self.close_tasks(cx);
         self.close_notes(cx);
         self.close_skills(cx);
         // How it comes in (open_motion.rs): taken now, so an open that goes
@@ -1657,6 +1671,7 @@ impl Threadbear {
         // after, as the literal above is as long as serde_json's macro goes.
         dump["importNote"] = json!(self.import_note);
         // Notes (notes_page.rs). `notes` above is the Swift dump's, the list's errors.
+        dump["tasksPage"] = self.tasks_dump(cx);
         dump["notesPage"] = self.notes_dump(cx);
         dump["looks"] = self.looks_dump();
         dump["skillsPage"] = self.skills_dump(cx);

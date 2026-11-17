@@ -492,7 +492,9 @@ impl Threadbear {
     /// and dark. Cropped around `focus`: bottom centre unless moved, so the
     /// photo's bottom edge stays on the window's as it resizes. An animated
     /// GIF plays, and holds still with Reduce Motion on (GPUI's own picture
-    /// does both). Nothing when the picture's gone; it takes no clicks.
+    /// does both, but only for an `img` with its own id: without one it
+    /// keeps no frame state and stays on the first frame). Nothing when the
+    /// picture's gone; it takes no clicks.
     pub(crate) fn render_backdrop(&self, slot: Slot, file: &str, dim: f64, focus: BackdropFocus, cx: &mut Context<Self>) -> Option<AnyElement> {
         let path = path(file)?;
         let image = dims(file)?;
@@ -508,8 +510,7 @@ impl Threadbear {
                 .left_0()
                 .size_full()
                 .overflow_hidden()
-                // The id keeps the image's frame state between renders, so a GIF plays.
-                .when(drawn.is_some(), |d| d.child(div().id("look-background-image").test_support().role(Role::Image).aria_label("Page background photo").absolute().left(px(x)).top(px(y)).w(px(w)).h(px(h)).child(img(path).id(SharedString::from(format!("backdrop-{}-{file}", slot_name(slot)))).size_full().object_fit(ObjectFit::Fill))))
+                .when(drawn.is_some(), |d| d.child(div().id("look-background-image").test_support().role(Role::Image).aria_label("Page background photo").absolute().left(px(x)).top(px(y)).w(px(w)).h(px(h)).child(img(path).size_full().object_fit(ObjectFit::Fill).id(SharedString::from(format!("look-background-frames-{}", slot_name(slot)))))))
                 .child(div().absolute().top_0().left_0().size_full().bg(wash))
                 // The size it's drawn at, for the next frame and for Position.
                 .child(
@@ -959,7 +960,9 @@ pub(crate) fn panel_section(title: impl Into<SharedString>, info: Option<(&'stat
         }
     }
     let title: SharedString = title.into();
-    let mut heading = h_flex().px(px(4.)).gap(px(6.)).items_center().child(div().text_size(px(style::size::LABEL)).line_height(px(16.)).font_semibold().child(title));
+    // Named as a heading, so a screen reader and a script find the section.
+    let name = div().id(SharedString::from(format!("panel-section-{title}"))).test_support().a11y_role(Role::Heading).aria_label(title.clone());
+    let mut heading = h_flex().px(px(4.)).gap(px(6.)).items_center().child(name.text_size(px(style::size::LABEL)).line_height(px(16.)).font_semibold().child(title));
     if let Some((id, text)) = info {
         heading = heading.child(info_tip(id, text, cx));
     }

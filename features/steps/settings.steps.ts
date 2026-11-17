@@ -40,7 +40,10 @@ When('I press {string} in Settings', async function (this: ThreadbearWorld, tip:
   // Tall enough for every section of General: a switch scrolled out of sight
   // can't be clicked, by a script any more than by a person (Sleep went below
   // the window's 620 points as Quitting, Notifications and Instructions came in).
-  await this.app.do({ cmd: 'resize', settings: true, w: 880, h: 1300 });
+  // Wide enough for the sidebar and side pane too: Settings shares the main
+  // window now, and at 880 its rows squeezed to a letter a line, with the
+  // reviewers' buttons cut off.
+  await this.app.do({ cmd: 'resize', settings: true, w: 1500, h: 1300 });
   await this.app.do({ cmd: 'click', tipPrefix: tip, settings: true });
 });
 

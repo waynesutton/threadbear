@@ -10,7 +10,7 @@ import { readShareImage } from './share-images.ts';
 import { CallerGate } from './rpc-gate.ts';
 import { threadOfPort } from './peer.ts';
 import { threadKey as makeThreadKey } from './rpc-auth.ts';
-import { loadConfig, ensureHome, readToken, paths, recordListening, defaultHome, DEFAULT_CWD, RUNNER_VERSION, RunnerJsonError, readRunnerJson, writeRunnerJson } from './config.ts';
+import { loadConfig, ensureHome, readToken, paths, recordListening, defaultHome, DEFAULT_CWD, RUNNER_VERSION, RunnerJsonError, readRunnerJson, writeRunnerJson, expandHome } from './config.ts';
 import { configureGitPanel, gitPanelSettings, handleGitPanel } from './git-panel.ts';
 import { startHousekeeping } from './housekeeping.ts';
 import { RELEASE, markConfigStop, markGoodLater, onSupervisorGone, ownCheckout, readRelease, readState, requestHandover, supervised, takeRollbackNotice, tellLaunchListening } from './release.ts';
@@ -39,6 +39,7 @@ import { HookRegistry, revokeHooksFor, webhookCommands, webhooksMethods, EXPERIM
 import { xSearchMethods } from './x-search.ts';
 import { Reinstaller } from './reinstall.ts';
 import { MacScreen } from './mac-screen.ts';
+import { Tasks, taskMethods } from './tasks.ts';
 import { Projects, drainProjectMethods, projectMethods } from './projects.ts';
 import { Librarian, librarianMethods } from './librarian.ts';
 import { ConnectorsMonitor, connectorsMethods, findLauncher, gatewayIsLocal, readLocalIds } from './connectors.ts';
@@ -309,19 +310,20 @@ async function main(): Promise<void> {
           if (store) following = following.then(() => followPublished(store, printPublisher, publishedKnown)).catch((e) => log.warn('published prints not followed', { error: String(e) }));
         })))
       : undefined;
+  let nativeTasks: Tasks | undefined;
   const claude = new ClaudeAdapter({
     plugins: () => skills.plugins(),
     claudePath: cfg.claudePath,
     registry,
     log,
-    mcpServersFor: (threadId) => ({ [SERVER_NAME]: threadbearMcpServer(router(), threadId, scheduleControl(), projectControl(), appRestarts, () => cfg.bulletReplies, pocketControl, () => cfg.oneReply, () => cfg.connectorsUrl, gatewayHealth, remoteControl, xSearchFor, pagesFor, () => printPublisher, () => cfg.printsWhenAsked) }),
+    mcpServersFor: (threadId) => ({ [SERVER_NAME]: threadbearMcpServer(router(), threadId, scheduleControl(), projectControl(), appRestarts, () => cfg.bulletReplies, pocketControl, () => cfg.oneReply, () => cfg.connectorsUrl, gatewayHealth, remoteControl, xSearchFor, pagesFor, () => printPublisher, () => cfg.printsWhenAsked, () => experimentOn(cfg.home, 'tasks') ? nativeTasks : undefined, () => experimentOn(cfg.home, 'clearerCompletion')) }),
     oneReply: () => cfg.oneReply,
     sandboxFor: (cwd) => sandboxFor(cfg.sandbox, cwd),
     alwaysAsk: ALWAYS_ASK_TOOLS,
     neverAsk: NEVER_ASK_TOOLS,
   });
   // The threadbear tools for an agent that isn't given them in-process.
-  const codexStyleTools = (threadId: string) => buildThreadbearTools(router(), threadId, Date.now, scheduleControl(), projectControl(), appRestarts, { provider: 'codex', bulletReplies: () => cfg.bulletReplies, oneReply: () => cfg.oneReply, pocket: pocketControl, gateway: () => cfg.connectorsUrl, gatewayHealth, remote: remoteControl, xSearch: xSearchFor, pages: pagesFor, printPublisher: () => printPublisher, printsWhenAsked: () => cfg.printsWhenAsked });
+  const codexStyleTools = (threadId: string) => buildThreadbearTools(router(), threadId, Date.now, scheduleControl(), projectControl(), appRestarts, { provider: 'codex', bulletReplies: () => cfg.bulletReplies, oneReply: () => cfg.oneReply, pocket: pocketControl, gateway: () => cfg.connectorsUrl, gatewayHealth, remote: remoteControl, xSearch: xSearchFor, pages: pagesFor, printPublisher: () => printPublisher, printsWhenAsked: () => cfg.printsWhenAsked, tasks: () => experimentOn(cfg.home, 'tasks') ? nativeTasks : undefined, clearerCompletion: () => experimentOn(cfg.home, 'clearerCompletion') });
   // One app-server per live Codex thread, each starting what E says is
   // current, with the same threadbear tools as dynamic tools.
   const codex = new CodexAdapter({
@@ -416,6 +418,7 @@ async function main(): Promise<void> {
     poolIds: () => runner.listPools().pools.map((p) => p.id),
     onExperimentChange: (id) => {
       if (id === SKILLS_STORE) skills.experimentChanged();
+      if (id === 'tasks') nativeTasks?.stop();
     },
     onExperimentOff: (id) => {
       // Turning webhooks off ends every hook, not just the list.
@@ -510,7 +513,7 @@ async function main(): Promise<void> {
     home: cfg.home,
     schedules: () => scheduler,
     threads: () => ({
-      list: () => runner.list(['inbox', 'snoozed']).map((t) => ({ id: t.id, cwd: t.cwd, ...(t.archivedAt ? { archivedAt: t.archivedAt } : {}) })),
+      list: () => runner.list(['inbox', 'snoozed']).map((t) => ({ ...t, queued: Boolean(runner.threads.get(t.id)?.rec.queue.length) })),
       archive: (threadId) => void runner.update({ threadId, archived: true, archivedBy: 'threadbear' }),
     }),
   });
@@ -535,12 +538,17 @@ async function main(): Promise<void> {
     tableOf: (cwd) => (tablesOn() ? tables.tableOf(cwd) : undefined),
     host: {
       has: (id) => runner.has(id),
+      authorityOf: (id) => runner.authorityNow(id),
       get: (id) => {
         const t = runner.get(id);
         return { id: t.id, title: t.title, cwd: t.cwd, permissionMode: t.permissionMode, status: t.status, projects: t.projects };
       },
       create: (p) => runner.create(p),
       send: (id, text) => runner.send(id, text, [], { origin: 'runner', queue: true }),
+      pendingWork: (id) => {
+        const st = runner.threads.get(id);
+        return Boolean(st && (st.rec.queue.length || st.rt.tasks.length || st.rt.approvals.size || st.rt.finished.length));
+      },
       lastReply: (id) => {
         const evs = runner.events(id, { limit: 2000 }).events as { type: string; text?: string }[];
         let start = 0;
@@ -556,12 +564,20 @@ async function main(): Promise<void> {
   runner.onThreadActivity((a) => {
     if (a.kind !== 'turn.end' || !bearsOn()) return;
     try {
-      mentions.turnEnded(a.threadId);
+      mentions.turnEnded(a.threadId, runner.threads.get(a.threadId)?.rec.turnId);
     } catch (e) {
       log.warn("a bear's reply couldn't be handed back", { threadId: a.threadId, error: (e as Error).message });
     }
   });
   scheduler.holdFor = (rec) => (bearsOn() && rec.cwd && !rec.threadId ? bears.holdReason(rec.cwd) : undefined);
+  scheduler.foldInto = (rec) => {
+    const bear = bearsOn() && rec.cwd ? bears.forCwd(rec.cwd) : undefined;
+    const worker = bear ? bears.busyUnattended(bear.id) : undefined;
+    if (worker && (worker.permissionMode !== (rec.permissionMode ?? bear?.state.permissionMode ?? 'ask') || path.resolve(worker.cwd) !== path.resolve(expandHome(rec.cwd!)))) {
+      throw new RpcError(ErrorCode.busy, 'The running bear job has different access or a different folder; waiting for it to finish.');
+    }
+    return worker?.id;
+  };
   scheduler.adjustAt = (p, at) => {
     if (!bearsOn()) return at;
     const by = p.createdBy && runner.has(p.createdBy) ? runner.get(p.createdBy).cwd : undefined;
@@ -711,7 +727,12 @@ async function main(): Promise<void> {
     create: (p) => runner.create(p),
     send: (threadId, text) => runner.send(threadId, text, [], { origin: 'runner', queue: true }),
     modeOf: (threadId) => (runner.has(threadId) ? runner.get(threadId).permissionMode : undefined),
+    cwdOf: (threadId) => (runner.has(threadId) ? runner.get(threadId).cwd : undefined),
     held: (cwd) => (bearsOn() ? bears.holdReason(cwd) : undefined),
+    foldInto: (cwd) => {
+      const bear = bearsOn() ? bears.forCwd(cwd) : undefined;
+      return bear ? bears.busyUnattended(bear.id)?.id : undefined;
+    },
   });
   setInterval(() => {
     try {
@@ -1082,7 +1103,8 @@ async function main(): Promise<void> {
       return { threadId: t.thread.id, started: true };
     }
   };
-  const methods = { ...profilePageMethods(publicProfile), ...restartMethods(restarter), ...scheduleMethods(scheduler), ...projectMethods(projects), ...pageMethods(pagesFor, askAboutPage, printPublisher), ...drainProjectMethods(projects), ...librarianMethods(librarian), ...connectorsMethods(connectors, { on: () => experimentOn(cfg.home, 'connectorsSetup'), start: (r) => startOwnThread(runner, r, undefined), open: openThread, local: () => experimentOn(cfg.home, 'localConnectors'), findLauncher: (l) => findLauncher(l) }), ...settingsMethods(settings), ...skillMethods(skills), ...instructionsMethods(instructions), ...modelMethods(models), ...devicesMethods(sync, (kind) => fullSyncOffer.trigger(kind)), ...agentsMethods(sync, () => experimentOn(cfg.home, OUTSIDE_AGENTS)), ...tablesMethods({ tables: () => tables, on: tablesOn }), ...bearsMethods({ bears, on: bearsOn, mention: (p) => mentions.ask(p), unseat: (id) => tables.unseatEverywhere(id), touch: () => runner.touchThreads(runner.list(['inbox', 'snoozed', 'archived']).filter((t) => bears.forCwd(t.cwd)).map((t) => t.id)), cwdOf: (id) => (runner.has(id) ? runner.get(id).cwd : undefined), revokeHooks: (folder) => (webhooksOn() ? revokeHooksFor(sync, folder) : Promise.resolve(0)) }), ...webhooksMethods({ backend: sync, registry: hookRegistry, on: webhooksOn, runnerId: syncRunnerId, needApi: WEBHOOKS_API_VERSION, modeOf: (id) => (runner.has(id) ? runner.get(id).permissionMode : undefined), bearFolder: (b) => { if (!bearsOn()) return undefined; try { return bears.get(b, { faces: false }).folder; } catch { return undefined; } } }), ...xSearchMethods({ on: () => experimentOn(cfg.home, 'xSearch'), secretsDir: paths.secrets(cfg.home) }), ...usageStatsMethods({ tally, history: usageHistory, clock: realClock }) };
+  nativeTasks = new Tasks(() => sync.relaySource(), () => experimentOn(cfg.home, 'tasks'), () => rpcServer?.notifyClients({ method: 'tasks.updated', params: {} }));
+  const methods = { ...taskMethods(nativeTasks), ...profilePageMethods(publicProfile), ...restartMethods(restarter), ...scheduleMethods(scheduler), ...projectMethods(projects), ...pageMethods(pagesFor, askAboutPage, printPublisher), ...drainProjectMethods(projects), ...librarianMethods(librarian), ...connectorsMethods(connectors, { on: () => experimentOn(cfg.home, 'connectorsSetup'), start: (r) => startOwnThread(runner, r, undefined), open: openThread, local: () => experimentOn(cfg.home, 'localConnectors'), findLauncher: (l) => findLauncher(l) }), ...settingsMethods(settings), ...skillMethods(skills), ...instructionsMethods(instructions), ...modelMethods(models), ...devicesMethods(sync, (kind) => fullSyncOffer.trigger(kind)), ...agentsMethods(sync, () => experimentOn(cfg.home, OUTSIDE_AGENTS)), ...tablesMethods({ tables: () => tables, on: tablesOn }), ...bearsMethods({ bears, on: bearsOn, mention: (p) => mentions.ask(p), unseat: (id) => tables.unseatEverywhere(id), touch: () => runner.touchThreads(runner.list(['inbox', 'snoozed', 'archived']).filter((t) => bears.forCwd(t.cwd)).map((t) => t.id)), cwdOf: (id) => (runner.has(id) ? runner.get(id).cwd : undefined), revokeHooks: (folder) => (webhooksOn() ? revokeHooksFor(sync, folder) : Promise.resolve(0)) }), ...webhooksMethods({ backend: sync, registry: hookRegistry, on: webhooksOn, runnerId: syncRunnerId, needApi: WEBHOOKS_API_VERSION, modeOf: (id) => (runner.has(id) ? runner.get(id).permissionMode : undefined), bearFolder: (b) => { if (!bearsOn()) return undefined; try { return bears.get(b, { faces: false }).folder; } catch { return undefined; } } }), ...xSearchMethods({ on: () => experimentOn(cfg.home, 'xSearch'), secretsDir: paths.secrets(cfg.home) }), ...usageStatsMethods({ tally, history: usageHistory, clock: realClock }) };
   // runner.status carries the CLI statuses too (protocol, "runner.status").
   const restartStatus = methods['runner.status'];
   methods['runner.status'] = (p) => {
@@ -1500,6 +1522,7 @@ async function main(): Promise<void> {
     macScreen?.stop();
     keepAwake.stop();
     connectors.stop();
+    nativeTasks?.stop();
     projects.stop();
     usage.stop();
     tally.stop();

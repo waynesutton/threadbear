@@ -27,6 +27,8 @@ Feature: An agent shows Mike a panel
     And the pane is showing the pinned file
     And the runner heard the panel was shown
 
+  # The agent keeps working, so Highlights keeps fetching: the app used to
+  # wait for every fetch to end, and never showed the panel (16 Nov).
   @panel.requests @highlights.pinned
   Scenario: A shown pin removed before I look opens Highlights
     Given the agent of "Morning brief" pinned a file of its own and showed it

@@ -85,9 +85,11 @@ Feature: The Connectors panel
     When I press "See the exact command Blender" in the Connectors panel
     Then the Connectors panel lists "uvx mcp-for-blender@2.2.7"
     And the Connectors panel lists "It stays at this version until you add a newer one."
+    And the command's sheet has come up
     When I press "Don't add it" in the Connectors panel
     Then the Connectors panel doesn't list "uvx mcp-for-blender@2.2.7"
     When I press "See the exact command Blender" in the Connectors panel
+    And the command's sheet has come up
     And I press "Start a thread that adds it to the gateway with exactly this command" in the Connectors panel
     Then the connector setup thread is open
     And the Connectors panel doesn't list "uvx mcp-for-blender@2.2.7"

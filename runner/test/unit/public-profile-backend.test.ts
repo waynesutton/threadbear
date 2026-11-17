@@ -54,6 +54,7 @@ test('a page that is not published is gone to strangers and a preview for Mike',
   await s.publish({ ...base, published: false });
   assert.equal(await s.view(), null);
   assert.equal(await s.view('made-up-token'), null);
+  // A phone's token comes only from a pairing code it claims (API 80).
   const { code } = await call(s.b.ctx, sync.issuePairingCode, { key: OWNER, name: 'browser' });
   const { token } = await call(s.b.ctx, tokens.claim, { code });
   const page = await s.view(token);

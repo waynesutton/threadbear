@@ -185,6 +185,7 @@ export class Scheduler {
   // Bears (bears.ts): why a run for this folder waits (its bear is away or
   // archived), and a one-off time moved out of a bear's quiet hours.
   holdFor?: (rec: { cwd?: string; threadId?: string }) => string | undefined;
+  foldInto?: (rec: ScheduleRecord) => string | undefined;
   adjustAt?: (p: CreateScheduleParams, at: number) => number;
   private runner: ScheduleRunner;
   private file: string;
@@ -1413,12 +1414,29 @@ export class Scheduler {
         record('sent', rec.threadId);
         return { outcome: 'sent', threadId: rec.threadId, turnId };
       }
-      // Don't pile up new threads behind one that's still going.
-      const last = rec.lastRun?.outcome === 'sent' ? rec.lastRun.threadId : undefined;
+      // A repeating job already in flight still skips its own next tick.
+      // Fold distinct work, never build an endless queue behind a slow cron.
+      const last = rec.lastRun?.outcome !== 'failed' ? rec.lastRun?.threadId : undefined;
       if (last && !manual && rec.cron && this.isBusy(last)) {
         const note = 'The thread from the last run was still going.';
         record('skipped', last, note);
         return { outcome: 'skipped', note };
+      }
+      const worker = this.foldInto?.(rec);
+      if (worker) {
+        const target = this.runner.get(worker);
+        // A queued message cannot select a login or model for its turn.
+        // Wait for this worker instead of silently discarding the routine's picks.
+        if ((rec.accountId && (target.accountId !== rec.accountId || target.poolId)) ||
+            (rec.poolId && target.poolId !== rec.poolId) ||
+            (rec.model && target.model !== rec.model) ||
+            (rec.effort && target.effort !== rec.effort)) {
+          throw new RpcError(ErrorCode.busy, 'The running bear job has different account, pool, model or effort settings; waiting for it to finish.');
+        }
+        const { turnId } = this.runner.sendScheduled(worker, text, rec.id, run, since);
+        const note = 'Folded into the running bear job.';
+        record('sent', worker, note);
+        return { outcome: 'sent', threadId: worker, turnId, note };
       }
       const r = this.runner.create({
         text,

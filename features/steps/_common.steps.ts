@@ -2,6 +2,7 @@
 // feature (features/README.md).
 import { Given, Then, When } from '@cucumber/cucumber';
 import assert from 'node:assert/strict';
+import { sleep } from '../support/driver.ts';
 import type { ThreadbearWorld } from '../support/world.ts';
 
 Given('the app is connected to a runner with the demo threads', async function (this: ThreadbearWorld) {
@@ -89,3 +90,18 @@ When("the runner says Threadbear Runner.app is behind main", async function (thi
 When('the runner says it is updating Threadbear Runner by itself', async function (this: ThreadbearWorld) {
   await this.app.do({ cmd: 'mock', method: 'updates', params: { state: 'idle', launcherChanged: true, reinstall: { state: 'waiting', auto: true } } });
 });
+
+// cards.feature and editing.feature both wait on an approval: one here, so
+// the two copies the GitHub and Mac mains each had don't both match.
+// Long enough for an allow to have reached the mock runner and the card to
+// have gone, as it does in a second after a click on Allow.
+Then('the approval for {string} is still waiting', async function (this: ThreadbearWorld, command: string) {
+  await sleep(2_000);
+  const d = await this.app.dump();
+  // An answered one stays a row for a moment, its text then ending in
+  // "(allow)" or "(deny)", before the work it let run folds it away.
+  const row = d.transcript.rows.find((r) => r.kind === 'approval' && r.text.includes(command));
+  assert.ok(row, `the approval for "${command}" was answered and has gone`);
+  assert.doesNotMatch(row.text, /\((allow|deny|allowAlways|answered)\)\s*$/, `the approval for "${command}" was answered`);
+});
+

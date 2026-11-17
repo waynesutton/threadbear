@@ -210,7 +210,12 @@ export type ContextUsage = {
   categories: { id?: string; name: string; tokens: number; kind: string }[];
 };
 
+export type ThreadCompletion = {
+  tasks: { id: string; title: string; status: 'completed' | 'pending' | 'blocked' }[];
+};
+
 export type ThreadSummary = {
+  completion?: ThreadCompletion;
   id: string;
   title: string;
   cwd: string;
@@ -861,6 +866,7 @@ export type EventBody =
       asks?: Ask[];
       // With needs "nothing": end_turn's suggested follow-ups.
       next?: string[];
+      completion?: ThreadCompletion;
       needsFrom?: 'tool' | 'text';
       // Review by another lab: what the reviewer found so far and what the
       // agent did about each, on the turn that answered them

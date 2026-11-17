@@ -343,7 +343,10 @@ const settings = {
   // Every experiment, as the real runner lists them (runner/src/experiments):
   // only Prints here, on unless TB_MOCK_PAGES_OFF, so both apps' Prints
   // scenarios have a store to read (features/prints.feature).
-  experiments: [{ id: 'pages', name: 'Prints', does: 'Threads make Prints you keep: charts, dashboards, reports, docs and diagrams, with versions, in a reply as a card.', on: !process.env.TB_MOCK_PAGES_OFF }],
+  experiments: [
+    { id: 'pages', name: 'Prints', does: 'Threads make Prints you keep: charts, dashboards, reports, docs and diagrams, with versions, in a reply as a card.', on: !process.env.TB_MOCK_PAGES_OFF },
+    { id: 'clearerCompletion', name: 'Clearer completion', does: 'Shows task completion on the reply card.', on: Boolean(process.env.TB_MOCK_COMPLETION) },
+  ],
 };
 const pagesOn = () => settings.experiments.some((e) => e.id === 'pages' && e.on);
 /** Prints by id: { page, versions: number[], sources: Map(version -> { markdown?, mermaid? }) }. */
@@ -445,6 +448,8 @@ function mockExperiments() {
     ...(process.env.TB_MOCK_OPEN_ANYTHING_OFF ? [] : ['openAnything']),
     ...(process.env.TB_MOCK_DECISIONS ? ['projectDecisions'] : []),
     ...(process.env.TB_MOCK_VOICE ? ['voiceMode'] : []),
+    ...(process.env.TB_MOCK_TASKS ? ['tasks'] : []),
+    ...(settings.experiments.some((e) => e.id === 'clearerCompletion' && e.on) ? ['clearerCompletion'] : []),
     // TB_MOCK_NESTED_OFF keeps its demo threads with the experiment off.
     ...(process.env.TB_MOCK_NESTED && !process.env.TB_MOCK_NESTED_OFF ? ['nestedThreads'] : []),
     ...(pagesOn() ? ['pages'] : []),
@@ -605,7 +610,30 @@ async function handle(client, { id, method, params = {} }) {
   }
 }
 
+// Isolated task fixtures for native UI specs; never reaches Convex.
+const mockTasks = new Map();
+let tasksFailNext = false;
+const mockTaskPrefs = { defaultView: 'list', columnOrder: ['backlog','todo','doing','done'], listOrder: ['doing','todo','backlog','done'], grouping: 'status', sort: 'manual', fade: .85, theme: 'system' };
 async function dispatch(client, method, p) {
+  if (method.startsWith('tasks.')) {
+    if (!process.env.TB_MOCK_TASKS) throw new Error('Tasks is off');
+    if (tasksFailNext && ['tasks.create','tasks.update'].includes(method)) { tasksFailNext=false; throw rpcError(-32000,'Task save rejected by the mock runner.'); }
+    switch (method) {
+      case 'tasks.list': return {items:[...mockTasks.values()].filter(t => !t.deleted),next:null};
+      case 'tasks.preferences': return mockTaskPrefs;
+      case 'tasks.photo': return null;
+      case 'tasks.projects': return projects.map(p => ({id:p.id,runnerId:'mock',title:p.title}));
+      case 'tasks.count':
+      case 'tasks.projectCount': return {count:[...mockTasks.values()].filter(t=>!t.deleted && t.project?.id === (p.project?.id ?? p.project)).length,more:false};
+      case 'tasks.create': if (!mockTasks.has(p.id)) mockTasks.set(p.id,{id:p.id,title:p.title,notes:p.notes??'',status:p.status??'todo',project:p.project??null,position:p.position??Date.now(),createdAt:Date.now(),updatedAt:Date.now(),deleted:false}); break;
+      case 'tasks.update': if (!mockTasks.has(p.id)) throw new Error('Task no longer exists'); Object.assign(mockTasks.get(p.id),p,{updatedAt:Date.now()}); break;
+      case 'tasks.remove': if(mockTasks.has(p.id)) mockTasks.get(p.id).deleted=true; break;
+      case 'tasks.restore': if(mockTasks.has(p.id)) mockTasks.get(p.id).deleted=false; break;
+      case 'tasks.setPreferences': Object.assign(mockTaskPrefs,p); break;
+      default: throw new Error('Unsupported mock task operation');
+    }
+    broadcast('tasks.updated',{}); return null;
+  }
   switch (method) {
     case 'hello':
       // The Mac mini has two logins of its own and no pools, as the real one does,
@@ -1726,6 +1754,20 @@ async function dispatch(client, method, p) {
     }
     case 'instructions.get':
       return { instructions: mockInstructions };
+    case 'mock.tasks':
+      tasksFailNext = p.failNext === true;
+      if (p.complete) {
+        const row = [...mockTasks.values()].find(t=>t.title===p.complete);
+        if (!row) throw rpcError(-32602,'No mock task with that title');
+        row.status='done'; broadcast('tasks.updated',{});
+      }
+      // Another device moving a task: {move: title, status}.
+      if (p.move) {
+        const row = [...mockTasks.values()].find(t=>t.title===p.move);
+        if (!row) throw rpcError(-32602,'No mock task with that title');
+        row.status=p.status??'doing'; row.updatedAt=Date.now(); broadcast('tasks.updated',{});
+      }
+      return {};
     case 'mock.instructions':
       instructionsFailNext = p.failNext === true;
       return {};
@@ -2238,6 +2280,16 @@ async function dispatch(client, method, p) {
       persist(thread.summary.id, { type: 'assistant.text', itemId: before.itemId, text: String(p.text ?? '') }, before.turnId);
       return { itemId: before.itemId };
     }
+    case 'mock.scheduleNote': {
+      const t = need(p.threadId);
+      const turn = `turn_scheduled_${t.summary.lastSeq + 1}`;
+      const text = p.text ?? '[Scheduled: "Finish verification", Once, tomorrow]\n\n## Remaining work\n\n- Check the release\n- Keep the original instructions available';
+      persist(t.summary.id, { type: 'user.message', text, images: [], origin: p.origin ?? 'schedule' }, turn);
+      persist(t.summary.id, { type: 'turn.started' }, turn);
+      persist(t.summary.id, { type: 'assistant.text', itemId: `${turn}_reply`, text: 'The follow-up is ready.', final: true }, turn);
+      persist(t.summary.id, { type: 'turn.completed', outcome: 'completed', durationMs: 1000, needs: 'nothing' }, turn);
+      return {};
+    }
     case 'mock.stream':
       return startStream(need(p.threadId).summary.id, p);
     // A thread with the id and title given, idle with nothing in it, for a
@@ -2360,6 +2412,14 @@ async function dispatch(client, method, p) {
       t.approvalWaiters ??= new Map();
       t.approvalWaiters.set(approvalId, () => setStatus(t.summary.id, 'idle', false));
       return { approvalId };
+    }
+    case 'mock.approvals': {
+      // Each approval the thread asked for, by its title, and how it was
+      // answered (null while it waits): an answered card folds away within
+      // a second, too fast for a spec to catch it reading "(allow)".
+      const t = need(p.threadId);
+      const decided = new Map(t.events.filter((e) => e.type === 'approval.resolved').map((e) => [e.approvalId, e.decision]));
+      return { approvals: t.events.filter((e) => e.type === 'approval.requested').map((e) => ({ approvalId: e.approvalId, title: e.title, decision: decided.get(e.approvalId) ?? null })) };
     }
     default:
       throw rpcError(-32601, `Unknown method ${method}`);

@@ -1,3 +1,4 @@
+import { fileURLToPath } from 'node:url';
 import { When, Then } from '@cucumber/cucumber';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -53,7 +54,8 @@ Then('my Librarian picture is still drawn', async function(this: ThreadbearWorld
 });
 
 When('I choose a Librarian background', async function(this: ThreadbearWorld) {
-  const file = new URL('../../app/Sources/Threadbear/Resources/Art/librarian.png', import.meta.url).pathname;
+  // fileURLToPath, not .pathname: on Windows that's /D:/... and no file.
+  const file = fileURLToPath(new URL('../../app/Sources/Threadbear/Resources/Art/librarian.png', import.meta.url));
   await this.app.do({ cmd: 'look', page: 'librarian', background: file });
   await this.until('background copied', d => looks(d).librarian.background);
 });
@@ -81,8 +83,10 @@ When('I open Customize on the Scheduled page', async function(this: ThreadbearWo
   await this.until('the Scheduled panel open', d => (d as unknown as { looks: { editing?: string } }).looks.editing === 'scheduled' && d);
 });
 Then('its panel has the Layout and Numbers sections', async function(this: ThreadbearWorld) {
-  // The panel's switches are labelled by their tips.
-  for (const label of ['Show or hide numbers on the page', 'Show or hide due in a day', 'Reset to the standard page']) {
+  // The panel's switches are labelled by their tips. Reset sits at the
+  // panel's foot, below a 768-point screen (GitHub's Linux runner), so it's
+  // left to the Projects panel, which is short enough to show it.
+  for (const label of ['Show or hide numbers on the page', 'Show or hide due in a day']) {
     await this.app.do({ cmd: 'label-point', label });
   }
 });
@@ -113,7 +117,9 @@ When('I open Customize on the Projects page', async function(this: ThreadbearWor
   await this.until('the Projects panel open', d => projects(d).editing === 'projects' && d);
 });
 Then('its panel has the Layout and Cards sections', async function(this: ThreadbearWorld) {
-  for (const label of ['Show or hide the title, search and New project. Hidden, the cards show every project', 'The wide tile with the project\'s icon. Off, cards are just text', 'Reset to the standard page']) {
+  // Reset sits at the panel's foot, below the fold on GitHub's Mac screen
+  // (as on the Scheduled panel), so it isn't looked for here.
+  for (const label of ['Show or hide the title, search and New project. Hidden, the cards show every project', 'The wide tile with the project\'s icon. Off, cards are just text']) {
     await this.app.do({ cmd: 'label-point', label });
   }
 });

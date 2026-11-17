@@ -8,6 +8,7 @@ import ThreadbearKit
 /// which sends the picks along with it.
 struct AsksCard: View {
     let asks: [PhoneAsk]
+    var completion: PhoneCompletion? = nil
     @Binding var picks: [Int: Int]
     /// Its answer is on its way: spinning, and nothing more to press.
     var busy: Bool
@@ -19,6 +20,7 @@ struct AsksCard: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
+            if let completion, completion.heading != nil { CompletionSummary(completion: completion) }
             ForEach(Array(asks.enumerated()), id: \.offset) { index, ask in
                 askView(ask, index: index)
             }
@@ -30,6 +32,7 @@ struct AsksCard: View {
                     Text("Send").frame(maxWidth: .infinity).spinning(busy, tint: .white)
                 }
                 .buttonStyle(.borderedProminent)
+                .modifier(CompletionButtonEdge(enabled: completion?.heading != nil))
                 .allowsHitTesting(!busy)
             }
         }
@@ -84,6 +87,7 @@ struct AsksCard: View {
                 }
                 .buttonStyle(.bordered)
                 .tint(.secondary)
+                .modifier(CompletionButtonEdge(enabled: completion?.heading != nil))
             }
         }
     }
@@ -130,6 +134,7 @@ struct AsksCard: View {
         }
         .buttonStyle(picked ? AnyButtonStyle(.borderedProminent) : AnyButtonStyle(.bordered))
         .tint(picked ? .accentColor : .primary)
+        .modifier(CompletionButtonEdge(enabled: completion?.heading != nil))
         // A picked one keeps its colour, so it's clear which is on its way.
         .disabled(busy && !picked)
         .allowsHitTesting(!busy)
@@ -147,6 +152,8 @@ struct AsksCard: View {
 struct DoneCard: View {
     let next: [String]
     var looseEnds: [PhoneLooseEnd] = []
+    var completion: PhoneCompletion? = nil
+    var looseEndsChecked = false
     var openThread: @MainActor (String) -> Void = { _ in }
     @Binding var picked: Set<Int>
     /// The ticked ones are on their way: Send spins, and nothing more to press.
@@ -159,7 +166,7 @@ struct DoneCard: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack {
-                Label("Done", systemImage: "checkmark.circle")
+                Label(completion?.heading ?? "Done", systemImage: "checkmark.circle")
                     .font(.subheadline.weight(.medium))
                     .foregroundStyle(.secondary)
                 Spacer()
@@ -170,6 +177,11 @@ struct DoneCard: View {
                 .tint(.secondary)
                 .controlSize(.small)
                 .accessibilityLabel("Archive")
+                .modifier(CompletionButtonEdge(enabled: completion?.heading != nil))
+            }
+            if let completion, completion.heading != nil { CompletionSummary(completion: completion, hideHeading: true) }
+            if completion?.heading != nil, looseEndsChecked, looseEnds.isEmpty {
+                Text("No loose ends found · Checked by Threadbear").font(.footnote).foregroundStyle(.secondary)
             }
             if !looseEnds.isEmpty { looseEndsList }
             if !next.isEmpty {
@@ -190,6 +202,7 @@ struct DoneCard: View {
                         .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
+                    .modifier(CompletionButtonEdge(enabled: completion?.heading != nil))
                     .disabled(busy)
                     .accessibilityAddTraits(ticked ? .isSelected : [])
                 }
@@ -201,6 +214,7 @@ struct DoneCard: View {
                         Text("Send").frame(maxWidth: .infinity).spinning(busy, tint: .white)
                     }
                     .buttonStyle(.borderedProminent)
+                    .modifier(CompletionButtonEdge(enabled: completion?.heading != nil))
                     .allowsHitTesting(!busy)
                 }
             }
@@ -386,5 +400,40 @@ struct FlowLayout: Layout {
         }
         if !row.indexes.isEmpty { rows.append(row) }
         return rows
+    }
+}
+
+
+/// Task reports and independent loose-end checks use separate labels.
+private struct CompletionSummary: View {
+    let completion: PhoneCompletion
+    var hideHeading = false
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            if !hideHeading, let heading = completion.heading { Text(heading).font(.subheadline.weight(.medium)) }
+            Text("Reported by the agent").font(.footnote).foregroundStyle(.secondary)
+            ForEach(completion.tasks) { task in
+                HStack(alignment: .firstTextBaseline, spacing: 10) {
+                    Image(systemName: task.isCompleted ? "checkmark" : "circle")
+                        .foregroundStyle(task.isCompleted ? Color.green : Color.secondary)
+                        .accessibilityHidden(true)
+                    Text(task.title)
+                    Spacer(minLength: 0)
+                    Text(task.isCompleted ? "Completed" : task.status == "blocked" ? "Blocked" : "Pending")
+                        .font(.footnote).foregroundStyle(.secondary)
+                }.font(.subheadline)
+            }
+        }
+    }
+}
+
+private struct CompletionButtonEdge: ViewModifier {
+    let enabled: Bool
+    @ViewBuilder func body(content: Content) -> some View {
+        if enabled {
+            content.overlay(alignment: .leading) {
+                Rectangle().fill(Color(red: 0.89, green: 0.64, blue: 0.24)).frame(width: 3).allowsHitTesting(false)
+            }.clipShape(RoundedRectangle(cornerRadius: 6))
+        } else { content }
     }
 }

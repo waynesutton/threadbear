@@ -57,6 +57,47 @@ Feature: The open card in the composer
     Then the card in the composer says "Done"
     And the card offers the follow-up "Turn on the lint rule that sorts imports"
 
+  # The Swift app is frozen; this optional completion summary is GPUI-only there.
+  @card.done @card.needsyou @clearer-completion @swift-pending
+  Scenario: A request with unfinished tasks keeps its question beside progress
+    When I open the thread "Tidy the imports in the uploader"
+    And the agent reports an incomplete request with two tasks
+    Then the card in the composer says "1 of 2 tasks completed"
+    And the completion summary shows "Completed: Build the completion card"
+    And the completion summary shows "Pending: Try the installed app"
+    And the card in the composer asks "1. Try the installed app"
+    And the card doesn't show "No loose ends found"
+
+  # The Swift app is frozen; this optional completion summary is GPUI-only there.
+  @card.done @clearer-completion @swift-pending
+  Scenario: A finished request reports every task completed
+    When I open the thread "Tidy the imports in the uploader"
+    And the agent reports a completed request with two tasks
+    Then the card in the composer says "All 2 tasks completed"
+    And the completion summary shows "Reported by the agent"
+    And the completion summary shows "Completed: Try the installed app"
+    And the card doesn't show "No loose ends found"
+
+  # Old event payloads remain readable, but the experiment controls their display.
+  @card.done @swift-pending
+  Scenario: A completion payload keeps the original card while the experiment is off
+    When I open the thread "Tidy the imports in the uploader"
+    And the agent reports a completed request with two tasks
+    Then the card in the composer says "Done"
+    And the card doesn't show "Reported by the agent"
+
+  # Turning it off also hides completion already saved in a thread's history.
+  @card.done @clearer-completion @swift-pending
+  Scenario: Turning clearer completion off restores the original card
+    When I open the thread "Tidy the imports in the uploader"
+    And the agent reports a completed request with two tasks
+    Then the card in the composer says "All 2 tasks completed"
+    When I open Settings on "general"
+    And I press "Turn Clearer completion off" in Settings
+    And I leave the Settings page
+    Then the card in the composer says "Done"
+    And the card doesn't show "Reported by the agent"
+
   @card.done @card.answers
   Scenario: Ticked follow-ups go when I send
     When I open the thread "Tidy the imports in the uploader"

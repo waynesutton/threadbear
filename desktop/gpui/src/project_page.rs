@@ -27,6 +27,7 @@ impl Threadbear {
     /// The open project's page, or nothing if it's gone.
     pub(crate) fn render_project_page(&mut self, window: &mut Window, cx: &mut Context<Self>) -> AnyElement {
         let Some(project) = self.open_project().cloned() else { return div().into_any_element() };
+        self.load_project_task_count(&project.id, cx);
         let threads: Vec<ThreadSummary> = rules::threads_in(&project.id, self.threads.values().map(|t| &**t)).into_iter().cloned().collect();
         let header = self.render_page_header(&project, threads.len(), window, cx);
         let mut column = v_flex().w_full().gap(px(30.)).child(header);
@@ -42,6 +43,11 @@ impl Threadbear {
                 column = column.child(self.render_decisions_tab(&project, window, cx));
                 return self.project_page_scroller(&project, column);
             }
+        }
+        if !self.project_decisions_on() && self.experiment_on("tasks") {
+            let id = project.id.clone();
+            column = column.child(crate::highlights::tipped(div().id("project-native-tasks"), "Open this project’s synced tasks").cursor_pointer().child("Tasks")
+                .on_click(cx.listener(move |this, _: &ClickEvent, window, cx| this.open_project_tasks(id.clone(), window, cx))));
         }
         if let Some(parts) = self.render_parts_section(&project, cx) {
             column = column.child(parts);
@@ -107,6 +113,14 @@ impl Threadbear {
                 .when_some(count, |s, n| s.child(div().text_size(px(style::size::DETAIL)).line_height(px(15.)).font_semibold().text_color(style::needs_you(cx)).child(n.to_string())))
                 .on_click(cx.listener(move |this, _: &ClickEvent, _, cx| this.pick_project_tab(&id, each, cx)));
             bar = bar.child(button);
+        }
+        if self.experiment_on("tasks") {
+            let id = project.id.clone();
+            let count = self.task_counts.get(&id).copied().flatten();
+            bar = bar.child(crate::highlights::tipped(div().id("project-native-tasks"), "Open this project’s synced tasks")
+                .px(px(10.)).py(px(5.)).rounded(px(6.)).cursor_pointer()
+                .child(match count { Some(0) => "Add task".into(), Some(n) => format!("Tasks {n}"), None => "Tasks".into() })
+                .on_click(cx.listener(move |this, _: &ClickEvent, window, cx| this.open_project_tasks(id.clone(), window, cx))));
         }
         bar.into_any_element()
     }

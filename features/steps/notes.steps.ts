@@ -97,9 +97,13 @@ async function showNotes(world: ThreadbearWorld, on: boolean) {
   await world.app.do({ cmd: 'settings' });
   await world.until('the Settings page', (d) => (d as { settingsWindow?: unknown }).settingsWindow);
   // Tall enough that the switch is on screen, as a person would scroll to it.
-  await world.app.do({ cmd: 'resize', settings: true, w: 880, h: 1300 });
+  // Wide enough for the sidebar and side pane too: Settings shares the main
+  // window now.
+  await world.app.do({ cmd: 'resize', settings: true, w: 1500, h: 1300 });
   const now = notes(await world.app.dump());
-  if (now?.button !== on) await world.app.do({ cmd: 'click', tip: 'Show Notes in the bar on the left' });
+  // Show Notes is the first row of Experiments, at the foot of General:
+  // `settings: true` scrolls it into view first, as a person would.
+  if (now?.button !== on) await world.app.do({ cmd: 'click', tip: 'Show Notes in the bar on the left', settings: true });
   await world.until(`Show Notes ${on ? 'on' : 'off'}`, (d) => notes(d)?.button === on);
 }
 

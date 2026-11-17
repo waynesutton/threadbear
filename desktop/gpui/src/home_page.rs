@@ -237,7 +237,8 @@ pub(crate) fn home_title_parts(title: Option<&'static str>, line: Option<&'stati
     match title {
         Some(title) => v_flex()
             .gap(px(12.))
-            .child(h_flex().items_center().gap(px(8.)).child(div().text_size(px(24.)).line_height(px(29.)).font_semibold().child(title)).child(info_tip("home-more", more, cx)))
+            // Named as a heading, so a screen reader and a script find the page's title.
+            .child(h_flex().items_center().gap(px(8.)).child(div().id("home-title").test_support().role(gpui_kit::Role::Heading).aria_label(title).text_size(px(24.)).line_height(px(29.)).font_semibold().child(title)).child(info_tip("home-more", more, cx)))
             .children(words),
         None => v_flex().child(h_flex().items_center().gap(px(8.)).children(words).child(info_tip("home-more", more, cx))),
     }

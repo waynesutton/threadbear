@@ -375,17 +375,22 @@
 //    place of a phone token, and tokens:claim trades it for the token from
 //    the phone's own scanner. A runner pairs phones only from 80, so no
 //    token goes into a QR code again.
-// 81: Prints can be published (this copy's; it was 73, 77, then 80, until
-//    Mike's releases took 73 to 80, 12, 14 and 16 Nov 2026). sync:publishPrint
-//    stores one print's index.html (static, at most 700,000 characters)
-//    under a link its runner made, sync:unpublishPrint removes it,
-//    prints:view answers the website's /p/<slug> page for anyone with the
-//    link, and prints:list gives the phone and the website the published
-//    ones. A runner publishes only from 81; nothing about a print is stored
-//    before it's published.
+// 81: Prints can be published (this copy's; it was 73, then 77, then 80,
+//    until Mike's releases took 73 to 80, 12 to 16 Nov 2026).
+//    sync:publishPrint stores one print's index.html (static, at most
+//    700,000 characters) under a link its runner made, sync:unpublishPrint
+//    removes it, prints:view answers the website's /p/<slug> page for anyone
+//    with the link, and prints:list gives the phone and the website the
+//    published ones. A runner publishes only from 81; nothing about a print
+//    is stored before it's published.
 // 82: webhooks (this copy's, 13 Nov 2026, experiment webhooks; it was 78,
-//    then 81, here until Mike's releases took 77 to 80, 14 and 16 Nov 2026). POST
-//    /hook/<key> takes a delivery (webhooks:deliver, capped, limited,
+//    then 81, until Mike's releases took 77 to 80, 14 and 16 Nov 2026).
+//    POST /hook/<key> takes a delivery (webhooks:deliver, capped, limited,
 //    deduped, batched); webhooks:issueWebhook, listWebhooks and
 //    revokeWebhook take the owner key. A runner offers webhooks only from 82.
-export const API_VERSION = 82;
+// 83: Native Tasks, cloud-owned and editable while the runner is offline.
+// 84: Tasks take a Doing status and a position on create, and preferences
+//    keep projectOrder and listOrder; a columnOrder saved before Doing comes
+//    back with it.
+// 85: clearer completion task summaries on thread cards (experiment clearerCompletion).
+export const API_VERSION = 85;

@@ -288,6 +288,8 @@ public struct PhoneThread: Codable, Sendable, Hashable, Identifiable {
     /// done card's "Still open" list. Nil when it hasn't checked, and from
     /// an older runner; empty when nothing's left.
     public var looseEnds: [PhoneLooseEnd]?
+    /// Agent-reported task progress (API 84); not runner verification.
+    public var completion: PhoneCompletion?
     /// Another lab's review of the last turn's change (backend API 76),
     /// drawn over that turn's reply, and the turn it's from (`cardTurn`, as
     /// message rows name turns). Both nil from an older runner or backend.
@@ -316,8 +318,9 @@ public struct PhoneThread: Codable, Sendable, Hashable, Identifiable {
         pendingApproval: PendingApproval? = nil, earliestSeq: Double? = nil,
         asks: [PhoneAsk]? = nil, asksSeq: Double? = nil, next: [String]? = nil,
         needs: String? = nil, pendingReviews: Double? = nil, waitingForRoom: PhoneWaitingForRoom? = nil,
-        links: [PhoneLink]? = nil, asked: String? = nil, looseEnds: [PhoneLooseEnd]? = nil
+        links: [PhoneLink]? = nil, asked: String? = nil, looseEnds: [PhoneLooseEnd]? = nil, completion: PhoneCompletion? = nil
     ) {
+        self.completion = completion
         self.looseEnds = looseEnds
         self.asked = asked
         self.threadId = threadId
@@ -397,6 +400,23 @@ public struct PhoneThread: Codable, Sendable, Hashable, Identifiable {
         let who = "Started by " + startedBy.label
         guard let why = startedBy.why, !why.isEmpty else { return who }
         return who + " (" + why + ")"
+    }
+}
+
+/// A missing or empty ledger makes no whole-request completion claim.
+public struct PhoneCompletion: Codable, Sendable, Hashable {
+    public struct Task: Codable, Sendable, Hashable, Identifiable {
+        public var id: String
+        public var title: String
+        public var status: String
+        public var isCompleted: Bool { status == "completed" }
+    }
+    public var tasks: [Task]
+    public var heading: String? {
+        guard !tasks.isEmpty else { return nil }
+        let completed = tasks.filter(\.isCompleted).count
+        if tasks.count == 1, completed == 1 { return "1 task completed" }
+        return completed == tasks.count ? "All \(tasks.count) tasks completed" : "\(completed) of \(tasks.count) tasks completed"
     }
 }
 

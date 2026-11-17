@@ -1,29 +1,32 @@
 {
   "claude": {
     "instructions": 2984,
-    "tools": 39571,
-    "total": 42555
+    "tools": 41332,
+    "total": 44316
   },
   "codex": {
     "instructions": 2153,
-    "tools": 39670,
-    "total": 41823
+    "tools": 41431,
+    "total": 43584
   },
   "worktreeInstructions": 608,
   "perTool": {
     "add_button": 1659,
     "ask_secret": 1241,
     "create_project": 1433,
+    "create_task": 574,
     "create_thread": 2574,
     "delete_schedule": 267,
+    "delete_task": 228,
     "delete_thread": 445,
-    "end_turn": 8927,
+    "end_turn": 9096,
     "interrupt_thread": 335,
     "join_project": 524,
     "leave_project": 460,
     "list_accounts": 454,
     "list_projects": 474,
     "list_schedules": 379,
+    "list_tasks": 191,
     "list_threads": 734,
     "move_thread": 1497,
     "pin": 1120,
@@ -37,6 +40,7 @@
     "unpin": 300,
     "update_project": 2937,
     "update_schedule": 1705,
+    "update_task": 599,
     "update_thread": 1720,
     "wait_for_app_restart": 649
   }

@@ -16,6 +16,47 @@ export type Scenario = { name: string; play: (p: Play) => void; shows: string[] 
 
 export const SCENARIOS: Scenario[] = [
   {
+    name: 'scheduled follow-up instructions and origin survive every route',
+    shows: ['Finish verification', 'The follow-up is recorded.'],
+    play: (p) => {
+      p.queuedReminder('[Scheduled: "Finish verification", Once, tomorrow]\n\n## Remaining work\n\n- Check the release\n- Keep the original instructions available', 'disclosure-check');
+      p.say('The current turn is finished.');
+      p.endTurn({ needs: 'nothing' });
+      p.say('The follow-up is recorded.');
+      p.endTurn({ needs: 'nothing' });
+    },
+  },
+  {
+    name: 'whole-request task progress survives a second turn on every surface',
+    shows: ['All 2 tasks completed', 'Build the card', 'Verify the card'],
+    play: (p) => {
+      p.clearerCompletion();
+      p.say('The card is built. Please verify it.');
+      p.endTurn({ needs: 'you', asks: [{ action: 'Try the card', options: ['It works', 'Adjust it'] }], completion: { tasks: [{ id: 'build', title: 'Build the card', status: 'completed' }, { id: 'verify', title: 'Verify the card', status: 'pending' }] } });
+      p.send('It works');
+      p.say('The card is built and verified.');
+      p.endTurn({ needs: 'nothing', completion: { tasks: [{ id: 'verify', title: 'Verify the card', status: 'completed' }] } });
+    },
+  },
+  {
+    name: 'unfinished task progress stays beside the asks on every surface',
+    shows: ['1 of 2 tasks completed', 'Build the card', 'Verify the card'],
+    play: (p) => {
+      p.clearerCompletion();
+      p.say('The card is built. Please verify it.');
+      p.endTurn({ needs: 'you', asks: [{ action: 'Try the card', options: ['It works', 'Adjust it'] }], completion: { tasks: [{ id: 'build', title: 'Build the card', status: 'completed' }, { id: 'verify', title: 'Verify the card', status: 'pending' }] } });
+    },
+  },
+  {
+    name: 'a late tool answer resumes as a message on every surface',
+    shows: ['answered an expired tool card', 'allowed this request once', 'The old tool call was not replayed'],
+    play: (p) => {
+      p.answerExpiredTool();
+      p.say('I will check whether the greeting is still needed.');
+      p.endTurn({ needs: 'nothing' });
+    },
+  },
+  {
     // Print files stay on their creating Mac. The website draws a card from
     // the published list (prints:list), or says it's kept on the Mac; the
     // phone keeps the fence. The published link stays as written.

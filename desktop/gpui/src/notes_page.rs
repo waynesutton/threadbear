@@ -63,6 +63,7 @@ impl Threadbear {
         if !self.notes_shown() || self.notes_page.is_some() {
             return;
         }
+        self.close_tasks(cx);
         self.close_settings(cx);
         let home = threadbear_client::config::RunnerConfig::from_env().home;
         let list_hidden = self.settings.saved.notes_list_hidden == Some(true);

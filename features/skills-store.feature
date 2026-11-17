@@ -30,6 +30,19 @@ Feature: Skills store
     And nothing is suggested
 
   @skills.page @skills-store @swift-pending
+  Scenario: Search narrows the skills by name
+    When I open Skills
+    And I write a new skill called "Brand Voice" that says "Write warmly."
+    And I search skills for "/BRAND"
+    Then the skills shown are "brand-voice"
+    And no suggestion is shown
+    When I search skills for "zzz"
+    Then the skills shown are ""
+    And Skills says "No skill's name has “zzz” in it."
+    When I search skills for ""
+    Then the skills shown are "brand-voice, pele"
+
+  @skills.page @skills-store @swift-pending
   Scenario: Always on can be turned off for one skill
     When I open Skills
     And I turn off Always on for "pele"

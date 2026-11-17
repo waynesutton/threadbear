@@ -356,6 +356,12 @@ impl Threadbear {
             button.hint = self.shortcut_display(ShortcutCommand::ShowNotes);
             views.push(rail_button(button, |this, window, cx| this.run_command(shell::Command::ShowNotes, window, cx), cx));
         }
+        if self.experiment_on("tasks") {
+            let mut button = RailButton::new("rail-tasks", "checklist", "Tasks", self.tasks_page.is_some());
+            button.tip = self.shortcut_tip("Tasks", ShortcutCommand::ShowTasks);
+            button.hint = self.shortcut_display(ShortcutCommand::ShowTasks);
+            views.push(rail_button(button, |this, window, cx| this.run_command(shell::Command::ShowTasks, window, cx), cx));
+        }
         // Connectors, Runners and Updates at the foot (activity_panels.rs),
         // each with its dot: the accent when only Mike can do something, grey
         // while something sorts itself out.

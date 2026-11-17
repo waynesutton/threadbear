@@ -87,3 +87,10 @@ Feature: Voice
     And I can turn Hold to dictate, Key and Space, Shift and the key, and Double tap on or off
     And I can pick the Voice, Speed, Language and Microphone
     And Play a Sample reads a line in the chosen voice
+
+  @voice.talk @manual @swift-pending
+  Scenario: A short pause doesn't send half a sentence
+    Given Voice is on for a thread
+    And Pause before sending is 1.5 seconds
+    When I say "check the logs", pause for a second, and say "then the tests"
+    Then "check the logs then the tests" is sent as one message

@@ -143,7 +143,9 @@ export type SyncConfig = {
 // lower one means its backend hasn't been deployed since this runner was:
 // said in runner.status, tb status and the log rather than stopping, since
 // the runner only adds to what it sends while the number stays the same.
-export const BACKEND_API_VERSION = 82;
+export const BACKEND_API_VERSION = 85;
+// Optional agent-reported task summaries on thread cards.
+export const COMPLETION_API_VERSION = 85;
 // From this one a message row can be a login's note (role "note"): a thread
 // that moved to another login or is waiting for room says so on another Mac.
 export const LOGIN_NOTES_API_VERSION = 78;
@@ -456,6 +458,7 @@ export type ThreadDoc = {
   asksSeq?: number;
   next?: string[];
   looseEnds?: { kind: string; text: string; threadId?: string; at?: string }[];
+  completion?: { tasks: { id: string; title: string; status: 'completed' | 'pending' | 'blocked' }[] };
   review?: LabReviewLedger;
   cardTurn?: string;
   needs?: 'you' | 'nothing';
@@ -952,6 +955,10 @@ export function toThreadDoc(t: ThreadSummary, runnerId: string, now: number, pen
     doc.asksSeq = t.asksSeq;
   }
   if (next?.length) doc.next = next;
+  if (t.completion && t.status === 'idle' && !t.archivedAt) {
+    const clean = scrub ?? ((text: string) => text);
+    doc.completion = { tasks: t.completion.tasks.map((task) => ({ ...task, title: clean(task.title) })) };
+  }
   // The done card's loose ends (docs/protocol.md, "Loose ends"), for the
   // phone's done card. The runner only has them for the card standing now
   // (runner/loose-ends.ts); the same test as lastEnd keeps an older
@@ -964,7 +971,7 @@ export function toThreadDoc(t: ThreadSummary, runnerId: string, now: number, pen
   // reply is: a finding can quote the code it's about.
   // Which turn those are from, for another Mac's relay to put them on that
   // turn's end and no other (its rows can lag the row).
-  if (cardTurn && (doc.looseEnds || review)) doc.cardTurn = cardTurn;
+  if (cardTurn && (doc.completion || doc.looseEnds || review)) doc.cardTurn = cardTurn;
   // Field by field, as the backend's validator lists them: a field the
   // ledger gains later would otherwise have every backend turn the whole
   // row down.
@@ -1047,7 +1054,7 @@ function phoneAnswers(raw: unknown): AskAnswer[] | undefined {
 export function forBackend(d: ThreadDoc, v: number, now: number): ThreadDoc {
   const asks = d.asks !== undefined || d.asksSeq !== undefined || d.next !== undefined;
   const sections = d.needs !== undefined || d.pendingReviews !== undefined || d.waitingForRoom !== undefined;
-  if ((v >= SHARE_API_VERSION || !d.share) && (v >= WOKE_API_VERSION || !d.woke) && (v >= ASKS_API_VERSION || !asks) && (v >= OPTION_NOTES_API_VERSION || !d.asks?.some((a) => a.optionNotes)) && (v >= LOOSE_ENDS_API_VERSION || !d.looseEnds) && (v >= RELAY_CARDS_API_VERSION || (!d.review && !d.cardTurn)) && (v >= SECTIONS_API_VERSION || !sections) && (v >= STARTED_BY_API_VERSION || !d.startedBy) && (v >= STARS_API_VERSION || !d.starredAt) && (v >= LINKS_API_VERSION || !d.links) && (v >= ASKED_API_VERSION || !d.asked) && (v >= KEYWORDS_API_VERSION || !d.keywords) && (v >= WAKE_NOTE_API_VERSION || !d.wakeNote) && (v >= NETWORK_WAIT_API_VERSION || !d.waitingForNetwork) && (v >= SECRETS_API_VERSION || d.pendingApproval?.kind !== 'secret') && (v >= RELAY_API_VERSION || d.pendingApproval?.seq === undefined) && (v >= PLAN_API_VERSION || d.pendingApproval?.kind !== 'approval' || d.pendingApproval.planSeq === undefined)) return d;
+  if ((v >= COMPLETION_API_VERSION || !d.completion) && (v >= SHARE_API_VERSION || !d.share) && (v >= WOKE_API_VERSION || !d.woke) && (v >= ASKS_API_VERSION || !asks) && (v >= OPTION_NOTES_API_VERSION || !d.asks?.some((a) => a.optionNotes)) && (v >= LOOSE_ENDS_API_VERSION || !d.looseEnds) && (v >= RELAY_CARDS_API_VERSION || (!d.review && !d.cardTurn)) && (v >= SECTIONS_API_VERSION || !sections) && (v >= STARTED_BY_API_VERSION || !d.startedBy) && (v >= STARS_API_VERSION || !d.starredAt) && (v >= LINKS_API_VERSION || !d.links) && (v >= ASKED_API_VERSION || !d.asked) && (v >= KEYWORDS_API_VERSION || !d.keywords) && (v >= WAKE_NOTE_API_VERSION || !d.wakeNote) && (v >= NETWORK_WAIT_API_VERSION || !d.waitingForNetwork) && (v >= SECRETS_API_VERSION || d.pendingApproval?.kind !== 'secret') && (v >= RELAY_API_VERSION || d.pendingApproval?.seq === undefined) && (v >= PLAN_API_VERSION || d.pendingApproval?.kind !== 'approval' || d.pendingApproval.planSeq === undefined)) return d;
   const out = { ...d };
   if (v < SECTIONS_API_VERSION) {
     delete out.needs;
@@ -1076,6 +1083,7 @@ export function forBackend(d: ThreadDoc, v: number, now: number): ThreadDoc {
     delete out.starredAt;
     out.view = threadView(out, now);
   }
+  if (v < COMPLETION_API_VERSION) delete out.completion;
   if (v < LOOSE_ENDS_API_VERSION) delete out.looseEnds;
   if (v < RELAY_CARDS_API_VERSION) {
     delete out.review;
@@ -4088,7 +4096,7 @@ export class ConvexSync {
    * with the owner key only (a runner key can't read other runners' threads).
    * Undefined with sync off or before the backend is at RELAY_API_VERSION.
    */
-  relaySource(): { post: Post; subscribe?: Subscribe; key: string; apiVersion: number; upload: Upload } | undefined {
+  relaySource(): { post: Post; subscribe?: Subscribe; key: string; apiVersion: number; connection?: object; upload: Upload } | undefined {
     if (this.off || !this.deps.key || (this.backendApiVersion ?? 0) < RELAY_API_VERSION) return undefined;
     const subscriber = this.subscriber;
     return {
@@ -4096,6 +4104,7 @@ export class ConvexSync {
       ...(subscriber ? { subscribe: (fn: string, args: Record<string, unknown>, onUpdate: (v: unknown) => void, onError: (e: Error) => void) => subscriber.subscribe(fn, args, onUpdate, onError) } : {}),
       key: this.deps.key,
       apiVersion: this.backendApiVersion ?? 0,
+      connection: subscriber,
       upload: (url: string, bytes: Uint8Array, mediaType: string) => this.upload(url, bytes, mediaType),
     };
   }

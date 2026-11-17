@@ -463,6 +463,21 @@ button.fold:hover > svg:last-child, button.fold:focus-visible > svg:last-child {
 .send:disabled { background: var(--line-strong); color: var(--faint); opacity: 1; }
 .send svg { width: 15px; height: 15px; }
 
+/* Agent task reports stay separate from the runner's loose-end checks.
+   Only action buttons get the reference's amber edge, never the card. */
+.completion-summary { font-family: inherit; }
+.completion-source, .completion-status { color: var(--muted); font-size: 13px; }
+.completion-source { margin-top: 8px; }
+.completion-summary ul { list-style: none; padding: 0; margin: 10px 0 0; }
+.completion-summary li { display: flex; gap: 10px; align-items: baseline; font-size: 15px; line-height: 23px; padding: 4px 0; }
+.completion-mark { flex: none; width: 16px; color: var(--muted); }
+.completion-mark.completed { color: #7bad83; }
+.completion-mark.blocked { color: #d4b479; }
+.completion-status { margin-left: auto; flex: none; }
+.completion-check { color: var(--muted); font-size: 13px; border-top: 1px solid var(--line); padding-top: 10px; }
+.card.has-completion button, .card.has-completion .ask-links .btn { border-left: 3px solid #e2a33d; }
+.card.has-completion button:focus-visible { outline: 2px solid #e2a33d; outline-offset: 2px; }
+
 /* ---- narrow screens: one column, the list or the thread */
 @media (max-width: 760px) {
   .shell { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1fr) auto; }

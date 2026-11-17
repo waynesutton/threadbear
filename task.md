@@ -9,9 +9,33 @@ Status and gap list: prds/prints-status.md
 
 ## In Progress
 
+- [ ] Collapse scheduled follow-up instructions behind Show details in the GPUI transcript. prds/collapsed-scheduled-followups.md
+
+- [ ] 2026-11-16 21:53 UTC Desktop CI: Linux's 60-minute budget landed as 7f2ba41e after 12 focused tests and the 505-second quick check passed. Run 43948148837 also passed all Windows specs before its release build hit 60 minutes; give Windows 90 minutes, keeping Linux/Mac at 60. Windows follow-up checks and a complete GitHub run remain required.
+
+
+
+- [x] Realtime Tasks local draft (2026-11-16T11:03:00Z): native build and six UI scenarios (77 steps), 14 backend/runner tests, two web draft tests, typechecks and web build pass. Real local-backend browser save/photo and touch drag verified; native card/column drag and light/dark inspected. Not deployed or landed. prds/realtime-tasks.md
+
 - [ ] Land verified Settings review fixes when the Mac is quiet, then verify the installed update.
 
 ## Completed
+
+- [x] 2026-11-17 06:11 UTC Clearer completion landed as ee1e9967..06337397 after the 559-second landing check passed. Installed and running GPUI06337397 and runner06337397 verified; clearerCompletion enabled for Wayne. Actual native partial/complete/off cards, It works and Archive clicks pass; live demo61db70e8 reports completed/pending tasks through the real end_turn tool. Archive remains manual. API85 cloud mirror source and iOS source/model checks are included; no cloud deployment or phone install performed. prds/clearer-thread-completion.md
+
+- [x] 2026-11-17 06:05 UTC Verify Notes voice removal in installed GPUI06337397: build ancestry includes5592339e, running PID9065 and desktop.log confirm this app, and installed binary lacks Use with Notes/settings-voice-notes while retaining thread Voice, Fn dictation and Pause before sending. Matching source has no Notes listener or controls. No new microphone test or visual UI inspection performed. prds/remove-gpui-notes-voice.md
+- [x] 2026-11-17 06:07 UTC Tasks list and board refinement landed (8f51b038 through 638c60d3), deployed with matching backend/web, and verified in installed GPUI 06337397. List default and all four statuses confirmed live; Doing create/read and Done update/read passed. Installed list quick-add and four-column board visually inspected. Ten native scenarios/131 steps, backend/web/core checks and required landing check pass. prds/realtime-tasks.md
+
+
+- [x] 2026-11-17 02:32 UTC Remove GPUI Notes mic, caption, setting and dedicated listener, preserving thread Voice, keyboard dictation and pause settings. Landed5592339e; 61 Voice tests, GPUI check, feature pairing, 787-second landing check and release build pass. Staged binary confirms removed/retained settings; running-app verification tracked above. desktop/core/src/voice.rs, desktop/gpui/src/voice/, notes_page.rs, settings_window/voice.rs. prds/remove-gpui-notes-voice.md
+
+- [x] 2026-11-16 13:50 UTC Five always-on bear improvements landed: one shared unattended worker per bear, memory rules with told.md and tasks/, built-in tidies in Auto for Claude bears, quiet finishes for empty runs, and late answers (experiment). prds/bears-always-on.md. Rebased over 186 main commits; 291 focused tests and ./check.sh --quick passed (539 s); landed as 2876bbc2..897aa777 and pushed with scripts/sync-main.sh. bears.refreshRules ran on all four bears on the live runner (897aa777): personas and bear.json unchanged, one managed block added each, the four tidy routines kept their ids and times. PR #66 already carries the three fixes.
+
+- [x] 2026-11-15 04:22 UTC Collect the bears research links in prds/bears-resources.md, separating user-supplied references from supporting documentation and recording what each informed. Verified against the original planning thread, build history and saved plans; local document links checked.
+
+- [x] 2026-11-15 04:05 UTC Update the end_turn tool-schema assertion for the new quiet field; all 90 threadbear-tools tests pass. The broader always-on bears check was interrupted after sustained high load and remains required before landing. prds/bears-always-on.md
+
+- [x] 2026-11-14 23:46 UTC Fix all three always-on bears review findings: prevent folded mentions escaping a caller's sandbox, preserve explicitly configured routine login/pool/model/effort, and recover a late answer whose message was saved before starting its turn failed. Verified: eight regression cases, 226 affected tests and runner typecheck passed. Committed separately before repeat review; not yet landed. prds/bears-always-on.md
 
 - [x] 2026-11-15 07:28 UTC Fix both Settings review findings: preserve failed Instructions edits for retry, surface errors after the page closes, hold automatic updates while unsaved, and inspect the rendered main-window page in the spec. Automation build, failure/recovery/update-hold and broad navigation/save driver checks, focus guard, spec pairing and syntax checks pass. Full landing check waits for quiet Mac load. prds/gpui-settings-in-main.md
 

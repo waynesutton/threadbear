@@ -9,6 +9,27 @@ type WithCard = Dump & { decisions?: string[] | null; composer: Dump['composer']
 
 const cardLines = (d: Dump): string[] => (d as WithCard).composer.card ?? [];
 
+When(/^the agent reports an? (incomplete|completed) request with two tasks$/, async function (this: ThreadbearWorld, state: string) {
+  const d = await this.app.dump();
+  const complete = state === 'completed';
+  await this.app.do({ cmd: 'mock', method: 'stream', params: {
+    threadId: d.selection?.id, text: 'The requested work has a task summary.', hz: 60,
+    completed: {
+      needs: complete ? 'nothing' : 'you',
+      ...(complete ? {} : { asks: [{ action: 'Try the installed app', options: ['It works', 'Needs changes'] }] }),
+      completion: { tasks: [
+        { id: 'build', title: 'Build the completion card', status: 'completed' },
+        { id: 'try', title: 'Try the installed app', status: complete ? 'completed' : 'pending' },
+      ] },
+    },
+  } });
+  await this.until('the request summary finished', (dump) => dump.selection?.status === 'idle' && dump.transcript.rows.some((row) => row.kind === 'footer' && row.turn === 'turn_stream'), 20_000);
+});
+
+Then('the completion summary shows {string}', async function (this: ThreadbearWorld, words: string) {
+  await this.until(`the completion summary saying "${words}"`, (d) => cardLines(d).includes(words));
+});
+
 function decisions(d: Dump): string[] {
   return (d as WithCard).decisions ?? [];
 }

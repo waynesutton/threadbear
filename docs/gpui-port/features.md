@@ -154,7 +154,7 @@ It comes from reading code, not from running anything, so "(unverified)" means n
 | `transcript.user` | Your bubble | Right aligned, 80% column, with images and chips | Custom row with `TextView` inside `MessageScroller`. | build | M | `Cells` (`TextRowCell`), `RowRenderer` |
 | `transcript.pending` | Pending states | Faded plus spinner, clock when queued, waiting-for-runner note | Drawn states on the bubble. | build | S | `Cells` (`PendingMark`), `PendingMessage` |
 | `transcript.edit` | Edit pencil | Hover, puts text back in the composer, rewinds on send, warns on background jobs | Hover button, with a gpui-kit dialog for the warning. | build | M | `Cells`, `AppModel+ThreadActions` |
-| `transcript.notes` | Runner and schedule notes | Centred quiet line, schedule name header | Drawn. | build | S | `RowRenderer` |
+| `transcript.notes` | Runner and schedule notes | Schedule title and time with Show details; runner notes stay quiet | Scheduled bodies start collapsed; Show details opens selectable, left-aligned Markdown and Hide details closes it. Runner notes retain their existing display. | build | S | `RowRenderer` |
 | `transcript.agentmessage` | Agent message card | Another thread's agent wrote it | Drawn card. | build | S | `RowRenderer` (`agentMessageText`) |
 | `transcript.answered` | Answered bubble | Your picks shown as question and answer; review pick likewise | Drawn. | build | S | `RowRenderer` (`userWords`), `AnswerChips` |
 | `transcript.reply` | Assistant reply | Streaming Markdown in the reading column | `TextView` in `MessageScroller` with follow-tail, as Ghostex does with `gpui::list`, re-rendering only the open block. | kit | L | `Cells` (`TextRowCell`), `RowRenderer` |
@@ -250,7 +250,7 @@ It comes from reading code, not from running anything, so "(unverified)" means n
 | `composer.threadid` | Thread id paste or drop | Becomes a chip | Paste rule and an in-app drag, on top of inline chips. | build | S | `ComposerView`, `ThreadDrag` |
 | `composer.cardmention` | Card mention | Click on a board adds a chip | Inserts a chip, on top of inline chips. | build | S | `CardChips`, `HighlightsBoard` |
 | `composer.dropanywhere` | Drop anywhere on thread | Outlined while it'll take it | GPUI file drop on the thread area, with a drawn outline. | kit | S | `ComposerView` (`ComposerDropView`) |
-| `composer.plus` | + menu | Attach images, Folder, Schedule | gpui-kit menu and GPUI path prompts. | kit | S | `ComposerControls` (`plusMenu`, `folderMenu`) |
+| `composer.plus` | + menu | Attach images or Markdown, Folder, Schedule | gpui-kit menu and GPUI path prompts. | kit | S | `ComposerControls` (`plusMenu`, `folderMenu`) |
 | `composer.runner` | Runner chip | Which Mac, star sets default | gpui-kit menu. | kit | S | `ComposerControls` (`runnerMenu`) |
 | `composer.account` | Account chip | When not using pools | `Popover`. | kit | M | `ComposerControls` (`AccountPickerView`) |
 | `composer.modelpicker` | Model picker | Search, provider rail, logos, Older, Effort, Speed, Unpin | Custom content in a `Popover`, with `Input` for search. | build | L | `ComposerControls` (`ModelPickerView`), `ModelPicker` |
@@ -272,6 +272,7 @@ It comes from reading code, not from running anything, so "(unverified)" means n
 | ID | Feature | What it does | How in GPUI | Route | Size | Swift |
 |---|---|---|---|---|---|---|
 | `card.done` | Done card | Archive, Or carry on list, tick and ? | Drawn card with `TextView`. A card that arrives while the thread's on screen settles in from 6 points below, and the done card's tick draws itself on (`composer_card.rs` `CardArrival`, `drawn_tick`; Mike picked it 13 Nov). | build | M | `ComposerCard`, `RowRenderer` (`asksText`) |
+| `clearer-completion` | Clearer completion (`clearerCompletion`) | Agent-reported task progress beside the existing asks and Archive action | Optional completion ledger on the composer-attached card; neutral action buttons with amber left edges, independent of runner-checked loose ends. Off keeps the original card even for stored completion events. | build | none | none |
 | `card.review` | Review findings | Another lab's findings on the card, each with fixed, disputed or left, and a line opening the review thread | Added section in `card.done` and `card.needsyou`, from `turn.completed`'s `review`. | build | S | `RowRenderer` (`reviewText`) |
 | `card.needsyou` | Needs you card | Outlined asks, button rows | Drawn card with blocks for each ask, holding its thread identity (a security fix). | build | L | `ComposerCard`, `RowRenderer` |
 | `card.paging` | Paging | ‹ 1 of 3 ›, moves on after a pick | Drawn, with a slide from `Animation`. | build | S | `ComposerCard` (`CardDeck`) |
@@ -381,6 +382,7 @@ It comes from reading code, not from running anything, so "(unverified)" means n
 | `looks.projects` | Customize the Projects page | Your picture, background, top, middle or bottom for the title and search and the cards, what each card shows | Drawn (`projects_look.rs`), sharing the Librarian's Picture and Background sections. | build | M | `ProjectsHome`, `ProjectsLookEditor` |
 | `librarian.log` | Librarian log | Recent, Next, Look at everything | Drawn list. | build | M | `LibrarianView` |
 | `librarian.picture` | Pokeable picture | Secret lines | Built, with its wobble on a poke (`home_page.rs`, core's `juice::wobble`): GPUI can't turn a picture, so the Swift tilt is a sway of the picture's middle, with the squash as it is. | build | S | `HomePage` |
+| `tasks.page` | Tasks page | Synced board/list, task editor, projects and backgrounds (⌘7) | Native page over the main panel, Convex through runner RPC. Experiment. | build | M | `TasksPage` |
 | `notes.page` | Notes page | Your own notes over the main panel (⌘6): list, rename, delete, Markdown colouring, task boxes, list typing, encrypted on this Mac | Main-panel page; the text in `EditorState` with a note highlighter (headings coloured, not sized), files sealed with `ring` as CryptoKit seals them. No dictation yet. | build | M | `NotesPage`, `NoteEditor`, `NotesStore` |
 | `skills.page` | Skills page | The skills store over the main panel (⌘5), while the skillsStore experiment is on: import, Always on, New Skill and Edit, suggested, remove | Main-panel page (`skills_page.rs`) over the runner's `skills.*`; rows read by `threadbear_core::skills`. | build | M | `SkillsPage`, `SkillPicker`, `SkillsModel` |
 | `schedule.page` | Scheduled page | Stats tiles | Drawn. | build | S | `ScheduledHome`, `HomePage` |

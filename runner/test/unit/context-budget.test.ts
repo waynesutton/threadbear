@@ -46,6 +46,7 @@ function tools(provider: 'claude' | 'codex', oneReply: boolean): ToolDefinition[
     oneReply: () => oneReply,
     bulletReplies: () => true,
     pocket: () => stub(),
+    tasks: () => stub(),
   }) as unknown as ToolDefinition[];
 }
 

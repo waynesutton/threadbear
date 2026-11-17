@@ -3741,6 +3741,30 @@ sub-agents, with no "coordinator" mark (mockups in
 Mac (GPUI) app only for now; the phone, the website and the Swift app show
 threads as before.
 
+## Clearer completion
+
+Experiment `clearerCompletion` adds an optional `completion` to `end_turn`,
+`turn.completed` and thread summaries. It contains `tasks`, at most 30
+`{ id, title, status }` entries. IDs are stable nonempty strings (64 chars),
+titles are nonempty (120 chars), and status is `completed`, `pending` or
+`blocked`. These are agent reports, shown separately from runner-checked
+loose ends. This feature never archives a thread automatically.
+
+The tool takes task updates, merging by ID in first-seen order. Omitted
+tasks retain their state; omitting completion preserves the whole ledger.
+`completion.removeIds` explicitly removes tasks no longer in scope (tool
+input only). The runner emits the merged snapshot, never removeIds. Empty
+ledgers are omitted. Failed or interrupted turns cannot update the ledger.
+With the experiment off the tool field and summary are absent; old callers
+remain valid. Stored progress survives restart. Incomplete tasks prevent a
+thread from being treated as finished by automatic helper archiving.
+
+The composer shows completed/total and task status on both Done and Needs
+you cards without replacing asks. Neutral action buttons have an amber left
+edge. Existing fonts and manual Archive remain. A missing loose-end check
+never means no loose ends; only a successful empty check makes that claim.
+API 85 mirrors the optional snapshot for other Macs, website and phone.
+
 ## A quiet inbox
 
 Experiment `quietInbox` (`runner/src/runner/quiet-inbox.ts`), off unless
@@ -5546,6 +5570,52 @@ Outside-agent `list_prints { limit?, cursor? }` and `read_print { slug, offset?,
 
 ### Bears
 
+**Late tool answers** (separate `lateAnswers` experiment, off by default).
+`approvals.respond` also accepts allow/deny for a tool card whose latest
+resolution is `expired` within the last 24 hours. `allowAlways` means one
+allow here. The runner queues the original request and the user's answer
+as a runner-origin message, then resolves the card. It does not replay the
+call, save an allow rule or widen the thread's mode. Already answered,
+rewound, unknown and older cards are refused. Questions, secrets, plan
+cards and cross-runner start requests keep their existing handling.
+Remote allow retains the card's visibility checks; a card with no item id
+can only be allowed on its owning Mac. The event log supplies the original
+request and expiry across restarts. GPUI's deliberate late-answer control
+is tracked in prds/bears-gpui.md; this also handles a click already in flight.
+
+**Always-on runs.** With `bears` on, routines, folder webhooks and mentions
+share a busy unattended thread for the bear. Running, starting, waiting,
+queued and background work count; a chat the user started does not. Work
+queues after the current turn. Modes and working folders must match when folding work; a
+routine retries, a webhook holds its delivery, and a mention asks the
+caller to retry when the running job has different access or a different folder. A mention's
+reply is handed back when that mention's own queued turn finishes. Repeating routines skip while their preceding run is still busy.
+
+Folding a mention checks the sender's saved authority against the worker's
+current authority, including sandbox confinement, as direct messages do.
+A routine also waits when its explicit account, pool, model or effort
+differs from the worker's settings; a pinned account never folds into a
+pooled thread. A late-answer retry counts as delivered only when queued or
+when `turn.started` exists. If only its user message was saved, retry starts
+the turn using that same row and original input, including across restarts.
+
+`end_turn { needs: "nothing", quiet: true }` marks a bear's unattended run
+as having nothing new to report. Once the turn is finished, the runner's
+loose-end check may archive it. Questions, suggested follow-ups, unfinished
+work, user messages, answered cards, stars and manual unarchives keep it
+visible. The `quietInbox` experiment need not be on. Other threads ignore
+`quiet`, and a useful bear report without it stays visible.
+
+`bears.refreshRules { bear? }` (all unarchived bears when omitted) refreshes
+only the marked always-on block in CLAUDE.md and AGENTS.md, and recognized
+built-in memory tidy routines. It returns `{ bears: string[] }`. It needs
+Full access and is refused from any bear's folder. `tb bears refresh-rules
+[bear]` is the CLI. User text and custom routines stay intact. New and
+refreshed bears read `memory/told.md`, record dated summaries of what they
+told the user, and keep unfinished tasks in `memory/tasks/`, linked from
+`memory/summary.md`. Directly created Claude memory tidies use Auto; Codex and agent-created bears use Ask. An authorized refresh moves built-in Claude tidies to Auto. The
+tidy changes memory files only and drops completed task files.
+
 An experiment (`bears`, `runner/src/bears.ts`). A bear is a folder,
 `<defaults.cwd>/Bears/<id>/` (`~/ThreadbearThreads/Bears` when the default
 folder is the home folder). The id (`researcher-7f3a`) never changes. The
@@ -5613,8 +5683,9 @@ three bears, and gets a `[Threadbear: Asked ...]` line added for the
 agent. Each ask makes a thread in the bear's folder in the lower of the
 bear's mode and the asking thread's, joined to the asking thread's
 projects, with `startedBy { kind: "thread", label: "Mentioned by <title>" }`.
-A bear with a mention thread still running gets the next ask in that
-thread. When its turn ends, its reply goes to each asker as a message
+A bear with an unattended thread still running gets the next ask queued
+there when access matches. When that queued turn ends, its reply goes to
+that turn's askers as a message
 starting `[Bear: <name> replied in thread:<id>. It's a bear's answer,
 not Wayne's words.]`, quoted. A bear's own thread may ask another bear
 only from a table they share, or when it's the head bear.
@@ -7512,6 +7583,7 @@ anyone's); "any runner" is any good key. Anything not sorted is owner only.
 | `sharedUsage` | its own | only the main key's readings, and only of the logins the owner has listed for its runner (`setRunnerLogins`), with no runner id; never what its own accounts rows name. Nobody, the owner included, gets a runner key's readings |
 | `setRunnerLogins` | owner only | which logins a runner key's runner shares: its own rows say whatever its key likes |
 | `runnerLogins` | owner only | each keyed runner's listed logins, and the ones its rows name |
+| `nativeTasks` | any runner | shared account Tasks and preferences, through the authenticated helper in tasks.ts; paired browser tokens use the same account boundary |
 | `pools` | any runner | the shared pools, which every runner follows; a runner key gets no member named by another runner's id |
 | `savePools` | owner only | pools reach the main Mac's logins and folders |
 | `adoptPools` | owner only | as `savePools`; a runner key's runner keeps its own until the main Mac sets them |
@@ -7825,3 +7897,66 @@ Either side may be upgraded first, so each tolerates the other:
 - An app older than Devices never asks for them. A newer app talking to a
   runner older than Devices gets `-32601` from `devices.*` and says the
   Phone & browser tab needs a newer runner.
+
+## Native Tasks (experiment, backend API 83; Doing and saved orders 84)
+
+Tasks are an account-wide Convex-owned collection, separate from encrypted
+Mac Notes and Notion-backed ProjectTasks. The Tasks experiment exposes
+list/create/update/move/delete/restore and preferences operations through
+the runner, with equivalent paired-browser functions. Changes subscribe
+in realtime; browser mutations do not queue behind an online runner.
+
+Each task carries a stable client-generated id (retry-safe creation), title,
+notes, status (backlog/todo/doing/done; doing since API 84), optional project reference (runnerId and
+project id), created/updated timestamps and manual position. Mutations
+patch specified fields only. Deletion can be undone by restoring the same
+id. New tasks use timestamp ordering unless create gives a position (API
+84), which clients use to put a quick-added task on top. Project deletion leaves tasks
+unassigned rather than deleting them.
+
+Preferences include defaultView (list initially since API 84, or board), the
+board's column order, the list's own section order (most active first),
+project group order, grouping, sorting, background color/photo, photo position/fade and theme.
+Changing the current view does not set defaultView: Display's default does.
+Desktop Tasks is below Notes, Command-7; website is /tasks. Links require
+existing account authentication. Offline views may show cached data but
+mutations require connectivity.
+
+### Tasks RPC contract
+
+The `tasks` experiment gates desktop RPCs and agent tools. The website checks
+backend API 84 before calling these functions. A runner supplies its own key;
+clients cannot override credentials in an RPC. Paired browsers use their token
+with the same Convex functions. This is a single-owner deployment collection.
+
+- `tasks.list {after?, limit?}` returns `{items, next}`. Follow `next` as `after`
+  until null; limit defaults to 100 and is capped at 250. Ids order pagination,
+  while `position` controls display order.
+- `tasks.create {id?, title, notes?, status?, project?, position?}` returns the id. Supply
+  the same id on retries. Repeating creation never overwrites an existing task.
+- `tasks.update {id, title?, notes?, status?, project?, position?}` patches only
+  supplied fields. A null project removes the association. Status is `backlog`,
+  `todo`, `doing` or `done`; checking completes, unchecking sets `todo`.
+- `tasks.remove {id}` and `tasks.restore {id}` soft-delete and restore.
+- `tasks.projects {}` returns `{runnerId,id,title}[]`. A project argument can
+  also be its exact id or title; ambiguous names fail. `tasks.count {project}`
+  and `tasks.projectCount {project}` return `{count,more}` capped at 1000.
+- `tasks.preferences {}` returns defaultView, columnOrder, listOrder,
+  projectOrder (`runnerId/id` keys, `none` for no project), grouping
+  (`status`/`project`), sort (`manual`/`newest`/`oldest`/`title`), backgroundColor,
+  backgroundPhoto, photoPosition, fade and theme. `tasks.setPreferences` patches
+  those fields. columnOrder and listOrder name each status at most once, and
+  come back with any missing status added (Doing after Todo), so an order an
+  older client saved with three statuses still works.
+- `tasks.photo {}` returns an authenticated storage capability URL or null.
+  `tasks.uploadPhoto {}` returns an upload URL. `tasks.photoFile {path}` reads
+  a local image, uploads it and selects it. PNG/JPEG/WebP/GIF, at most 10 MB.
+- `tasks.updated {}` invalidates loaded tasks/preferences. It is not a row
+  snapshot: clients requery, coalesce concurrent refreshes and retain the last
+  successful snapshot on failure. There is no offline write queue.
+
+Titles are trimmed, required and at most 500 characters; notes are at most
+20,000. Times and positions here are numeric milliseconds, unlike thread ISO
+timestamps. Project references include both runner and project identity.
+The four agent tools are `list_tasks`, `create_task`, `update_task` and
+`delete_task` (with `undo:true` to restore).

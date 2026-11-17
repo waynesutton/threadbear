@@ -16,7 +16,7 @@ use serde_json::{json, Value};
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::time::{Duration, Instant};
 use threadbear_core::composer::{self, OWN_ANSWER};
-use threadbear_core::reducer::{Ask, AskNote, AsksCard, RowContent};
+use threadbear_core::reducer::{Ask, AskNote, AsksCard, CompletionStatus, CompletionSummary, RowContent};
 use crate::tips::Tip as _;
 
 /// What Mike has picked on the open card, kept with the composer so it
@@ -93,7 +93,13 @@ impl Composer {
         let pane = self.pane.upgrade()?;
         let row = pane.read(cx).feed.model().open_card()?;
         let RowContent::Asks(card) = &row.content else { return None };
-        card.is_open.then(|| card.clone())
+        card.is_open.then(|| {
+            let mut card = card.clone();
+            if !self.app.upgrade().is_some_and(|app| app.read(cx).experiment_on("clearerCompletion")) {
+                card.completion = None;
+            }
+            card
+        })
     }
 
     /// The card's state, reset when a new card turns up: it opens on its
@@ -411,20 +417,22 @@ impl Composer {
         let this = cx.entity().downgrade();
         // Arriving, its tick draws itself on; then it's the tick as ever.
         let green = style::tick_green(cx);
-        let tick = match drawing.filter(|at| at.elapsed() < threadbear_core::juice::TICK_DRAW_END) {
+        let tick = if card.completion.as_ref().is_some_and(|summary| summary.tasks.iter().any(|task| task.status != CompletionStatus::Completed)) {
+            crate::icons::symbol("circle").with_size(px(16.)).text_color(style::needs_you_text(cx)).into_any_element()
+        } else { match drawing.filter(|at| at.elapsed() < threadbear_core::juice::TICK_DRAW_END) {
             Some(at) => {
                 window.request_animation_frame();
                 drawn_tick(threadbear_core::juice::tick_drawn(at.elapsed()), green).into_any_element()
             }
             None => crate::icons::tall_checkmark().with_size(px(16.)).text_color(green).into_any_element(),
-        };
+        } };
         column = column.child(
             h_flex()
                 .w_full()
                 .h(px(metrics::PAGED_HEADING))
                 .justify_between()
-                .child(card_title(tick, 2.5, "Done", cx))
-                .child(card_button(("done-archive", 0usize), "Archive", ButtonLook::Plain, "Archive this thread", cx).on_click({
+                .child(card_title(tick, 2.5, &card.completion.as_ref().map(CompletionSummary::heading).unwrap_or_else(|| "Done".to_owned()), cx))
+                .child(completion_button(("done-archive", 0usize), "Archive", ButtonLook::Plain, "Archive this thread", card.completion.is_some(), cx).on_click({
                     let this = this.clone();
                     move |_, window, cx| {
                         if let Some(this) = this.upgrade() {
@@ -433,6 +441,12 @@ impl Composer {
                     }
                 })),
         );
+        if let Some(summary) = &card.completion {
+            column = column.child(completion_tasks(summary, false, cx));
+            if card.loose_ends.as_ref().is_some_and(Vec::is_empty) {
+                column = column.child(small_label("No loose ends found · Checked by Threadbear", cx));
+            }
+        }
         // What's still open (doneText): a booked check-in alone goes under
         // "Coming back", as it doesn't stop an archive.
         if let Some(ends) = &card.loose_ends {
@@ -595,9 +609,17 @@ impl Composer {
         heading = heading.child(right.when(!paged, |r| r.self_start()));
         if collapsed {
             // Never shorter than the chevron beside it.
-            return v_flex().w_full().min_h(px(metrics::TOGGLE)).child(heading).into_any_element();
+            let mut column = v_flex().w_full().min_h(px(metrics::TOGGLE));
+            if let Some(summary) = &card.completion {
+                column = column.child(div().mb(px(6.)).text_size(px(style::size::CARD_TITLE)).font_weight(FontWeight::MEDIUM).text_color(style::label_text(cx)).child(summary.heading()));
+            }
+            return column.child(heading).into_any_element();
         }
-        let mut column = v_flex().w_full().child(heading.when(!paged, |h| h.mb(px(metrics::HEADING_SPACING))));
+        let mut column = v_flex().w_full();
+        if let Some(summary) = &card.completion {
+            column = column.child(completion_tasks(summary, true, cx));
+        }
+        column = column.child(heading.when(!paged, |h| h.mb(px(metrics::HEADING_SPACING))));
         let numbered = card.asks.len() > 1;
         if paged {
             // Every page in the same cell, so the cell is the tallest one's
@@ -677,6 +699,9 @@ impl Composer {
 /// (project_decisions.rs), so the two look and answer alike, Recommended
 /// star, rows and Something else box included.
 pub(crate) trait AskHost: Sized + 'static {
+    fn amber_actions(&self, _cx: &App) -> bool {
+        false
+    }
     /// The answer picked on this ask, `OWN_ANSWER` for Something else.
     fn ask_pick(&self, ask: usize) -> Option<i64>;
     /// Where the asks' links open from: this Mac or another, and the folder
@@ -718,6 +743,7 @@ pub(crate) trait AskHost: Sized + 'static {
     fn render_ask(&mut self, index: usize, ask: &Ask, numbered: bool, window: &mut Window, cx: &mut Context<Self>) -> AnyElement {
         let picked = self.ask_pick(index);
         let choices = composer::choices(ask);
+        let amber = self.amber_actions(cx);
         // A numbered ask's text starts past its number, as in a list in a
         // message; its buttons line up with the text, not the number.
         let indent = if numbered { px(metrics::INDENT) } else { px(0.) };
@@ -754,14 +780,14 @@ pub(crate) trait AskHost: Sized + 'static {
             let mut row = h_flex().w_full().pl(indent).mt(px(metrics::ASK_AFTER + metrics::BUTTONS_BEFORE)).py(px(half)).flex_wrap().gap_x(px(metrics::BUTTON_GAP)).gap_y(px(half * 2.));
             for (n, title, target) in links {
                 let this = this.clone();
-                let look = if n == 0 { ButtonLook::Picked } else { ButtonLook::Plain };
+                let look = if n == 0 && !amber { ButtonLook::Picked } else { ButtonLook::Plain };
                 // Resting on one shows where it goes, as a reply's link does
                 // (RowRenderer's AskButton peek); a review has none, its
                 // window being the look, and keeps its tip.
                 let key = self.ask_link_key(index, n).filter(|_| crate::reply_links::has_card(&target));
                 let tip: &'static str = if key.is_some() { "" } else if target.starts_with("review:") { "Open the design options" } else { "Open this" };
                 let shown = key.as_ref().filter(|k| crate::chips::card_shown(k, crate::chips::SLOWER)).and_then(|_| self.ask_link_card(&title, &target, cx)).map(|card| crate::chips::under(metrics::BUTTON_HEIGHT, card));
-                let button = card_button(("ask-link", index * 100 + n), &format!("{title} ↗"), look, tip, cx)
+                let button = completion_button(("ask-link", index * 100 + n), &format!("{title} ↗"), look, tip, amber, cx)
                     .relative()
                     .when_some(key, |b, key| b.on_hover(move |on, window, cx| crate::chips::hover(&key, *on, crate::chips::SLOWER, window, cx)))
                     .children(shown);
@@ -797,7 +823,7 @@ pub(crate) trait AskHost: Sized + 'static {
                 };
                 let title = if is_picked { format!("✓ {choice}") } else { choice.clone() };
                 let this = this.clone();
-                buttons = buttons.child(card_button(("answer", index * 100 + n), &title, look, "Pick this answer", cx).on_click(move |_, window, cx| {
+                buttons = buttons.child(completion_button(("answer", index * 100 + n), &title, look, "Pick this answer", amber, cx).on_click(move |_, window, cx| {
                     if let Some(this) = this.upgrade() {
                         this.update(cx, |this, cx| this.ask_pick_answer(index, n as i64, window, cx));
                     }
@@ -805,7 +831,7 @@ pub(crate) trait AskHost: Sized + 'static {
             }
             let own = picked == Some(OWN_ANSWER);
             let this2 = this.clone();
-            buttons = buttons.child(card_button(("answer-own", index), if own { "✓ Something else" } else { "Something else…" }, if own { ButtonLook::Picked } else { ButtonLook::Plain }, "Answer in your own words", cx).on_click(move |_, window, cx| {
+            buttons = buttons.child(completion_button(("answer-own", index), if own { "✓ Something else" } else { "Something else…" }, if own { ButtonLook::Picked } else { ButtonLook::Plain }, "Answer in your own words", amber, cx).on_click(move |_, window, cx| {
                 if let Some(this) = this2.upgrade() {
                     this.update(cx, |this, cx| this.ask_pick_answer(index, OWN_ANSWER, window, cx));
                 }
@@ -926,6 +952,9 @@ pub(crate) trait AskHost: Sized + 'static {
 }
 
 impl AskHost for Composer {
+    fn amber_actions(&self, cx: &App) -> bool {
+        self.open_card(cx).is_some_and(|card| card.completion.is_some())
+    }
     fn ask_pick(&self, ask: usize) -> Option<i64> {
         self.card.picks.get(&(ask as i64)).copied()
     }
@@ -1242,6 +1271,16 @@ impl Composer {
     pub(crate) fn card_lines(&self, cx: &App) -> Option<Vec<String>> {
         let card = self.open_card(cx)?;
         let mut lines = Vec::new();
+        if let Some(summary) = &card.completion {
+            lines.push(summary.heading());
+            if !self.card.collapsed || card.is_done() {
+                lines.push("Reported by the agent".to_owned());
+                lines.extend(summary.tasks.iter().map(|task| format!("{}: {}", task.status.label(), task.title)));
+            }
+            if card.loose_ends.as_ref().is_some_and(Vec::is_empty) {
+                lines.push("No loose ends found · Checked by Threadbear".to_owned());
+            }
+        }
         // A link button's card while it shows: "peek: <title> | <detail>",
         // as its card says them, last.
         let home = std::env::var("HOME").unwrap_or_default();
@@ -1252,7 +1291,7 @@ impl Composer {
             self.pane.upgrade()?.read(cx).ask_link_words(&link.title, &target)
         });
         if card.is_done() {
-            lines.push("Done".to_owned());
+            if card.completion.is_none() { lines.push("Done".to_owned()); }
             for (i, next) in card.next.iter().enumerate() {
                 let tick = if self.card.next_picks.contains(&(i as i64)) { "[x]" } else { "[ ]" };
                 lines.push(format!("{tick} {next}{}", if self.card.explain.contains(&(i as i64)) { " (?)" } else { "" }));
@@ -1381,13 +1420,41 @@ pub(crate) mod metrics {
 /// three quarters of a point lower than centring puts them, where TextKit's
 /// rounded-down baseline offset leaves the Swift card's.
 /// `gap` puts the words where the Swift title's space after its symbol does.
-fn card_title(mark: AnyElement, gap: f32, words: &'static str, cx: &App) -> impl IntoElement {
+fn card_title(mark: AnyElement, gap: f32, words: &str, cx: &App) -> impl IntoElement {
     h_flex()
         .flex_none()
         .items_center()
         .gap(px(gap))
         .child(mark)
-        .child(div().relative().top(px(0.75)).text_size(px(style::size::CARD_TITLE)).line_height(px(17.)).font_weight(FontWeight::MEDIUM).text_color(style::label_text(cx)).child(words))
+        .child(div().relative().top(px(0.75)).text_size(px(style::size::CARD_TITLE)).line_height(px(17.)).font_weight(FontWeight::MEDIUM).text_color(style::label_text(cx)).child(words.to_owned()))
+}
+
+/// Agent-reported task progress uses the card's own typography. Repository
+/// checks are rendered separately, never inferred from these statuses.
+fn completion_tasks(summary: &CompletionSummary, heading: bool, cx: &App) -> impl IntoElement {
+    let mut column = v_flex().w_full().pb(px(10.));
+    if heading {
+        column = column.child(div().text_size(px(style::size::CARD_TITLE)).font_weight(FontWeight::MEDIUM).text_color(style::label_text(cx)).child(summary.heading()));
+    }
+    column = column.child(small_label("Reported by the agent", cx));
+    for task in &summary.tasks {
+        let color = if task.status == CompletionStatus::Completed { style::tick_green(cx) } else { style::needs_you_text(cx) };
+        let mark = if task.status == CompletionStatus::Completed { "✓" } else { "○" };
+        column = column.child(h_flex().w_full().items_start().gap(px(10.)).mt(px(5.))
+            .child(div().flex_none().text_color(color).child(mark))
+            .child(div().flex_1().min_w_0().text_size(px(style::size::BODY)).line_height(px(style::size::BODY_LINE)).text_color(style::label_text(cx)).child(task.title.clone()))
+            .child(div().flex_none().text_size(px(style::size::DETAIL)).text_color(style::secondary_label(cx)).child(task.status.label())));
+    }
+    column
+}
+
+/// Keep the native button fill; the experiment adds only the approved amber
+/// left edge. Picked answers retain their existing selection feedback.
+fn completion_button(id: impl Into<ElementId>, title: &str, look: ButtonLook, tip: &'static str, amber: bool, cx: &App) -> Stateful<Div> {
+    let look = if amber && look == ButtonLook::Suggested { ButtonLook::Plain } else { look };
+    card_button(id, title, look, tip, cx).relative().when(amber, |button| {
+        button.child(div().absolute().inset_0().rounded(px(7.5)).border_l(px(3.)).border_color(rgb(0xe2a33d)))
+    })
 }
 
 #[derive(Clone, Copy, PartialEq)]

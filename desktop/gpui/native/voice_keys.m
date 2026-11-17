@@ -43,8 +43,13 @@ static id<NSTextInputClient> tb_client(void) {
 }
 
 static uint32_t tb_char_at(id<NSTextInputClient> client, NSUInteger at) {
-    if (![client respondsToSelector:@selector(attributedSubstringForProposedRange:actualRange:)]) return 0;
-    NSAttributedString *text = [client attributedSubstringForProposedRange:NSMakeRange(at, 1) actualRange:NULL];
+    // Through id: NSTextInputClient doesn't take in NSObject, and a newer SDK
+    // refuses respondsToSelector: on it (the fork's Mac CI, 16 Nov).
+    if (![(id)client respondsToSelector:@selector(attributedSubstringForProposedRange:actualRange:)]) return 0;
+    // A real place for the range it gives back: GPUI's text input writes
+    // there without checking for NULL, and NULL crashed the app on Fn.
+    NSRange actual = NSMakeRange(NSNotFound, 0);
+    NSAttributedString *text = [client attributedSubstringForProposedRange:NSMakeRange(at, 1) actualRange:&actual];
     if (text.length == 0) return 0;
     NSString *s = text.string;
     NSRange whole = [s rangeOfComposedCharacterSequenceAtIndex:0];

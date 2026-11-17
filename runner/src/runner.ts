@@ -92,7 +92,8 @@ import { cleanUpWorktree, makeWorktree, sameSubfolder, worktreeInstructions } fr
 import { stripModelSuffix, type AccountRegistry, type LearnedAccountInfo } from './accounts.ts';
 import { pickAccount as pickByRoom, resetTime, type UsageReading } from './usage.ts';
 import { DEFAULT_POOL_FOLDERS, RUNNER_VERSION, expandHome, paths, peekRunnerJson, type Config } from './config.ts';
-import { experimentsOn } from './experiments.ts';
+import { mergeCompletion, completionOpen } from './completion.ts';
+import { experimentOn, experimentsOn } from './experiments.ts';
 import { WAIT_SLACK_MS, blockedUntil, limitWhy, loginOk, nextLogin, pickInPool, poolAccounts, poolForFolder, poolProviders, readPools, roomWait, validatePools } from './pools.ts';
 import { copyImageInto, imageRefFor } from './media.ts';
 import { isDirectory } from './fsutil.ts';
@@ -172,6 +173,7 @@ import { CONFINED_NO_SANDBOX, sandboxFor } from './sandbox.ts';
 import { COPIED_REFUSAL, neutraliseCopied, realCopy } from './real-copy.ts';
 
 export type Notification =
+  | { method: 'tasks.updated'; params: Record<string, never> }
   | { method: 'thread.updated'; params: { thread: ThreadSummary } }
   | { method: 'thread.event'; params: { threadId: string; event: AnyEvent } }
   | { method: 'thread.deleted'; params: { threadId: string } }
@@ -1653,8 +1655,6 @@ export class Runner {
     // A report to the thread that started the sender, kept until its other
     // threads finish (runner/nested.ts).
     if (this.holdReport(st, text, images, opts)) return { turnId: crypto.randomUUID(), held: true };
-    // Mike writing: anything held goes in first, so he and it see the same.
-    if (fromMike(text, opts) && st.rec.heldReports?.length) this.deliverHeld(st);
     // Wayne's own message (the app, tb, the phone): any bear it names is
     // asked, and the agent is told so under it.
     if (this.mentionHook && (opts.origin === undefined || opts.origin === 'phone') && text) {
@@ -1665,6 +1665,8 @@ export class Runner {
         this.log.warn('a mention could not be handed on', { threadId, error: String(e) });
       }
     }
+    // Mike writing: anything held goes in first, so he and it see the same.
+    if (fromMike(text, opts) && st.rec.heldReports?.length) this.deliverHeld(st);
     return { turnId: this.sendTo(st, text, images, opts) };
   }
 
@@ -1734,6 +1736,7 @@ export class Runner {
     if (opts.scheduleId) msg.scheduleId = opts.scheduleId;
     if (opts.preserveSchedule !== undefined) msg.preserveSchedule = opts.preserveSchedule;
     if (opts.scheduledSince !== undefined) msg.scheduledSince = opts.scheduledSince;
+    if (opts.retryMessageSeq !== undefined) msg.retryMessageSeq = opts.retryMessageSeq;
     if (opts.answers?.length) msg.answers = opts.answers;
     if (opts.editOf) msg.editOf = opts.editOf;
     rec.lastActivityAt = this.isoNow();
@@ -1925,7 +1928,11 @@ export class Runner {
     // stable message ID keeps the original user row rather than duplicating it.
     const reviewMessage = msg.reviewId ? this.store.log(rec.id).read(1, rec.lastSeq).find(e => e.type === 'user.message' && e.reviewId === msg.reviewId && e.turnId === msg.turnId) : undefined;
     const scheduledMessage = msg.scheduledSince !== undefined ? this.scheduledMessage(st, msg.turnId, msg.scheduledSince) : undefined;
-    const messageSeq = reviewMessage?.seq ?? scheduledMessage?.seq ?? this.emit(st, userMessage(msg), msg.turnId).seq;
+    // A late answer can have written its message before turn.started failed.
+    // Reuse only that exact surviving row, never an unrelated or rewound one.
+    const retryMessage = msg.retryMessageSeq === undefined ? undefined : this.store.log(rec.id).read(msg.retryMessageSeq, msg.retryMessageSeq).find(e =>
+      e.type === 'user.message' && e.turnId === msg.turnId && !cutOut(rec, e.seq));
+    const messageSeq = reviewMessage?.seq ?? scheduledMessage?.seq ?? retryMessage?.seq ?? this.emit(st, userMessage(msg), msg.turnId).seq;
     try {
       this.emit(st, { type: 'turn.started', turnId: msg.turnId }, msg.turnId);
     } catch (e) {
@@ -2731,6 +2738,10 @@ export class Runner {
       if (said.next) body.next = said.next;
       body.needsFrom = said.from;
     }
+    if (outcome === 'completed' && experimentOn(this.cfg.home, 'clearerCompletion')) {
+      rec.completion = mergeCompletion(rec.completion, turn.endTurn?.completion);
+      if (rec.completion) body.completion = rec.completion;
+    }
     // Here rather than only in end_turn's handler: a refused end_turn
     // leaves the asks in the reply's text, and that thread never heard
     // Mike had restarted (29 Oct 2026).
@@ -2795,7 +2806,7 @@ export class Runner {
     // turn counts (the one after a sub-agent or background job ends is
     // often where the report is), so this reads end_turn itself, not `away`.
     // Judged before endTurn, which starts any queued message.
-    const finished = outcome === 'completed' && said?.needs === 'nothing' && !rec.queue.length && !archive &&
+    const finished = outcome === 'completed' && !(experimentOn(this.cfg.home, 'clearerCompletion') && completionOpen(rec.completion)) && said?.needs === 'nothing' && !rec.queue.length && !archive &&
       !snoozeFromTool(turn.endTurn) && !waitForFromTool(turn.endTurn) &&
       !rec.subagents?.some((a) => a.status === 'running') && !rt.tasks.length && !rt.approvals.size &&
       // A job that ended mid-turn: the CLI's turn reading its result is next.
@@ -2857,7 +2868,7 @@ export class Runner {
     // hibernates until they're done (experiment quietInbox,
     // runner/quiet-inbox.ts). Not one a schedule had out of the archive: the
     // lines above have dealt with it.
-    if (finished && !review && !rec.labReviewOwed && !rt.turn && !rec.archivedAt && !this.stopping) void this.settleQuietly(st, Boolean(said?.next?.length));
+    if (finished && !review && !rec.labReviewOwed && !rt.turn && !rec.archivedAt && !this.stopping) void this.settleQuietly(st, Boolean(said?.next?.length), Boolean(turn.endTurn && typeof turn.endTurn === 'object' && 'quiet' in turn.endTurn && turn.endTurn.quiet === true));
     if (archive && !rt.turn && !rec.archivedAt && !this.stopping) {
       this.emit(st, { type: 'system.note', text: 'Archived, as the agent was asked to once it had finished.' });
       this.update({ threadId: rec.id, archived: true, archivedBy: 'agent' });
@@ -4117,6 +4128,7 @@ export class Runner {
     if (rec.share) s.share = { access: rec.share.access === 'link' ? 'link' : 'off', slug: rec.share.slug, updatedAt: rec.share.updatedAt };
     // Only for the card it was checked for: a new turn's card waits for its own.
     if (rec.looseEnds && this.looseEndsCard(st) === rec.looseEnds.seq) s.looseEnds = { seq: rec.looseEnds.seq, ends: rec.looseEnds.ends.map((e) => ({ ...e })), at: rec.looseEnds.at };
+    if (rec.completion && experimentOn(this.cfg.home, 'clearerCompletion') && !rec.archivedAt && (rec.status === 'running' || rec.status === 'starting' || (rec.status === 'idle' && rec.needs?.seq === rec.lastTurnCompletedSeq))) s.completion = structuredClone(rec.completion);
     if (rt.moving) s.moving = { ...rt.moving };
     const bear = this.bearOf?.(rec.cwd);
     if (bear) s.bear = bear;
@@ -4467,7 +4479,7 @@ export function stoppedWorkMessage(what: string[], last: boolean): string {
   ].join('\n');
 }
 
-export type SendOptions = { origin?: MessageOrigin; scheduleId?: string; preserveSchedule?: boolean; queue?: boolean; answers?: AskAnswer[]; editOf?: number; messageId?: string; scheduledSince?: number };
+export type SendOptions = { origin?: MessageOrigin; scheduleId?: string; preserveSchedule?: boolean; queue?: boolean; answers?: AskAnswer[]; editOf?: number; messageId?: string; retryMessageSeq?: number; scheduledSince?: number };
 
 type ScheduledDelivery = { seq: number; started: boolean; text: string; images: ImageRef[]; superseded?: false } | { superseded: true; started: true };
 

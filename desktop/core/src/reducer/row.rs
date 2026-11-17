@@ -613,6 +613,7 @@ pub struct AsksCard {
     /// The done card's loose ends, as the runner checked them: None when
     /// it didn't, empty when nothing's left.
     pub loose_ends: Option<Vec<LooseEnd>>,
+    pub completion: Option<CompletionSummary>,
 }
 
 impl AsksCard {
@@ -628,6 +629,7 @@ impl AsksCard {
             explain_next: BTreeSet::new(),
             notes: BTreeMap::new(),
             loose_ends: None,
+            completion: None,
         }
     }
 

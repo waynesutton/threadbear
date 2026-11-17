@@ -5,6 +5,7 @@
 // are what an agent showed Mike on purpose or he pasted (replyImages), or a shared thread's.
 import { defineSchema, defineTable } from 'convex/server';
 import { v } from 'convex/values';
+import { taskFields, taskPreferenceFields } from './taskFields';
 
 // A thread's sharing, as the runner mirrors it (ThreadShare in
 // docs/protocol.md): "link" is readable by anyone with /s/<slug>; "off"
@@ -111,6 +112,11 @@ export const threadFields = {
   // one shows as its text; threadId for a thread one, at (ISO) for a
   // booked check-in.
   looseEnds: v.optional(v.array(v.object({ kind: v.string(), text: v.string(), threadId: v.optional(v.string()), at: v.optional(v.string()) }))),
+  // Agent-reported task progress; independent of runner-checked loose ends (API 84).
+  completion: v.optional(v.object({ tasks: v.array(v.object({
+    id: v.string(), title: v.string(),
+    status: v.union(v.literal('completed'), v.literal('pending'), v.literal('blocked')),
+  })) })),
   // The turn (its id's first 8 characters, as message rows have it) that
   // the row's done-card fields describe, `review` and `looseEnds`, since
   // API 76: another Mac's relay puts them on that turn's end only, not on an
@@ -213,6 +219,9 @@ export const views = ['inbox', 'hibernating', 'den'] as const;
 export const moveStates = ['asking', 'ready', 'packing', 'unpacking', 'claimed', 'done', 'failed', 'cancelled'] as const;
 
 export default defineSchema({
+  // Cloud-owned tasks, not part of the runner's replaceable project mirror.
+  tasks: defineTable(taskFields).index('by_task_id', ['id']).index('by_deleted_id', ['deleted', 'id']).index('by_updated', ['updatedAt']).index('by_project_deleted', ['project.runnerId', 'project.id', 'deleted']),
+  taskPreferences: defineTable({ name: v.string(), ...taskPreferenceFields }).index('by_name', ['name']),
   // One row per runner (the Mac, Tinker Desk later), written every minute.
   // A phone treats one not seen for 3 minutes as offline.
   runners: defineTable({
@@ -791,6 +800,7 @@ export default defineSchema({
   })
     .index('by_runner_id', ['runnerId', 'id'])
     .index('by_slug', ['slug']),
+
   // One-use pairing codes (API 80, tokens.ts): what the Mac's QR code
   // carries in place of a token. Only the code's SHA-256; the phone trades
   // the code for a token with tokens:claim within ten minutes, once.

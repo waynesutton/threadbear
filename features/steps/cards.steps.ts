@@ -28,13 +28,16 @@ When('the agent asks to run {string} and then {string}', async function (this: T
 });
 
 Then('the approval for {string} says it was allowed', async function (this: ThreadbearWorld, command: string) {
-  await this.until(`"${command}" allowed`, (d) => d.transcript.rows.some((r) => r.kind === 'approval' && r.text.includes(command) && r.text.endsWith('(allow)')));
-});
-
-Then('the approval for {string} is still waiting', async function (this: ThreadbearWorld, command: string) {
-  const d = await this.app.dump();
-  const row = d.transcript.rows.find((r) => r.kind === 'approval' && r.text.includes(command));
-  assert.ok(row && !/\((allow|deny|allowAlways)\)$/.test(row.text), `"${command}" was answered: ${row?.text}`);
+  // Asked of the mock runner, as the card that says "(allow)" folds away
+  // within a second of the answer, often before a dump sees it.
+  const threadId = (await this.app.dump()).selection?.id;
+  for (let i = 0; i < 100; i += 1) {
+    const out = await this.app.do({ cmd: 'mock', method: 'approvals', params: { threadId } });
+    const { approvals } = JSON.parse(out.replace(/^(\w+ )?ok /, '').replace(/^mock /, '')) as { approvals: { title: string; decision: string | null }[] };
+    if (approvals.some((a) => a.title.includes(command) && a.decision === 'allow')) return;
+    await new Promise((resolve) => setTimeout(resolve, 100));
+  }
+  assert.fail(`"${command}" was never allowed`);
 });
 
 Then('a question card asks {string}', async function (this: ThreadbearWorld, question: string) {
@@ -84,10 +87,6 @@ Then('a review card says {string}', async function (this: ThreadbearWorld, words
 
 When('the agent asks for two approvals', async function (this: ThreadbearWorld) {
   await this.app.do({ cmd: 'send', text: 'Please ask for two approvals' });
-});
-
-Then('the approval for {string} says it was allowed', async function (this: ThreadbearWorld, command: string) {
-  await this.until(`"${command}" allowed`, (d) => d.transcript.rows.some((r) => r.kind === 'approval' && r.text.includes(command) && r.text.endsWith('(allow)')));
 });
 
 When('I select the earlier reply in the transcript', async function (this: ThreadbearWorld) {

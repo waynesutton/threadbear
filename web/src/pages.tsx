@@ -1,3 +1,4 @@
+import { ProjectTasksLink } from './tasks';
 // The rail's views: each is a list for the sidebar and a page for the main
 // column, like a thread and the threads list. They only subscribe while they're
 // showing. Most of what they say comes from the queries the phone reads, and
@@ -424,6 +425,7 @@ export function ProjectPage({ token, id }: { token: string; id: string }) {
       <PageHead view="projects" title={p.title} />
       <div className="page-body">
         <div className="page-col">
+          <ProjectTasksLink token={token} runnerId={p.runnerId} id={p.id} />
           {block('Goals', p.goals)}
           {block('Where it stands', p.state)}
           {live.length ? (

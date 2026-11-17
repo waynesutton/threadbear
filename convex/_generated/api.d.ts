@@ -8,6 +8,8 @@
  * @module
  */
 
+import type * as tasks from "../tasks.js";
+import type * as taskFields from "../taskFields.js";
 import type * as crons from "../crons.js";
 import type * as devices from "../devices.js";
 import type * as hookHttp from "../hookHttp.js";
@@ -44,6 +46,8 @@ import type {
 } from "convex/server";
 
 declare const fullApi: ApiFromModules<{
+  tasks: typeof tasks;
+  taskFields: typeof taskFields;
   crons: typeof crons;
   devices: typeof devices;
   hookHttp: typeof hookHttp;

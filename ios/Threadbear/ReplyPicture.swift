@@ -415,8 +415,9 @@ struct WebPictureLink: View {
     var url: URL
 
     var body: some View {
-        // A Link goes through the environment's openURL, the thread's links
-        // and then LinkGate, as a Markdown link does.
+        // A Link opens through the environment's openURL, which the app's
+        // root sets to LinkGate, with no direct call for a view moved
+        // elsewhere to slip past (OpenGateSourceTests).
         Link(destination: url) {
             PictureOnMac(alt: alt, note: "Picture on \(url.host() ?? "the web"), not loaded. Tap to open it.")
         }
