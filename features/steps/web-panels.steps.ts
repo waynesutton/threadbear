@@ -29,6 +29,9 @@ When('I set the panel host appearance to {string}', async function (this: Thread
   const before = web(await this.app.dump())?.page?.loads;
   if (before !== undefined) loadsBefore = before;
   await this.app.do({ cmd: 'appearance', mode });
+  // Headless windows need a rendered frame to apply the panel appearance.
+  const frame = path.join(os.tmpdir(), `panel-appearance-${process.pid}.png`);
+  try { await this.app.shot(frame); } finally { fs.rmSync(frame, { force: true }); }
 });
 
 Then('the panel page prefers {string} appearance', async function (this: ThreadbearWorld, mode: string) {

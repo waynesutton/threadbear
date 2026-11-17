@@ -6,6 +6,10 @@ How Prints work today, what's missing and what's next: [Prints status](https://g
 
 ## [Unreleased]
 
+### Fixed
+
+- Embedded Print and Git pages follow the app appearance, including changes while the panel is open without reloading.
+
 ### Removed
 
 - GPUI Notes microphone and Use with Notes setting. Thread Voice, keyboard dictation and Pause before sending remain available.

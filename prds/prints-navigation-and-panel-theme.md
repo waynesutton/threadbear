@@ -23,6 +23,8 @@ The installed GPUI app renders dark Print cards but opens Print and Git web pane
 
 ## Status
 
-Panel appearance patch implemented with a behaviour scenario for dark/light changes without reload. Pairing and diff checks pass; native compilation and runtime verification remain pending.
+The full Prints navigation port landed in main at 7f375555; this branch adds panel appearance propagation. Native build passed. Four focused Prints scenarios (41 steps) passed, covering lists, cards, pane opening and the disabled experiment. Actual Chromium checks confirmed Print and Git HTML preferences and backgrounds change dark/light/dark with one page load. Git HTML was served in an isolated test server without the real Git API; repository operations were not tested. The runtime-tagged automated appearance scenario has not been run; manual runtime verification used an isolated installed runtime copy.
 
-The requested navigation already exists in the Mac mini commits 0908dc2f and f36b14b5. Thread c67a712f is merging that complete port into main. Avoid a duplicate port here; rebase onto its landing and verify the requested rail/Highlights behaviour along with this theme fix.
+Windows CI run 44049768051 exposed a test that compared joined paths as literal Unix strings. The assertion now compares filesystem paths so Windows separators are valid.
+
+Landing checks and installed-app verification remain pending.

@@ -160,3 +160,10 @@
 - `runner/src/page-list.ts` parses, draws, ticks and moves todo lists and boards from Markdown.
 - `app/Sources/ThreadbearCore/Protocol/Page.swift` has `PrintLink`, the `threadbear-print:` click.
 - `app/Sources/Threadbear/Pages.swift` has `handlePrintLink`; `Views/PanelsView.swift` catches the link in a Print's view.
+
+## Embedded panel appearance
+
+- `desktop/web/src/mac/panel.rs` hosts live Chromium panels and applies app appearance without reloading.
+- `desktop/gpui/src/web_panels.rs` keeps panel instances and synchronizes their appearance.
+- `features/web-panels.feature` covers panel navigation and appearance changes.
+- `prds/prints-navigation-and-panel-theme.md` tracks Prints navigation and panel appearance verification.

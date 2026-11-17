@@ -9,7 +9,7 @@ Status and gap list: prds/prints-status.md
 
 ## In Progress
 
-- [ ] Restore GPUI Prints navigation and make embedded Print/Git panels follow app appearance. prds/prints-navigation-and-panel-theme.md. Implementation and installed verification pending.
+- [ ] Restore GPUI Prints navigation and make embedded Print/Git panels follow app appearance. prds/prints-navigation-and-panel-theme.md. Native build and 4 Prints scenarios (41 steps) pass; live Chromium Print/Git HTML dark/light switches preserve one load. Landing and installed verification pending.
 
 
 - [ ] 2026-11-16 21:53 UTC Desktop CI: Linux's 60-minute budget landed as 7f2ba41e after 12 focused tests and the 505-second quick check passed. Run 43948148837 also passed all Windows specs before its release build hit 60 minutes; give Windows 90 minutes, keeping Linux/Mac at 60. Windows follow-up checks and a complete GitHub run remain required.
