@@ -2,6 +2,14 @@
 
 Created: 2026-11-16T09:14:50.172751+00:00
 
+## Delivered 2026-11-17 06:07 UTC
+
+Refinement landed as `8f51b038` through `638c60d3` after the required grouped landing check passed. The updater deployed matching backend and website from `5592339e` at 01:50–01:51 UTC. The installed GPUI app restarted onto `06337397`; its build metadata, ancestry and updater log confirm all Tasks fixes are running.
+
+Live verification: saved and read the List default and Backlog/Todo/Doing/Done order; created/read a temporary Doing task, updated/read Done, then removed the verification tasks. The website returned HTTP 200 and its deployed bundle includes Doing and saved list order. Inspected the actual installed list quick-add and four-column board through accessibility navigation and window-only screenshots. Native automation's ten scenarios/131 steps cover saves, failure/retry, menus, ordering and Undo. Earlier real local-backend browser checks cover mobile, theme and realtime edits; no physical-phone check is claimed.
+
+The user's unsent draft was preserved throughout the automatic update wait. No forced restart, push or PR was performed by this refinement rollout. Earlier checkpoints below are historical.
+
 ## Approved experience
 
 Tasks below Notes, opened with Command-7. Native GPUI desktop and authenticated mobile web /tasks share one Convex collection. The simple quick-add list is the default. Board has Backlog, Todo, Doing and Done. List/Board switch has an explicit Set as default action, synced across devices. Switching the current view does not change the default.
