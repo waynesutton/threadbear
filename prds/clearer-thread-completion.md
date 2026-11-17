@@ -47,3 +47,5 @@ The original full quick check returned nonzero because both native steps hit the
 
 
 2026-11-17T01:55:17Z: the queued landing rebased after the Tasks refinement and Notes voice removal landed on main. Resolved changelog/task conflicts by preserving both threads and the removed Notes voice copy. Tasks now owns API84, so completion moved to API85 (backend version, runner gate and current protocol/experiment docs). Implementation is ee1e9967. Regenerated native parity from current specs. All 28 completion/mirror/cross-route checks and the runner typecheck pass after this integration. Normal landing will run its required combined check.
+
+2026-11-17T02:13:37Z: landing check stopped on experiment-docs.test.ts only. The generated experiment document retained the previous Tasks text after the rebase; regenerated it from current experiment source and the two generation tests pass. No implementation change. Retry normal landing with this generated correction.
