@@ -147,10 +147,7 @@ Feature: Files opened in the side pane
   # Read-only Quick Look thumbnails on the Mac. Other systems still offer
   # the document's own app, through the open gate. Swift's frozen dump only
   # names its full Quick Look view; it cannot confirm a rendered thumbnail.
-  # GitHub's Sequoia Intel image never draws an Office thumbnail (two
-  # fixtures, 30 seconds, 18 Nov), so its run leaves this one out; check
-  # hosts and GitHub's arm image run it.
-  @file.quicklook @swift-pending @windows-pending @linux-pending @hosted-intel-pending
+  @file.quicklook @swift-pending @windows-pending @linux-pending
   Scenario: An Office document previews without launching another app
     When I open the thread "Rebuild the three landing pages"
     And I open a sample Office document in the pane
