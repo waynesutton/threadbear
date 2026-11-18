@@ -302,7 +302,14 @@ pub(crate) fn windows_now(main: AnyWindowHandle, cx: &mut App) -> WindowsNow {
         let looked = handle.update(cx, |_, window, cx| {
             // The kit's menus take the keys while they're open.
             let menu = window.context_stack().iter().any(|c| c.contains("PopupMenu"));
-            let held = menu || window.has_active_dialog(cx) || window.has_active_sheet(cx) || window.has_active_prompt();
+            let held = menu || window.has_active_prompt();
+            // A window without the kit's root (About, the dock's drag outline)
+            // has no dialogs, sheets or inputs to ask about, and asking
+            // aborts the app. Clicking a thread crashed it here (Wayne, 18 Nov).
+            if !matches!(window.root::<gpui_kit::base::Root>(), Some(Some(_))) {
+                return (held, false);
+            }
+            let held = held || window.has_active_dialog(cx) || window.has_active_sheet(cx);
             (held, window.is_window_active() && window.has_focused_input(cx))
         });
         // A window being drawn right now can't be read: count it as busy.
