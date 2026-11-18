@@ -1725,6 +1725,7 @@ impl Threadbear {
         // the box while it was on screen (composer_card.rs).
         dump["prints"] = crate::prints::dump(self, cx);
         dump["bearsPanel"] = self.bears_panel_dump();
+        dump["sidebarLists"] = crate::sidebar_lists::dump(self);
         dump["juice"] = json!({
             "slidOff": self.sidebar.gestures.last_slid(),
             "cardArrived": self.composer(cx).and_then(|c| c.read(cx).card_arrival.last),

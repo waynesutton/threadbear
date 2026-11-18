@@ -1,5 +1,10 @@
 # Files
 
+## Sidebar selection and search
+
+- `desktop/gpui/src/sidebar_lists.rs`: separate Print/Bear/Table search, visible selection, bulk archive/restore controls and native confirmations.
+- `prds/sidebar-bulk-selection.md`: scope and verification record for sidebar search and bulk actions.
+
 ## Scheduled follow-up details
 
 - `desktop/gpui/src/rows.rs`: collapsed scheduled headings and selectable Markdown details using existing row expansion state.

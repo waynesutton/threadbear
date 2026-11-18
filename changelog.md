@@ -20,6 +20,8 @@ How Prints work today, what's missing and what's next: [Prints status](https://g
 
 ### Changed
 
+- Prints, Bears and Tables sidebars each have search, visible selection controls and bulk Archive/Delete actions. Prints archived on this Mac can be restored without changing their files or shared links.
+
 - Tasks appearance controls use an icon, photo sliders and an explicit List/Board default. Wrap Columns keeps every board column on the page.
 - Notes offers Sans and Mono text with size controls and line numbers. Existing Serif choices fall back to Sans.
 - Generated Prints uses updated light/dark dashboard and report layouts, metric changes and compact charts. Published Prints offers System, Light and Dark themes.

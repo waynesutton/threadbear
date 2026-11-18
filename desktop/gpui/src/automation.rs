@@ -1154,6 +1154,7 @@ fn shell_step(app: &Entity<Threadbear>, cmd: &Value, window: &mut Window, cx: &m
                     if t.browser_rail(&thread.id, cx).is_some() {
                         ids.push(shell::BROWSER.to_string());
                     }
+                    if t.shows_prints_rail(&thread) { ids.push(shell::PRINTS.to_string()); }
                     if t.shows_bears_rail(&thread) {
                         ids.push(shell::BEARS.to_string());
                     }

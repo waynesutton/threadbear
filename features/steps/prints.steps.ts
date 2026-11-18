@@ -4,7 +4,7 @@
 // The @manual scenarios still need a dev runner.
 import { Then, When } from '@cucumber/cucumber';
 import type { ThreadbearWorld } from '../support/world.ts';
-import type { Dump, Row } from '../support/driver.ts';
+import { sleep, type Dump, type Row } from '../support/driver.ts';
 import { previewLine } from '../support/pane.ts';
 
 /** Settings' "Only make Prints when I ask", or null while it isn't shown. */
@@ -177,4 +177,59 @@ When('I take the picked Prints out of {string}', async function (this: Threadbea
 
 Then('the Print {string} is in {string}', async function (this: ThreadbearWorld, title: string, projects: string) {
   await this.until(`"${title}" in ${projects}`, (d) => printTitles(d).some((p) => p.title === title && p.projects === projects));
+});
+
+// The real sidebar controls, scoped independently for Prints, Bears and Tables.
+type SidebarList = { query: string; archived: boolean; selecting: boolean; visible: string[]; selected: string[]; busy: boolean };
+const sidebarList = (d: unknown, section: string) => (d as { sidebarLists?: Record<string, SidebarList> }).sidebarLists?.[section];
+When('I open the {string} bulk sidebar', async function (this: ThreadbearWorld, section: string) {
+  await this.open('Tidy the imports in the uploader');
+  await this.app.do({ cmd: 'panel', id: section === 'Prints' ? 'threadbear.prints' : 'threadbear.bears' });
+  await this.until(`${section} loaded`, d => (sidebarList(d, section)?.visible.length ?? 0) > 0);
+});
+When('I use {string} in the {string} sidebar', async function (this: ThreadbearWorld, action: string, section: string) {
+  await this.app.do({ cmd: 'click', title: `${action} ${section}` });
+});
+When('I search the {string} sidebar for {string}', async function (this: ThreadbearWorld, section: string, text: string) {
+  await this.app.do({ cmd: 'click', title: `Search ${section}` });
+  await this.app.do({ cmd: 'menu-key', modifiers: ['cmd'], key: 'a' });
+  if (text) await this.app.do({ cmd: 'type', focused: true, text });
+  else await this.app.do({cmd: 'menu-key', key: 'backspace'});
+  await this.until(`${section} query changed`, d => sidebarList(d, section)?.query === text);
+});
+When('I click the sidebar item {string}', async function (this: ThreadbearWorld, title: string) {
+  await this.app.do({ cmd: 'click', title });
+});
+When('I confirm the sidebar action with {string}', async function (this: ThreadbearWorld, button: string) {
+  // Let the native alert finish its entrance before aiming at its button.
+  await sleep(300);
+  await this.app.do({ cmd: 'click', title: button });
+  await this.until('archive action finished', d => !sidebarList(d, 'Bears')?.busy && !sidebarList(d, 'Tables')?.busy);
+});
+Then('the {string} sidebar has {int} selected and {int} visible', async function (this: ThreadbearWorld, section: string, selected: number, visible: number) {
+  await this.until(`${section}: ${selected} selected, ${visible} visible`, d => {
+    const state = sidebarList(d, section);
+    return state && !state.busy && state.selected.length === selected && state.visible.length === visible;
+  });
+});
+Then('the sidebar keeps the current thread open', async function (this: ThreadbearWorld) {
+  await this.until('selection did not open a row', d => d.selection?.id === 'demo_tidy_imports');
+});
+
+When('archiving the bear {string} is refused', async function (this: ThreadbearWorld, id: string) {
+  await this.app.do({cmd: 'mock', method: 'bearArchive', params: {fail: id}});
+});
+Then('the failed sidebar archive is explained', async function (this: ThreadbearWorld) {
+  await this.until('archive error visible', d => JSON.stringify(d).includes('Archive refused for test'));
+});
+When('I select all sidebar rows with the keyboard', async function (this: ThreadbearWorld) {
+  await this.app.do({cmd: 'menu-key', key: 'a', modifiers: ['cmd']});
+});
+When('I leave sidebar selection with Escape', async function (this: ThreadbearWorld) {
+  await this.app.do({cmd: 'menu-key', key: 'escape'});
+});
+When('I open the filtered Print row menu', async function (this: ThreadbearWorld) {
+  const raw = await this.app.do({cmd: 'label-point', label: 'Invoice totals by month'});
+  const [x, y] = String(raw).replace(/^ok /, '').trim().split(/\s+/).map(Number);
+  await this.app.do({cmd: 'click-at', x, y, right: true});
 });

@@ -9,6 +9,8 @@ Status and gap list: prds/prints-status.md
 
 ## In Progress
 
+- [ ] 2026-11-18 20:33 UTC Separate Prints/Bears/Tables sidebar search, visible selection and bulk archive/delete built and verified locally: 62 native scenarios/865 steps, build/typecheck, focus guard and pairing checks pass. Landing and installed verification remain. prds/sidebar-bulk-selection.md
+
 
 
 - [ ] 2026-11-17 10:57 UTC Tasks interaction refinement verified locally:15 native scenarios/197 steps, backend/browser tests, photo display, Light/Dark and keyboard scrolling pass. Normal landing and coordinated rollout remain. prds/tasks-interaction-refinement.md

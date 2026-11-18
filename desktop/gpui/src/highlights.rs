@@ -8,7 +8,8 @@
 // shell can host it as a dock panel. `new` and `render` are all it needs.
 use crate::app::Threadbear;
 use crate::{call, icons, now_ms, style};
-use gpui_kit::base::TestSupportExt as _;
+use gpui_kit::base::{TestSupportExt as _, TestTextExt as _};
+use gpui_kit::component::input::{InputEvent, InputState};
 use gpui_kit::component::menu::{PopupMenu, PopupMenuItem};
 use gpui_kit::component::{h_flex, v_flex, ActiveTheme as _, Icon, Sizable as _, StyledExt as _};
 use gpui_kit::prelude::*;
@@ -303,6 +304,8 @@ pub(crate) struct SidePane {
     pub(crate) explain: crate::explain_pane::ExplainState,
     /// The Browser pane's address bar (agent_browser.rs).
     pub(crate) browser: crate::agent_browser::BrowserPaneState,
+    pub(crate) list_search: [Entity<InputState>; 3],
+    pub(crate) list_focus: [FocusHandle; 3],
     _subs: Vec<Subscription>,
 }
 
@@ -342,8 +345,19 @@ impl SidePane {
             drawn: HashMap::new(),
             explain: Default::default(),
             browser: Default::default(),
+            list_search: ["Search Prints", "Search Bears", "Search Tables"].map(|label| cx.new(|cx| InputState::new(window, cx).placeholder(label))),
+            list_focus: std::array::from_fn(|_| cx.focus_handle()),
             _subs: vec![],
         };
+        for kind in crate::sidebar_lists::Kind::ALL {
+            pane._subs.push(cx.subscribe(&pane.list_search[kind.index()], move |this, input, ev: &InputEvent, cx| {
+                if matches!(ev, InputEvent::Change) {
+                    let query = input.read(cx).value().to_string();
+                    let app = this.app.clone();
+                    cx.defer(move |cx| { app.update(cx, |app, cx| app.sidebar_search(kind, query, cx)).ok(); });
+                }
+            }));
+        }
         pane.chosen = pane.places.iter().filter_map(|(id, p)| Some((id.clone(), p.section.clone()?))).collect();
         // The pane follows the window's model: what's selected, and each
         // summary's seq and highlight stamp for "fetch again".
@@ -2355,8 +2369,11 @@ impl SidePane {
         let titles = self.project_titles(cx);
         let (open, menu) = (page.id.clone(), page.id.clone());
         let picked = self.app.upgrade().is_some_and(|a| a.read(cx).print_picked(&page.id));
+        let rail = index == "rail";
+        let selecting = rail && self.app.upgrade().is_some_and(|a| a.read(cx).prints.sidebar.selecting || !a.read(cx).prints.picked.is_empty());
+        let row_icon = if selecting { if picked { "checkmark.circle.fill" } else { "circle" }.to_owned() } else { page.symbol().to_owned() };
         PaneRow::new(SharedString::from(format!("print-{index}-{}", page.id)), page.title.clone())
-            .icon(page.symbol())
+            .icon(row_icon)
             .trailing(Some(threadbear_core::prints::rows::kind_and_version(page)))
             .detail(Some(threadbear_core::prints::rows::projects(page, &titles)))
             .tip(format!("Open {} beside the thread. \u{2318}-click or Shift-click picks several", page.title))
@@ -2364,9 +2381,15 @@ impl SidePane {
             .on_click(move |this, window, cx| {
                 if let Some(app) = this.app.upgrade() {
                     let id = open.clone();
-                    let pick = crate::print_select::Pick::from(&window.modifiers());
+                    let mut pick = crate::print_select::Pick::from(&window.modifiers());
+                    if rail {
+                        window.focus(&this.list_focus[0], cx);
+                        crate::web_panels::keyboard_to_app(window);
+                    }
                     let order = order.clone();
                     app.update(cx, |a, cx| {
+                        if rail && (a.prints.sidebar.selecting || !a.prints.picked.is_empty()) && pick == crate::print_select::Pick::Plain { pick = crate::print_select::Pick::Toggle; }
+                        if rail && pick != crate::print_select::Pick::Plain { a.prints.sidebar.selecting = true; }
                         if !a.print_row_clicked(&id, &order, pick, cx) {
                             a.open_print_here(&id, window, cx);
                         }
@@ -2376,7 +2399,10 @@ impl SidePane {
             .on_menu(move |this, pos, window, cx| {
                 if let Some(app) = this.app.upgrade() {
                     let id = menu.clone();
-                    app.update(cx, |a, cx| a.print_row_menu(&id, true, pos, window, cx));
+                    app.update(cx, |a, cx| {
+                        if rail { a.prints.picked = a.sidebar_selected(crate::sidebar_lists::Kind::Prints); }
+                        a.print_row_menu(&id, true, pos, window, cx);
+                    });
                 }
             })
             .render(p, cx)
@@ -2387,20 +2413,15 @@ impl SidePane {
     /// projects it's in. A click opens it in the pane; Back comes back.
     fn render_prints_list(&mut self, cx: &mut Context<Self>) -> AnyElement {
         let p = palette(cx);
-        let all = self.app.upgrade().map(|a| threadbear_core::prints::rows::all(&a.read(cx).prints.list)).unwrap_or_default();
-        if all.is_empty() {
-            return crate::files::pane_note(threadbear_core::prints::words::RAIL_EMPTY, p).into_any_element();
-        }
+        let all = self.app.upgrade().map(|a| a.read(cx).visible_prints()).unwrap_or_default();
         let order: Rc<Vec<String>> = Rc::new(all.iter().map(|pg| pg.id.clone()).collect());
-        let mut list = v_flex().py(px(8.));
-        // Picked ones: the bar over the list says how many (print_select.rs).
-        if let Some(app) = self.app.upgrade() {
-            let picked = app.read(cx).picked_prints().len();
-            list = list.children(crate::print_select::picked_bar(app.downgrade(), picked, cx).map(|bar| div().px(px(8.)).child(bar)));
-        }
-        for page in &all {
-            list = list.child(self.print_row(page, "rail", order.clone(), p, cx));
-        }
-        div().id("prints-list").size_full().overflow_y_scroll().child(list).into_any_element()
+        let controls = self.sidebar_controls(crate::sidebar_lists::Kind::Prints, cx);
+        let mut list = v_flex().py(px(4.));
+        if all.is_empty() { list = list.child(div().px(px(16.)).py(px(12.)).child("No Prints found").test_text("No Prints found")); }
+        for page in &all { list = list.child(self.print_row(page, "rail", order.clone(), p, cx)); }
+        v_flex().id("prints-panel").size_full().track_focus(&self.list_focus[0])
+            .on_key_down(cx.listener(|this, ev: &KeyDownEvent, window, cx| this.sidebar_keys(crate::sidebar_lists::Kind::Prints, ev, window, cx)))
+            .child(controls)
+            .child(div().id("prints-list").flex_1().min_h_0().overflow_y_scroll().child(list)).into_any_element()
     }
 }

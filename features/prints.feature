@@ -234,3 +234,55 @@ Feature: Prints
     When I click the link
     Then example.com opens in my browser
     And the Print stays where it was
+
+  @prints.list @swift-pending
+  Scenario: Sidebar search scopes visible selection and reversible archive
+    Given the app is connected to a runner with the demo threads
+    When I open the "Prints" bulk sidebar
+    And I search the "Prints" sidebar for " LAUNCH "
+    Then the "Prints" sidebar has 0 selected and 2 visible
+    When I use "Select" in the "Prints" sidebar
+    And I click the sidebar item "Launch notes"
+    And I click the sidebar item "Launch checklist"
+    Then the "Prints" sidebar has 2 selected and 2 visible
+    And the sidebar keeps the current thread open
+    When I use "Delete" in the "Prints" sidebar
+    And I press Esc in the Delete confirm
+    Then the "Prints" sidebar has 2 selected and 2 visible
+    When I use "Archive" in the "Prints" sidebar
+    Then the "Prints" sidebar has 0 selected and 0 visible
+    When I use "Archived" in the "Prints" sidebar
+    Then the "Prints" sidebar has 0 selected and 2 visible
+    When I use "All" in the "Prints" sidebar
+    And I use "Restore" in the "Prints" sidebar
+    And I use "Active" in the "Prints" sidebar
+    Then the "Prints" sidebar has 0 selected and 2 visible
+
+  @prints.list @swift-pending
+  Scenario: Changing a Print search drops hidden selections before Delete
+    Given the app is connected to a runner with the demo threads
+    When I open the "Prints" bulk sidebar
+    And I use "Select" in the "Prints" sidebar
+    And I use "All" in the "Prints" sidebar
+    And I search the "Prints" sidebar for "missing title"
+    Then the "Prints" sidebar has 0 selected and 0 visible
+    When I search the "Prints" sidebar for "Invoice"
+    And I use "All" in the "Prints" sidebar
+    Then the "Prints" sidebar has 1 selected and 1 visible
+    When I use "Delete" in the "Prints" sidebar
+    Then Delete asks once about "Invoice totals by month"
+    When I press Return in the Delete confirm
+    Then the "Prints" sidebar has 0 selected and 0 visible
+    And a Print is called "Launch notes"
+
+  @prints.list @prints.menu @swift-pending
+  Scenario: A filtered sidebar menu drops Prints selected on another surface
+    Given the app is connected to a runner with the demo threads
+    When I open the "Prints" bulk sidebar
+    And I search the "Prints" sidebar for "Invoice"
+    And I "⌘"-click the Print "Invoice totals by month"
+    And I "⌘"-click the Print "Launch notes"
+    Then the "Prints" sidebar has 1 selected and 1 visible
+    When I open the filtered Print row menu
+    Then the Prints picked are ""
+    And a Print is called "Launch notes"

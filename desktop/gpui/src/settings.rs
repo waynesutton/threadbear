@@ -152,6 +152,8 @@ pub struct Saved {
     /// `notesFont`: the Notes page's typeface, "mono" for Mono. None is
     /// Sans, the app's own. The GPUI app's own.
     pub notes_font: Option<String>,
+    /// Prints archived from this Mac's sidebar; files and shared links stay intact.
+    pub archived_print_ids: Option<Vec<String>>,
     /// Settings > General > Look (looks.rs), under the Swift app's keys
     /// (Looks.swift), each off until turned on. `librarianLookOn`:
     /// Customize on the Librarian page.

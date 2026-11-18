@@ -125,13 +125,13 @@ Feature: Bear tiles in the sidebar
     And if the runner refuses, it says Writer again and the error shows
 
   @bears.panel @manual @swift-pending
-  Scenario: Delete several bears and tables with one sheet
-    When I ⌘-click Writer and Shift-click Launch crew in Bears & Tables
-    Then the rows from Writer to Launch crew are picked and a bar says "Delete 3"
+  Scenario: Delete several bears in their own section with one sheet
+    When I ⌘-click Writer and Shift-click Designer in the Bears section
+    Then the rows from Writer to Designer are picked and the bar says "2 selected"
     When I right-click one of them
-    Then the menu offers "Delete 3 items…"
+    Then the menu offers "Delete 2 items…"
     When I pick it
-    Then one sheet lists the bears and tables that go
+    Then one sheet lists only the selected bears that go
     When I press Delete
     Then they leave the list at once, and any the runner refuses come back with the error
 
@@ -169,3 +169,82 @@ Feature: Bear tiles in the sidebar
     When I open the Bears and Tables row menu for "bear:writer-3c4d"
     And I choose "Refresh" in the Bears and Tables menu
     Then the Bears and Tables refresh is shown
+
+  @bears.panel @bears.tile @swift-pending
+  Scenario: Bears and Tables have separate search selection and archive controls
+    Given the app is connected to a runner with the demo threads
+    When I open the "Bears" bulk sidebar
+    And I use "Select" in the "Bears" sidebar
+    And I click the sidebar item "Writer"
+    And I click the sidebar item "Designer"
+    Then the "Bears" sidebar has 2 selected and 3 visible
+    And the "Tables" sidebar has 0 selected and 2 visible
+    And the sidebar keeps the current thread open
+    When I use "Archive" in the "Bears" sidebar
+    And I confirm the sidebar action with "Cancel"
+    Then the "Bears" sidebar has 2 selected and 3 visible
+    When I use "Archive" in the "Bears" sidebar
+    And I confirm the sidebar action with "Archive"
+    Then the "Bears" sidebar has 0 selected and 1 visible
+    And the "Tables" sidebar has 0 selected and 2 visible
+    When I use "Archived" in the "Bears" sidebar
+    Then the "Bears" sidebar has 0 selected and 2 visible
+    When I use "All" in the "Bears" sidebar
+    And I use "Restore" in the "Bears" sidebar
+    And I confirm the sidebar action with "Unarchive"
+    And I use "Active" in the "Bears" sidebar
+    Then the "Bears" sidebar has 0 selected and 3 visible
+    When I click the sidebar item "Writer"
+    And I search the "Tables" sidebar for "Head"
+    And I use "Select" in the "Tables" sidebar
+    And I use "All" in the "Tables" sidebar
+    Then the "Tables" sidebar has 1 selected and 1 visible
+    And the "Bears" sidebar has 1 selected and 3 visible
+    When I use "Archive" in the "Tables" sidebar
+    And I confirm the sidebar action with "Archive"
+    Then the "Tables" sidebar has 0 selected and 0 visible
+    And the "Bears" sidebar has 1 selected and 3 visible
+    When I use "Archived" in the "Tables" sidebar
+    And I use "All" in the "Tables" sidebar
+    And I use "Restore" in the "Tables" sidebar
+    And I confirm the sidebar action with "Unarchive"
+    And I use "Active" in the "Tables" sidebar
+    Then the "Tables" sidebar has 0 selected and 1 visible
+
+  @bears.panel @bears.tile @swift-pending
+  Scenario: A partial archive failure leaves failed Bears selectable and Tables alone
+    Given the app is connected to a runner with the demo threads
+    When I open the "Bears" bulk sidebar
+    And archiving the bear "writer-3c4d" is refused
+    And I search the "Bears" sidebar for "Writer"
+    And I use "Select" in the "Bears" sidebar
+    And I select all sidebar rows with the keyboard
+    Then the "Bears" sidebar has 1 selected and 1 visible
+    When I search the "Bears" sidebar for ""
+    And I click the sidebar item "Writer"
+    And I click the sidebar item "Designer"
+    And I use "Archive" in the "Bears" sidebar
+    And I confirm the sidebar action with "Archive"
+    Then the "Bears" sidebar has 1 selected and 2 visible
+    And the "Tables" sidebar has 0 selected and 2 visible
+    And the failed sidebar archive is explained
+    When I use "Delete" in the "Bears" sidebar
+    And I confirm the sidebar action with "Cancel"
+    Then the "Bears" sidebar has 1 selected and 2 visible
+    When I leave sidebar selection with Escape
+    Then the "Bears" sidebar has 0 selected and 2 visible
+
+  @bears.panel @bears.tile @swift-pending
+  Scenario: Clearing a Bears menu selection preserves the Tables selection
+    Given the app is connected to a runner with the demo threads
+    When I open the "Bears" bulk sidebar
+    And I use "Select" in the "Bears" sidebar
+    And I use "All" in the "Bears" sidebar
+    And I use "Select" in the "Tables" sidebar
+    And I use "All" in the "Tables" sidebar
+    Then the "Bears" sidebar has 3 selected and 3 visible
+    And the "Tables" sidebar has 2 selected and 2 visible
+    When I open the Bears and Tables row menu for "bear:writer-3c4d"
+    And I choose "Clear selection" in the Bears and Tables menu
+    Then the "Bears" sidebar has 0 selected and 3 visible
+    And the "Tables" sidebar has 2 selected and 2 visible

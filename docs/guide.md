@@ -1160,7 +1160,11 @@ Print previews and Git side panels follow the app’s light or dark appearance. 
 
 **In Highlights and on the rail.** A thread's Highlights list the Prints it made, under Prints, each with its kind, version and the projects it's in, or "No project". The Prints button on the right-hand rail, under Files, lists every Print you have, newest first, with the same details. It shows once there's at least one. Click a Print in either to open it beside the thread. Right-click one for everything a project's Print menu has: Show in Finder, Edit Text, Download, Versions, Publish, Delete and the rest. A deleted Print waits 7 days under **Recently deleted** on its project's page, where **Restore** brings it back.
 
-**Several at once.** In the rail's Prints, Highlights' Prints or a project's Prints, ⌘-click picks a Print or lets it go, and Shift-click picks every one from the last you picked to the one you click. Picked ones are shaded, and a bar over the list says how many, with **Projects** (put them all in a project, or take them all out of one; a tick means they're all in it already) and **Delete…**. Right-click a picked one for the same: **Projects for 3 prints** and **Delete 3 prints…**. Delete asks once, naming them: Return deletes them and Esc keeps them. It then takes them all away; any the runner couldn't delete come back, with why. Esc, the bar's ✕ or a plain click lets them all go (a plain click opens that Print as usual).
+**Several at once.** In the Prints sidebar, search by title, press **Select**, then click the Prints you want. Selection circles and a count show what will change. **All** (or ⌘A while the list has focus) selects the visible results; typing in Search clears the previous selection. ⌘-click and Shift-click also work. **Done** or Esc ends selection. **Delete** asks once, naming the selected Prints; Return deletes and Esc cancels. Any deletion the runner refuses comes back with an error.
+
+**Archive Prints.** **Archive** hides the selected Prints from this Mac's active sidebar. Their files, project memberships and published links stay intact. Choose **Archived**, select items and press **Restore** to bring them back. Search works in both views. Archive is local to this Mac; Delete is the existing seven-day trash operation.
+
+In Highlights or a project's Prints list, ⌘-click and Shift-click keep their existing selection behavior. Their selection bar and right-click menu offer **Projects** and **Delete…**.
 
 **Links in a Print** open in your browser when you click them, beside the thread and in a Print's own window. The Print stays where it was. Only web addresses (http and https) go out, one for each click.
 
@@ -2903,16 +2907,25 @@ commands, faces and routines. Store skills you've added reach bear threads
 like any other thread.
 
 In the desktop app, the paw on a thread's right-hand rail opens Bears &
-Tables: your bears under Pinned, Bears and Archived (the head bear marked),
-and with Tables on, your tables. Click one to open its newest thread.
+Tables. Bears and Tables have separate search boxes, selections and action
+rows. Click normally to open an item; press **Select** to pick several with
+plain clicks. ⌘-click toggles one, Shift-click selects a range within that
+section, and **All** or ⌘A selects its visible results. Search changes clear
+only that section's selection. **Done** or Esc ends selection.
+
 Right-click one for Open, Edit, Show in Finder, Copy Folder Path, Refresh,
 Rename… or Delete…. Editing a bear opens its configuration file; editing a
-table opens its project goals. To delete several at once,
-⌘-click or Shift-click to pick them, then press Delete in the bar over the
-list or right-click one of them: one sheet lists what goes. Esc lets go of
-the picked rows. Deleting a bear moves its folder to the runner's trash;
-deleting a table stops it being a project and leaves its chat threads and
-folder where they are.
+table opens its project goals. **Delete** in a section's selection bar asks
+once about that section's selected items. Deleting a bear moves its folder
+to the runner's trash; deleting a table leaves its chat threads and folder.
+
+**Archive** also asks first. Archiving bears pauses their routines, revokes
+webhooks and removes their table seats; their folders and threads stay.
+Archiving the Head Bear leaves no active head. Choose **Archived** and
+**Restore** to unarchive them; routines remain paused and webhooks and table
+seats must be added again. Archiving or restoring tables preserves their
+folders, threads and seated bears. An action in Bears never includes Tables,
+or vice versa.
 
 The rest of what bears do lives in `tb bears`:
 

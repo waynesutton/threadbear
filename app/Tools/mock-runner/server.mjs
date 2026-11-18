@@ -480,6 +480,7 @@ if (process.env.TB_MOCK_PARTS) {
 // on its own and Launch crew as a Part of Threadbear. Only when asked, as
 // it changes those threads' tiles.
 let bears = [];
+let bearArchiveFailure;
 if (process.env.TB_MOCK_BEARS) addDemoBears();
 // A big set for timing the Projects view (TB_MOCK_PERF_PROJECTS=<threads>):
 // that many threads over 80 projects, nearly all archived, the open ones
@@ -1764,6 +1765,8 @@ async function dispatch(client, method, p) {
       if (oldRunner) throw rpcError(-32601, `Unknown method ${method}`);
       return projectRequest(method, p);
     case 'bears.list':
+    case 'bears.archive':
+    case 'bears.delete':
     case 'bears.update':
     case 'tables.list':
       return bearsRequest(method, p);
@@ -1894,6 +1897,9 @@ async function dispatch(client, method, p) {
         if (!row) throw rpcError(-32602,'No mock task with that title');
         row.status=p.status??'doing'; row.columnId=row.status; row.updatedAt=Date.now(); broadcast('tasks.updated',{});
       }
+      return {};
+    case 'mock.bearArchive':
+      bearArchiveFailure = p.fail;
       return {};
     case 'mock.instructions':
       instructionsFailNext = p.failNext === true;
@@ -3609,10 +3615,27 @@ function bearTile(b) {
 }
 
 function bearsRequest(method, p) {
-  const on = bears.length > 0;
+  const on = Boolean(process.env.TB_MOCK_BEARS);
   switch (method) {
     case 'bears.list':
-      return { on, bears: bears.map((b) => ({ ...b, state: {}, away: false, archived: false, routines: [] })) };
+      return { on, bears: bears.filter(b => p.archived || !b.archived).map((b) => ({ state: {}, away: false, archived: false, routines: [], ...b })) };
+    case 'bears.archive': {
+      const bear = bears.find(b => b.id === p.bear);
+      if (!bear) throw rpcError(-32602, `No bear ${p.bear}`);
+      if (bearArchiveFailure === bear.id) throw rpcError(-32000, 'Archive refused for test');
+      bear.archived = p.archived !== false;
+      if (bear.archived) {
+        for (const project of projects.values()) {
+          if (project.table) project.table.bears = project.table.bears.filter(id => id !== bear.id);
+        }
+        broadcastProjects();
+      }
+      return { bear };
+    }
+    case 'bears.delete': {
+      bears = bears.filter(b => b.id !== p.bear);
+      return { ok: true };
+    }
     case 'bears.update': {
       if (!on) throw rpcError(-32000, 'Bears are off: turn them on in Settings > General > Experiments.');
       const bear = bears.find((b) => b.id === p.bear);

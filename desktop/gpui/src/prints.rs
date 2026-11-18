@@ -30,6 +30,7 @@ use threadbear_core::prints::{self as core, words, Page};
 /// The app's Prints.
 #[derive(Default)]
 pub(crate) struct PrintsState {
+    pub(crate) sidebar: crate::sidebar_lists::ListState,
     /// Every Print but the deleted ones, as the runner last said.
     pub(crate) list: Vec<Page>,
     /// Deleted ones (kept 7 days): asked for when a project's page shows.

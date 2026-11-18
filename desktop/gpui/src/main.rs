@@ -7,6 +7,7 @@
 mod a11y;
 mod print_cards;
 mod print_select;
+mod sidebar_lists;
 mod prints;
 mod activity;
 mod activity_panels;

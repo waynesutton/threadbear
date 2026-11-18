@@ -19,13 +19,15 @@
 // Every write shows at once and goes back, with the error, if the runner
 // refuses (AGENTS.md, "Assume every action is slow to land").
 use crate::app::Threadbear;
-use crate::highlights::{icon, palette, tipped, Heading, PaneRow, Palette, SidePane};
+use crate::sidebar_lists::Kind;
+use gpui_kit::base::TestTextExt as _;
+use crate::highlights::{palette, PaneRow, Palette, SidePane};
 use crate::sidebar::{MenuAction, MenuRow};
 use crate::style::{self, px};
 use crate::tips::Tip as _;
 use gpui_kit::component::dialog::DialogButtonProps;
 use gpui_kit::component::input::{Input, InputState};
-use gpui_kit::component::{h_flex, v_flex, WindowExt as _};
+use gpui_kit::component::{v_flex, WindowExt as _};
 use gpui_kit::prelude::*;
 use gpui_kit::*;
 use serde_json::json;
@@ -46,15 +48,25 @@ const RETRY: Duration = Duration::from_secs(3);
 
 #[derive(Default)]
 pub(crate) struct BearsPanelState {
+    pub(crate) bears_view: crate::sidebar_lists::ListState,
+    pub(crate) tables_view: crate::sidebar_lists::ListState,
+    pub(crate) archiving: bool,
     /// `bears.list`'s last answer, archived ones too; none until it comes.
     pub(crate) bears: Option<Vec<PanelBear>>,
     fetched_at: Option<Instant>,
     fetching: bool,
     pub(crate) selection: Selection,
+    pub(crate) table_selection: Selection,
     /// Rows on their way out: hidden until the runner says, back if it refuses.
     deleting: HashSet<String>,
     /// The list's own focus, for Esc.
     focus: Option<FocusHandle>,
+}
+
+impl BearsPanelState {
+    pub(crate) fn selected(&self, kind: Kind) -> &Selection { if kind == Kind::Tables { &self.table_selection } else { &self.selection } }
+    pub(crate) fn selected_mut(&mut self, kind: Kind) -> &mut Selection { if kind == Kind::Tables { &mut self.table_selection } else { &mut self.selection } }
+    fn picked(&self, key: &str) -> bool { self.selected(if key.starts_with("table:") { Kind::Tables } else { Kind::Bears }).contains(key) }
 }
 
 /// What a line of the panel's menu does (sidebar.rs's `MenuAction::Bears`).
@@ -67,7 +79,7 @@ pub(crate) enum BearsAction {
     Refresh,
     Rename(String),
     Delete(Vec<String>),
-    ClearSelection,
+    ClearSelection(Kind),
 }
 
 /// What a click on a row opens.
@@ -159,6 +171,7 @@ impl Threadbear {
                 }
                 let order: Vec<String> = this.bears_panel_rows().into_iter().map(|r| r.key).collect();
                 this.bears_panel.selection.retain(&order);
+                this.bears_panel.table_selection.retain(&order);
                 cx.notify();
                 // Drawn again then, which asks again while the panel's on show.
                 cx.spawn(async move |this, cx| {
@@ -241,9 +254,17 @@ impl Threadbear {
 
     /// A click on a row: plain opens it, ⌘ and Shift pick.
     pub(crate) fn bears_panel_click(&mut self, key: &str, click: Click, window: &mut Window, cx: &mut Context<Self>) -> Option<Opens> {
-        let rows = self.bears_panel_rows();
+        let kind = if key.starts_with("table:") { Kind::Tables } else { Kind::Bears };
+        if self.bears_panel.archiving { return None; }
+        let rows = self.visible_bears(kind);
+        let mut click = click;
+        if self.sidebar_list(kind).selecting && click == Click::Plain { click = Click::Toggle; }
+        if click != Click::Plain {
+            if kind == Kind::Bears { self.bears_panel.bears_view.selecting = true; }
+            else { self.bears_panel.tables_view.selecting = true; }
+        }
         let order: Vec<String> = rows.iter().map(|r| r.key.clone()).collect();
-        let opens = self.bears_panel.selection.click(key, click, &order);
+        let opens = self.bears_panel.selected_mut(kind).click(key, click, &order);
         if let Some(focus) = self.bears_panel.focus.clone() {
             window.focus(&focus, cx);
             crate::web_panels::keyboard_to_app(window);
@@ -263,10 +284,11 @@ impl Threadbear {
     }
 
     pub(crate) fn clear_bears_selection(&mut self, cx: &mut Context<Self>) -> bool {
-        if self.bears_panel.selection.is_empty() {
+        if self.bears_panel.selection.is_empty() && self.bears_panel.table_selection.is_empty() {
             return false;
         }
         self.bears_panel.selection.clear();
+        self.bears_panel.table_selection.clear();
         cx.notify();
         true
     }
@@ -275,6 +297,7 @@ impl Threadbear {
     /// among them, Delete N items… for them all. A right-click on a row
     /// that isn't picked lets the others go, so the menu is plainly its.
     pub(crate) fn open_bears_menu(&mut self, key: &str, position: Point<Pixels>, window: &mut Window, cx: &mut Context<Self>) {
+        if self.bears_panel.archiving { return; }
         let rows = self.bears_menu_rows(key);
         if rows.is_empty() {
             return;
@@ -283,18 +306,17 @@ impl Threadbear {
     }
 
     pub(crate) fn bears_menu_rows(&mut self, key: &str) -> Vec<MenuRow> {
-        let picked = &self.bears_panel.selection;
-        if picked.len() > 1 && picked.contains(key) {
-            let keys = picked.keys.clone();
+        let kind = if key.starts_with("table:") { Kind::Tables } else { Kind::Bears };
+        let picked = self.sidebar_selected(kind);
+        if picked.len() > 1 && picked.iter().any(|id| id == key) {
+            let keys = picked.clone();
             return vec![
                 MenuRow::item(format!("Delete {} items\u{2026}", keys.len()), "trash", MenuAction::Bears(BearsAction::Delete(keys))),
                 MenuRow::separator(),
-                MenuRow::item("Clear selection", "xmark", MenuAction::Bears(BearsAction::ClearSelection)),
+                MenuRow::item("Clear selection", "xmark", MenuAction::Bears(BearsAction::ClearSelection(kind))),
             ];
         }
-        if !picked.contains(key) {
-            self.bears_panel.selection.clear();
-        }
+        if !picked.iter().any(|id| id == key) { self.bears_panel.selected_mut(kind).clear(); }
         let Some(row) = self.bears_panel_rows().into_iter().find(|r| r.key == key) else { return vec![] };
         let mut rows = vec![];
         if row.opens.is_some() {
@@ -319,6 +341,8 @@ impl Threadbear {
     pub(crate) fn run_bears_action(&mut self, action: BearsAction, window: &mut Window, cx: &mut Context<Self>) {
         match action {
             BearsAction::Open(key) => {
+                if key.starts_with("table:") { self.bears_panel.tables_view.selecting = false; }
+                else { self.bears_panel.bears_view.selecting = false; }
                 if let Some(Opens::File(path)) = self.bears_panel_click(&key, Click::Plain, window, cx) {
                     self.open_bears_file(path, false, window, cx);
                 }
@@ -348,9 +372,7 @@ impl Threadbear {
             }
             BearsAction::Rename(key) => self.open_bears_rename(&key, window, cx),
             BearsAction::Delete(keys) => self.open_bears_delete(keys, window, cx),
-            BearsAction::ClearSelection => {
-                self.clear_bears_selection(cx);
-            }
+            BearsAction::ClearSelection(kind) => self.sidebar_clear(kind, cx),
         }
     }
 
@@ -467,6 +489,7 @@ impl Threadbear {
 
     /// Delete…: one sheet naming everything that goes.
     pub(crate) fn open_bears_delete(&mut self, keys: Vec<String>, window: &mut Window, cx: &mut Context<Self>) {
+        if self.bears_panel.archiving { return; }
         let mut bears = vec![];
         let mut tables = vec![];
         for key in &keys {
@@ -494,7 +517,8 @@ impl Threadbear {
 
     /// Gone from the list at once; what the runner refuses comes back, with why.
     pub(crate) fn delete_bears_rows(&mut self, keys: Vec<String>, cx: &mut Context<Self>) {
-        self.bears_panel.selection.clear();
+        self.bears_panel.selection.keys.retain(|k| !keys.contains(k));
+        self.bears_panel.table_selection.keys.retain(|k| !keys.contains(k));
         let bears: Vec<String> = keys.iter().filter_map(|k| k.strip_prefix("bear:").map(str::to_owned)).collect();
         for id in keys.iter().filter_map(|k| k.strip_prefix("table:")) {
             self.confirmed_delete_project(id, cx);
@@ -550,9 +574,9 @@ impl Threadbear {
         let rows: Vec<Value> = self
             .bears_panel_rows()
             .into_iter()
-            .map(|r| json!({ "key": r.key, "section": r.section, "title": r.title, "detail": r.detail, "folder": self.bears_row_folder(&r.key), "picked": self.bears_panel.selection.contains(&r.key) }))
+            .map(|r| json!({ "key": r.key, "section": r.section, "title": r.title, "detail": r.detail, "folder": self.bears_row_folder(&r.key), "picked": self.bears_panel.picked(&r.key) }))
             .collect();
-        json!({ "on": self.bears_on(), "tables": self.tables_on(), "loaded": self.bears_panel.bears.is_some(), "rows": rows, "picked": self.bears_panel.selection.keys })
+        json!({ "on": self.bears_on(), "tables": self.tables_on(), "loaded": self.bears_panel.bears.is_some(), "rows": rows, "picked": self.bears_panel.selection.keys.iter().chain(self.bears_panel.table_selection.keys.iter()).collect::<Vec<_>>() })
     }
 }
 
@@ -613,10 +637,10 @@ impl SidePane {
     pub(crate) fn render_bears_panel(&mut self, thread: &ThreadSummary, cx: &mut Context<Self>) -> AnyElement {
         let p = palette(cx);
         let Some(app) = self.app.upgrade() else { return div().into_any_element() };
-        let (rows, loaded, picked, focus, stale) = {
+        let (loaded, stale) = {
             let a = app.read(cx);
             let state = &a.bears_panel;
-            (a.bears_panel_rows(), state.bears.is_some(), state.selection.clone(), state.focus.clone(), a.bears_panel_stale() || state.focus.is_none())
+            (state.bears.is_some(), a.bears_panel_stale() || state.focus.is_none())
         };
         if stale {
             let app = app.downgrade();
@@ -624,34 +648,20 @@ impl SidePane {
                 app.update(cx, |a, cx| a.refresh_bears_panel(false, cx)).ok();
             });
         }
-        if rows.is_empty() {
-            let note = if loaded { "No bears yet. Ask any thread to make one." } else { "Loading\u{2026}" };
-            return crate::files::pane_note(note, p).into_any_element();
-        }
-        let reserves = true;
-        let mut list = v_flex().py(px(8.));
-        let mut last: Option<&'static str> = None;
-        for row in &rows {
-            if last != Some(row.section) {
-                last = Some(row.section);
-                list = list.child(self.heading(Heading { key: format!("bears-{}", row.section), title: row.section.to_owned(), icon: None, count: None, folded: false, foldable: false, accessory: None }, p, cx));
-            }
-            list = list.child(self.bears_row(row, picked.contains(&row.key), reserves, thread, p, cx));
-        }
-        let bar = (!picked.is_empty()).then(|| self.bears_bar(picked.keys.clone(), p, cx));
-        let app_weak = app.downgrade();
-        let mut body = v_flex()
-            .id("bears-panel")
-            .size_full()
-            .on_key_down(cx.listener(move |_, ev: &KeyDownEvent, _, cx| {
-                if ev.keystroke.key == "escape" && app_weak.update(cx, |a, cx| a.clear_bears_selection(cx)).unwrap_or(false) {
-                    cx.stop_propagation();
-                }
-            }))
-            .children(bar)
-            .child(div().id("bears-list").flex_1().min_h_0().overflow_y_scroll().child(list));
-        if let Some(focus) = focus {
-            body = body.track_focus(&focus);
+        let mut body = v_flex().id("bears-panel").size_full();
+        for kind in [Kind::Bears, Kind::Tables] {
+            if kind == Kind::Tables && !app.read(cx).tables_on() { continue; }
+            let visible = app.read(cx).visible_bears(kind);
+            let controls = self.sidebar_controls(kind, cx);
+            let mut list = v_flex().py(px(4.));
+            if visible.is_empty() { list = list.child(div().px(px(16.)).py(px(8.)).child(if loaded { format!("No {} found", kind.name()) } else { "Loading…".into() }).test_text(if loaded { format!("No {} found", kind.name()) } else { "Loading…".into() })); }
+            for row in &visible { list = list.child(self.bears_row(row, app.read(cx).bears_panel.picked(&row.key), true, thread, p, cx)); }
+            body = body.child(v_flex().id(SharedString::from(format!("{}-section", kind.name())))
+                .flex_1().min_h_0().track_focus(&self.list_focus[kind.index()])
+                .on_key_down(cx.listener(move |this, ev: &KeyDownEvent, window, cx| this.sidebar_keys(kind, ev, window, cx)))
+                .child(div().px(px(16.)).pt(px(10.)).text_size(px(style::size::SMALL)).font_weight(FontWeight::SEMIBOLD).child(kind.name()).test_text(kind.name()))
+                .child(controls)
+                .child(div().id(SharedString::from(format!("{}-rows", kind.name()))).flex_1().min_h_0().overflow_y_scroll().child(list)));
         }
         body.into_any_element()
     }
@@ -663,8 +673,10 @@ impl SidePane {
             Some(Opens::Project(_)) => format!("Open {}'s project page. \u{2318}-click or Shift-click to pick more than one.", row.name),
             None => format!("\u{2318}-click or Shift-click to pick {}", row.name),
         };
+        let kind = if row.key.starts_with("table:") { Kind::Tables } else { Kind::Bears };
+        let selecting = self.app.upgrade().is_some_and(|a| a.read(cx).sidebar_list(kind).selecting);
         let pane_row = PaneRow::new(SharedString::from(format!("bears-row-{}", row.key)), row.title.clone())
-            .icon(row.icon.clone())
+            .icon(if selecting { if picked { "checkmark.circle.fill" } else { "circle" }.to_owned() } else { row.icon.clone() })
             .tinted(row.working.then_some(p.needs_you))
             .reserves_icon(reserves)
             .trailing(row.trailing.clone())
@@ -678,6 +690,8 @@ impl SidePane {
                 let how = if m.shift { Click::Range } else if m.platform || m.control { Click::Toggle } else { Click::Plain };
                 let Some(app) = this.app.upgrade() else { return };
                 let opened = app.update(cx, |a, cx| a.bears_panel_click(&key, how, window, cx));
+                window.focus(&this.list_focus[kind.index()], cx);
+                crate::web_panels::keyboard_to_app(window);
                 if let Some(Opens::File(path)) = opened {
                     this.preview_path(&path, Some("CLAUDE.md".to_owned()), &thread, cx);
                 }
@@ -690,34 +704,4 @@ impl SidePane {
         pane_row.picked(picked.then(|| style::primary_opacity(cx, 0.12))).render(p, cx).into_any_element()
     }
 
-    /// Over the list while rows are picked: how many, Delete N and Clear.
-    fn bears_bar(&mut self, keys: Vec<String>, p: Palette, cx: &mut Context<Self>) -> AnyElement {
-        let n = keys.len();
-        let (fill, edge) = (style::button_fill(cx), style::button_edge(cx));
-        let button = |id: &'static str, label: String, color: Hsla| div().id(id).flex_none().px(px(8.)).py(px(3.)).rounded(px(5.)).bg(fill).border_1().border_color(edge).cursor_pointer().child(div().text_size(px(style::size::DETAIL)).text_color(color).child(label));
-        let delete = tipped(button("bears-delete-picked", format!("Delete {n}"), p.failed), format!("Delete the {n} picked, after asking")).on_click(cx.listener(move |this, _: &ClickEvent, window, cx| {
-            if let Some(app) = this.app.upgrade() {
-                let keys = keys.clone();
-                app.update(cx, |a, cx| a.open_bears_delete(keys, window, cx));
-            }
-        }));
-        let clear = tipped(button("bears-clear-picked", "Clear".to_owned(), p.fg), "Let go of the picked rows (Esc)").on_click(cx.listener(|this, _: &ClickEvent, _, cx| {
-            if let Some(app) = this.app.upgrade() {
-                app.update(cx, |a, cx| a.clear_bears_selection(cx));
-            }
-        }));
-        h_flex()
-            .flex_none()
-            .gap(px(8.))
-            .items_center()
-            .px(px(crate::highlights::LEADING))
-            .py(px(8.))
-            .border_b_1()
-            .border_color(p.hairline)
-            .child(icon("checkmark", 11., p.secondary))
-            .child(div().flex_1().text_size(px(style::size::DETAIL)).text_color(p.secondary).child(format!("{n} picked")))
-            .child(clear)
-            .child(delete)
-            .into_any_element()
-    }
 }
