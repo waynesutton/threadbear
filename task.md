@@ -9,7 +9,6 @@ Status and gap list: prds/prints-status.md
 
 ## In Progress
 
-- [ ] 2026-11-18 10:33 UTC Verify batch-two Mac Tasks/Prints polish after the automatic app update and runner rebuild. Product landed at 01feefdd; backend and website deployment records match. Installed app still db62f91d. prds/mac-tasks-prints-polish.md
 
 - [ ] 2026-11-17 10:57 UTC Tasks interaction refinement verified locally:15 native scenarios/197 steps, backend/browser tests, photo display, Light/Dark and keyboard scrolling pass. Normal landing and coordinated rollout remain. prds/tasks-interaction-refinement.md
 
@@ -22,6 +21,8 @@ Status and gap list: prds/prints-status.md
 - [ ] Land verified Settings review fixes when the Mac is quiet, then verify the installed update.
 
 ## Completed
+
+- [x] 2026-11-18 11:08 UTC Confirm Mac UI polish installed at GPUI 1eae75ff with desktop tree matching 01feefdd, automatic handover and runner connection logged. Live API87 smoke and runner RPCs pass. Matching isolated headless build passed task properties/sub-tasks/links/activity/calendar/board wrap, Highlights task creation, Print Escape/Return deletion and eighth composer picture opening; screenshots inspected and test app stopped. Live release controls were not directly scripted. prds/mac-tasks-prints-polish.md
 
 - [x] 2026-11-18 10:33 UTC Land both Mac UI batches: Tasks sliders/default view/spacing/board scrolling and detail fields, native Bears & Tables management, Prints selection/links/design/theme, Notes typography and composer picture wrapping. Batch one db62f91d; batch two 01feefdd. Verified: required quick check passed in 650 seconds (4,146 runner tests passed, five skipped), native/type/web checks, and preceding 39 behavior scenarios/513 steps. Installed batch-two verification remains above. prds/mac-tasks-prints-polish.md
 
