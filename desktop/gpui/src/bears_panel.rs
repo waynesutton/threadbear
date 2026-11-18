@@ -239,6 +239,7 @@ impl Threadbear {
         let opens = self.bears_panel.selection.click(key, click, &order);
         if let Some(focus) = self.bears_panel.focus.clone() {
             window.focus(&focus, cx);
+            crate::web_panels::keyboard_to_app(window);
         }
         cx.notify();
         if !opens {
