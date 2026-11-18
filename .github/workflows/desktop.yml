@@ -117,6 +117,9 @@ jobs:
         run: |
           cargo build --manifest-path desktop/Cargo.toml -p threadbear-gpui --features automation
           cd features
+          # The hosted Intel Mac image draws no Office Quick Look thumbnail,
+          # so the one scenario that needs it is left out there.
+          if [ "${{ matrix.os }}" = "macos-15-intel" ]; then export TB_TAGS='not @hosted-intel-pending'; fi
           TB_APP=gpui TB_RETRY=1 node_modules/.bin/cucumber-js
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         if: always()
