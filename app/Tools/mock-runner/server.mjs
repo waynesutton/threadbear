@@ -450,6 +450,7 @@ function mockExperiments() {
     ...(process.env.TB_MOCK_DECISIONS ? ['projectDecisions'] : []),
     ...(process.env.TB_MOCK_VOICE ? ['voiceMode'] : []),
     ...(process.env.TB_MOCK_TASKS ? ['tasks'] : []),
+    ...(process.env.TB_MOCK_BEARS ? ['bears', 'tables'] : []),
     ...(settings.experiments.some((e) => e.id === 'clearerCompletion' && e.on) ? ['clearerCompletion'] : []),
     // TB_MOCK_NESTED_OFF keeps its demo threads with the experiment off.
     ...(process.env.TB_MOCK_NESTED && !process.env.TB_MOCK_NESTED_OFF ? ['nestedThreads'] : []),
@@ -3573,23 +3574,31 @@ function addDemoBears() {
   ];
   const homes = { 'head-bear-1a2b': 'demo_tidy_imports', 'writer-3c4d': 'demo_landing_pages', 'designer-5e6f': 'demo_codex_poster' };
   for (const bear of bears) {
+    // Real files in this mock's disposable home exercise the pane editor
+    // and Finder gate without touching anyone's bear folders.
+    const folder = path.join(dataDir, 'Bears', bear.id);
+    fs.mkdirSync(folder, { recursive: true });
+    fs.writeFileSync(path.join(folder, 'bear.json'), JSON.stringify(bear, null, 2));
+    fs.writeFileSync(path.join(folder, 'CLAUDE.md'), `# ${bear.name}\n\n${bear.does}\n`);
+    bear.folder = folder;
     const t = threads.get(homes[bear.id]);
     if (t) t.summary.bear = bearTile(bear);
   }
   const head = {
-    id: 'p_7ab1e001', title: 'Head table', folders: ['/Users/mike/Bears/Tables/head-table-7ab1'], goals: 'Where the bears plan the week together.',
+    id: 'p_7ab1e001', title: 'Head table', folders: [path.join(dataDir, 'Tables', 'head-table-7ab1')], goals: 'Where the bears plan the week together.',
     state: '', notes: '', links: [], createdBy: 'mike', createdAt: ago(60 * 24), updatedAt: ago(30),
     icon: { symbol: 'person.3', by: 'mike', updatedAt: ago(60 * 24) },
     table: { bears: ['head-bear-1a2b', 'writer-3c4d'] },
   };
   const crew = {
-    id: 'p_7ab1e002', title: 'Launch crew', folders: ['/Users/mike/Bears/Tables/launch-crew-9c0d'], goals: 'Gets Threadbear 0.4 out the door.',
+    id: 'p_7ab1e002', title: 'Launch crew', folders: [path.join(dataDir, 'Tables', 'launch-crew-9c0d')], goals: 'Gets Threadbear 0.4 out the door.',
     state: '', notes: '', links: [], createdBy: 'mike', createdAt: ago(60 * 12), updatedAt: ago(20),
     icon: { symbol: 'person.3', by: 'mike', updatedAt: ago(60 * 12) },
     parentId: projects.find((p) => p.title === 'Threadbear')?.id,
     table: { bears: ['writer-3c4d'] },
   };
   projects.push(head, crew);
+  for (const table of [head, crew]) fs.mkdirSync(table.folders[0], { recursive: true });
   const tidy = threads.get('demo_tidy_imports');
   if (tidy) join(tidy.summary, head, 'mike', false, ago(30));
 }
@@ -3603,7 +3612,7 @@ function bearsRequest(method, p) {
   const on = bears.length > 0;
   switch (method) {
     case 'bears.list':
-      return { on, bears: bears.map((b) => ({ ...b, folder: `/Users/mike/Bears/${b.id}`, state: {}, away: false, archived: false, routines: [] })) };
+      return { on, bears: bears.map((b) => ({ ...b, state: {}, away: false, archived: false, routines: [] })) };
     case 'bears.update': {
       if (!on) throw rpcError(-32000, 'Bears are off: turn them on in Settings > General > Experiments.');
       const bear = bears.find((b) => b.id === p.bear);

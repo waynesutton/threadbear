@@ -2322,7 +2322,7 @@ with the same notes as the Swift app. Back and ⌘W leave it as Esc does.
 There a note reads like a doc rather than code: it's set in the app's own
 type on roomy lines, with the line numbers level with each line. Under the
 note's title, − and + make the text smaller or larger (12 to 22 points),
-and Sans or Serif picks the type; it remembers both. Two things differ
+and Sans or Mono picks the type; it remembers both. Two things differ
 there for now: headings are bold but not bigger, and you can't dictate
 into a note.
 
@@ -2905,7 +2905,9 @@ like any other thread.
 In the desktop app, the paw on a thread's right-hand rail opens Bears &
 Tables: your bears under Pinned, Bears and Archived (the head bear marked),
 and with Tables on, your tables. Click one to open its newest thread.
-Right-click one for Rename… or Delete…. To delete several at once,
+Right-click one for Open, Edit, Show in Finder, Copy Folder Path, Refresh,
+Rename… or Delete…. Editing a bear opens its configuration file; editing a
+table opens its project goals. To delete several at once,
 ⌘-click or Shift-click to pick them, then press Delete in the bar over the
 list or right-click one of them: one sheet lists what goes. Esc lets go of
 the picked rows. Deleting a bear moves its folder to the runner's trash;
@@ -3168,6 +3170,9 @@ activity, with All or just Comments. Return sends a comment and Shift-Return
 starts a new line. The title and description save when you leave them. Back or
 Escape goes back to the list or board, and J and K (or Down and Up) step to the
 next and previous task.
+
+Attach Print opens a search field: type part of a title, then click a result
+or press Return for the first match. Escape closes the search.
 
 In the list, Up and Down navigate tasks and Enter opens one. Arrow keys still
 edit text normally while a field has focus.

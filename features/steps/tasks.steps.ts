@@ -231,3 +231,23 @@ Then('the Tasks board wraps its columns', async function (this: ThreadbearWorld)
 Then('the app says {string}', async function (this: ThreadbearWorld, words: string) {
   await this.until(`the note "${words}"`, (d) => (d as unknown as { importNote?: string | null }).importNote === words);
 });
+
+When("I open the task's Print search", async function (this: ThreadbearWorld) {
+  await this.app.do({ cmd: 'click', title: 'Attach Print' });
+  await this.until('Print search open', d => detail(d)?.picker === 'print');
+});
+When("I search the task's Prints for {string}", async function (this: ThreadbearWorld, query: string) {
+  await this.app.do({ cmd: 'menu-key', modifiers: ['cmd'], key: 'a' });
+  await this.app.do({ cmd: 'type', focused: true, text: query });
+});
+When('I choose the matching Print {string}', async function (this: ThreadbearWorld, title: string) {
+  await this.app.do({ cmd: 'click', title });
+});
+
+Then('the Print search offers {string}', async function (this: ThreadbearWorld, title: string) {
+  await this.app.do({ cmd: 'label-point', label: title });
+});
+
+Then('the Print search remains open', async function (this: ThreadbearWorld) {
+  await this.until('attached result does not dismiss search', d => detail(d)?.picker === 'print');
+});

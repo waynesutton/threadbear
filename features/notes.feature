@@ -69,7 +69,7 @@ Feature: Notes
     And I open Notes
     Then the notes listed are "Untitled note"
 
-  # Notes read like a doc (Wayne, 17 Nov): the app's own type or a serif, on
+  # Notes read like a doc (Wayne, 17 Nov): the app's own type or a monospace font, on
   # a reading line, with − and + for the size, kept for next time.
   @notes.page @swift-pending
   Scenario: The note's text size and type can be changed
@@ -77,7 +77,12 @@ Feature: Notes
     And I start a new note
     Then the note's text is 15 points in "Sans"
     When I press the note's "+" button 2 times
-    And I set the note in "Serif"
-    Then the note's text is 17 points in "Serif"
+    And I set the note in "Mono"
+    Then the note's text is 17 points in "Mono"
     When I press the note's "-" button 9 times
-    Then the note's text is 12 points in "Serif"
+    Then the note's text is 12 points in "Mono"
+    When I press ⌘6
+    And I open Notes
+    Then the note's text is 12 points in "Mono"
+    When I set the note in "Sans"
+    Then the note's text is 12 points in "Sans"

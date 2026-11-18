@@ -236,3 +236,29 @@ Feature: Tasks
     When I open Tasks
     Then Tasks contains "alex-example/site#48"
     And the task "alex-example/site#48" links to "alex-example/site#48"
+
+  @tasks.page @tasks.detail
+  Scenario: Find and attach a Print without scrolling through the full library
+    When I open Tasks
+    And I add the task "Attach a launch Print"
+    Then Tasks contains "Attach a launch Print"
+    When I edit the task "Attach a launch Print"
+    And I open the task's Print search
+    And I search the task's Prints for "unmatched-zebra"
+    Then Tasks shows "No matching Prints"
+    When I press Escape in Tasks
+    Then the Tasks editor is open
+    When I open the task's Print search
+    And I search the task's Prints for "INVOICE TOTALS"
+    Then the Print search offers "Invoice totals by month"
+    When I press "enter" in Tasks
+    Then the task "Attach a launch Print" links to "Invoice totals by month"
+    When I open the task's Print search
+    And I search the task's Prints for "Invoice totals"
+    And I press "enter" in Tasks
+    Then the Print search remains open
+    When I press Escape in Tasks
+    And I open the task's Print search
+    And I search the task's Prints for "Launch notes"
+    And I choose the matching Print "Launch notes"
+    Then the task "Attach a launch Print" links to "Launch notes"

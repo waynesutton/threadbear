@@ -52,7 +52,7 @@
 ## GPUI Notes
 
 - `desktop/core/src/notes.rs` notes as the Swift app keeps them: sealing (AES-256-GCM with `ring`), names, Markdown spans, list typing and the files.
-- `desktop/gpui/src/notes_page.rs` the Notes page over the main panel, its editor and highlighter, the delete question and the scripted `notes` command.
+- `desktop/gpui/src/notes_page.rs` the Notes page, Sans/Mono fonts and sizes, encrypted editor, delete question and scripted controls.
 - `features/notes.feature` and `features/steps/notes.steps.ts` Notes scenarios.
 - `prds/gpui-notes.md` scope and verification for the port.
 ## GPUI Voice
@@ -89,7 +89,7 @@
 ## Bears, tables and webhooks
 
 - `desktop/core/src/bears_panel.rs`: native bear/table rows, selection and bulk-operation rules.
-- `desktop/gpui/src/bears_panel.rs`: Bears & Tables panel, rename and confirmed deletion controls.
+- `desktop/gpui/src/bears_panel.rs`: Bears & Tables panel, open/edit/Finder menus, rename and confirmed deletion controls.
 - `runner/src/bears.ts` bear folders, access state, shared worker lookup, managed memory rules, tidy refresh and the `bears.*` RPCs.
 - `runner/src/mentions.ts` routes mentions within mode and sandbox boundaries and matches replies to each asking turn.
 - `runner/src/runner/late-answers.ts` resumes expired tool answers once using the persisted event log and existing permission checks.
@@ -184,3 +184,5 @@
 - `desktop/gpui/src/web_panels.rs` keeps panel instances and synchronizes their appearance.
 - `features/web-panels.feature` covers panel navigation and appearance changes.
 - `prds/prints-navigation-and-panel-theme.md` tracks Prints navigation and panel appearance verification.
+
+- `prds/mac-polish-followup.md`: Tasks spacing and Print search, Notes fonts, Bears menus and crash verification.

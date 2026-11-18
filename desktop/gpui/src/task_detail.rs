@@ -272,6 +272,51 @@ impl TasksPage {
         self.detail.adding_link = false;
         self.set_links(&row.id, links, cx);
     }
+    /// Search the current list, so a newly refreshed Print can be picked too.
+    pub(super) fn matching_prints(&self, cx: &App) -> Vec<(String, String)> {
+        let query = self.print_search.read(cx).value().trim().to_lowercase();
+        self.app.upgrade().map(|app| {
+            let app = app.read(cx);
+            if !app.prints_on() { return vec![]; }
+            app.prints.list.iter().filter(|p| p.title.to_lowercase().contains(&query))
+                .map(|p| (p.id.clone(), p.title.clone())).collect()
+        }).unwrap_or_default()
+    }
+
+    pub(super) fn pick_print(&mut self, id: &str, title: &str, window: &mut Window, cx: &mut Context<Self>) {
+        self.attach_print(id, title, cx);
+        self.close_picker(cx);
+        window.focus(&self.focus, cx);
+        crate::web_panels::keyboard_to_app(window);
+    }
+
+    fn print_picker(&self, cx: &mut Context<Self>) -> AnyElement {
+        let matches = self.matching_prints(cx);
+        let mut results = v_flex().id("task-print-results").max_h(px(240.)).overflow_y_scroll().gap(px(2.));
+        if matches.is_empty() {
+            results = results.child(div().p(px(10.)).text_size(px(13.)).text_color(style::secondary_label(cx)).child("No matching Prints".test_text("No matching Prints")));
+        }
+        for (id, title) in matches {
+            let attached = self.open_row().is_some_and(|row| row.links.iter().any(|link| link["printId"] == id));
+            let tip = if attached { format!("Already attached: {title}") } else { format!("Attach {title}") };
+            results = results.child(Button::new(SharedString::from(format!("attach-print-{id}"))).label(title.clone())
+                .icon(icons::symbol(if attached { "checkmark" } else { "doc.richtext" })).small().ghost().w_full()
+                .tooltip(tip).disabled(attached)
+                .on_click(cx.listener(move |this, _, window, cx| this.pick_print(&id, &title, window, cx))));
+        }
+        v_flex().id("task-print-picker").w_full().gap(px(6.)).my(px(6.)).p(px(8.)).rounded(px(8.))
+            .border_1().border_color(style::card_border(cx)).bg(style::card_background(cx))
+            .child(h_flex().gap(px(6.))
+                .child(div().flex_1().min_w_0().child(Input::new(&self.print_search).small()))
+                .child(Button::new("task-print-cancel").label("Cancel").small().ghost().tooltip("Close Print search (Escape)")
+                    .on_click(cx.listener(|this, _, window, cx| {
+                        this.close_picker(cx);
+                        window.focus(&this.focus, cx);
+                        crate::web_panels::keyboard_to_app(window);
+                    }))))
+            .child(results).into_any_element()
+    }
+
     pub(super) fn attach_print(&mut self, print_id: &str, title: &str, cx: &mut Context<Self>) {
         let Some(row) = self.open_row().cloned() else { return };
         if row.links.iter().any(|l| l["printId"] == print_id) { return; }
@@ -383,7 +428,8 @@ impl TasksPage {
     }
     fn toggle_picker(&mut self, name: &'static str, cx: &mut Context<Self>) {
         // The press that closed it (outside the card) shouldn't open it again.
-        if self.detail.picker_closed_at.is_some_and(|t| t.elapsed().as_millis() < 250) { return; }
+        // Print search is inline, so it has no outside-click dismissal to debounce.
+        if name != "print" && self.detail.picker_closed_at.is_some_and(|t| t.elapsed().as_millis() < 250) { return; }
         self.detail.picker = if self.detail.picker == Some(name) { None } else { Some(name) };
         if name == "due" {
             let day = self.open_row().and_then(|r| r.due_date.as_deref()).and_then(task_dates::parse).unwrap_or_else(today);
@@ -650,16 +696,16 @@ impl TasksPage {
         }
 
         // Links and attachments.
-        let prints: Vec<(String, String)> = self.app.upgrade().map(|a| { let a = a.read(cx); if a.prints_on() { a.prints.list.iter().map(|p| (p.id.clone(), p.title.clone())).collect() } else { vec![] } }).unwrap_or_default();
-        let p = page.clone();
-        let attach_print = Button::new("task-attach-print").label("Attach Print").icon(icons::symbol("doc.richtext")).small().ghost().tooltip("Attach one of your prints").disabled(prints.is_empty()).dropdown_menu(move |menu: PopupMenu, _, _| {
-            let mut menu = menu.max_h(px(320.)).scrollable(true);
-            for (id, title) in &prints {
-                let (p, id, title) = (p.clone(), id.clone(), title.clone());
-                menu = menu.item(PopupMenuItem::new(title.clone()).icon(icons::symbol("doc.richtext")).on_click(move |_, _, cx| { p.update(cx, |p, cx| p.attach_print(&id, &title, cx)).ok(); }));
+        let attach_print = Button::new("task-attach-print").label("Attach Print").icon(icons::symbol("doc.richtext")).small().ghost().tooltip("Search your Prints and attach one").on_click(cx.listener(|this, _, window, cx| {
+            this.toggle_picker("print", cx);
+            if this.detail.picker == Some("print") {
+                this.print_search.update(cx, |field, cx| {
+                    field.set_value("", window, cx);
+                    field.focus(window, cx);
+                });
+                crate::web_panels::keyboard_to_app(window);
             }
-            menu
-        });
+        }));
         let actions = h_flex().gap(px(4.)).flex_wrap()
             .child(Button::new("task-add-link").label("Add link").icon(icons::symbol("link")).small().ghost().tooltip("Add a link with an optional title").on_click(cx.listener(|this, _, window, cx| {
                 this.detail.adding_link = !this.detail.adding_link;
@@ -672,6 +718,9 @@ impl TasksPage {
         let mut links = v_flex().id("task-links").rounded(px(8.)).drag_over::<ExternalPaths>(move |s, _, _, _| s.bg(accent_soft))
             .on_drop(cx.listener(|this, paths: &ExternalPaths, _, cx| for path in paths.paths() { this.attach_image(path.clone(), cx); }))
             .child(actions);
+        if self.detail.picker == Some("print") {
+            links = links.child(self.print_picker(cx));
+        }
         if self.detail.adding_link {
             links = links.child(h_flex().gap(px(8.)).my(px(6.)).p(px(8.)).rounded(px(8.)).border_1().border_color(style::card_border(cx)).bg(style::card_background(cx))
                 .child(div().flex_1().child(Input::new(&self.link_url).small()))

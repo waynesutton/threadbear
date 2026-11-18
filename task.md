@@ -9,6 +9,8 @@ Status and gap list: prds/prints-status.md
 
 ## In Progress
 
+- [ ] 2026-11-18 18:17 UTC Mac polish follow-up built and checked: task gap/Print search, Sans/Mono Notes, Bears & Tables open/edit/Finder menus. Automation build, 41 existing scenarios plus expanded Print search (29 steps), focus guard, mock syntax and 94 feature pairings pass; screenshots inspected without test crashes. Landing and automatic installed verification pending. prds/mac-polish-followup.md
+
 
 - [ ] 2026-11-17 10:57 UTC Tasks interaction refinement verified locally:15 native scenarios/197 steps, backend/browser tests, photo display, Light/Dark and keyboard scrolling pass. Normal landing and coordinated rollout remain. prds/tasks-interaction-refinement.md
 

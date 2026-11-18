@@ -140,3 +140,32 @@ Feature: Bear tiles in the sidebar
     Given two bears are picked in Bears & Tables
     When I press Esc
     Then none are picked
+
+  @bears.panel @bears.tile @swift-pending
+  Scenario: A bear's menu opens its thread and edits its settings without closing the app
+    When I open the Bears and Tables row menu for "bear:writer-3c4d"
+    Then the Bears and Tables menu offers "Open, Edit Settings…, Show in Finder, Copy Folder Path, Refresh, Rename…, Delete…"
+    When I choose "Open" in the Bears and Tables menu
+    Then Writer's thread is selected
+    When I open the Bears and Tables row menu for "bear:writer-3c4d"
+    And I choose "Edit Settings…" in the Bears and Tables menu
+    Then Writer's settings file is open for editing
+
+  @bears.panel @bears.tile @swift-pending
+  Scenario: A table's menu edits its goals on its project page
+    When I open the Bears and Tables row menu for "table:p_7ab1e001"
+    Then the Bears and Tables menu offers "Open, Edit Table…, Show in Finder, Copy Folder Path, Refresh, Rename…, Delete…"
+    When I choose "Edit Table…" in the Bears and Tables menu
+    Then Head table's goals are open for editing
+
+  @bears.panel @bears.tile @swift-pending
+  Scenario: A bear's menu reveals and copies its own folder
+    When I open the Bears and Tables row menu for "bear:writer-3c4d"
+    And I choose "Show in Finder" in the Bears and Tables menu
+    Then the Writer folder was revealed through the app
+    When I open the Bears and Tables row menu for "bear:writer-3c4d"
+    And I choose "Copy Folder Path" in the Bears and Tables menu
+    Then the clipboard holds the Writer folder path
+    When I open the Bears and Tables row menu for "bear:writer-3c4d"
+    And I choose "Refresh" in the Bears and Tables menu
+    Then the Bears and Tables refresh is shown

@@ -119,7 +119,7 @@ Then('the bar has no Notes button', async function (this: ThreadbearWorld) {
   await this.until('no Notes button', (d) => notes(d)?.button === false);
 });
 
-// The note's type (notes_page.rs): the − and + buttons and Sans or Serif,
+// The note's type (notes_page.rs): the − and + buttons and Sans or Mono,
 // read from the dump's `textSize` and `font`.
 const noteType = (d: unknown) => notes(d) as (NotesInfo & { textSize?: number; font?: string }) | null | undefined;
 
@@ -129,7 +129,7 @@ When('I press the note\'s {string} button {int} times', async function (this: Th
 });
 
 When('I set the note in {string}', async function (this: ThreadbearWorld, face: string) {
-  await this.app.do({ cmd: 'notes', font: face.toLowerCase() });
+  await this.app.do({ cmd: 'click', tip: face === 'Mono' ? "Set the note in the app's code font" : "Set the note in the app's own type" });
 });
 
 Then('the note\'s text is {int} points in {string}', async function (this: ThreadbearWorld, size: number, face: string) {

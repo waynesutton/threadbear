@@ -6,7 +6,9 @@
 //
 // - A click opens the bear's or table's newest thread; a bear with none
 //   shows its CLAUDE.md here, a table with none its project page.
-// - Right-click: Rename… (`bears.update { bear, name }`, or for a table,
+// - Right-click: Open, Edit Settings… (the bear's bear.json, or a table's
+//   project goals), Show in Finder, Copy Folder Path, Refresh and Rename…
+//   (`bears.update { bear, name }`, or for a table,
 //   a project, `projects.update { projectId, title }`) and Delete… (a
 //   sheet, then `bears.delete`, or `projects.delete` for a table: its chat
 //   threads and folder stay).
@@ -58,6 +60,11 @@ pub(crate) struct BearsPanelState {
 /// What a line of the panel's menu does (sidebar.rs's `MenuAction::Bears`).
 #[derive(Clone, Debug)]
 pub(crate) enum BearsAction {
+    Open(String),
+    Edit(String),
+    Reveal(String),
+    CopyFolder(String),
+    Refresh,
     Rename(String),
     Delete(Vec<String>),
     ClearSelection,
@@ -264,7 +271,7 @@ impl Threadbear {
         true
     }
 
-    /// The row's menu: Rename… and Delete…, or with rows picked and this one
+    /// The row's menu, or with rows picked and this one
     /// among them, Delete N items… for them all. A right-click on a row
     /// that isn't picked lets the others go, so the menu is plainly its.
     pub(crate) fn open_bears_menu(&mut self, key: &str, position: Point<Pixels>, window: &mut Window, cx: &mut Context<Self>) {
@@ -288,20 +295,91 @@ impl Threadbear {
         if !picked.contains(key) {
             self.bears_panel.selection.clear();
         }
-        vec![
+        let Some(row) = self.bears_panel_rows().into_iter().find(|r| r.key == key) else { return vec![] };
+        let mut rows = vec![];
+        if row.opens.is_some() {
+            rows.push(MenuRow::item("Open", "arrow.right.circle", MenuAction::Bears(BearsAction::Open(key.to_owned()))));
+        }
+        if key.starts_with("table:") || self.bears_row_folder(key).is_some() {
+            rows.push(MenuRow::item(if key.starts_with("bear:") { "Edit Settings\u{2026}" } else { "Edit Table\u{2026}" }, "pencil", MenuAction::Bears(BearsAction::Edit(key.to_owned()))));
+        }
+        if self.bears_row_folder(key).is_some() {
+            rows.push(MenuRow::item("Show in Finder", "folder", MenuAction::Bears(BearsAction::Reveal(key.to_owned()))));
+            rows.push(MenuRow::item("Copy Folder Path", "doc.on.doc", MenuAction::Bears(BearsAction::CopyFolder(key.to_owned()))));
+        }
+        rows.extend([
+            MenuRow::item("Refresh", "arrow.clockwise", MenuAction::Bears(BearsAction::Refresh)),
+            MenuRow::separator(),
             MenuRow::item("Rename\u{2026}", "pencil", MenuAction::Bears(BearsAction::Rename(key.to_owned()))),
             MenuRow::item("Delete\u{2026}", "trash", MenuAction::Bears(BearsAction::Delete(vec![key.to_owned()]))),
-        ]
+        ]);
+        rows
     }
 
     pub(crate) fn run_bears_action(&mut self, action: BearsAction, window: &mut Window, cx: &mut Context<Self>) {
         match action {
+            BearsAction::Open(key) => {
+                if let Some(Opens::File(path)) = self.bears_panel_click(&key, Click::Plain, window, cx) {
+                    self.open_bears_file(path, false, window, cx);
+                }
+            }
+            BearsAction::Edit(key) => {
+                if let Some(id) = key.strip_prefix("table:") {
+                    self.open_project_page(id, cx);
+                    self.start_editing_project(id, threadbear_core::projects::TextField::Goals, window, cx);
+                } else if let Some(folder) = self.bears_row_folder(&key) {
+                    self.open_bears_file(format!("{folder}/bear.json"), true, window, cx);
+                }
+            }
+            BearsAction::Reveal(key) => {
+                if let Some(folder) = self.bears_row_folder(&key) {
+                    crate::open_gate::reveal(&folder, crate::open_gate::Origin::ThisMac, cx);
+                }
+            }
+            BearsAction::CopyFolder(key) => {
+                if let Some(folder) = self.bears_row_folder(&key) {
+                    cx.write_to_clipboard(ClipboardItem::new_string(folder));
+                    self.flash_done("Folder path copied", cx);
+                }
+            }
+            BearsAction::Refresh => {
+                self.refresh_bears_panel(true, cx);
+                self.flash_done("Refreshing Bears & Tables", cx);
+            }
             BearsAction::Rename(key) => self.open_bears_rename(&key, window, cx),
             BearsAction::Delete(keys) => self.open_bears_delete(keys, window, cx),
             BearsAction::ClearSelection => {
                 self.clear_bears_selection(cx);
             }
         }
+    }
+
+    fn bears_row_folder(&self, key: &str) -> Option<String> {
+        let folder = if let Some(id) = key.strip_prefix("bear:") {
+            self.bears_panel.bears.as_ref()?.iter().find(|b| b.id == id)?.folder.as_str()
+        } else {
+            self.project(key.strip_prefix("table:")?)?.folders.first()?.as_str()
+        };
+        (!folder.is_empty()).then(|| expand_home(folder))
+    }
+
+    /// File preview reads the app's settings, so release this app update
+    /// before entering the pane. Its editor keeps the usual save safeguards.
+    fn open_bears_file(&mut self, path: String, editing: bool, window: &mut Window, cx: &mut Context<Self>) {
+        let Some(thread) = self.pane_thread().filter(|t| !t.is_remote()) else { return };
+        let section = self.side.read(cx).section_for(&thread);
+        self.show_pane(&section, cx);
+        let (side, handle) = (self.side.clone(), window.window_handle());
+        cx.defer(move |cx| {
+            handle.update(cx, |_, window, cx| {
+                side.update(cx, |side, cx| {
+                    side.preview_path(&path, None, &thread, cx);
+                    if editing && side.previews.get(&thread.id).and_then(|p| p.file_path()) == Some(path.as_str()) {
+                        side.set_preview_editing(&thread, true, window, cx);
+                    }
+                });
+            }).ok();
+        });
     }
 
     fn bears_row_name(&self, key: &str) -> Option<String> {
@@ -472,7 +550,7 @@ impl Threadbear {
         let rows: Vec<Value> = self
             .bears_panel_rows()
             .into_iter()
-            .map(|r| json!({ "key": r.key, "section": r.section, "title": r.title, "detail": r.detail, "picked": self.bears_panel.selection.contains(&r.key) }))
+            .map(|r| json!({ "key": r.key, "section": r.section, "title": r.title, "detail": r.detail, "folder": self.bears_row_folder(&r.key), "picked": self.bears_panel.selection.contains(&r.key) }))
             .collect();
         json!({ "on": self.bears_on(), "tables": self.tables_on(), "loaded": self.bears_panel.bears.is_some(), "rows": rows, "picked": self.bears_panel.selection.keys })
     }

@@ -149,7 +149,7 @@ pub struct Saved {
     /// `notesTextSize`: the Notes page's text size in points at 100%, from
     /// its − and + buttons (12 to 22). None is 15. The GPUI app's own.
     pub notes_text_size: Option<f32>,
-    /// `notesFont`: the Notes page's typeface, "serif" for Serif. None is
+    /// `notesFont`: the Notes page's typeface, "mono" for Mono. None is
     /// Sans, the app's own. The GPUI app's own.
     pub notes_font: Option<String>,
     /// Settings > General > Look (looks.rs), under the Swift app's keys

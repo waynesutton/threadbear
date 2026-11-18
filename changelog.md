@@ -8,6 +8,8 @@ How Prints work today, what's missing and what's next: [Prints status](https://g
 
 ### Fixed
 
+- Task list sections leave a gap before the first row so its hover area stays clear of the toggle.
+
 - Composer pictures wrap within the Mac message box and scroll after three rows, keeping later attachments reachable.
 - Tasks boards scroll horizontally between sidebars; list completion controls have more room, and board task entry fields are taller. Print web links open in the browser, and delete confirmation accepts Return or Escape.
 - Embedded Print and Git pages follow the app appearance, including changes while the panel is open without reloading.
@@ -19,7 +21,7 @@ How Prints work today, what's missing and what's next: [Prints status](https://g
 ### Changed
 
 - Tasks appearance controls use an icon, photo sliders and an explicit List/Board default. Wrap Columns keeps every board column on the page.
-- Notes has readable Sans/Serif text and size controls while keeping line numbers.
+- Notes offers Sans and Mono text with size controls and line numbers. Existing Serif choices fall back to Sans.
 - Generated Prints uses updated light/dark dashboard and report layouts, metric changes and compact charts. Published Prints offers System, Light and Dark themes.
 - Scheduled follow-ups in the GPUI transcript start collapsed, with Show details and Hide details. Expanded instructions use selectable, left-aligned Markdown; the agent still receives the original message.
 - Tasks adds keyboard navigation, deletion confirmation, renamed and custom columns, and Send to thread with a link back to the created thread. Boards scroll within narrow windows and phones. Appearance uses Light/Dark with matching text; native photos are read by the picker’s app before upload and downloaded for display. The project-page Tasks tab matches Project typography. Requires backend API 86.
@@ -29,6 +31,8 @@ How Prints work today, what's missing and what's next: [Prints status](https://g
 - GPUI Settings opens inside the main window. Back, Esc or Close returns to the previous view with its thread draft intact.
 
 ### Added
+
+- Search Prints by title when attaching one to a task. Bears & Tables menus add Open, Edit, Show in Finder, Copy Folder Path and Refresh.
 
 - Task detail pages with priorities, due dates, sub-tasks, links, image attachments and activity/comments, backed by API 87. Project-related threads and Prints appear in the detail page; Highlights can add a task.
 - Native Bears & Tables management with rename, right-click actions and multi-selection deletion. Prints supports multi-selection for project assignment and confirmed deletion.

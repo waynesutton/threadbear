@@ -309,6 +309,7 @@ pub(crate) struct TasksPage {
     sub_input: Entity<InputState>,
     link_url: Entity<InputState>,
     link_title: Entity<InputState>,
+    print_search: Entity<InputState>,
     // A save from the task's page keeps it open.
     keep_open: bool,
     wrap_columns: bool,
@@ -340,8 +341,22 @@ impl TasksPage {
         let sub_input = cx.new(|cx| InputState::new(window, cx).placeholder("Sub-task title, then Return"));
         let link_url = cx.new(|cx| InputState::new(window, cx).placeholder("https://"));
         let link_title = cx.new(|cx| InputState::new(window, cx).placeholder("Title (optional)"));
+        let print_search = cx.new(|cx| InputState::new(window, cx).placeholder("Search Prints"));
         let place_slider = cx.new(|_| SliderState::new().min(0.).max(1.).step(0.5).default_value(0.5_f32));
         let subs = vec![
+            cx.subscribe_in(&print_search, window, |this, _, ev: &InputEvent, window, cx| {
+                if let InputEvent::PressEnter { .. } = ev {
+                    if this.detail.picker == Some("print") {
+                        let next = this.matching_prints(cx).into_iter().find(|(id, _)| {
+                            this.open_row().is_some_and(|row| !row.links.iter().any(|link| link["printId"] == *id))
+                        });
+                        if let Some((id, title)) = next {
+                            this.pick_print(&id, &title, window, cx);
+                        }
+                    }
+                }
+                cx.notify();
+            }),
             cx.subscribe(&fade_slider, |this, _, ev: &SliderEvent, cx| match ev {
                 SliderEvent::Change(v) => {
                     this.prefs["fade"] = json!((v.start() * 100.).round() / 100.);
@@ -434,6 +449,7 @@ impl TasksPage {
             sub_input,
             link_url,
             link_title,
+            print_search,
             keep_open: false,
             wrap_columns: false,
             _subscriptions: subs,
@@ -1318,6 +1334,8 @@ impl TasksPage {
             .on_drop(cx.listener(move |this, drag: &TaskDrag, _, cx| this.drop_task(drag, &s1, &g1, None, cx)))
             .child(header);
         if !self.collapsed.contains(&key) {
+            // Separate the fold target from the first task's hover/click area.
+            section = section.child(div().h(px(10.)).flex_none());
             for task in items {
                 section = section.child(self.row(task, group, cx));
             }
@@ -1909,6 +1927,8 @@ impl Render for TasksPage {
             .on_action(cx.listener(|this, _: &CloseTasks, window, cx| {
                 if this.detail.picker.is_some() {
                     this.detail.picker = None;
+                    window.focus(&this.focus, cx);
+                    crate::web_panels::keyboard_to_app(window);
                     cx.notify();
                     return;
                 }
