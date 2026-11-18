@@ -839,9 +839,14 @@ impl Threadbear {
         use threadbear_dock::{DockDrop, DockEdge};
         let id = match panel {
             RequestedPanel::Section(section) => {
-                let (thread_id, section) = (thread.id.clone(), section.clone());
-                self.side.update(cx, |side, cx| side.choose_section(&thread_id, &section, cx));
-                section
+                // Once this update is over: leaving a file open over another
+                // section reads the app's settings (`file_modes`), which GPUI
+                // refuses while the app is the one being updated. Opening a
+                // thread whose agent had asked for a panel crashed the app
+                // (Wayne, 18 Nov).
+                let (thread_id, chosen, side) = (thread.id.clone(), section.clone(), self.side.clone());
+                cx.defer(move |cx| side.update(cx, |side, cx| side.choose_section(&thread_id, &chosen, cx)));
+                section.clone()
             }
             RequestedPanel::Usage => shell::USAGE.to_owned(),
             RequestedPanel::Updates => shell::UPDATES.to_owned(),
