@@ -9,7 +9,6 @@ Status and gap list: prds/prints-status.md
 
 ## In Progress
 
-- [ ] 2026-11-18 20:33 UTC Separate Prints/Bears/Tables sidebar search, visible selection and bulk archive/delete built and verified locally: 62 native scenarios/865 steps, build/typecheck, focus guard and pairing checks pass. Landing and installed verification remain. prds/sidebar-bulk-selection.md
 
 
 
@@ -24,6 +23,8 @@ Status and gap list: prds/prints-status.md
 - [ ] Land verified Settings review fixes when the Mac is quiet, then verify the installed update.
 
 ## Completed
+
+- [x] 2026-11-18 21:09 UTC Separate Prints/Bears/Tables search, visible selection and bulk archive/delete landed and installed as f405c0de. Native build/typecheck, focus guard, 62 isolated scenarios/865 steps and 570-second landing check pass. Installed desktop tree matches; automatic handover and runner connection confirmed at21:08UTC, with no new panic/hang reports through21:09UTC. Release provenance verified separately from headless interactions. desktop/gpui/src/sidebar_lists.rs, bears_panel.rs, highlights.rs, settings.rs; prds/sidebar-bulk-selection.md
 
 - [x] 2026-11-18 18:50 UTC Deliver Mac polish follow-up87aece50: task first-row gap/Print search, Sans/Mono Notes, Bears/Table Open/Edit/Finder/Copy/Refresh. Required quick check passed582s; installed release desktop tree matches, automatic handover/runner connection confirmed, no panic/hang recorded through18:50:30UTC. Exact landed-source headless verification passed5scenarios/89steps; live controls were not scripted. task.md, prds/mac-polish-followup.md.
 
