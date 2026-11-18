@@ -10,6 +10,7 @@ use gpui_kit::component::checkbox::Checkbox;
 use gpui_kit::component::dialog::DialogButtonProps;
 use gpui_kit::component::input::{Input, InputEvent, InputState, Textarea, TextareaState};
 use gpui_kit::component::menu::{DropdownMenu as _, PopupMenu, PopupMenuItem};
+use gpui_kit::component::slider::{Slider, SliderEvent, SliderState};
 use gpui_kit::component::{h_flex, v_flex, ActiveTheme as _, Disableable as _, Icon, Selectable as _, Sizable as _, WindowExt as _};
 use gpui_kit::prelude::*;
 use gpui_kit::*;
@@ -198,7 +199,7 @@ pub(crate) struct TasksPage {
     title: Entity<InputState>,
     notes: Entity<TextareaState>,
     composer: Entity<TextareaState>,
-    column_input: Entity<InputState>,
+    column_input: Entity<TextareaState>,
     adding_in: Option<(String, String)>,
     projects: Vec<Value>,
     filter: Value,
@@ -230,7 +231,18 @@ pub(crate) struct TasksPage {
     task_bounds: Rc<RefCell<HashMap<String, Bounds<Pixels>>>>,
     viewport_height: f32,
     background_size: (f32, f32),
+    // The photo's fade and place: drawn live while dragged, saved on release.
+    fade_slider: Entity<SliderState>,
+    place_slider: Entity<SliderState>,
     _subscriptions: Vec<Subscription>,
+}
+
+/// Top, center and bottom as stops on one slider, as Convex keeps them.
+fn place_value(place: &str) -> f32 {
+    match place { "top" => 0., "bottom" => 1., _ => 0.5 }
+}
+fn place_name(value: f32) -> &'static str {
+    if value < 0.25 { "top" } else if value > 0.75 { "bottom" } else { "center" }
 }
 
 impl TasksPage {
@@ -241,15 +253,32 @@ impl TasksPage {
         window.focus(&focus, cx);
         crate::web_panels::keyboard_to_app(window);
         let composer = cx.new(|cx| TextareaState::new(window, cx).placeholder("Add a task. Return to add, Shift-Return for a new line").auto_grow(1, 6).submit_on_enter(true));
-        let column_input = cx.new(|cx| InputState::new(window, cx).placeholder("Task title, then Return"));
+        // Two lines tall to start, so a card's title has room as it's typed.
+        let column_input = cx.new(|cx| TextareaState::new(window, cx).placeholder("Task title, then Return").auto_grow(2, 6).submit_on_enter(true));
+        let fade_slider = cx.new(|_| SliderState::new().min(0.).max(0.95).step(0.01).default_value(0.85_f32));
+        let place_slider = cx.new(|_| SliderState::new().min(0.).max(1.).step(0.5).default_value(0.5_f32));
         let subs = vec![
+            cx.subscribe(&fade_slider, |this, _, ev: &SliderEvent, cx| match ev {
+                SliderEvent::Change(v) => {
+                    this.prefs["fade"] = json!((v.start() * 100.).round() / 100.);
+                    cx.notify();
+                }
+                SliderEvent::Release(v) => this.set_pref("fade", json!((v.start() * 100.).round() / 100.), cx),
+            }),
+            cx.subscribe(&place_slider, |this, _, ev: &SliderEvent, cx| match ev {
+                SliderEvent::Change(v) => {
+                    this.prefs["photoPosition"] = json!(place_name(v.start()));
+                    cx.notify();
+                }
+                SliderEvent::Release(v) => this.set_pref("photoPosition", json!(place_name(v.start())), cx),
+            }),
             cx.subscribe_in(&composer, window, |this, _, ev: &InputEvent, window, cx| {
                 if let InputEvent::PressEnter { shift: false, .. } = ev {
                     this.submit_composer(window, cx);
                 }
             }),
             cx.subscribe_in(&column_input, window, |this, _, ev: &InputEvent, window, cx| match ev {
-                InputEvent::PressEnter { .. } => this.submit_column(window, cx),
+                InputEvent::PressEnter { shift: false, .. } => this.submit_column(window, cx),
                 InputEvent::Blur if this.column_input.read(cx).value().trim().is_empty() => {
                     this.adding_in = None;
                     cx.notify();
@@ -296,6 +325,8 @@ impl TasksPage {
             task_bounds: Rc::new(RefCell::new(HashMap::new())),
             viewport_height: 600.,
             background_size: (0., 0.),
+            fade_slider,
+            place_slider,
             _subscriptions: subs,
         }
     }
@@ -943,8 +974,9 @@ impl TasksPage {
             .when(self.manual(), |d| d.on_drag(TaskDrag { id: id.clone(), title: task.title.clone() }, |drag, _, _, cx| cx.new(|_| Ghost(drag.title.clone()))))
             .drag_over::<TaskDrag>(move |s, _, _, _| s.border_t_2().border_color(accent))
             .on_drop(cx.listener(move |this, drag: &TaskDrag, _, cx| this.drop_task(drag, &drop_status, &drop_group, Some(&drop_before), cx)))
+            // A dead gap after the box, so a click meant for the title never ticks it.
             .child(
-                div().pt(px(2.)).child(
+                div().pt(px(2.)).mr(px(10.)).flex_none().child(
                     Checkbox::new(SharedString::from(format!("check-{id}")))
                         .checked(done)
                         .accessibility_label(format!("Mark {} {}", task.title, next))
@@ -1154,7 +1186,7 @@ impl TasksPage {
         out.into_any_element()
     }
     fn board_columns(&self, group: &str, rows: &[TaskRow], cx: &mut Context<Self>) -> AnyElement {
-        let mut columns = h_flex().id(SharedString::from(format!("columns-{group}"))).items_start().w_full().min_w_0().max_w_full().gap(px(12.)).overflow_x_scroll().track_scroll(&self.pane_scroll(&format!("board:{group}"))).pb(px(8.));
+        let mut columns = h_flex().id(SharedString::from(format!("columns-{group}"))).items_start().w_full().min_w_0().max_w_full().when(group == "all", |d| d.h_full()).gap(px(12.)).overflow_x_scroll().track_scroll(&self.pane_scroll(&format!("board:{group}"))).pb(px(8.));
         for status in self.board_order() {
             let items: Vec<&TaskRow> = rows.iter().filter(|r| column_id(r) == status && (group == "all" || project_key(&r.project) == group)).collect();
             let (accent, soft) = (style::accent(cx), style::accent(cx).opacity(0.08));
@@ -1209,7 +1241,8 @@ impl TasksPage {
             let mut cards = v_flex().id(SharedString::from(format!("cards-{group}-{status}"))).min_h_0()
                 .max_h(px((self.viewport_height - 210.).max(140.))).overflow_y_scroll().track_scroll(&self.pane_scroll(&column_key));
             if adding {
-                cards = cards.child(div().mb(px(6.)).child(Input::new(&self.column_input).small().disabled(self.busy)));
+                cards = cards.child(div().mb(px(6.)).px(px(10.)).py(px(8.)).min_h(px(64.)).rounded(px(8.)).border_1().border_color(style::accent(cx)).bg(cx.theme().background).text_size(px(14.))
+                    .child(Textarea::new(&self.column_input).appearance(false).disabled(self.busy)));
             }
             for task in &items {
                 cards = cards.child(self.card(task, group, cx));
@@ -1232,7 +1265,7 @@ impl TasksPage {
     }
     fn board_view(&self, rows: &[TaskRow], cx: &mut Context<Self>) -> AnyElement {
         if !self.by_project() {
-            return self.board_columns("all", rows, cx);
+            return div().size_full().min_w_0().child(self.board_columns("all", rows, cx)).into_any_element();
         }
         let mut out = v_flex();
         for group in self.groups(rows) {
@@ -1385,19 +1418,44 @@ impl TasksPage {
                     .when(has_photo, |d| d.child(Button::new("tasks-reset-background").label("Remove").small().outline().tooltip("Remove the photo").disabled(self.busy).on_click(cx.listener(|this, _, _, cx| this.set_pref("backgroundPhoto", Value::Null, cx))))),
             );
         if has_photo {
-            let mut fades = h_flex().gap(px(4.));
-            for (label, value) in [("Clear", 0.0), ("Light", 0.4), ("Soft", 0.7), ("Faint", 0.9)] {
-                let on = (self.prefs["fade"].as_f64().unwrap_or(0.85) - value).abs() < 0.01;
-                fades = fades.child(Button::new(SharedString::from(format!("fade-{label}"))).label(label).xsmall().selected(on).tooltip("How much the photo fades").on_click(cx.listener(move |this, _, _, cx| this.set_pref("fade", json!(value), cx))));
+            let fade = self.prefs["fade"].as_f64().unwrap_or(0.85) as f32;
+            let place = place_value(self.prefs["photoPosition"].as_str().unwrap_or("center"));
+            // Another Mac or the web changed it: the sliders follow, unless one is being dragged.
+            for (state, target) in [(self.fade_slider.clone(), fade), (self.place_slider.clone(), place)] {
+                if (state.read(cx).value().start() - target).abs() > 0.005 && !cx.has_active_drag() {
+                    cx.defer(move |cx| {
+                        if let Some(window) = cx.active_window() {
+                            window.update(cx, |_, window, cx| state.update(cx, |s, cx| s.set_value(target, window, cx))).ok();
+                        }
+                    });
+                }
             }
-            let mut places = h_flex().gap(px(4.));
-            for place in ["top", "center", "bottom"] {
-                let on = self.prefs["photoPosition"].as_str().unwrap_or("center") == place;
-                let label = format!("{}{}", place[..1].to_uppercase(), &place[1..]);
-                places = places.child(Button::new(SharedString::from(format!("place-{place}"))).label(label).xsmall().selected(on).tooltip(format!("Show the {place} of the photo")).on_click(cx.listener(move |this, _, _, cx| this.set_pref("photoPosition", json!(place), cx))));
-            }
-            panel = panel.child(div().text_size(px(12.)).text_color(style::secondary_label(cx)).child("Fade")).child(fades).child(places);
+            let slider_row = |label: &'static str, id: &'static str, tip: &'static str, state: &Entity<SliderState>, value: String, cx: &mut Context<Self>| {
+                h_flex()
+                    .gap(px(10.))
+                    .child(div().w(px(56.)).flex_none().text_size(px(12.)).text_color(style::secondary_label(cx)).child(label))
+                    .child(div().id(id).test_support().a11y_role(Role::GenericContainer).aria_label(tip).flex_1().min_w_0().tip(tip).child(Slider::new(state).horizontal().accessibility_label(tip)))
+                    .child(div().w(px(48.)).flex_none().text_right().text_size(px(12.)).text_color(style::tertiary_label(cx)).child(value))
+            };
+            let place_label = match place_name(place) { "top" => "Top", "bottom" => "Bottom", _ => "Center" };
+            panel = panel
+                .child(slider_row("Fade", "tasks-fade", "How much the photo fades behind your tasks", &self.fade_slider, format!("{}%", (fade * 100.).round() as i32), cx))
+                .child(slider_row("Position", "tasks-place", "Which part of the photo shows: top, center or bottom", &self.place_slider, place_label.to_string(), cx));
         }
+        let default_view = self.prefs["defaultView"].as_str().unwrap_or("list").to_string();
+        let mut views = h_flex().self_start().gap(px(2.)).p(px(2.)).rounded(px(7.)).bg(style::hover_fill(cx));
+        for (name, label) in [("list", "List"), ("board", "Board")] {
+            views = views.child(Button::new(SharedString::from(format!("tasks-default-{name}"))).label(label).accessibility_label(format!("Open Tasks in {label}")).small().ghost().selected(default_view == name)
+                .tooltip(format!("Open Tasks in the {} every time", label.to_lowercase()))
+                .on_click(cx.listener(move |this, _, _, cx| {
+                    this.set_pref("defaultView", json!(name), cx);
+                    this.view = Some(name.into());
+                    cx.notify();
+                })));
+        }
+        panel = panel.child(div().h(px(1.)).bg(style::hairline(cx)))
+            .child(div().text_size(px(12.)).text_color(style::secondary_label(cx)).child("Open Tasks in"))
+            .child(views);
         panel.into_any_element()
     }
     fn editor_sheet(&self, cx: &mut Context<Self>) -> AnyElement {
@@ -1526,10 +1584,15 @@ impl Render for TasksPage {
             })));
         }
         let mut actions = h_flex().flex_1().min_w_0().flex_wrap().justify_end().gap(px(6.)).child(segment.flex_none()).child(self.display_menu(cx));
-        actions = actions.child(Button::new("tasks-customize").label("Background").small().outline().selected(self.customize).tooltip("Background color and photo").on_click(cx.listener(|this, _, window, cx| {
-            this.customize = !this.customize;
-            cx.notify();
-        })));
+        // An icon, as Linear has it; the dot says a photo is set.
+        let customize = Button::new("tasks-customize").icon(icons::symbol("slider.horizontal.3")).accessibility_label("Customize Tasks").small().outline().selected(self.customize)
+            .tooltip("Appearance, background photo and the default view")
+            .on_click(cx.listener(|this, _, _, cx| {
+                this.customize = !this.customize;
+                cx.notify();
+            }));
+        let dot = style::accent(cx);
+        actions = actions.child(div().relative().child(customize).when(self.photo.is_some(), |d| d.child(div().absolute().top(px(-2.)).right(px(-2.)).size(px(7.)).rounded_full().bg(dot))));
         if let Some(url) = self.app.read_with(cx, |app, _| app.website_url.clone()).ok().flatten() {
             actions = actions.child(Button::new("tasks-web").icon(icons::symbol("safari")).small().ghost().tooltip("Open Tasks on the web, synced with this Mac").on_click(move |_, _, cx| {
                 crate::open_gate::open_web(&format!("{}/tasks", url.trim_end_matches('/')), cx);
@@ -1561,7 +1624,14 @@ impl Render for TasksPage {
         if let Some(error) = self.error.clone().filter(|_| !self.editor_open) {
             page = page.child(div().mb(px(10.)).text_size(px(13.)).text_color(style::failed_text(cx)).child(error.clone().test_text(error)));
         }
-        page = page.child(div().id("tasks-scroll").w_full().min_w_0().flex_1().min_h_0().overflow_y_scroll().track_scroll(&self.scroll).pb(px(80.)).child(body));
+        // One board fills the pane itself, so a sideways swipe anywhere under the
+        // columns scrolls them, not only over a column (the page's vertical
+        // scroller below would take it and do nothing).
+        if view == "board" && !self.by_project() {
+            page = page.child(div().id("tasks-board").flex().w_full().min_w_0().flex_1().min_h_0().child(body));
+        } else {
+            page = page.child(div().id("tasks-scroll").w_full().min_w_0().flex_1().min_h_0().overflow_y_scroll().track_scroll(&self.scroll).pb(px(80.)).child(body));
+        }
 
         let bg = cx.theme().background;
         // The page, the toast and the editor sheet are all read by the scripted control.

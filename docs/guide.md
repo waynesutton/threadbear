@@ -3121,8 +3121,11 @@ or asks before deleting it (with Undo afterward). Send to thread starts a new
 thread with the task title, notes and project. It shows Starting while queued,
 then View thread; repeated clicks reuse the same request. Projects are optional,
 and their pages link to their tasks. Display picks a project, groups by status or project, sets the order,
-and makes the view you're in the one Tasks opens with. Background offers Light
-and Dark appearance, or a photo and its fade. Text follows the selected theme.
+and makes the view you're in the one Tasks opens with. The sliders button next
+to Display offers Light and Dark appearance, a photo with Fade and Position
+sliders, and Open Tasks in List or Board. A dot on it means a photo is set.
+Text follows the selected theme. On the board, swipe sideways anywhere under the
+columns to scroll them.
 Up and Down navigate tasks; Enter opens one, and Escape closes its editor.
 Arrow keys still edit text normally while a field has focus.
 

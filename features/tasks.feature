@@ -40,6 +40,15 @@ Feature: Tasks
     Then Tasks shows the "board" view
 
   @tasks.page
+  Scenario: The customize panel sets the view Tasks opens in
+    When I open Tasks
+    And I open the Tasks customize panel
+    And I choose Board under Open Tasks in
+    Then Tasks shows the "board" view
+    When I close and reopen Tasks
+    Then Tasks shows the "board" view
+
+  @tasks.page
   Scenario: A failed save keeps my draft when I leave Tasks
     When I open Tasks
     And the next task save will fail
