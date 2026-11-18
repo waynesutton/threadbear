@@ -45,6 +45,7 @@ pub mod navigation_swipe;
 pub mod nested;
 pub mod shortcuts;
 pub mod skills;
+pub mod task_dates;
 pub mod task_order;
 pub mod new_thread;
 pub mod notes;

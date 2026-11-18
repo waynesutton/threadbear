@@ -21,6 +21,10 @@ use threadbear_core::task_order;
 
 actions!(tasks_page, [CloseTasks]);
 
+#[path = "task_detail.rs"]
+mod detail;
+use detail::{due_chip, priority_icon, subtask_chip};
+
 #[derive(Clone, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct TaskRow {
@@ -39,6 +43,23 @@ struct TaskRow {
     project: Option<Value>,
     position: f64,
     created_at: f64,
+    // Newer runners' fields; an older one leaves them out.
+    #[serde(default)]
+    priority: Option<String>,
+    #[serde(default)]
+    due_date: Option<String>,
+    #[serde(default)]
+    parent_id: Option<String>,
+    #[serde(default, deserialize_with = "links_or_none")]
+    links: Vec<Value>,
+    #[serde(default)]
+    comment_count: Option<u64>,
+    #[serde(default)]
+    created_by: Option<Value>,
+}
+fn links_or_none<'de, D: serde::Deserializer<'de>>(d: D) -> Result<Vec<Value>, D::Error> {
+    let value: Value = serde::Deserialize::deserialize(d)?;
+    Ok(value.as_array().cloned().unwrap_or_default())
 }
 fn column_id(row: &TaskRow) -> &str { row.column_id.as_deref().unwrap_or(&row.status) }
 #[derive(Clone)]
@@ -98,7 +119,9 @@ impl Threadbear {
         let focus = page.read(cx).focus.clone();
         window.focus(&focus, cx);
         crate::web_panels::keyboard_to_app(window);
+        let wrap = self.new_thread.prefs.tasks_wrap_columns;
         page.update(cx, |p, cx| {
+            p.wrap_columns = wrap;
             p.refresh(cx);
             p.change("tasks.setPreferences", json!({"theme":style::appearance().name()}), cx);
             p.focus_composer(window, cx);
@@ -179,7 +202,13 @@ impl Threadbear {
             "photoLoaded":page.is_some_and(|p| p.photo_image.is_some()),
             "quickDraft":page.map(|p| p.composer.read(cx).value().to_string()),
             "toast":page.and_then(|p| p.toast.as_ref().map(|t| t.0.clone())),
-            "tasks":page.map(|p| p.rows.iter().map(|t| json!({"id":t.id,"title":t.title,"status":t.status,"columnId":column_id(t),"thread":t.thread,"notes":t.notes,"project":project_key(&t.project)})).collect::<Vec<_>>()),
+            "tasks":page.map(|p| p.rows.iter().map(|t| json!({"id":t.id,"title":t.title,"status":t.status,"columnId":column_id(t),"thread":t.thread,"notes":t.notes,"project":project_key(&t.project),
+                "priority":t.priority,"dueDate":t.due_date,"parentId":t.parent_id,"links":t.links,"commentCount":t.comment_count})).collect::<Vec<_>>()),
+            "topLevel":page.map(|p| p.visible().iter().map(|t| t.title.clone()).collect::<Vec<_>>()),
+            "wrapColumns":page.map(|p| p.wrap_columns),
+            "detail":page.filter(|p| p.editor_open && p.editing_baseline.is_some()).map(|p| json!({"task":p.editing,"picker":p.detail.picker,"commentsOnly":p.detail.comments_only,
+                "activity":match &p.detail.activity { Some(Ok(items)) => json!(items.iter().map(|i| json!({"kind":i["kind"],"body":i["body"]})).collect::<Vec<_>>()), Some(Err(e)) => json!({"error":e}), None => Value::Null },
+                "related":p.detail.related.as_ref().map(|r| r.clone().unwrap_or_else(|e| json!({"error":e}))),"error":p.detail.error,"month":[p.detail.month.0,p.detail.month.1]})),
             "error":page.and_then(|p| p.error.clone())})
     }
     pub(crate) fn render_tasks_page(&self) -> AnyElement {
@@ -187,6 +216,45 @@ impl Threadbear {
             Some(page) => div().size_full().child(page.clone()).into_any_element(),
             None => div().into_any_element(),
         }
+    }
+}
+
+/// A highlight's way back from a task: its page or link, else the thread that has it.
+pub(crate) fn link_to_highlight(item: &threadbear_core::highlights::Highlight, thread: &threadbear_core::inbox::ThreadSummary) -> Value {
+    match &item.url {
+        Some(url) if !url.starts_with("file://") => json!({"kind":"link","title":item.title,"url":url}),
+        _ => json!({"kind":"thread","title":thread.title,"thread":{"runnerId":thread.runner_id,"id":thread.id}}),
+    }
+}
+
+impl Threadbear {
+    /// Highlights' Add to Tasks: a task named after the row, linking back to
+    /// it, with a short note when it's in (or the error, as Tasks is off).
+    pub(crate) fn add_task_from(&mut self, title: String, mut link: Value, cx: &mut Context<Self>) {
+        if !self.experiment_on("tasks") {
+            self.show_error("Tasks is off. Turn it on in Settings, General, Experiments.".into(), cx);
+            return;
+        }
+        if link["kind"] == "thread" && link["thread"]["runnerId"].is_null() {
+            // This Mac's own thread: its runner, as Tasks names runners.
+            let own = self.remote.all_runners.iter().find(|r| r.is_self).map(|r| r.id.clone()).unwrap_or_else(|| "local".into());
+            link["thread"]["runnerId"] = json!(own);
+        }
+        link["id"] = json!(threadbear_core::notes::new_id());
+        let args = json!({"id": threadbear_core::notes::new_id(), "title": title, "notes": "", "status": "todo", "columnId": "todo", "project": Value::Null, "position": -(crate::now_ms() as f64), "links": [link]});
+        let client = self.client.clone();
+        cx.spawn(async move |this, cx| {
+            let result = call(client, "tasks.create", args).await;
+            this.update(cx, |this, cx| {
+                match result {
+                    Ok(_) => {
+                        this.show_import_note(format!("Added to Tasks: {title}"), cx);
+                        this.tasks_updated(cx);
+                    }
+                    Err(e) => this.show_error(format!("Couldn't add {title} to Tasks: {}", e.message), cx),
+                }
+            }).ok();
+        }).detach();
     }
 }
 
@@ -234,6 +302,16 @@ pub(crate) struct TasksPage {
     // The photo's fade and place: drawn live while dragged, saved on release.
     fade_slider: Entity<SliderState>,
     place_slider: Entity<SliderState>,
+    // The open task's page (task_detail.rs).
+    detail: detail::Detail,
+    detail_scroll: ScrollHandle,
+    comment_input: Entity<TextareaState>,
+    sub_input: Entity<InputState>,
+    link_url: Entity<InputState>,
+    link_title: Entity<InputState>,
+    // A save from the task's page keeps it open.
+    keep_open: bool,
+    wrap_columns: bool,
     _subscriptions: Vec<Subscription>,
 }
 
@@ -256,6 +334,12 @@ impl TasksPage {
         // Two lines tall to start, so a card's title has room as it's typed.
         let column_input = cx.new(|cx| TextareaState::new(window, cx).placeholder("Task title, then Return").auto_grow(2, 6).submit_on_enter(true));
         let fade_slider = cx.new(|_| SliderState::new().min(0.).max(0.95).step(0.01).default_value(0.85_f32));
+        let title = cx.new(|cx| InputState::new(window, cx).placeholder("Task title"));
+        let notes = cx.new(|cx| TextareaState::new(window, cx).placeholder("Add a description…").auto_grow(3, 20));
+        let comment_input = cx.new(|cx| TextareaState::new(window, cx).placeholder("Leave a comment. Return to send, Shift-Return for a new line").auto_grow(1, 8).submit_on_enter(true));
+        let sub_input = cx.new(|cx| InputState::new(window, cx).placeholder("Sub-task title, then Return"));
+        let link_url = cx.new(|cx| InputState::new(window, cx).placeholder("https://"));
+        let link_title = cx.new(|cx| InputState::new(window, cx).placeholder("Title (optional)"));
         let place_slider = cx.new(|_| SliderState::new().min(0.).max(1.).step(0.5).default_value(0.5_f32));
         let subs = vec![
             cx.subscribe(&fade_slider, |this, _, ev: &SliderEvent, cx| match ev {
@@ -277,6 +361,23 @@ impl TasksPage {
                     this.submit_composer(window, cx);
                 }
             }),
+            // The task's page saves its title and description as you leave them.
+            cx.subscribe_in(&title, window, |this, _, ev: &InputEvent, window, cx| {
+                if matches!(ev, InputEvent::PressEnter { .. } | InputEvent::Blur) { this.autosave(window, cx); }
+            }),
+            cx.subscribe_in(&notes, window, |this, _, ev: &InputEvent, window, cx| {
+                if matches!(ev, InputEvent::Blur) { this.autosave(window, cx); }
+            }),
+            cx.subscribe_in(&comment_input, window, |this, _, ev: &InputEvent, window, cx| {
+                if let InputEvent::PressEnter { shift: false, .. } = ev { this.send_comment(window, cx); }
+            }),
+            cx.subscribe_in(&sub_input, window, |this, _, ev: &InputEvent, window, cx| match ev {
+                InputEvent::PressEnter { .. } => this.add_subtask(window, cx),
+                InputEvent::Blur if this.sub_input.read(cx).value().trim().is_empty() => { this.detail.adding_sub = false; cx.notify(); }
+                _ => {}
+            }),
+            cx.subscribe_in(&link_url, window, |this, _, ev: &InputEvent, window, cx| if let InputEvent::PressEnter { .. } = ev { this.add_link(window, cx); }),
+            cx.subscribe_in(&link_title, window, |this, _, ev: &InputEvent, window, cx| if let InputEvent::PressEnter { .. } = ev { this.add_link(window, cx); }),
             cx.subscribe_in(&column_input, window, |this, _, ev: &InputEvent, window, cx| match ev {
                 InputEvent::PressEnter { shift: false, .. } => this.submit_column(window, cx),
                 InputEvent::Blur if this.column_input.read(cx).value().trim().is_empty() => {
@@ -291,8 +392,8 @@ impl TasksPage {
             client,
             rows: vec![],
             prefs: json!({}),
-            title: cx.new(|cx| InputState::new(window, cx).placeholder("Task title")),
-            notes: cx.new(|cx| TextareaState::new(window, cx).placeholder("Add a note…").auto_grow(3, 10)),
+            title,
+            notes,
             composer,
             column_input,
             adding_in: None,
@@ -327,6 +428,14 @@ impl TasksPage {
             background_size: (0., 0.),
             fade_slider,
             place_slider,
+            detail: Default::default(),
+            detail_scroll: ScrollHandle::new(),
+            comment_input,
+            sub_input,
+            link_url,
+            link_title,
+            keep_open: false,
+            wrap_columns: false,
             _subscriptions: subs,
         }
     }
@@ -479,6 +588,10 @@ impl TasksPage {
                             }
                         }
                         this.rows = rows.into_iter().filter_map(|r| serde_json::from_value(r).ok()).collect();
+                        if this.editor_open && this.editing_baseline.is_some() {
+                            this.load_activity(cx);
+                            this.load_images(cx);
+                        }
                     }
                     Err(e) => this.error = Some(e.message),
                 }
@@ -554,6 +667,15 @@ impl TasksPage {
             }
             if patch.get("project").is_some() {
                 row.project = (!patch["project"].is_null()).then(|| patch["project"].clone());
+            }
+            if patch.get("priority").is_some() {
+                row.priority = patch["priority"].as_str().map(String::from);
+            }
+            if patch.get("dueDate").is_some() {
+                row.due_date = patch["dueDate"].as_str().map(String::from);
+            }
+            if let Some(links) = patch["links"].as_array() {
+                row.links = links.clone();
             }
         }
         self.error = None;
@@ -648,7 +770,7 @@ impl TasksPage {
         let project = if group != "all" { self.group_project(group) } else if self.filter.is_object() { self.filter.clone() } else { Value::Null };
         let position = self.rows.iter().filter(|r| column_id(r) == status).map(|r| r.position).min_by(f64::total_cmp).map_or(crate::now_ms() as f64, |p| p - 1000.);
         let id = threadbear_core::notes::new_id();
-        self.rows.push(TaskRow { id: id.clone(), title: title.clone(), notes: notes.clone(), status: self.canonical(status), column_id: Some(status.into()), thread: None, thread_command_id: None, thread_error: None, project: (!project.is_null()).then(|| project.clone()), position, created_at: crate::now_ms() as f64 });
+        self.rows.push(TaskRow { id: id.clone(), title: title.clone(), notes: notes.clone(), status: self.canonical(status), column_id: Some(status.into()), thread: None, thread_command_id: None, thread_error: None, project: (!project.is_null()).then(|| project.clone()), position, created_at: crate::now_ms() as f64, priority: None, due_date: None, parent_id: None, links: vec![], comment_count: None, created_by: None });
         self.busy = true;
         self.error = None;
         cx.notify();
@@ -707,6 +829,8 @@ impl TasksPage {
         self.busy = true;
         self.error = None;
         cx.notify();
+        let saved = args["id"].as_str().unwrap_or("").to_string();
+        let (sent_title, sent_notes) = (args["title"].as_str().map(String::from), args["notes"].as_str().map(String::from));
         cx.spawn_in(window, async move |this, cx| {
             let result = call(client, method, args).await;
             this.update_in(cx, |this, window, cx| {
@@ -715,13 +839,23 @@ impl TasksPage {
                     Ok(_) => {
                         if this.send_after_save {
                             this.send_after_save = false;
-                            let id = this.editing.clone().unwrap_or_else(|| this.draft_id.clone());
+                            let id = saved.clone();
                             this.change("tasks.startThread", json!({"id":id}), cx);
                         }
-                        this.close_editor(window, cx);
+                        // A new task's sheet closes; the task's own page stays,
+                        // with what was saved as its new starting point.
+                        if method == "tasks.create" && !this.keep_open {
+                            this.close_editor(window, cx);
+                        } else if this.editing.as_deref() == Some(saved.as_str()) {
+                            if let Some(base) = this.editing_baseline.as_mut() {
+                                if let Some(t) = sent_title { base.title = t; }
+                                if let Some(n) = sent_notes { base.notes = n; }
+                            }
+                        }
+                        this.keep_open = false;
                         this.refresh(cx);
                     }
-                    Err(e) => { this.send_after_save = false; this.error = Some(e.message); },
+                    Err(e) => { this.send_after_save = false; this.keep_open = false; this.error = Some(e.message); },
                 }
                 cx.notify();
             })
@@ -733,6 +867,10 @@ impl TasksPage {
         self.editor_open = false;
         self.editing = None;
         self.editing_baseline = None;
+        self.detail.picker = None;
+        self.detail.adding_sub = false;
+        self.detail.adding_link = false;
+        self.detail.error = None;
         self.draft_id = threadbear_core::notes::new_id();
         self.title.update(cx, |f, cx| f.set_value("", window, cx));
         self.notes.update(cx, |f, cx| f.set_value("", window, cx));
@@ -753,14 +891,33 @@ impl TasksPage {
         self.project = task.project.clone();
         self.title.update(cx, |f, cx| f.set_value(task.title.clone(), window, cx));
         self.notes.update(cx, |f, cx| f.set_value(task.notes.clone(), window, cx));
+        // The page has the keys (J, K, the arrows, Esc) until you click into
+        // the title or description; Edit Note goes straight to the description.
         if notes_first {
             self.notes.update(cx, |f, cx| f.focus(window, cx));
             crate::web_panels::keyboard_to_app(window);
         } else {
-            self.title.update(cx, |f, cx| f.focus(window, cx));
-            crate::web_panels::keyboard_to_app(window);
+            window.focus(&self.focus, cx);
         }
+        crate::web_panels::keyboard_to_app(window);
+        self.detail_scroll.set_offset(point(px(0.), px(0.)));
+        // The description grows to its text on the frame after it's first laid
+        // out at its width, so draw it again shortly after opening.
+        cx.spawn(async move |this, cx| {
+            for ms in [60, 250] {
+                cx.background_executor().timer(std::time::Duration::from_millis(ms)).await;
+                if this.update(cx, |_, cx| cx.notify()).is_err() { break; }
+            }
+        }).detach();
+        self.load_detail(&task.id.clone(), cx);
         cx.notify();
+    }
+    /// The task's page saves a title or description once Mike leaves it.
+    fn autosave(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        if self.editor_open && self.editing_baseline.is_some() && !self.busy && !self.title.read(cx).value().trim().is_empty() && self.draft_dirty_editor(cx) {
+            self.keep_open = true;
+            self.save(window, cx);
+        }
     }
     fn draft_dirty_editor(&self, cx: &App) -> bool {
         let title = self.title.read(cx).value().to_string();
@@ -782,7 +939,11 @@ impl TasksPage {
         if key == "none" { "No project".into() } else { self.project_name(&self.group_project(key)) }
     }
     fn visible(&self) -> Vec<TaskRow> {
-        let mut rows: Vec<TaskRow> = self.rows.iter().filter(|r| self.filter == json!("all") || r.project.clone().unwrap_or(Value::Null) == self.filter).cloned().collect();
+        // A sub-task shows under its task, not as a row of its own, unless its task is gone.
+        let ids: HashSet<&str> = self.rows.iter().map(|r| r.id.as_str()).collect();
+        let mut rows: Vec<TaskRow> = self.rows.iter()
+            .filter(|r| r.parent_id.as_deref().is_none_or(|p| !ids.contains(p)))
+            .filter(|r| self.filter == json!("all") || r.project.clone().unwrap_or(Value::Null) == self.filter).cloned().collect();
         rows.sort_by(|a, b| match self.prefs["sort"].as_str().unwrap_or("manual") {
             "title" => a.title.cmp(&b.title),
             "newest" => b.created_at.total_cmp(&a.created_at),
@@ -813,7 +974,8 @@ impl TasksPage {
         }
         scroll.set_offset(offset);
     }
-    fn navigate_task(&mut self, key: &str, window: &mut Window, cx: &mut Context<Self>) {
+    /// The tasks in the order they're drawn, skipping folded sections.
+    fn nav_order(&self) -> Vec<TaskRow> {
         let rows = self.visible();
         let board = self.view_name() == "board";
         let order = if board { self.board_order() } else { self.list_order() };
@@ -825,6 +987,11 @@ impl TasksPage {
                 visible.extend(rows.iter().filter(|r| column_id(r) == column && (group == "all" || project_key(&r.project) == group)).cloned());
             }
         }
+        visible
+    }
+    fn navigate_task(&mut self, key: &str, window: &mut Window, cx: &mut Context<Self>) {
+        let board = self.view_name() == "board";
+        let visible = self.nav_order();
         if visible.is_empty() { return; }
         let current = visible.iter().position(|t| Some(&t.id) == self.selected_task.as_ref());
         if key == "enter" {
@@ -930,6 +1097,35 @@ impl TasksPage {
                     }
                     sub
                 });
+                let (p, row) = (page.clone(), t.clone());
+                menu = menu.submenu_with_icon(Some(priority_icon(Some("high"), 14., cx)), "Priority", window, cx, move |sub, _, cx| {
+                    let mut sub = sub;
+                    let mut choices: Vec<(Option<&'static str>, &'static str)> = vec![(None, "No priority")];
+                    choices.extend(threadbear_core::task_dates::PRIORITIES.iter().map(|(id, name)| (Some(*id), *name)));
+                    for (value, label) in choices {
+                        let (p, id) = (p.clone(), row.id.clone());
+                        sub = sub.item(PopupMenuItem::new(label).icon(priority_icon(value, 14., cx)).checked(row.priority.as_deref() == value).on_click(move |_, _, cx| {
+                            p.update(cx, |p, cx| p.set_field(&id, "priority", value.map_or(Value::Null, |v| json!(v)), cx)).ok();
+                        }));
+                    }
+                    sub
+                });
+                let (p, row) = (page.clone(), t.clone());
+                menu = menu.submenu_with_icon(Some(icons::symbol("calendar")), "Due date", window, cx, move |sub, _, _| {
+                    let mut sub = sub;
+                    let picks = threadbear_core::task_dates::quick_picks(detail::today());
+                    let current = row.due_date.clone();
+                    for (label, day) in [("Today", picks[0].1), ("Tomorrow", picks[1].1), ("End of week", picks[2].1)] {
+                        let (p, id, value) = (p.clone(), row.id.clone(), threadbear_core::task_dates::format(day));
+                        sub = sub.item(PopupMenuItem::new(format!("{label}  {}", threadbear_core::task_dates::long_label(day))).checked(current.as_deref() == Some(value.as_str())).on_click(move |_, _, cx| {
+                            p.update(cx, |p, cx| p.set_field(&id, "dueDate", json!(value), cx)).ok();
+                        }));
+                    }
+                    let (p, id) = (p.clone(), row.id.clone());
+                    sub.separator().item(PopupMenuItem::new("Clear").disabled(current.is_none()).on_click(move |_, _, cx| {
+                        p.update(cx, |p, cx| p.set_field(&id, "dueDate", Value::Null, cx)).ok();
+                    }))
+                });
                 menu = menu.separator();
                 for (index, status) in statuses.iter().enumerate() {
                     let (p, id, status) = (page.clone(), t.id.clone(), status.clone());
@@ -951,6 +1147,25 @@ impl TasksPage {
             return None;
         }
         Some(div().flex_none().max_w(px(160.)).truncate().px(px(8.)).py(px(1.)).rounded_full().border_1().border_color(style::hairline(cx)).text_size(px(12.)).text_color(style::secondary_label(cx)).child(self.project_name(project)).into_any_element())
+    }
+    /// A row's or card's due date and sub-task count, when it has them.
+    fn meta_chips(&self, task: &TaskRow, cx: &App) -> Vec<AnyElement> {
+        let mut out = Vec::new();
+        if task.status != "done" {
+            out.extend(task.due_date.as_deref().and_then(|d| due_chip(d, cx)));
+        }
+        let (done, all) = self.subtask_counts(&task.id);
+        if all > 0 { out.push(subtask_chip(done, all, cx)); }
+        if !task.links.is_empty() {
+            out.push(div().id(SharedString::from(format!("links-mark-{}", task.id))).flex_none().tip(if task.links.len() == 1 { "1 link".to_string() } else { format!("{} links", task.links.len()) })
+                .child(icons::symbol("link").with_size(px(12.)).text_color(style::tertiary_label(cx))).into_any_element());
+        }
+        out
+    }
+    fn priority_mark(&self, task: &TaskRow, cx: &App) -> Option<AnyElement> {
+        let priority = task.priority.as_deref()?;
+        let name = threadbear_core::task_dates::priority_name(Some(priority));
+        Some(div().id(SharedString::from(format!("priority-mark-{}", task.id))).flex_none().tip(format!("{name} priority")).child(priority_icon(Some(priority), 14., cx)).into_any_element())
     }
     fn row(&self, task: &TaskRow, group: &str, cx: &mut Context<Self>) -> AnyElement {
         let id = task.id.clone();
@@ -995,9 +1210,11 @@ impl TasksPage {
                     .cursor_pointer()
                     .tip("Open the task")
                     .on_click(cx.listener(move |this, _, window, cx| this.open_editor(&edit, false, window, cx)))
+                    .children(self.priority_mark(task, cx))
                     .child(div().min_w_0().text_size(px(14.)).when(done, |d| d.line_through().text_color(style::tertiary_label(cx))).child(task.title.clone().test_text(task.title.clone())))
                     .when(!task.notes.is_empty(), |d| d.child(icons::symbol("text.alignleft").with_size(px(12.)).text_color(style::tertiary_label(cx)))),
             )
+            .children(self.meta_chips(task, cx))
             .children(self.chip(task, cx))
             .child(div().flex_none().invisible().group_hover("task-row", |s| s.visible()).child(self.more_menu(task, cx)))
             .into_any_element()
@@ -1035,10 +1252,13 @@ impl TasksPage {
                     .child(div().flex_1().min_w_0().text_size(px(14.)).when(done, |d| d.line_through().text_color(style::tertiary_label(cx))).child(task.title.clone().test_text(task.title.clone())))
                     .child(div().flex_none().invisible().group_hover("task-card", |s| s.visible()).child(self.more_menu(task, cx))),
             )
-            .when(!task.notes.is_empty() || self.chip(task, cx).is_some(), |d| {
+            .when(!task.notes.is_empty() || self.chip(task, cx).is_some() || task.priority.is_some() || !self.meta_chips(task, cx).is_empty(), |d| {
                 d.child(
                     h_flex()
                         .gap(px(6.))
+                        .flex_wrap()
+                        .children(self.priority_mark(task, cx))
+                        .children(self.meta_chips(task, cx))
                         .when(!task.notes.is_empty(), |d| d.child(icons::symbol("text.alignleft").with_size(px(12.)).text_color(style::tertiary_label(cx))))
                         .children(self.chip(task, cx)),
                 )
@@ -1186,7 +1406,12 @@ impl TasksPage {
         out.into_any_element()
     }
     fn board_columns(&self, group: &str, rows: &[TaskRow], cx: &mut Context<Self>) -> AnyElement {
-        let mut columns = h_flex().id(SharedString::from(format!("columns-{group}"))).items_start().w_full().min_w_0().max_w_full().when(group == "all", |d| d.h_full()).gap(px(12.)).overflow_x_scroll().track_scroll(&self.pane_scroll(&format!("board:{group}"))).pb(px(8.));
+        // Wrapped, every column shows on rows of their own and the page scrolls
+        // down; otherwise one row that scrolls sideways.
+        let wrap = self.wrap_columns;
+        let mut columns = h_flex().id(SharedString::from(format!("columns-{group}"))).items_start().w_full().min_w_0().max_w_full().when(group == "all" && !wrap, |d| d.h_full()).gap(px(12.)).pb(px(8.))
+            .when(wrap, |d| d.flex_wrap())
+            .when(!wrap, |d| d.overflow_x_scroll().track_scroll(&self.pane_scroll(&format!("board:{group}"))));
         for status in self.board_order() {
             let items: Vec<&TaskRow> = rows.iter().filter(|r| column_id(r) == status && (group == "all" || project_key(&r.project) == group)).collect();
             let (accent, soft) = (style::accent(cx), style::accent(cx).opacity(0.08));
@@ -1239,7 +1464,7 @@ impl TasksPage {
                 .on_drop(cx.listener(move |this, drag: &TaskDrag, _, cx| this.drop_task(drag, &s1, &g1, None, cx)))
                 .child(header);
             let mut cards = v_flex().id(SharedString::from(format!("cards-{group}-{status}"))).min_h_0()
-                .max_h(px((self.viewport_height - 210.).max(140.))).overflow_y_scroll().track_scroll(&self.pane_scroll(&column_key));
+                .when(!wrap, |d| d.max_h(px((self.viewport_height - 210.).max(140.))).overflow_y_scroll().track_scroll(&self.pane_scroll(&column_key)));
             if adding {
                 cards = cards.child(div().mb(px(6.)).px(px(10.)).py(px(8.)).min_h(px(64.)).rounded(px(8.)).border_1().border_color(style::accent(cx)).bg(cx.theme().background).text_size(px(14.))
                     .child(Textarea::new(&self.column_input).appearance(false).disabled(self.busy)));
@@ -1279,7 +1504,7 @@ impl TasksPage {
     }
     fn display_menu(&self, cx: &mut Context<Self>) -> AnyElement {
         let page = cx.entity().downgrade();
-        let (prefs, filter, view, show_done) = (self.prefs.clone(), self.filter.clone(), self.view_name(), self.show_done);
+        let (prefs, filter, view, show_done, wrap) = (self.prefs.clone(), self.filter.clone(), self.view_name(), self.show_done, self.wrap_columns);
         let mut filters = vec![("All Projects".to_string(), json!("all"))];
         filters.extend(self.project_choices());
         Button::new("tasks-display")
@@ -1338,6 +1563,12 @@ impl TasksPage {
                         .ok();
                     }));
                 }
+                if view == "board" {
+                    let p = page.clone();
+                    menu = menu.item(PopupMenuItem::new("Wrap Columns").checked(wrap).on_click(move |_, _, cx| {
+                        p.update(cx, |p, cx| p.set_wrap(!p.wrap_columns, cx)).ok();
+                    }));
+                }
                 let (p, v) = (page.clone(), view.clone());
                 let is_default = prefs["defaultView"].as_str().unwrap_or("list") == view;
                 let name = if view == "list" { "List" } else { "Board" };
@@ -1346,6 +1577,15 @@ impl TasksPage {
                 }))
             })
             .into_any_element()
+    }
+    /// Wrap Columns: kept on this Mac, beside the app's other display choices.
+    fn set_wrap(&mut self, on: bool, cx: &mut Context<Self>) {
+        self.wrap_columns = on;
+        self.app.update(cx, |app, _| {
+            app.new_thread.prefs.tasks_wrap_columns = on;
+            crate::prefs::save(&app.new_thread.prefs);
+        }).ok();
+        cx.notify();
     }
     fn upload_photo(&mut self, path: std::path::PathBuf, cx: &mut Context<Self>) {
         if self.busy { return; }
@@ -1613,21 +1853,29 @@ impl Render for TasksPage {
             .child(div().text_size(px(13.)).text_color(style::tertiary_label(cx)).child(format!("{open} open")))
             .child(actions);
 
-        let body = if view == "list" { self.list_view(&rows, cx) } else { self.board_view(&rows, cx) };
+        // An existing task opens on a page of its own in place of the list or
+        // board (task_detail.rs); a new one is still the small sheet.
+        let open_row = self.editor_open.then(|| self.editing_baseline.as_ref().and_then(|_| self.open_row().cloned())).flatten();
         let mut page = v_flex()
             .id("tasks-content")
             .size_full()
             .px(px(28.))
             .pt(px(24.))
-            .text_color(style::label_text(cx))
-            .child(header);
+            .text_color(style::label_text(cx));
+        if let Some(row) = &open_row {
+            page = page.child(self.detail_view(row, window, cx));
+        } else {
+            page = page.child(header);
+        }
         if let Some(error) = self.error.clone().filter(|_| !self.editor_open) {
             page = page.child(div().mb(px(10.)).text_size(px(13.)).text_color(style::failed_text(cx)).child(error.clone().test_text(error)));
         }
+        let body = if open_row.is_some() { div().into_any_element() } else if view == "list" { self.list_view(&rows, cx) } else { self.board_view(&rows, cx) };
         // One board fills the pane itself, so a sideways swipe anywhere under the
         // columns scrolls them, not only over a column (the page's vertical
         // scroller below would take it and do nothing).
-        if view == "board" && !self.by_project() {
+        if open_row.is_some() {
+        } else if view == "board" && !self.by_project() && !self.wrap_columns {
             page = page.child(div().id("tasks-board").flex().w_full().min_w_0().flex_1().min_h_0().child(body));
         } else {
             page = page.child(div().id("tasks-scroll").w_full().min_w_0().flex_1().min_h_0().overflow_y_scroll().track_scroll(&self.scroll).pb(px(80.)).child(body));
@@ -1639,10 +1887,19 @@ impl Render for TasksPage {
             .key_context("TasksPage")
             .track_focus(&self.focus)
             .on_key_down(cx.listener(|this, event: &KeyDownEvent, window, cx| {
-                if this.editor_open || this.busy { return; }
                 let modifiers = &event.keystroke.modifiers;
                 if modifiers.platform || modifiers.control || modifiers.alt || modifiers.shift { return; }
                 let key = event.keystroke.key.as_str();
+                // The task's page: J or the down arrow for the next task, K or up for the one before.
+                if this.editor_open && this.editing_baseline.is_some() && this.focus.is_focused(window) && !this.busy {
+                    match key {
+                        "down" | "j" => { this.step_task(1, window, cx); cx.stop_propagation(); }
+                        "up" | "k" => { this.step_task(-1, window, cx); cx.stop_propagation(); }
+                        _ => {}
+                    }
+                    return;
+                }
+                if this.editor_open || this.busy { return; }
                 let empty_composer = this.composer.read(cx).value().is_empty() && this.composer.read(cx).focus_handle(cx).is_focused(window);
                 if (this.focus.is_focused(window) || (empty_composer && key == "down")) && matches!(key, "up" | "down" | "enter") {
                     this.navigate_task(key, window, cx);
@@ -1650,8 +1907,13 @@ impl Render for TasksPage {
                 }
             }))
             .on_action(cx.listener(|this, _: &CloseTasks, window, cx| {
+                if this.detail.picker.is_some() {
+                    this.detail.picker = None;
+                    cx.notify();
+                    return;
+                }
                 if this.editor_open {
-                    this.close_editor(window, cx);
+                    this.leave_detail(window, cx);
                     cx.notify();
                     return;
                 }
@@ -1721,7 +1983,7 @@ impl Render for TasksPage {
                 ),
             );
         }
-        if self.editor_open {
+        if self.editor_open && open_row.is_none() {
             shell = shell.child(self.editor_sheet(cx));
         }
         shell
@@ -1780,6 +2042,69 @@ pub(crate) fn automation(app: &Entity<Threadbear>, cmd: &Value, window: &mut Win
         }
         if let Some(view) = cmd["view"].as_str() {
             p.view = Some(view.into());
+        }
+        if let Some(on) = cmd["wrap"].as_bool() {
+            p.set_wrap(on, cx);
+        }
+        // The task's page: `task` names one (title or id), else the open one.
+        let target = cmd["task"].as_str().and_then(|t| p.rows.iter().find(|r| r.title == t || r.id == t).map(|r| r.id.clone())).or_else(|| p.editing.clone());
+        if let Some(id) = target.clone() {
+            if cmd.get("priority").is_some() {
+                p.set_field(&id, "priority", cmd["priority"].clone(), cx);
+            }
+            if let Some(due) = cmd["due"].as_str() {
+                let today = detail::today();
+                let value = match due {
+                    "clear" => Value::Null,
+                    "today" => json!(threadbear_core::task_dates::format(today)),
+                    "tomorrow" => json!(threadbear_core::task_dates::format(today + threadbear_core::chrono::Duration::days(1))),
+                    "overdue" => json!(threadbear_core::task_dates::format(today - threadbear_core::chrono::Duration::days(2))),
+                    day => json!(day),
+                };
+                p.set_field(&id, "dueDate", value, cx);
+            }
+        }
+        if p.editor_open && p.editing_baseline.is_some() {
+            if let Some(name) = cmd["picker"].as_str() {
+                p.detail.picker = match name { "priority" => Some("priority"), "due" => Some("due"), _ => None };
+            }
+            if let Some(by) = cmd["month"].as_i64() {
+                let (y, m) = p.detail.month;
+                p.detail.month = threadbear_core::task_dates::shift_month(y, m, by as i32);
+            }
+            if let Some(which) = cmd["activity"].as_str() {
+                p.detail.comments_only = which == "comments";
+            }
+            if let Some(text) = cmd["comment"].as_str() {
+                p.comment_input.update(cx, |f, cx| f.set_value(text.to_owned(), window, cx));
+                p.send_comment(window, cx);
+            }
+            if let Some(title) = cmd["subtask"].as_str() {
+                p.detail.adding_sub = true;
+                p.sub_input.update(cx, |f, cx| f.set_value(title.to_owned(), window, cx));
+                p.add_subtask(window, cx);
+            }
+            if let Some(url) = cmd["addLink"].as_str() {
+                p.link_url.update(cx, |f, cx| f.set_value(url.to_owned(), window, cx));
+                p.link_title.update(cx, |f, cx| f.set_value(cmd["linkTitle"].as_str().unwrap_or("").to_owned(), window, cx));
+                p.add_link(window, cx);
+            }
+            if let Some(id) = cmd["attachPrint"].as_str() {
+                let title = cmd["printTitle"].as_str().unwrap_or(id).to_string();
+                p.attach_print(id, &title, cx);
+            }
+            if let Some(path) = cmd["imagePath"].as_str() {
+                p.attach_image(path.into(), cx);
+            }
+            if let Some(by) = cmd["step"].as_i64() {
+                p.step_task(by as i32, window, cx);
+            }
+            if let Some(y) = cmd["detailScroll"].as_f64() {
+                p.detail_scroll.set_offset(point(px(0.), px(-y as f32)));
+            }
+            if cmd["back"].as_bool() == Some(true) {
+                p.leave_detail(window, cx);
+            }
         }
         if let Some(on) = cmd["showDone"].as_bool() {
             p.show_done = on;

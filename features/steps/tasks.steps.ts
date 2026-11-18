@@ -166,3 +166,68 @@ Then('the Tasks photo is displayed', async function (this: ThreadbearWorld) {
 When('I narrow the Tasks window', async function (this: ThreadbearWorld) {
   await this.app.do({ cmd: 'resize', w: 1000, h: 700 });
 });
+
+// The task's own page (desktop/gpui/src/task_detail.rs).
+type TaskFull = { id: string; title: string; priority?: string | null; dueDate?: string | null; parentId?: string | null; links?: { title?: string }[] };
+type Detail = { task?: string; picker?: string | null; activity?: { kind: string; body: string }[] | { Err: string } | null };
+const full = (d: unknown, title: string) => (tasks(d)?.tasks as TaskFull[] | undefined)?.find((t) => t.title === title);
+const detail = (d: unknown) => (d as { tasksPage?: { detail?: Detail | null } }).tasksPage?.detail;
+Then("the task's page is open on {string}", async function (this: ThreadbearWorld, title: string) {
+  await this.until(`page of ${title}`, (d) => !!detail(d) && detail(d)?.task === full(d, title)?.id);
+});
+When("I set the task's priority to {string}", async function (this: ThreadbearWorld, priority: string) {
+  await this.app.do({ cmd: 'tasks', priority });
+});
+When("I set the task's due date to {string}", async function (this: ThreadbearWorld, due: string) {
+  await this.app.do({ cmd: 'tasks', due });
+});
+Then('the task {string} has priority {string} and a due date', async function (this: ThreadbearWorld, title: string, priority: string) {
+  await this.until(`${title} ${priority}, due`, (d) => full(d, title)?.priority === priority && !!full(d, title)?.dueDate);
+});
+Then('the task {string} has no due date', async function (this: ThreadbearWorld, title: string) {
+  await this.until(`${title} not due`, (d) => !!full(d, title) && !full(d, title)?.dueDate);
+});
+When('I add the sub-task {string}', async function (this: ThreadbearWorld, title: string) {
+  await this.app.do({ cmd: 'tasks', subtask: title });
+});
+Then('the task {string} is a sub-task of {string}', async function (this: ThreadbearWorld, title: string, parent: string) {
+  await this.until(`${title} under ${parent}`, (d) => !!full(d, parent) && full(d, title)?.parentId === full(d, parent)?.id);
+});
+Then('the top level of Tasks does not list {string}', async function (this: ThreadbearWorld, title: string) {
+  await this.until(`${title} not at the top level`, (d) => {
+    const top = (tasks(d) as { topLevel?: string[] } | undefined)?.topLevel;
+    return !!top && !top.includes(title);
+  });
+});
+When('I comment {string}', async function (this: ThreadbearWorld, body: string) {
+  await this.app.do({ cmd: 'tasks', comment: body });
+});
+Then("the task's activity shows the comment {string}", async function (this: ThreadbearWorld, body: string) {
+  await this.until(`comment ${body}`, (d) => {
+    const items = detail(d)?.activity;
+    // The box is at the foot of the page, often below the fold, so this reads the page's list.
+    return Array.isArray(items) && items.some((i) => i.kind === 'comment' && i.body === body);
+  });
+});
+When('I add the link {string} titled {string}', async function (this: ThreadbearWorld, url: string, title: string) {
+  await this.app.do({ cmd: 'tasks', addLink: url, linkTitle: title });
+});
+Then('the task {string} links to {string}', async function (this: ThreadbearWorld, title: string, link: string) {
+  await this.until(`${title} links to ${link}`, (d) => !!full(d, title)?.links?.some((l) => l.title === link));
+});
+Then('Tasks shows {string}', async function (this: ThreadbearWorld, words: string) {
+  await this.until(`"${words}" drawn`, (d) => drawn(d).includes(words));
+});
+When("I open the task's due date picker", async function (this: ThreadbearWorld) {
+  await this.app.do({ cmd: 'tasks', picker: 'due' });
+  await this.until('due picker open', (d) => detail(d)?.picker === 'due');
+});
+When('I turn on Wrap Columns', async function (this: ThreadbearWorld) {
+  await this.app.do({ cmd: 'tasks', wrap: true });
+});
+Then('the Tasks board wraps its columns', async function (this: ThreadbearWorld) {
+  await this.until('columns wrapped', (d) => (tasks(d) as { wrapColumns?: boolean } | undefined)?.wrapColumns === true && tasks(d)?.view === 'board');
+});
+Then('the app says {string}', async function (this: ThreadbearWorld, words: string) {
+  await this.until(`the note "${words}"`, (d) => (d as unknown as { importNote?: string | null }).importNote === words);
+});

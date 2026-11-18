@@ -174,3 +174,65 @@ Feature: Tasks
     And I narrow the Tasks window
     And I close and reopen Tasks
     Then Tasks shows the "list" view
+
+  @tasks.page @tasks.detail
+  Scenario: A task opens on its own page with priority, due date, sub-tasks, links and comments
+    When I open Tasks
+    And I add the task "Plan the launch"
+    Then Tasks contains "Plan the launch"
+    When I edit the task "Plan the launch"
+    Then the task's page is open on "Plan the launch"
+    When I set the task's priority to "high"
+    And I set the task's due date to "today"
+    Then the task "Plan the launch" has priority "high" and a due date
+    When I add the sub-task "Book the room"
+    Then the task "Book the room" is a sub-task of "Plan the launch"
+    And the top level of Tasks does not list "Book the room"
+    When I comment "Room 4 is free on Friday"
+    Then the task's activity shows the comment "Room 4 is free on Friday"
+    When I add the link "https://example.com/plan" titled "The plan"
+    Then the task "Plan the launch" links to "The plan"
+    When I press Escape in Tasks
+    Then the Tasks editor is closed
+    And Tasks shows "Due Today"
+
+  @tasks.page @tasks.detail
+  Scenario: The due date picker offers quick picks and a calendar
+    When I open Tasks
+    And I add the task "Renew the domain"
+    Then Tasks contains "Renew the domain"
+    When I edit the task "Renew the domain"
+    And I open the task's due date picker
+    Then Tasks shows "Today"
+    And Tasks shows "End of this week"
+    When I set the task's due date to "clear"
+    Then the task "Renew the domain" has no due date
+
+  @tasks.page @tasks.detail
+  Scenario: J and K step to the next and previous task on its page
+    When I open Tasks
+    And I add the task "First stepped task"
+    Then Tasks contains "First stepped task"
+    When I add the task "Second stepped task"
+    Then Tasks contains "Second stepped task"
+    When I edit the task "Second stepped task"
+    And I press "k" in Tasks
+    Then the task's page is open on "First stepped task"
+    When I press "j" in Tasks
+    Then the task's page is open on "Second stepped task"
+
+  @tasks.page
+  Scenario: The board can wrap its columns onto new rows
+    When I open Tasks
+    And I choose the Tasks Board view
+    And I turn on Wrap Columns
+    Then the Tasks board wraps its columns
+
+  @tasks.page
+  Scenario: Add to Tasks from a highlight makes a task that links back to it
+    When I open the thread "Rebuild the three landing pages"
+    And I choose "Add to Tasks" from the menu of the highlight "alex-example/site#48"
+    Then the app says "Added to Tasks: alex-example/site#48"
+    When I open Tasks
+    Then Tasks contains "alex-example/site#48"
+    And the task "alex-example/site#48" links to "alex-example/site#48"

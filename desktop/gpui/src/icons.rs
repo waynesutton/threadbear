@@ -207,6 +207,7 @@ pub fn try_symbol(name: &str) -> Option<Icon> {
         "sidebar.right" => IconName::PanelRight,
         "chevron.left" => IconName::ChevronLeft,
         "square.and.arrow.up" => IconName::Share,
+        "square.and.arrow.down" => IconName::Download,
         "doc.plaintext" => IconName::FileText,
         "safari" => IconName::Compass,
         "exclamationmark.triangle" => IconName::TriangleAlert,

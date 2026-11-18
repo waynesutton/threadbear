@@ -612,16 +612,83 @@ async function handle(client, { id, method, params = {} }) {
 }
 
 // Isolated task fixtures for native UI specs; never reaches Convex.
+// TB_MOCK_TASKS=demo (or `mock.tasks {seed:true}`) fills it with sample
+// tasks: priorities, due dates, sub-tasks, links and comments.
 const mockTasks = new Map();
+const mockTaskActivity = new Map();
 let tasksFailNext = false;
 let mockTaskPhoto = null;
 let mockTaskPhotoBytes;
 let mockTaskPhotoServer;
+let mockTaskImages = 0;
+const mockTaskImageBytes = new Map();
+// The photo at /photo, a task's pictures at /image?n=<n>.
+async function mockTaskServer() {
+  if (mockTaskPhotoServer) return;
+  mockTaskPhotoServer = createHttpServer((req, res) => {
+    const n = new URL(req.url, 'http://x').searchParams.get('n');
+    res.writeHead(200, {'Content-Type':'image/png'}); res.end(n ? mockTaskImageBytes.get(n) : mockTaskPhotoBytes);
+  });
+  await new Promise(resolve => mockTaskPhotoServer.listen(0, '127.0.0.1', resolve));
+}
 const mockTaskPrefs = { defaultView: 'list', columnOrder: ['backlog','todo','doing','done'], listOrder: ['doing','todo','backlog','done'], grouping: 'status', sort: 'manual', fade: .85, theme: 'system' };
+const mockTaskUser = { kind: 'user', name: 'Alex' };
+function mockTaskDay(days) {
+  const d = new Date(); d.setDate(d.getDate() + days);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+function mockTaskEvent(id, body, author = mockTaskUser, at = Date.now()) {
+  const list = mockTaskActivity.get(id) ?? [];
+  list.push({ id: 'act_' + crypto.randomBytes(4).toString('hex'), taskId: id, kind: 'event', body, author, createdAt: at });
+  mockTaskActivity.set(id, list);
+}
+function mockTaskRow(fields) {
+  const now = Date.now();
+  return { notes: '', status: 'todo', project: null, position: now, createdAt: now, updatedAt: now, deleted: false,
+    priority: null, dueDate: null, parentId: null, links: [], commentCount: 0, createdBy: mockTaskUser, ...fields, columnId: fields.columnId ?? fields.status ?? 'todo' };
+}
+function seedMockTasks() {
+  const tb = projects.find((x) => x.title === 'Threadbear');
+  const project = tb ? { runnerId: 'mock', id: tb.id } : null;
+  const hour = 3_600_000;
+  const rows = [
+    { id: 'task_launch', title: 'Ship the Tasks detail page', status: 'doing', priority: 'urgent', dueDate: mockTaskDay(0), project, position: 1,
+      notes: 'Open a task and see everything about it: properties, sub-tasks, links, and what happened.\n\nMatch the board and list chips.',
+      links: [
+        { id: 'lnk_pr', kind: 'link', title: 'Pull request #212', url: 'https://github.com/alex-example/threadbear/pull/212' },
+        { id: 'lnk_print', kind: 'print', title: 'Invoice totals by month', printId: 'pg_invoice_totals' },
+        { id: 'lnk_thread', kind: 'thread', title: 'Resumable uploads', thread: { runnerId: 'mock', id: 'demo_upload' } },
+      ], createdAt: Date.now() - 50 * hour },
+    { id: 'task_launch_a', title: 'Draw the priority icons', status: 'done', priority: 'normal', parentId: 'task_launch', project, position: 2 },
+    { id: 'task_launch_b', title: 'Due date picker with a calendar', status: 'todo', priority: 'high', parentId: 'task_launch', project, position: 3, dueDate: mockTaskDay(1) },
+    { id: 'task_launch_c', title: 'Comments box at the bottom', status: 'todo', priority: 'low', parentId: 'task_launch', project, position: 4 },
+    { id: 'task_copy', title: 'Rewrite the pricing copy', status: 'todo', priority: 'high', dueDate: mockTaskDay(-2), position: 5, createdBy: { kind: 'agent', name: 'Writer' } },
+    { id: 'task_bug', title: 'Fix the upload retry on flaky wifi', status: 'todo', priority: 'normal', dueDate: mockTaskDay(4), project, position: 6 },
+    { id: 'task_idea', title: 'Try a weekly digest email', status: 'backlog', position: 7 },
+    { id: 'task_logo', title: 'Pick the new app icon', status: 'backlog', priority: 'low', dueDate: mockTaskDay(12), position: 8 },
+    { id: 'task_done', title: 'Book the launch call', status: 'done', priority: 'normal', position: 9 },
+  ];
+  for (const r of rows) {
+    if (mockTasks.has(r.id)) continue;
+    mockTasks.set(r.id, mockTaskRow(r));
+    mockTaskEvent(r.id, 'created the task', r.createdBy ?? mockTaskUser, r.createdAt ?? Date.now() - 20 * hour);
+  }
+  const launch = 'task_launch';
+  mockTaskEvent(launch, 'set the priority to Urgent', mockTaskUser, Date.now() - 30 * hour);
+  mockTaskActivity.get(launch).push(
+    { id: 'cmt_1', taskId: launch, kind: 'comment', body: 'The board chips need to fit in a 280 point column.', author: mockTaskUser, createdAt: Date.now() - 26 * hour },
+    { id: 'cmt_2', taskId: launch, kind: 'comment', body: 'Sub-tasks are drawn. The calendar starts on Monday.', author: { kind: 'agent', name: 'Claude' }, createdAt: Date.now() - 3 * hour });
+  mockTaskEvent(launch, 'moved it to Doing', mockTaskUser, Date.now() - 2 * hour);
+  mockTasks.get(launch).commentCount = 2;
+}
+let mockTasksSeeded = false;
+const priorityName = { urgent: 'Urgent', high: 'High', normal: 'Normal', low: 'Low' };
 async function dispatch(client, method, p) {
   if (method.startsWith('tasks.')) {
     if (!process.env.TB_MOCK_TASKS) throw new Error('Tasks is off');
-    if (tasksFailNext && ['tasks.create','tasks.update'].includes(method)) { tasksFailNext=false; throw rpcError(-32000,'Task save rejected by the mock runner.'); }
+    if (process.env.TB_MOCK_TASKS === 'demo' && !mockTasksSeeded) { mockTasksSeeded = true; seedMockTasks(); }
+    if (tasksFailNext && ['tasks.create','tasks.update','tasks.comment'].includes(method)) { tasksFailNext=false; throw rpcError(-32000,'Task save rejected by the mock runner.'); }
+    const known = () => { const t = mockTasks.get(p.id); if (!t || t.deleted) throw new Error('Task no longer exists'); return t; };
     switch (method) {
       case 'tasks.list': return {items:[...mockTasks.values()].filter(t => !t.deleted),next:null};
       case 'tasks.preferences': return mockTaskPrefs;
@@ -629,18 +696,62 @@ async function dispatch(client, method, p) {
       case 'tasks.projects': return projects.map(p => ({id:p.id,runnerId:'mock',title:p.title}));
       case 'tasks.count':
       case 'tasks.projectCount': return {count:[...mockTasks.values()].filter(t=>!t.deleted && t.project?.id === (p.project?.id ?? p.project)).length,more:false};
-      case 'tasks.create': if (!mockTasks.has(p.id)) mockTasks.set(p.id,{id:p.id,title:p.title,notes:p.notes??'',status:p.status??'todo',columnId:p.columnId??p.status??'todo',project:p.project??null,position:p.position??Date.now(),createdAt:Date.now(),updatedAt:Date.now(),deleted:false}); break;
-      case 'tasks.update': if (!mockTasks.has(p.id)) throw new Error('Task no longer exists'); Object.assign(mockTasks.get(p.id),p,...(p.status && !p.columnId ? [{columnId:p.status}] : []),{updatedAt:Date.now()}); break;
+      case 'tasks.create': if (!mockTasks.has(p.id)) { mockTasks.set(p.id,mockTaskRow({id:p.id,title:p.title,notes:p.notes??'',status:p.status??'todo',columnId:p.columnId??p.status??'todo',project:p.project??null,position:p.position??Date.now(),priority:p.priority??null,dueDate:p.dueDate??null,parentId:p.parentId??null,links:(p.links??[]).map(l => ({id:l.id??'lnk_'+crypto.randomBytes(4).toString('hex'),...l}))})); mockTaskEvent(p.id,'created the task'); } break;
+      case 'tasks.update': {
+        const row = known();
+        if (p.status && p.status !== row.status) mockTaskEvent(p.id, `moved it to ${p.status[0].toUpperCase()}${p.status.slice(1)}`);
+        if ('priority' in p && p.priority !== row.priority) mockTaskEvent(p.id, p.priority ? `set the priority to ${priorityName[p.priority] ?? p.priority}` : 'cleared the priority');
+        if ('dueDate' in p && p.dueDate !== row.dueDate) mockTaskEvent(p.id, p.dueDate ? `set the due date to ${p.dueDate}` : 'cleared the due date');
+        if (p.links) p = { ...p, links: p.links.map(l => ({ id: l.id ?? 'lnk_' + crypto.randomBytes(4).toString('hex'), ...l })) };
+        Object.assign(row,p,...(p.status && !p.columnId ? [{columnId:p.status}] : []),{updatedAt:Date.now()}); break;
+      }
       case 'tasks.remove': if(mockTasks.has(p.id)) mockTasks.get(p.id).deleted=true; break;
       case 'tasks.restore': if(mockTasks.has(p.id)) mockTasks.get(p.id).deleted=false; break;
       case 'tasks.photoData': {
         mockTaskPhotoBytes = Buffer.from(p.base64, 'base64');
-        if (!mockTaskPhotoServer) {
-          mockTaskPhotoServer = createHttpServer((_req, res) => { res.writeHead(200, {'Content-Type':'image/png'}); res.end(mockTaskPhotoBytes); });
-          await new Promise(resolve => mockTaskPhotoServer.listen(0, '127.0.0.1', resolve));
-        }
+        await mockTaskServer();
         mockTaskPhoto = `http://127.0.0.1:${mockTaskPhotoServer.address().port}/photo?v=${Date.now()}`;
         break;
+      }
+      // A picture on a task: served from the same little server as the photo.
+      case 'tasks.imageData':
+      case 'tasks.imageFile': {
+        const row = known();
+        const bytes = method === 'tasks.imageData' ? Buffer.from(p.base64, 'base64') : fs.readFileSync(p.path);
+        await mockTaskServer();
+        mockTaskImages += 1;
+        mockTaskImageBytes.set(String(mockTaskImages), bytes);
+        const name = p.name ?? (p.path ? path.basename(p.path) : `Image ${mockTaskImages}`);
+        row.links = [...(row.links ?? []), { id: 'lnk_' + crypto.randomBytes(4).toString('hex'), kind: 'image', title: name, imageUrl: `http://127.0.0.1:${mockTaskPhotoServer.address().port}/image?n=${mockTaskImages}` }];
+        mockTaskEvent(p.id, `attached ${name}`);
+        break;
+      }
+      case 'tasks.activity': known(); return { items: [...(mockTaskActivity.get(p.id) ?? [])].sort((a, b) => a.createdAt - b.createdAt) };
+      case 'tasks.comment': {
+        const row = known();
+        const body = String(p.body ?? '').trim();
+        if (!body) throw rpcError(-32602, 'A comment needs some words.');
+        const item = { id: p.commentId ?? 'cmt_' + crypto.randomBytes(4).toString('hex'), taskId: p.id, kind: 'comment', body, author: mockTaskUser, createdAt: Date.now() };
+        mockTaskActivity.set(p.id, [...(mockTaskActivity.get(p.id) ?? []), item]);
+        row.commentCount = (row.commentCount ?? 0) + 1;
+        broadcast('tasks.updated',{}); return { comment: item };
+      }
+      case 'tasks.removeComment': {
+        const row = known();
+        const list = mockTaskActivity.get(p.id) ?? [];
+        mockTaskActivity.set(p.id, list.filter((i) => i.id !== p.commentId));
+        row.commentCount = Math.max(0, (row.commentCount ?? 0) - (list.length - mockTaskActivity.get(p.id).length));
+        break;
+      }
+      case 'tasks.related': {
+        const row = known();
+        if (!row.project) return { threads: [], prints: [] };
+        const inProject = [...threads.values()].filter((t) => (t.summary.projects ?? []).some((x) => x.id === row.project.id)).map((t) => t.summary)
+          .sort((a, b) => Date.parse(b.lastActivityAt ?? 0) - Date.parse(a.lastActivityAt ?? 0)).slice(0, 5)
+          .map((s) => ({ id: s.id, title: s.title, status: s.status, lastActivityAt: s.lastActivityAt }));
+        const prints = [...mockPages.values()].map((x) => x.page).filter((pg) => !pg.deletedAt && pg.projects.some((r) => r.id === row.project.id)).slice(0, 5)
+          .map((pg) => ({ id: pg.id, title: pg.title, kind: pg.kind }));
+        return { threads: inProject, prints: prints.length ? prints : [...mockPages.values()].map((x) => x.page).filter((pg) => !pg.deletedAt).slice(0, 2).map((pg) => ({ id: pg.id, title: pg.title, kind: pg.kind })) };
       }
       case 'tasks.startThread': if (!mockTasks.has(p.id)) throw new Error('Task no longer exists'); Object.assign(mockTasks.get(p.id), {threadCommandId:'mock-command-'+p.id, thread:{runnerId:'mock',id:'demo_upload'}}); break;
       case 'tasks.setPreferences': Object.assign(mockTaskPrefs,p); break;
@@ -1770,6 +1881,7 @@ async function dispatch(client, method, p) {
       return { instructions: mockInstructions };
     case 'mock.tasks':
       tasksFailNext = p.failNext === true;
+      if (p.seed) { seedMockTasks(); broadcast('tasks.updated',{}); }
       if (p.complete) {
         const row = [...mockTasks.values()].find(t=>t.title===p.complete);
         if (!row) throw rpcError(-32602,'No mock task with that title');

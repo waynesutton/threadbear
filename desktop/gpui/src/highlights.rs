@@ -243,6 +243,8 @@ pub(crate) enum MenuAction {
     // A row of Threads it started (`startedRow`'s menu).
     OpenThread { id: String },
     OpenThreadInPanel { id: String },
+    /// A new task named after the row, linking back to it (tasks_page.rs).
+    AddToTasks { title: String, link: serde_json::Value },
 }
 
 /// The app's window of files read so far and folders looked at lives in
@@ -987,6 +989,11 @@ impl SidePane {
                     app.update(cx, |app, cx| app.open_thread_in_panel(id, cx));
                 }
             }
+            MenuAction::AddToTasks { title, link } => {
+                if let Some(app) = self.app.upgrade() {
+                    app.update(cx, |app, cx| app.add_task_from(title, link, cx));
+                }
+            }
         }
         self.menu = None;
         cx.notify();
@@ -1069,6 +1076,7 @@ impl SidePane {
         } else {
             vec![]
         };
+        items.push(MenuItem::action("Add to Tasks", "checklist", MenuAction::AddToTasks { title: item.title.clone(), link: crate::tasks_page::link_to_highlight(item, thread) }));
         items.push(MenuItem::separator());
         items.push(MenuItem::action("Remove", "pin.slash", MenuAction::Remove { id: item.id.clone(), title: item.title.clone() }));
         items

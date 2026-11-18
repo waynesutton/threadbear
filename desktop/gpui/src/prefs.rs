@@ -24,6 +24,8 @@ pub struct Prefs {
     /// The message box's spelling and substitution switches, from its
     /// right-click menu (composer_spelling.rs).
     pub text_checks: crate::text_services::Checks,
+    /// Tasks' board with its columns wrapped onto new rows (tasks_page.rs).
+    pub tasks_wrap_columns: bool,
 }
 
 fn path() -> PathBuf {
