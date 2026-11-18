@@ -30,7 +30,7 @@ test('task tools are absent while disabled and use the shared task bridge when e
   await invoke('delete_task', { id: 'retry', undo: true });
   assert.deepEqual(
     calls.map(([fn]) => fn),
-    ['tasks:list', 'tasks:projects', 'tasks:create', 'tasks:update', 'tasks:restore'],
+    ['tasks:list', 'tasks:projects', 'tasks:preferences', 'tasks:create', 'tasks:update', 'tasks:restore'],
   );
   assert.equal(NEVER_ASK_TOOLS.has('mcp__threadbear__list_tasks'), true);
   assert.equal(NEVER_ASK_TOOLS.has('mcp__threadbear__create_task'), false);

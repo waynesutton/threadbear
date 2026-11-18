@@ -706,6 +706,7 @@ impl TasksPage {
         self.title.update(cx, |f, cx| f.set_value("", window, cx));
         self.notes.update(cx, |f, cx| f.set_value("", window, cx));
         window.focus(&self.focus, cx);
+        crate::web_panels::keyboard_to_app(window);
     }
     fn open_editor(&mut self, task: &TaskRow, notes_first: bool, window: &mut Window, cx: &mut Context<Self>) {
         if self.busy || (self.editor_open && self.draft_dirty_editor(cx)) {
@@ -814,6 +815,7 @@ impl TasksPage {
                 self.reveal(&selected.id, &self.pane_scroll(&column), false);
             } else { self.reveal(&selected.id, &self.scroll, false); }
             window.focus(&self.focus, cx);
+            crate::web_panels::keyboard_to_app(window);
             cx.notify();
         }
     }
@@ -1220,6 +1222,7 @@ impl TasksPage {
                     .on_click(cx.listener(move |this, _, window, cx| {
                         this.adding_in = Some((group.clone(), status.clone()));
                         this.column_input.update(cx, |input, cx| { input.set_value("", window, cx); input.focus(window, cx); });
+                        crate::web_panels::keyboard_to_app(window);
                         cx.notify();
                     })));
             }

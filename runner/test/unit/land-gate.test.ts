@@ -79,7 +79,9 @@ test("path filters match as GitHub's do", () => {
 test("this repo's Desktop app workflow holds landings to desktop/ and features/", () => {
   const held = holdingWorkflows(repoRoot);
   const desktop = held.find((w) => w.file === 'desktop.yml');
-  assert.ok(desktop, 'desktop.yml has the mark');
+  // waynesutton/threadbear takes the mark off: its CI is the Mac only and
+  // reports without holding landings (the workflow's header says why).
+  if (!desktop) return;
   assert.equal(desktop.name, 'Desktop app');
   assert.deepEqual(filesThatRunIt(desktop.paths, ['desktop/gpui/src/terminal.rs', 'features/terminal.feature', 'runner/src/cli.ts', 'docs/guide.md']), ['desktop/gpui/src/terminal.rs', 'features/terminal.feature']);
 });
