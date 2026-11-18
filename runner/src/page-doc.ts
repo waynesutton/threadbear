@@ -121,43 +121,51 @@ export function markdownToHtml(md: string): string {
   return out.join('\n');
 }
 
-// The page palette: neutral near-black and near-white, quiet grey lines and
-// the system's own type, no font to load (Wayne, 12 Nov 2026). Shared with
-// make-print's theme.mjs so a doc sits beside a dashboard as one set.
-// Follows the viewer's light or dark appearance with no script. The names
-// stay (--teal is the accent) so every kind keeps working.
-export const PAGE_THEME_CSS = `:root{color-scheme:dark light;--bg:#0a0a0a;--card:#141414;--line:#262626;--text:#fafafa;--dim:#a1a1a1;--faint:#737373;--teal:#4fb3d9;--slate:#6b7785;--amber:#e8a33d;--amberline:#3a2e1a;--radius:10px;--sans:-apple-system,BlinkMacSystemFont,"SF Pro Text","Segoe UI",system-ui,sans-serif;--display:-apple-system,BlinkMacSystemFont,"SF Pro Display","Segoe UI",system-ui,sans-serif;--mono:ui-monospace,"SF Mono",Menlo,Consolas,monospace}
-@media (prefers-color-scheme: light){:root{--bg:#ffffff;--card:#f7f7f7;--line:#e7e7e7;--text:#0a0a0a;--dim:#5c5c5c;--faint:#8a8a8a;--teal:#2f7fa0;--slate:#8fa0b2;--amber:#c7861d;--amberline:#ecd6ad}}
+// The page palette, the same as make-print's Prints look (theme.mjs;
+// redesigned 18 Nov 2026): near-black #08090a with hairline lines in dark,
+// warm paper #f4f3ef with white cards in light, the system's own type, no
+// font to load. Follows the viewer's appearance with no script, and a
+// viewer can force either with data-theme="light|dark" on <html> (the
+// website's switch). The names stay (--teal is the accent, --slate and
+// --amber as before) so every kind keeps working.
+const DOC_DARK = 'color-scheme:dark;--bg:#08090a;--card:#0f1011;--raise:#151618;--line:#1d1e21;--line2:#26272b;--text:#f7f8f8;--dim:#8a8f98;--faint:#62666d;--h1a:#ffffff;--h1b:#9a9ca3;--teal:#7b84ff;--slate:#6b7785;--amber:#f5c15a;--amberline:#3d3320';
+const DOC_LIGHT = 'color-scheme:light;--bg:#f4f3ef;--card:#ffffff;--raise:#faf9f6;--line:#e7e5df;--line2:#dcd9d1;--text:#111113;--dim:#5e5d58;--faint:#8e8c85;--h1a:#111113;--h1b:#55555c;--teal:#4f5bff;--slate:#8fa0b2;--amber:#b7811a;--amberline:#efdcae';
+export const PAGE_THEME_CSS = `:root{${DOC_DARK};--radius:12px;--sans:"Inter var",Inter,-apple-system,BlinkMacSystemFont,"SF Pro Text","Segoe UI",system-ui,sans-serif;--display:"Inter var",Inter,-apple-system,BlinkMacSystemFont,"SF Pro Display","Segoe UI",system-ui,sans-serif;--mono:ui-monospace,"SF Mono",Menlo,Consolas,monospace}
+@media (prefers-color-scheme: light){:root{${DOC_LIGHT}}}
+:root[data-theme=light]{${DOC_LIGHT}}:root[data-theme=dark]{${DOC_DARK}}
 *{box-sizing:border-box}
-body{margin:0;background:var(--bg);color:var(--text);font:15px/1.7 var(--sans);-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility}
+html{background:var(--bg)}
+body{margin:0;background:var(--bg);color:var(--text);font:15px/1.7 var(--sans);font-feature-settings:"cv11","ss01";-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility}
 h1,h2,h3{font-family:var(--display);font-weight:600;color:var(--text)}
-h1{font-size:40px;line-height:1.1;letter-spacing:-.03em;margin:0 0 10px}
-h2{letter-spacing:-.015em}
-.meta{color:var(--faint);font-size:13px}
-a{color:var(--text);text-decoration:underline dotted;text-decoration-thickness:1.5px;text-underline-offset:4px}
-a:hover{text-decoration-style:solid}
+h1{font-size:40px;line-height:1.08;letter-spacing:-.032em;margin:0 0 12px;background:linear-gradient(180deg,var(--h1a) 30%,var(--h1b));-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;text-wrap:balance}
+h2{letter-spacing:-.018em}
+.meta{color:var(--faint);font-size:12.5px;font-variant-numeric:tabular-nums}
+a{color:var(--text);text-decoration:underline;text-decoration-color:var(--line2);text-decoration-thickness:1px;text-underline-offset:3px}
+a:hover{text-decoration-color:var(--dim)}
 code{font:13px/1.5 var(--mono)}
-::selection{background:color-mix(in srgb,var(--text) 18%,transparent)}`;
+::selection{background:color-mix(in srgb,var(--teal) 28%,transparent)}`;
 
-const DOC_CSS = `main{max-width:760px;margin:0 auto;padding:48px 24px 64px}
-header{border-bottom:1px solid var(--line);padding-bottom:22px;margin-bottom:28px}
-h2{font-size:24px;line-height:1.25;margin:40px 0 12px}h3{font-size:18px;line-height:1.3;margin:28px 0 8px}h4{font-size:15px;margin:22px 0 6px;color:var(--dim)}
-p{margin:0 0 16px}
+const DOC_CSS = `main{max-width:720px;margin:0 auto;padding:64px 28px 80px}
+header{border-bottom:1px solid var(--line);padding-bottom:24px;margin-bottom:36px}
+h2{font-size:24px;line-height:1.25;margin:48px 0 12px}h3{font-size:17px;line-height:1.35;margin:32px 0 8px}h4{font-size:13px;margin:24px 0 6px;color:var(--dim);text-transform:uppercase;letter-spacing:.06em;font-weight:500}
+p{margin:0 0 16px;text-wrap:pretty}
 strong{font-weight:600}
-code{background:var(--card);border:1px solid var(--line);border-radius:6px;padding:1px 6px}
-pre{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:16px 18px;overflow-x:auto;margin:0 0 18px}
-pre code{border:0;padding:0;background:none;font-size:13px;line-height:1.65}
+code{background:var(--raise);border:1px solid var(--line);border-radius:5px;padding:1px 5px;font-size:12.5px}
+pre{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:16px 18px;overflow-x:auto;margin:0 0 20px}
+pre code{border:0;padding:0;background:none;font-size:12.5px;line-height:1.65}
 ul,ol{margin:0 0 16px;padding-left:22px}li{margin:6px 0}li::marker{color:var(--faint)}
 li.task{list-style:none;margin-left:-22px}
-.box{display:inline-block;width:14px;height:14px;border:1.5px solid var(--faint);border-radius:4px;margin-right:10px;vertical-align:-2px}
-li.task.done .box{background:var(--text);border-color:var(--text)}
+.box{display:inline-block;width:14px;height:14px;border:1.5px solid var(--line2);border-radius:4px;margin-right:10px;vertical-align:-2px}
+li.task.done .box{background:var(--teal);border-color:var(--teal)}
 li.task.done{color:var(--dim)}
-blockquote{margin:0 0 16px;padding:2px 0 2px 16px;border-left:2px solid var(--line);color:var(--dim)}
-hr{border:0;border-top:1px solid var(--line);margin:36px 0}
-table{width:100%;border-collapse:collapse;margin:0 0 18px;font-size:14px}
-th,td{text-align:left;padding:10px 12px;border-bottom:1px solid var(--line)}
-th{color:var(--dim);font-weight:500;font-size:13px}
-@media (max-width:600px){main{padding:28px 18px 48px}h1{font-size:30px}}`;
+blockquote{margin:0 0 18px;padding:14px 18px;border:1px solid var(--line);border-left:2px solid var(--teal);border-radius:0 var(--radius) var(--radius) 0;background:var(--card);color:var(--dim)}
+blockquote p:last-child{margin:0}
+hr{border:0;border-top:1px solid var(--line);margin:40px 0}
+table{width:100%;border-collapse:separate;border-spacing:0;margin:0 0 20px;font-size:14px;background:var(--card);border:1px solid var(--line);border-radius:var(--radius);overflow:hidden}
+th,td{text-align:left;padding:10px 14px;border-bottom:1px solid var(--line)}
+tbody tr:last-child td{border-bottom:0}
+th{color:var(--faint);font-weight:500;font-size:11.5px;letter-spacing:.04em;text-transform:uppercase;background:var(--raise)}
+@media (max-width:600px){main{padding:32px 18px 48px}h1{font-size:30px}}`;
 
 export function renderDoc(title: string, md: string, meta: string): string {
   return `<!doctype html>

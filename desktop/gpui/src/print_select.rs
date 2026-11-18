@@ -177,7 +177,9 @@ impl Threadbear {
             alert
                 .title(title.clone())
                 .description(detail.clone())
-                .button_props(DialogButtonProps::default().ok_text("Delete").show_cancel(true))
+                // Delete is the filled (primary) button, with the ⏎ Allow shows on an
+                // approval: what Return does.
+                .button_props(DialogButtonProps::default().ok_text("Delete \u{23CE}").show_cancel(true))
                 .on_ok(move |_, _, cx| {
                     ok.update(cx, |this, cx| this.delete_prints(ids.clone(), cx)).ok();
                     true
@@ -191,6 +193,12 @@ impl Threadbear {
                         .ok();
                 })
         });
+        // Return deletes and Esc cancels (Wayne, 18 Nov): the dialog takes
+        // GPUI's focus as it opens, but the Print's page beside the list
+        // kept AppKit's keyboard, so neither key reached it. Again on the
+        // next frame, as the menu that asked closes after this.
+        crate::web_panels::keyboard_to_app(window);
+        window.defer(cx, |window, _| crate::web_panels::keyboard_to_app(window));
     }
 
     /// The rows go at once; each is deleted on the runner, and any it

@@ -123,7 +123,7 @@ test("a saved style changes the theme, density and accent; a bad accent is ignor
   const { themeCss } = await import("./theme.mjs");
   const dark = themeCss({ theme: "dark", density: "airy", accent: "#ff8800" });
   assert.doesNotMatch(dark, /prefers-color-scheme/);
-  assert.match(dark, /--pad:22px/);
+  assert.match(dark, /--pad:26px/);
   assert.match(dark, /--accent:#ff8800/);
   assert.match(themeCss({}), /prefers-color-scheme: light/);
   assert.match(themeCss({ accent: "red;}body{x" }), /--accent:var\(--teal\)/);
@@ -229,4 +229,53 @@ test("the commands run from a folder with a space in its path", async () => {
   assert.ok(existsSync(join(root, "insights", "index.html")));
   run(join(skill, "apimap.mjs"), join(skill, "fixtures", "functions.json"), join(root, "api"));
   assert.ok(existsSync(join(root, "api", "index.html")));
+});
+
+// The redesigned look (18 Nov): forced themes for a viewer, numbers with
+// their change and history, numbered report sections, and one accent per
+// chart with the rest dimmed.
+test("a viewer can force light or dark, whatever the saved style", async () => {
+  const { themeCss } = await import("./theme.mjs");
+  for (const css of [themeCss({}), themeCss({ theme: "light" }), themeCss({ theme: "dark" })]) {
+    assert.match(css, /:root\[data-theme=light\]\{color-scheme:light;/);
+    assert.match(css, /:root\[data-theme=dark\]\{color-scheme:dark;/);
+  }
+});
+
+test("tiles carry a change pill and a sparkline, and the pill never leans on colour alone", async () => {
+  const { tiles, deltaPill, sparkline } = await import("./charts.mjs");
+  const html = tiles([{ label: "Revenue", value: "$129K", delta: "+12.4%", spark: [3, 4, 6, 5, 8] }, { label: "Errors", value: "41", delta: 8, better: "down" }]);
+  assert.match(html, /<span class="pill up">↑ 12\.4%<\/span>/);
+  assert.match(html, /<span class="pill down">↑ 8%<\/span>/, "more errors is bad news, still marked up");
+  assert.match(html, /class="spark"/);
+  assert.match(deltaPill("-3%"), /class="pill down">↓ 3%/);
+  assert.equal(deltaPill(undefined), "");
+  assert.equal(sparkline([1]), "", "one point is no line");
+  assert.match(sparkline([1, 2, 3], { kind: "bars" }), /<rect/);
+});
+
+test("a report numbers its sections, lists them beside, and draws checklists and the one number", () => {
+  const { html } = buildPage({ title: "Monthly", sections: [{ heading: "Where it stands", markdown: "- [x] Shipped\n- [ ] Next", callout: { label: "The one number", value: "$1.2M", note: "Booked" } }, { heading: "Next month", markdown: "More." }] }, FX);
+  assert.match(html, /<aside class="toc"><b>Contents<\/b><ol><li><i>01<\/i>Where it stands<\/li><li><i>02<\/i>Next month<\/li>/);
+  assert.match(html, /<div class="sec-head"><i>02<\/i><h2>Next month<\/h2>/);
+  assert.match(html, /<li class="task done"><span class="box"><\/span><span>Shipped/);
+  assert.match(html, /<div class="callout"><div class="k">The one number<\/div><div class="v">\$1\.2M<\/div>/);
+  assert.doesNotMatch(html, /<script/);
+  const one = buildPage({ title: "Short", sections: [{ heading: "Only", markdown: "x" }] }, FX).html;
+  assert.doesNotMatch(one, /class="toc"/, "one heading needs no contents");
+});
+
+test("one accent per chart: columns light the peak and the latest, lines get unique gradients", () => {
+  const { html } = buildPage({ title: "C", charts: [{ type: "column", items: [{ label: "a", value: 1 }, { label: "b", value: 5 }, { label: "c", value: 2 }, { label: "d", value: 3 }] }, { type: "line", items: undefined, by: "Month", value: "Revenue" }, { type: "line", by: "Month", value: "Revenue" }], data: "sales.csv" }, FX);
+  assert.equal((html.match(/class="s1 dimmed"/g) ?? []).length, 2, "a and c dimmed, b (peak) and d (latest) lit");
+  const ids = [...html.matchAll(/linearGradient id="(g\d+)"/g)].map((m) => m[1]);
+  assert.equal(ids.length, 2);
+  assert.notEqual(ids[0], ids[1]);
+});
+
+test("tables can show pills and change pills", () => {
+  const { html } = buildPage({ title: "T", data: [{ Account: "Acme", Plan: "Pro", Change: "+4%" }, { Account: "Beta", Plan: "Team", Change: -2 }], table: { columns: ["Account", "Plan", "Change"], pills: ["Plan"], deltas: ["Change"] } }, FX);
+  assert.match(html, /<td><span class="pill">Pro<\/span><\/td>/);
+  assert.match(html, /<span class="pill up">↑ 4%<\/span>/);
+  assert.match(html, /<span class="pill down">↓ 2%<\/span>/);
 });

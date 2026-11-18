@@ -153,6 +153,24 @@ Then('no Print is called {string}', async function (this: ThreadbearWorld, title
   await this.until(`"${title}" gone`, (d) => !printTitles(d).some((p) => p.title === title));
 });
 
+// The keys a person presses, where the keyboard is: the confirm's own
+// Confirm and Cancel, not the script's `confirm`.
+When('I press Return in the Delete confirm', async function (this: ThreadbearWorld) {
+  await this.app.do({ cmd: 'return' });
+});
+
+When('I press Esc in the Delete confirm', async function (this: ThreadbearWorld) {
+  await this.app.do({ cmd: 'escape' });
+});
+
+Then('nothing is asking about deleting Prints', async function (this: ThreadbearWorld) {
+  await this.until('no Delete confirm', (d) => !picking(d).askingDelete);
+});
+
+Then('a Print is called {string}', async function (this: ThreadbearWorld, title: string) {
+  await this.until(`"${title}" there`, (d) => printTitles(d).some((p) => p.title === title));
+});
+
 When('I take the picked Prints out of {string}', async function (this: ThreadbearWorld, project: string) {
   await this.app.do({ cmd: 'print', do: 'projectPicked', project, add: false });
 });

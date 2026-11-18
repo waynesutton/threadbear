@@ -57,7 +57,9 @@ export function buildPage(spec, base = process.cwd()) {
     const data = c.data ? load(c.data) : main;
     const what = `Chart "${c.title ?? c.type}"`;
     const agg = c.agg ?? (c.value ? "sum" : "count");
-    const opts = { title: c.title, note: c.note ?? (c.value ? `${agg === "sum" ? "total" : agg} of ${c.value}` : agg === "count" ? "rows" : undefined), unit: c.unit ?? "" };
+    // Drawn at about the width it shows at, so its words keep their size:
+    // half the page in a dashboard's pair, the whole column otherwise.
+    const opts = { title: c.title, note: c.note ?? (c.value ? `${agg === "sum" ? "total" : agg} of ${c.value}` : agg === "count" ? "rows" : undefined), unit: c.unit ?? "", width: c.width ?? 520 };
     if (c.items) return pick(c.type, c.items, opts, c);
     need([c.by, c.value, c.series], data, what);
     if (c.type === "line") {
@@ -80,11 +82,14 @@ export function buildPage(spec, base = process.cwd()) {
   const tileHtml = (list) =>
     tiles(
       list.map((t) => {
-        if (t.value !== undefined && (!main || !main.columns.includes(t.value)) && !t.agg) return { label: t.label, value: String(t.value), note: t.note, tone: t.tone };
+        // What a tile shows besides its number: a change pill and a little
+        // history (SKILL.md, "tiles").
+        const extra = { note: t.note, tone: t.tone, delta: t.delta, deltaUnit: t.deltaUnit, better: t.better, spark: t.spark, sparkKind: t.sparkKind };
+        if (t.value !== undefined && (!main || !main.columns.includes(t.value)) && !t.agg) return { label: t.label, value: String(t.value), ...extra };
         const agg = t.agg ?? "sum";
         if (agg !== "count") need([t.value], main, `Tile "${t.label}"`);
         const v = agg === "count" ? main.rows.length : total(numbers(main.rows, t.value), agg);
-        return { label: t.label, value: fmt(v, t.unit ?? ""), note: t.note, tone: t.tone };
+        return { label: t.label, value: fmt(v, t.unit ?? ""), ...extra };
       }),
     );
 
@@ -93,29 +98,42 @@ export function buildPage(spec, base = process.cwd()) {
     const cols = tb === true ? main.columns : (tb.columns ?? main.columns);
     need(cols, main, "Table");
     const rows = tb.sort ? [...main.rows].sort((a, b) => (b[tb.sort] ?? 0) - (a[tb.sort] ?? 0)) : main.rows;
-    return `<section class="card">${table(cols, rows, { title: tb.title ?? "Rows", limit: tb.limit ?? 50, units: tb.units ?? {} })}</section>`;
+    return `<section class="card">${table(cols, rows, { title: tb.title ?? "Rows", limit: tb.limit ?? 50, units: tb.units ?? {}, pills: tb.pills ?? [], deltas: tb.deltas ?? [] })}</section>`;
   };
+
+  // "The one number": a dark card (light in dark mode) with one big value.
+  const callout = (c) => (c ? `<div class="callout"><div class="k">${esc(c.label ?? "The one number")}</div><div class="v">${esc(c.value)}</div>${c.note ? `<div class="n">${esc(c.note)}</div>` : ""}</div>` : "");
 
   const figure = (f) => (f ? `<section class="card figure">${readFileSync(at(f), "utf8").replace(/<\?xml[^>]*>/, "").replace(/<script[\s\S]*?<\/script>/gi, "")}</section>` : "");
 
   const kind = spec.kind ?? (spec.sections ? "report" : (spec.charts?.length ?? 0) > 1 || spec.tiles ? "dashboard" : "chart");
   let body;
+  let wide = false;
   if (kind === "progress") {
     body = progressBody(spec);
   } else if (kind === "report") {
-    body = [
-      spec.tiles ? tileHtml(spec.tiles) : "",
-      figure(spec.figure),
-      ...(spec.sections ?? []).map((s) => `<section class="card stack">${s.heading ? `<h2 style="margin-top:0">${esc(s.heading)}</h2>` : ""}${s.markdown ? `<div class="prose">${markdown(s.markdown)}</div>` : ""}${s.chart ? chartHtml(s.chart) : ""}${s.figure ? figure(s.figure) : ""}</section>`),
-      tableHtml(spec.table),
-    ].join("\n");
+    // Numbered sections, open on the page rather than boxed, with their
+    // charts in cards; with two or more headings, a contents list beside.
+    const secs = spec.sections ?? [];
+    const num = (i) => String(i + 1).padStart(2, "0");
+    const sections = secs.map(
+      (s, i) =>
+        `<section class="sec">${s.heading ? `<div class="sec-head"><i>${num(i)}</i><h2>${esc(s.heading)}</h2></div>` : ""}${s.markdown ? `<div class="prose">${markdown(s.markdown)}</div>` : ""}${callout(s.callout)}${s.chart ? `<div class="card">${chartHtml({ width: 720, ...s.chart })}</div>` : ""}${s.figure ? figure(s.figure) : ""}</section>`,
+    );
+    const inner = [spec.tiles ? tileHtml(spec.tiles) : "", callout(spec.callout), figure(spec.figure), ...sections, tableHtml(spec.table)].filter(Boolean).join("\n");
+    const heads = secs.map((s, i) => (s.heading ? `<li><i>${num(i)}</i>${esc(s.heading)}</li>` : "")).filter(Boolean);
+    body = heads.length >= 2 ? `<div class="report"><aside class="toc"><b>Contents</b><ol>${heads.join("")}</ol></aside><div class="body">${inner}</div></div>` : `<div class="report-one">${inner}</div>`;
+    wide = heads.length >= 2;
   } else {
-    const charts = (spec.charts ?? []).map((c) => `<section class="card">${chartHtml(c)}</section>`);
-    body = [spec.tiles ? tileHtml(spec.tiles) : "", figure(spec.figure), charts.length > 1 ? `<div class="grid2">${charts.join("")}</div>` : charts.join(""), tableHtml(spec.table)].join("\n");
+    const pair = (spec.charts ?? []).length > 1;
+    const charts = (spec.charts ?? []).map((c) => `<section class="card">${chartHtml(pair ? c : { width: 1000, ...c })}</section>`);
+    body = [spec.tiles ? tileHtml(spec.tiles) : "", callout(spec.callout), figure(spec.figure), charts.length > 1 ? `<div class="grid2">${charts.join("")}</div>` : charts.join(""), tableHtml(spec.table)].filter(Boolean).join("\n");
   }
 
   const rowsNote = main ? `${main.rows.length.toLocaleString("en-US")} rows` : "";
   const stamp = new Date().toISOString().slice(0, 16).replace("T", " ") + " UTC";
+  const kindName = { chart: "Chart", dashboard: "Dashboard", report: "Report", progress: "Progress" }[kind] ?? kind;
+  const eyebrow = kind === "progress" ? [kindName, new Date().toLocaleString("en-US", { hour: "numeric", minute: "2-digit", month: "short", day: "numeric" })] : [kindName, rowsNote].filter(Boolean);
   const html = `<!doctype html>
 <html lang="en">
 <head>
@@ -123,12 +141,12 @@ export function buildPage(spec, base = process.cwd()) {
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>${esc(spec.title)}</title>
 <style>${themeCss(spec.style ?? savedStyle())}${BASE_CSS}${kind === "progress" ? PROGRESS_CSS : ""}
-section+section,.tiles+section,.grid2+section,section+.grid2,.tiles+.grid2{margin-top:12px}
+.report-one>*+*,.body>*+*{margin-top:var(--gap)}
 .grid2>section{margin-top:0!important}</style>
 </head>
 <body>
-<main class="${kind === "report" ? "narrow" : ""}">
-<header><h1>${esc(spec.title)}</h1><span class="sub">${esc(spec.subtitle ?? (kind === "progress" ? `progress · ${new Date().toLocaleString("en-US", { hour: "numeric", minute: "2-digit", month: "short", day: "numeric" })}` : [kind, rowsNote].filter(Boolean).join(" · ")))}</span></header>
+<main class="${kind === "report" && !wide ? "narrow" : ""}">
+<header class="top"><p class="eyebrow">${eyebrow.map((x) => `<span>${esc(x)}</span>`).join("")}</p><h1>${esc(spec.title)}</h1>${spec.subtitle ? `<p class="lede">${esc(spec.subtitle)}</p>` : ""}</header>
 ${body}
 <footer><span>${esc(spec.footer ?? (typeof spec.data === "string" ? `From ${spec.data.split("/").pop()}` : typeof spec.data?.file === "string" ? `From ${spec.data.file.split("/").pop()}${spec.data.sheet ? `, sheet ${spec.data.sheet}` : ""}` : ""))}</span><span>${stamp}</span></footer>
 </main>

@@ -196,6 +196,25 @@ Feature: Prints
     And no Print is called "How the export runs"
     And the Prints picked are ""
 
+  # Return says Delete and Esc says Cancel (Wayne, 18 Nov): Delete is the
+  # filled button, and the confirm takes the keyboard even from a Print's
+  # page beside the list. That page holding the keyboard needs the web
+  # runtime; the dump's `keyboard` shows who has it.
+  @prints.list @prints.menu @swift-pending
+  Scenario: Return deletes the picked Prints and Esc keeps them
+    Given the app is connected to a runner with the demo threads
+    When I "⌘"-click the Print "Launch checklist"
+    And I delete the picked Prints
+    Then Delete asks once about "Launch checklist"
+    And the app has the keyboard
+    When I press Esc in the Delete confirm
+    Then nothing is asking about deleting Prints
+    And a Print is called "Launch checklist"
+    When I delete the picked Prints
+    Then Delete asks once about "Launch checklist"
+    When I press Return in the Delete confirm
+    Then no Print is called "Launch checklist"
+
   @prints.list @prints.menu @swift-pending
   Scenario: Picked Prints come out of a project together
     Given the app is connected to a runner with the demo threads

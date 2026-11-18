@@ -1327,7 +1327,10 @@ impl Composer {
         let side = px(style::size::THUMBNAIL);
         let radius = px(8.);
         let edge = style::hairline(cx);
-        let mut row = h_flex().gap(px(8.));
+        // Many pictures wrap onto more rows rather than running off the
+        // box's right edge (Wayne, 18 Nov), and past three rows the strip
+        // scrolls, so the words stay in view.
+        let mut row = h_flex().flex_wrap().gap(px(STRIP_GAP)).w_full();
         for (index, (_, id)) in chips.iter().enumerate() {
             let chip = self.pictures.get(id);
             let image = chip.and_then(|c| c.image.as_ref());
@@ -1367,7 +1370,7 @@ impl Composer {
                 }));
             row = row.child(tile);
         }
-        Some(row.into_any_element())
+        Some(div().id("composer-strip").w_full().max_h(px(strip_max_height())).overflow_y_scroll().child(row).into_any_element())
     }
 
     fn render_send_button(&self, running: bool, creating: bool, cx: &mut Context<Self>) -> AnyElement {
@@ -1810,6 +1813,16 @@ pub(crate) fn remove_badge(id: impl Into<ElementId>) -> impl StatefulInteractive
         .cursor_pointer()
         .child(Icon::from(IconName::X).with_size(px(9.)).text_color(gpui_kit::white()))
         .tip("Remove")
+}
+
+/// The space between the strip's thumbnails, across and down.
+const STRIP_GAP: f32 = 8.;
+/// Rows of thumbnails the strip shows before it scrolls.
+const STRIP_ROWS: f32 = 3.;
+
+/// The strip's tallest: three rows of thumbnails and the gaps between them.
+pub(crate) fn strip_max_height() -> f32 {
+    STRIP_ROWS * style::size::THUMBNAIL + (STRIP_ROWS - 1.) * STRIP_GAP
 }
 
 /// The ×'s name for VoiceOver (the Swift one's accessibilityLabel), and for

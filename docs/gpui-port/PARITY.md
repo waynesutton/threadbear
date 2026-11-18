@@ -37,7 +37,7 @@ earlier four-platform run.
 
 <!-- parity:start -->
 
-282 of 381 features have a spec so far, across 785 scenarios.
+290 of 389 features have a spec so far, across 825 scenarios.
 
 Scenarios passing: Swift: not run, Mac: not run, Windows: not run, Linux: not run.
 
@@ -164,9 +164,14 @@ Scenarios passing: Swift: not run, Mac: not run, Windows: not run, Linux: not ru
 
 | Feature | Swift | Mac | Windows | Linux |
 |---|---|---|---|---|
+| `rich.inline` Inline Markdown | pending | pending | pending | pending |
 | `rich.blocks` Headings, lists, quotes | pending | pending | pending | pending |
 | `rich.table` Tables | pending | pending | pending | pending |
 | `rich.mermaid` Mermaid diagrams | pending | pending | pending | pending |
+| `prints.project` Prints on a project's page | pending | pending | pending | pending |
+| `prints.menu` A Print's menu and sheets | pending | pending | pending | pending |
+| `prints.pdf` Download a Print as a PDF | pending | pending | pending | pending |
+| `prints.publish` Publish a Print | pending | pending | pending | pending |
 | `prints.diagram` Diagram Prints | pending | pending | pending | pending |
 | `prints.whenasked` Prints only when asked | pending | pending | pending | pending |
 | `prints.card` Print card in a reply | pending | pending | pending | pending |
@@ -323,12 +328,14 @@ Scenarios passing: Swift: not run, Mac: not run, Windows: not run, Linux: not ru
 | `projects.parts` Parts of a project | pending | pending | pending | pending |
 | `projects.tabs` Project page tabs | pending | pending | pending | pending |
 | `projects.newthread` New thread in project | pending | pending | pending | pending |
+| `profile.page` Profile page | pending | pending | pending | pending |
 | `librarian.customize` Customize Librarian | pending | pending | pending | pending |
 | `librarian.page` Librarian page | pending | pending | pending | pending |
 | `looks.scheduled` Customize the Scheduled page | pending | pending | pending | pending |
 | `looks.projects` Customize the Projects page | pending | pending | pending | pending |
 | `librarian.log` Librarian log | pending | pending | pending | pending |
 | `tasks.page` Tasks page | pending | pending | pending | pending |
+| `tasks.detail` Task page | pending | pending | pending | pending |
 | `notes.page` Notes page | pending | pending | pending | pending |
 | `skills.page` Skills page | pending | pending | pending | pending |
 | `schedule.page` Scheduled page | pending | pending | pending | pending |
@@ -428,6 +435,7 @@ Scenarios passing: Swift: not run, Mac: not run, Windows: not run, Linux: not ru
 | `bears.colour` Bear Colour (`bears`) | pending | pending | pending | pending |
 | `bears.mention` @ bear picker (`bears`) | pending | pending | pending | pending |
 | `bears.tablepage` A table's bears (`tables`) | pending | pending | pending | pending |
+| `bears.panel` Bears & Tables panel (`bears`, `tables`) | pending | pending | pending | pending |
 | `voice.button` Voice button (`voiceMode`) | pending | pending | pending | pending |
 | `voice.talk` Talking with a thread (`voiceMode`) | pending | pending | pending | pending |
 | `voice.approvals` Spoken approvals (`voiceMode`) | pending | pending | pending | pending |

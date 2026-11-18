@@ -1,6 +1,7 @@
-{ "kind": "report", "title": "Sales review, January to October", "data": "sales.csv",
-  "tiles": [ { "label": "Revenue", "value": "Revenue", "agg": "sum", "unit": "$" }, { "label": "Seats", "value": "Seats", "agg": "sum" } ],
+{ "kind": "report", "title": "Sales review, January to October", "subtitle": "Revenue grew in nine of ten months, to $15.9K in October.", "data": "sales.csv",
+  "tiles": [ { "label": "Revenue", "value": "Revenue", "agg": "sum", "unit": "$", "delta": "+6.9%", "note": "October vs September" }, { "label": "Seats", "value": "Seats", "agg": "sum", "delta": "+10.8%", "note": "October vs September" } ],
   "sections": [
-    { "heading": "Where it stands", "markdown": "Revenue grew every month. **North America** is still the biggest region, and **Pro** is most of the money.\n\n- Europe is close behind\n- Africa and the Middle East are small but growing" },
+    { "heading": "Where it stands", "markdown": "Revenue grew every month but August. **North America** is still the biggest region, and **Pro** is most of the money.\n\n- Europe is close behind\n- Africa and the Middle East are small but growing", "callout": { "label": "The one number", "value": "$15.9K", "note": "October revenue, the best month so far and 64% above January." } },
+    { "heading": "Month by month", "chart": { "type": "column", "title": "Revenue by month", "by": "Month", "value": "Revenue", "unit": "$" } },
     { "heading": "By region", "chart": { "type": "bar", "title": "Revenue by region", "by": "Region", "value": "Revenue", "unit": "$" } },
-    { "heading": "Next", "markdown": "1. Push Team seats in Europe\n2. Try a cheaper Starter plan in Latin America" } ] }
+    { "heading": "Next month", "markdown": "- [x] Price the Team plan for Europe\n- [ ] Push Team seats in Europe\n- [ ] Try a cheaper Starter plan in Latin America" } ] }

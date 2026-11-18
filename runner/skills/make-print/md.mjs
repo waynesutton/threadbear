@@ -38,7 +38,9 @@ export function markdown(md) {
       while (i < lines.length) {
         const m = /^\s*([-*+]|\d+[.)])\s+(.+)$/.exec(lines[i]);
         if (!m || /\d/.test(m[1]) !== ordered) break;
-        items.push(`<li>${inline(m[2])}</li>`);
+        // A checklist line, `- [ ]` or `- [x]`, as the doc prints draw one.
+        const task = /^\[([ xX])\]\s+(.*)$/.exec(m[2]);
+        items.push(task ? `<li class="task${task[1] !== " " ? " done" : ""}"><span class="box"></span><span>${inline(task[2])}</span></li>` : `<li>${inline(m[2])}</li>`);
         i++;
       }
       i--;

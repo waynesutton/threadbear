@@ -709,3 +709,13 @@ a.lab-review-head:hover { color: var(--muted); }
 .md .print-card.kept .print-card-meta { white-space: normal; }
 .md .print-card-open { display: inline-flex; align-items: center; gap: 5px; padding: 4px 10px; border-radius: 7px; background: var(--hover); border: 1px solid var(--line-strong); color: inherit; text-decoration: none; white-space: nowrap; }
 .md .print-card-open svg { width: 13px; height: 13px; }
+
+/* The published print's light, dark or system switch (print.tsx). */
+.print-bar .muted { overflow: hidden; text-overflow: ellipsis; }
+.print-theme { margin-left: auto; display: inline-flex; flex: none; gap: 2px; padding: 2px; border-radius: 8px; background: var(--fill); }
+.print-theme button { display: inline-flex; align-items: center; gap: 5px; padding: 3px 8px; border: 0; border-radius: 6px; background: transparent; color: var(--muted); font: inherit; font-size: 12px; cursor: pointer; }
+.print-theme button svg { width: 13px; height: 13px; }
+.print-theme button:hover { color: var(--text); }
+.print-theme button.on { background: var(--raised); color: var(--text); box-shadow: 0 0 0 1px var(--line-strong); }
+.print-theme button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+@media (max-width: 520px) { .print-theme button span { display: none; } .print-theme button { padding: 4px 7px; } }

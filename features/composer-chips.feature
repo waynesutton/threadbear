@@ -155,3 +155,12 @@ Feature: The chips under the message box
     And I paste the picture into the composer
     And the composer holds 2 pictures
     Then clicking the thumbnail of picture 1 opens picture 1 of 2
+
+  # Many pictures wrap onto more rows of thumbnails over the words, rather
+  # than running off the box's right edge where the last ones can't be
+  # reached (Wayne, 18 Nov). Past three rows the strip scrolls.
+  @composer.chiphover @swift-pending
+  Scenario: Many pictures wrap onto more rows, and the last one can still be opened
+    When I paste the picture into the composer 8 times
+    And the composer holds 8 pictures
+    Then clicking the thumbnail of picture 8 opens picture 8 of 8

@@ -1,12 +1,12 @@
-{ "kind": "dashboard", "title": "Sales 2026", "data": { "file": "sales.xlsx", "sheet": "Sales 2026" },
+{ "kind": "dashboard", "title": "Sales 2026", "subtitle": "Revenue, seats and plans from January to October, by region.", "data": { "file": "sales.xlsx", "sheet": "Sales 2026" },
   "tiles": [
-    { "label": "Revenue", "value": "Revenue", "agg": "sum", "unit": "$" },
-    { "label": "Seats", "value": "Seats", "agg": "sum" },
-    { "label": "Average order", "value": "Revenue", "agg": "avg", "unit": "$" },
-    { "label": "Rows", "agg": "count" } ],
+    { "label": "Revenue", "value": "Revenue", "agg": "sum", "unit": "$", "delta": "+6.9%", "note": "vs September", "spark": [9704, 10701, 11761, 12231, 12703, 13737, 14310, 13462, 14866, 15885] },
+    { "label": "Seats", "value": "Seats", "agg": "sum", "delta": "+10.8%", "note": "vs September", "spark": [392, 436, 462, 483, 518, 553, 585, 540, 576, 638], "sparkKind": "bars" },
+    { "label": "Average order", "value": "Revenue", "agg": "avg", "unit": "$", "delta": "+6.9%", "spark": [539, 594, 653, 680, 706, 763, 795, 748, 826, 883] },
+    { "label": "Rows", "agg": "count", "note": "18 a month" } ],
   "charts": [
     { "type": "line", "title": "Revenue by month", "by": "Month", "value": "Revenue", "series": "Product", "unit": "$" },
     { "type": "bar", "title": "Revenue by region", "by": "Region", "value": "Revenue", "unit": "$" },
     { "type": "column", "title": "Seats by month", "by": "Month", "value": "Seats" },
     { "type": "segmented", "title": "Revenue by plan", "by": "Product", "value": "Revenue", "unit": "$" } ],
-  "table": { "columns": ["Month", "Region", "Product", "Revenue", "Seats"], "sort": "Revenue", "limit": 12, "title": "Biggest rows", "units": { "Revenue": "$" } } }
+  "table": { "columns": ["Month", "Region", "Product", "Revenue", "Seats"], "sort": "Revenue", "limit": 12, "title": "Biggest rows", "units": { "Revenue": "$" }, "pills": ["Product"] } }

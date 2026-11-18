@@ -47,21 +47,25 @@ When the request doesn't name a chart type, choose by what the data has to show 
    ```json
    { "kind": "dashboard", "title": "Sales 2026", "subtitle": "optional",
      "data": { "file": "sales.xlsx", "sheet": "Sales 2026" },
-     "tiles": [ { "label": "Revenue", "value": "Revenue", "agg": "sum", "unit": "$" },
+     "tiles": [ { "label": "Revenue", "value": "Revenue", "agg": "sum", "unit": "$", "delta": "+6.9%", "note": "vs September", "spark": [9704, 10701, 11761] },
                 { "label": "Rows", "agg": "count" },
                 { "label": "Status", "value": "On track" } ],
      "charts": [ { "type": "line", "title": "Revenue by month", "by": "Month", "value": "Revenue", "series": "Product", "unit": "$" },
                  { "type": "bar", "title": "By region", "by": "Region", "value": "Revenue", "top": 10 },
                  { "type": "pie", "title": "Share", "items": [ { "label": "A", "value": 3 } ] } ],
-     "table": { "columns": ["Month", "Region", "Revenue"], "sort": "Revenue", "limit": 20, "units": { "Revenue": "$" } },
-     "sections": [ { "heading": "Where it stands", "markdown": "Text **with** lists.", "chart": { "type": "column", "by": "Month", "value": "Seats" } } ],
+     "table": { "columns": ["Month", "Region", "Plan", "Change", "Revenue"], "sort": "Revenue", "limit": 20, "units": { "Revenue": "$" }, "pills": ["Plan"], "deltas": ["Change"] },
+     "sections": [ { "heading": "Where it stands", "markdown": "Text **with** lists.\n\n- [x] Done\n- [ ] Next",
+                     "callout": { "label": "The one number", "value": "$15.9K", "note": "October revenue" },
+                     "chart": { "type": "column", "by": "Month", "value": "Seats" } } ],
      "figure": "optional.svg",
      "footer": "optional source line" }
    ```
 
    - `agg` is `sum` (the default with a `value`), `count`, `avg`, `min` or `max`.
    - `type` is `bar`, `column`, `line`, `segmented` or `pie`.
-   - `sections` makes it a report.
+   - `sections` makes it a report: numbered sections (01, 02...), with a contents list beside when there are two or more. A section's `callout` is "the one number", in a card of its own. Markdown `- [ ]` and `- [x]` lines are a checklist.
+   - A tile's `delta` is its change, shown as a green or red pill with an arrow (`"+6.9%"`, or a number, with `deltaUnit`; `"better": "down"` when less is good, as for errors or costs). `spark` is a short list of numbers drawn as a small line (`"sparkKind": "bars"` for columns). Numbers first: lead with tiles, then charts.
+   - A table's `pills` columns show as chips (a plan, a status) and its `deltas` columns as change pills.
 3. **Build it:**
 
    ```sh
@@ -153,10 +157,10 @@ node $P $S note "<one line on where it stands>"
 Every print uses the style saved in `~/.config/threadbear/print-style.json`:
 
 ```json
-{ "theme": "auto", "density": "normal", "accent": "#4fb3d9" }
+{ "theme": "auto", "density": "normal", "accent": "#4f5bff" }
 ```
 
-- `theme` is `auto` (follows the viewer's appearance), `dark` or `light`.
+- `theme` is `auto` (follows the viewer's appearance), `dark` or `light`. Keep `auto`: one page holds both looks, so a print is never made twice, and the viewer (the app, or the website's Light, Dark and System switch) picks one.
 - `density` is `dense`, `normal` or `airy`.
 - `accent` is one `#rrggbb` colour, used for progress, highlights and links.
 
@@ -201,4 +205,4 @@ If the file doesn't exist the first time you make a print, ask the user once: da
 | `style.json` | The user's saved style. Asked once; missing until then |
 | `test.mjs` | `node --test test.mjs` |
 
-**Palette.** It's the `dataviz` skill's categorical palette without violet, six colours in a fixed order, checked with its `validate_palette.js` against these prints' cards, light (`#fbfaf7`) and dark (`#12161b`), on 10 Nov 2026. Anything past six folds into a grey "Other". The light check warns on contrast, so every chart keeps its labels and a "Show the data" table. Don't remove them.
+**The look.** One neutral base per theme (near-black `#08090a` in dark, warm paper `#f4f3ef` in light, white or near-black 12px cards with hairline borders), the system's type with tight tracking on big titles, tabular numbers, thin strokes and dashed grids. One accent per chart: bars and columns are one colour, and a column chart lights its peak and its latest and dims the rest. Several series or parts use six fixed colours (accent, sky, positive, highlight, warning, rose; no violet), then a grey "Other". Every chart keeps its direct labels and a "Show the data" table, so colour is never the only key. Don't remove them.

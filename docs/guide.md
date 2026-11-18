@@ -1156,9 +1156,11 @@ Ask in plain words, in any thread:
 
 Print previews and Git side panels follow the app’s light or dark appearance. Changing appearance updates an open panel without reloading it.
 
+**Light and dark.** Every print holds both looks in one page, so a thread never makes it twice: near-black with quiet lines in dark, warm paper with white cards in light, big numbers first and one colour per chart. On your Mac it follows the app's appearance. On the web, a published print follows your device's light or dark setting, and the switch at the top right of its page (**System**, **Light**, **Dark**) picks one instead; the browser remembers it, as it does the website's own appearance in its settings menu. That's why a print could look light on the web while dark in the app: the app has its own appearance, and the browser goes by the Mac's or the phone's.
+
 **In Highlights and on the rail.** A thread's Highlights list the Prints it made, under Prints, each with its kind, version and the projects it's in, or "No project". The Prints button on the right-hand rail, under Files, lists every Print you have, newest first, with the same details. It shows once there's at least one. Click a Print in either to open it beside the thread. Right-click one for everything a project's Print menu has: Show in Finder, Edit Text, Download, Versions, Publish, Delete and the rest. A deleted Print waits 7 days under **Recently deleted** on its project's page, where **Restore** brings it back.
 
-**Several at once.** In the rail's Prints, Highlights' Prints or a project's Prints, ⌘-click picks a Print or lets it go, and Shift-click picks every one from the last you picked to the one you click. Picked ones are shaded, and a bar over the list says how many, with **Projects** (put them all in a project, or take them all out of one; a tick means they're all in it already) and **Delete…**. Right-click a picked one for the same: **Projects for 3 prints** and **Delete 3 prints…**. Delete asks once, naming them, then takes them all away; any the runner couldn't delete come back, with why. Esc, the bar's ✕ or a plain click lets them all go (a plain click opens that Print as usual).
+**Several at once.** In the rail's Prints, Highlights' Prints or a project's Prints, ⌘-click picks a Print or lets it go, and Shift-click picks every one from the last you picked to the one you click. Picked ones are shaded, and a bar over the list says how many, with **Projects** (put them all in a project, or take them all out of one; a tick means they're all in it already) and **Delete…**. Right-click a picked one for the same: **Projects for 3 prints** and **Delete 3 prints…**. Delete asks once, naming them: Return deletes them and Esc keeps them. It then takes them all away; any the runner couldn't delete come back, with why. Esc, the bar's ✕ or a plain click lets them all go (a plain click opens that Print as usual).
 
 **Links in a Print** open in your browser when you click them, beside the thread and in a Print's own window. The Print stays where it was. Only web addresses (http and https) go out, one for each click.
 
@@ -3124,15 +3126,19 @@ Tick a task's box to mark it done: it leaves the list, and Undo brings it back.
 Show Done Tasks in Display (or the "done" link at the bottom) shows them again.
 The list runs Doing, Todo, Backlog, each a section you can fold.
 
-Switch to Board for columns: Backlog, Todo, Doing and Done. Cards show just the
-title, a note mark and the project; drag a card to move it, or use + on a column
+Switch to Board for columns: Backlog, Todo, Doing and Done. Cards show the
+title, the priority, the due date (red once it's passed, amber on the day), a
+sub-task count like 1/3, a note mark and the project; drag a card to move it, or use + on a column
 to add one there. Add a task at the foot of a column does the same. Click a
 column name to rename it, or Add column to make another. Renaming keeps its
 tasks and completion behavior. Drag column headings, list sections and project
 groups to reorder them; the board and list keep their own orders. Narrow
-windows and phones scroll columns sideways within the board.
+windows and phones scroll columns sideways within the board. In the Mac app,
+Display > Wrap Columns puts the columns on as many rows as they need instead, so
+every column shows without scrolling sideways.
 
-Each task's ⋯ menu opens it, adds a note, moves it to a project, sets its status
+Each task's ⋯ menu opens it, adds a note, moves it to a project, sets its
+priority or due date (Today, Tomorrow, End of week or Clear), sets its status
 or asks before deleting it (with Undo afterward). Send to thread starts a new
 thread with the task title, notes and project. It shows Starting while queued,
 then View thread; repeated clicks reuse the same request. Projects are optional,
@@ -3142,8 +3148,33 @@ to Display offers Light and Dark appearance, a photo with Fade and Position
 sliders, and Open Tasks in List or Board. A dot on it means a photo is set.
 Text follows the selected theme. On the board, swipe sideways anywhere under the
 columns to scroll them.
-Up and Down navigate tasks; Enter opens one, and Escape closes its editor.
-Arrow keys still edit text normally while a field has focus.
+A task can have a priority (Urgent, High, Normal or Low), a due date (Today,
+Tomorrow, End of this week, In one week, or any day from the calendar),
+sub-tasks (one level: "1/2 closed" counts the done ones), and links to a web
+page, a print, a picture or a thread. List rows and board cards show the
+priority and the due date. Activity under a task lists its comments and what
+changed and who did it, you or an agent ("set priority to Urgent"); leave a comment in the box
+at the bottom. Deleting a task deletes its sub-tasks, and Undo brings them back.
+In the Mac app, a task in one of this Mac's projects also lists that project's
+latest threads and prints. Agents can set a priority and due date and comment
+through their task tools.
+In the Mac app a task opens on a page of its own, in place of the list or
+board: its title, then Status, Priority, Due date, Project, Created by, Threads
+(Send to Thread, or View Thread once it has one) and Links, then its
+description, sub-tasks (Add sub-task, then Return), links and attachments (Add
+link with an optional title, Attach Print, or Attach image from a picker or by
+dropping pictures on the section), what its project has been up to, and its
+activity, with All or just Comments. Return sends a comment and Shift-Return
+starts a new line. The title and description save when you leave them. Back or
+Escape goes back to the list or board, and J and K (or Down and Up) step to the
+next and previous task.
+
+In the list, Up and Down navigate tasks and Enter opens one. Arrow keys still
+edit text normally while a field has focus.
+
+In a thread's Highlights, a row's right-click menu has Add to Tasks: it makes a
+task named after the row, linking to the page, or to the thread for a file or
+commit, and says so when it's in.
 
 Open on web goes to your private `/tasks` page with the usual browser pairing.
 Web task edits work while your Mac sleeps. Editing needs a connection; a change
