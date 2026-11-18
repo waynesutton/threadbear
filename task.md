@@ -9,6 +9,8 @@ Status and gap list: prds/prints-status.md
 
 ## In Progress
 
+- [ ] 2026-11-18 UTC Respect owner-specific PR reminder preferences in the automatic Still open card, preserving unpushed-work warnings. prds/loose-end-pr-preferences.md
+
 
 
 

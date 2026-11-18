@@ -56,7 +56,7 @@ export async function worktreeLooseEnds(w: WorktreeRecord): Promise<LooseEnd[]> 
 // folders to look in for its commits, the thread's own folder: a thread
 // that only changed files through a shell has no `edited` to find its repo
 // by (Codex's review, 11 Nov 2026).
-export type EditedOptions = { pushed?: string[]; dirs?: string[]; prs?: PrLookup };
+export type EditedOptions = { pushed?: string[]; dirs?: string[]; prs?: PrLookup; ignoredPrOwners?: string[] };
 
 
 /** The remote's main branch ("origin/main"), as origin/HEAD names it, else main or master. */
@@ -104,7 +104,7 @@ async function landedByRebase(top: string, shas: string[]): Promise<number> {
 }
 
 export async function editedLooseEnds(edited: string[], commits: string[], skip?: string, opts: EditedOptions = {}): Promise<LooseEnd[]> {
-  const { pushed = [], dirs = [], prs = githubPr } = opts;
+  const { pushed = [], dirs = [], prs = githubPr, ignoredPrOwners = [] } = opts;
   const repos = new Map<string, string[]>();
   const tops = new Map<string, string | undefined>();
   const topOf = async (file: string, isDir = false): Promise<string | undefined> => {
@@ -158,7 +158,7 @@ export async function editedLooseEnds(edited: string[], commits: string[], skip?
     }
     const unpushed = off.length ? off.length - (await landedByRebase(top, off)) : 0;
     if (unpushed > 0) out.push({ kind: 'unpushed', text: `${unpushed === 1 ? '1 commit' : `${unpushed} commits`} it made in ${name} ${unpushed === 1 ? "isn't" : "aren't"} pushed` });
-    out.push(...(await unmergedLooseEnds(top, pushed, prs, budget)));
+    out.push(...(await unmergedLooseEnds(top, pushed, prs, budget, ignoredPrOwners)));
   }
   return out;
 }
@@ -181,7 +181,7 @@ const MAX_UNMERGED = 3;
 // PR lookups for one check, across its repos. The commits need no cap of
 // their own: Highlights keeps at most 80 items.
 const MAX_LOOKUPS = 6;
-async function unmergedLooseEnds(top: string, pushed: string[], prs: PrLookup, budget: { lookups: number }): Promise<LooseEnd[]> {
+async function unmergedLooseEnds(top: string, pushed: string[], prs: PrLookup, budget: { lookups: number }, ignoredPrOwners: string[] = []): Promise<LooseEnd[]> {
   if (!pushed.length) return [];
   const main = await remoteMain(top);
   if (!main) return [];
@@ -222,6 +222,10 @@ async function unmergedLooseEnds(top: string, pushed: string[], prs: PrLookup, b
         to = upstream;
       }
     }
+    // A personal reminder preference, scoped to the matched PR's destination.
+    // Do not hide local work or an unknown branch merely because it has an upstream.
+    const destinationOwner = (to ?? repo)?.split('/')[0]?.toLowerCase();
+    if (pr?.state === 'OPEN' && destinationOwner && ignoredPrOwners.some(owner => owner.trim().toLowerCase() === destinationOwner)) continue;
     if (pr && pr.state !== 'OPEN') {
       const tip = await readGit(top, ['rev-parse', '--verify', '--quiet', `refs/remotes/origin/${branch}^{commit}`]);
       if (tip.ok && tip.stdout.trim() === pr.headRefOid) continue;

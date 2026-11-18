@@ -2,6 +2,7 @@
 // runner/loose-ends.ts): what's still open on a finished thread, checked
 // by the runner so a plain Archive is safe without asking the agent.
 import { test } from 'node:test';
+import { loadConfig } from '../../src/config.ts';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -345,6 +346,19 @@ test('looseEnds: work pushed to a branch that main lacks is open until its PR is
   assert.deepEqual(await editedLooseEnds([a], [], undefined, { pushed: [sha, more], prs: byRepo({ 'mikecann/website': { number: 66, state: 'OPEN', isDraft: false, headOwner: 'convex' } }) }), [
     { kind: 'unmerged', text: "PR #66 to mikecann/website isn't merged" },
   ]);
+  // Preferences hide the matched destination's reminder, never local work
+  // or another owner's PR. Owner names are case-insensitive and trimmed.
+  const upstreamOpen = byRepo({ 'mikecann/website': { number: 66, state: 'OPEN', isDraft: false, headOwner: 'convex' } });
+  assert.deepEqual(await editedLooseEnds([a], [], undefined, { pushed: [sha, more], prs: upstreamOpen, ignoredPrOwners: [' MikeCann '] }), []);
+  assert.equal((await editedLooseEnds([a], [], undefined, { pushed: [sha], prs: upstreamOpen, ignoredPrOwners: ['someone'] }))[0]?.kind, 'unmerged');
+  assert.deepEqual(await editedLooseEnds([a], [], undefined, { pushed: [sha], prs: lookup({ number: 1092, state: 'OPEN', isDraft: false }), ignoredPrOwners: ['CONVEX'] }), []);
+  assert.equal((await editedLooseEnds([a], [], undefined, { pushed: [sha], prs: lookup({ number: 1092, state: 'OPEN', isDraft: false }), ignoredPrOwners: ['mikecann'] }))[0]?.kind, 'unmerged');
+  assert.equal((await editedLooseEnds([a], [], undefined, { pushed: [sha], prs: lookup(undefined), ignoredPrOwners: ['mikecann'] }))[0]?.kind, 'unmerged');
+  sh(repo, 'echo local > local.txt && git add local.txt && git commit -qm local');
+  const local = sh(repo, 'git rev-parse HEAD');
+  assert.deepEqual(await editedLooseEnds([a], [local], undefined, { pushed: [sha], prs: upstreamOpen, ignoredPrOwners: ['mikecann'] }), [
+    { kind: 'unpushed', text: "1 commit it made in website isn't pushed" },
+  ]);
   // Someone else's branch with the same name doesn't count.
   assert.deepEqual(await editedLooseEnds([a], [], undefined, { pushed: [sha, more], prs: byRepo({ 'mikecann/website': { number: 70, state: 'OPEN', isDraft: false, headOwner: 'someone' } }) }), [
     { kind: 'unmerged', text: "Work it pushed to alex/examples in website isn't on main" },
@@ -505,4 +519,15 @@ test('looseEnds: a running job cut short never sends part of a key the runner kn
   both.known.add(longKey.slice(0, 20));
   const sentBoth = both.doc({ t: cut.text }).t;
   for (let i = 0; i + 8 <= longKey.length; i++) assert.ok(!sentBoth.includes(longKey.slice(i, i + 8)), sentBoth);
+});
+
+
+test('looseEnds: reminder owner preferences load defensively without changing defaults', () => {
+  const home = tmpDir('tb-loose-preferences-');
+  fs.writeFileSync(path.join(home, 'runner.json'), JSON.stringify({looseEndsIgnoredPrOwners: [' MikeCann ', '', 42, 'mikecann', 'OtherOwner']}));
+  assert.deepEqual(loadConfig({THREADBEAR_HOME: home}).looseEndsIgnoredPrOwners, ['mikecann', 'otherowner']);
+  fs.writeFileSync(path.join(home, 'runner.json'), JSON.stringify({looseEndsIgnoredPrOwners: 'mikecann'}));
+  assert.deepEqual(loadConfig({THREADBEAR_HOME: home}).looseEndsIgnoredPrOwners, []);
+  fs.writeFileSync(path.join(home, 'runner.json'), '{}');
+  assert.deepEqual(loadConfig({THREADBEAR_HOME: home}).looseEndsIgnoredPrOwners, []);
 });

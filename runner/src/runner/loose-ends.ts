@@ -39,7 +39,7 @@ export const looseEndsPart = {
     const made = (hl?.items ?? []).filter((h) => h.kind === 'commit' && h.sha);
     const commits = made.filter((h) => !h.pushed).map((h) => h.sha!);
     const pushed = made.filter((h) => h.pushed).map((h) => h.sha!);
-    ends.push(...(await editedLooseEnds(hl?.edited ?? [], commits, own?.path, { pushed, dirs: [rec.cwd] })));
+    ends.push(...(await editedLooseEnds(hl?.edited ?? [], commits, own?.path, { pushed, dirs: [rec.cwd], ignoredPrOwners: this.cfg.looseEndsIgnoredPrOwners })));
     ends.push(...runningLooseEnds(this.background(st)));
     ends.push(...this.childEnds(st));
     ends.push(...scheduleLooseEnds(rec.id, this.schedulesFor?.(rec.id) ?? []));

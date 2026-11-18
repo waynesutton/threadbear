@@ -1,5 +1,9 @@
 # Files
 
+## Reminder preferences
+
+- `prds/loose-end-pr-preferences.md`: owner-specific automatic PR reminder preferences and rollout verification.
+
 ## Sidebar selection and search
 
 - `desktop/gpui/src/sidebar_lists.rs`: separate Print/Bear/Table search, visible selection, bulk archive/restore controls and native confirmations.

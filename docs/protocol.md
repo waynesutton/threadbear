@@ -3605,6 +3605,12 @@ done card's Archive, which puts a thread away at once: he wanted to know
 nothing was left first. The runner now checks what it can see for itself
 and puts it on the done card, so Archive stays a plain button.
 
+`runner.json` may set `looseEndsIgnoredPrOwners` to GitHub repository owner
+names. A matched PR targeting one of those owners is omitted from the card,
+case-insensitively. Other loose ends remain, including unpushed commits and
+branches with no matched PR. The default is an empty list; there is no wire
+format change.
+
 When a turn completes with `needs: "nothing"` (and isn't archiving
 itself), the runner checks:
 

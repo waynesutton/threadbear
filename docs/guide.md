@@ -201,6 +201,10 @@ The card shows how many are completed and which are pending or blocked,
 including work carried across turns. "Reported by the agent" labels that
 list. Threadbear checks loose ends separately; only a successful empty
 check says "No loose ends found". An unavailable check makes no such claim.
+To omit automatic PR reminders for particular GitHub repository owners,
+set `looseEndsIgnoredPrOwners` in runner.json to their owner names. This
+keeps unpushed commits and other local-work warnings. The preference applies
+when the runner next starts; agents should also respect it in their replies.
 Action buttons such as It works and Archive keep their neutral fill with
 a thin amber left edge. Archive stays manual. A thread without reported
 tasks keeps its usual card; turning the experiment off restores that view.

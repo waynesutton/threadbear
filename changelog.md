@@ -8,6 +8,8 @@ How Prints work today, what's missing and what's next: [Prints status](https://g
 
 ### Fixed
 
+- Automatic Still open cards can omit PR reminders for selected GitHub owners while retaining local-work warnings.
+
 - Task list sections leave a gap before the first row so its hover area stays clear of the toggle.
 
 - Composer pictures wrap within the Mac message box and scroll after three rows, keeping later attachments reachable.

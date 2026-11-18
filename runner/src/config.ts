@@ -119,6 +119,8 @@ export type Config = {
   // (src/update.ts). Off with followMain: false in runner.json or
   // THREADBEAR_FOLLOW_MAIN=0.
   followMain: boolean;
+  // GitHub destination owners whose PRs do not appear as loose ends.
+  looseEndsIgnoredPrOwners?: string[];
   // A turn's reply in the Mac app: end_turn's bullets, or (false) the
   // agent's own message, with the bullets only for previews.
   bulletReplies: boolean;
@@ -201,6 +203,7 @@ export type RunnerJson = {
   sandbox?: unknown;
   pools?: unknown[];
   followMain?: boolean;
+  looseEndsIgnoredPrOwners?: string[];
   // This machine's main is GitHub's (follow-origin.ts): read by that file,
   // each time, so it needs no restart.
   followOrigin?: boolean;
@@ -463,6 +466,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env, opts: { readOnl
     ),
     accountsDir: path.join(home, 'accounts'),
     followMain: env.THREADBEAR_FOLLOW_MAIN ? env.THREADBEAR_FOLLOW_MAIN !== '0' : json.followMain !== false,
+    looseEndsIgnoredPrOwners: Array.isArray(json.looseEndsIgnoredPrOwners) ? [...new Set(json.looseEndsIgnoredPrOwners.filter((v): v is string => typeof v === 'string').map(v => v.trim().toLowerCase()).filter(Boolean))] : [],
     bulletReplies: json.bulletReplies !== false,
     // On unless runner.json turns it off (2 Nov: Mike found it the right
     // balance, and it's no longer in Settings).
