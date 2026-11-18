@@ -9,7 +9,6 @@ Status and gap list: prds/prints-status.md
 
 ## In Progress
 
-- [ ] 2026-11-18 18:17 UTC Mac polish follow-up built and checked: task gap/Print search, Sans/Mono Notes, Bears & Tables open/edit/Finder menus. Automation build, 41 existing scenarios plus expanded Print search (29 steps), focus guard, mock syntax and 94 feature pairings pass; screenshots inspected without test crashes. Landing and automatic installed verification pending. prds/mac-polish-followup.md
 
 
 - [ ] 2026-11-17 10:57 UTC Tasks interaction refinement verified locally:15 native scenarios/197 steps, backend/browser tests, photo display, Light/Dark and keyboard scrolling pass. Normal landing and coordinated rollout remain. prds/tasks-interaction-refinement.md
@@ -23,6 +22,8 @@ Status and gap list: prds/prints-status.md
 - [ ] Land verified Settings review fixes when the Mac is quiet, then verify the installed update.
 
 ## Completed
+
+- [x] 2026-11-18 18:50 UTC Deliver Mac polish follow-up87aece50: task first-row gap/Print search, Sans/Mono Notes, Bears/Table Open/Edit/Finder/Copy/Refresh. Required quick check passed582s; installed release desktop tree matches, automatic handover/runner connection confirmed, no panic/hang recorded through18:50:30UTC. Exact landed-source headless verification passed5scenarios/89steps; live controls were not scripted. task.md, prds/mac-polish-followup.md.
 
 - [x] 2026-11-18 11:08 UTC Confirm Mac UI polish installed at GPUI 1eae75ff with desktop tree matching 01feefdd, automatic handover and runner connection logged. Live API87 smoke and runner RPCs pass. Matching isolated headless build passed task properties/sub-tasks/links/activity/calendar/board wrap, Highlights task creation, Print Escape/Return deletion and eighth composer picture opening; screenshots inspected and test app stopped. Live release controls were not directly scripted. prds/mac-tasks-prints-polish.md
 

@@ -51,6 +51,29 @@ Notes and Bears menus. All test interactions completed without a panic and
 the isolated app was stopped. Screenshots are private local fixtures under
 .fixtures/mac-polish-followup/.
 
-Required landing check and automatic installed verification remain pending.
-The existing crash fixes f3367a06 and 8c1fc3c4 are ancestors of this build;
-this does not claim the whole app is crash-free.
+2026-11-18 18:50 UTC: delivered. Product commit 87aece50 landed after the
+required ./check.sh --quick passed in 582 seconds. The automatic updater
+built the release, swapped it in at 18:48:37 UTC and logged it running at
+18:48:38.999 UTC. Installed build.json names commit
+87aece50f7ca2cc07df8e14c290643cc6a73faf7 and desktop tree
+f45bdbb756fec9979ae7bed048e915d0ed0bbbca, which matches git's desktop tree.
+All three crash fixes f3367a06, 8c1fc3c4 and 3d0779cd are ancestors.
+
+The installed process (PID 90377) connected to the runner at 18:48:38.360 UTC
+and remained running at 18:50:30 UTC. No new panic or hang record appeared
+between restart and that observation. No draft was cleared and no restart
+or installation was forced.
+
+To verify the exact landed source after rebase, rebuilt the automation app
+with a clean desktop diff against 87aece50. Five focused scenarios passed
+all 89 steps: Print search/no results/Return/Escape/duplicate avoidance and
+mouse selection; Notes size/font persistence; Bears and Tables opening,
+settings/goals editing, Finder/copy and refresh. All isolated instances
+were stopped. Build/spec logs: /tmp/tb-polish-installed-build.log and
+/tmp/tb-polish-installed-specs.log.
+
+The installed release has no scripted automation endpoint. Installed
+verification above establishes build provenance, successful handover and
+runner connection; interaction verification used the isolated app built
+from the same desktop source. This is not a claim that every live app
+interaction was exercised or that future crashes are impossible.
