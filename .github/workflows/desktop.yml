@@ -64,8 +64,9 @@ jobs:
         include:
           - { name: Linux, os: ubuntu-24.04 }
           # arm64 hosted capacity cancelled four attempts before setup (17 Nov).
-          # Same macOS and full checks on GitHub's standard Intel pool.
-          - { name: Mac, os: macos-26-intel }
+          # Tahoe Intel's IconServices hangs: actions/runner-images#14773.
+          # Sequoia Intel keeps every native check on a supported macOS image.
+          - { name: Mac, os: macos-15-intel }
           - { name: Windows, os: windows-latest }
     defaults:
       run:
