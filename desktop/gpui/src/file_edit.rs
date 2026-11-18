@@ -295,11 +295,13 @@ impl SidePane {
     /// automatically off and changes typed it asks Save, Don't Save or Cancel
     /// and says no; `then` does the leaving once Save or Don't Save is picked.
     pub(crate) fn may_leave_file(&mut self, thread_id: &str, then: impl FnOnce(&mut Self, &mut Context<Self>) + 'static, cx: &mut Context<Self>) -> bool {
-        let autosave = self.file_modes(cx).1;
-        let Some(edit) = self.edit_mut(thread_id) else { return true };
-        if !edit.dirty {
+        if !self.edit_mut(thread_id).is_some_and(|e| e.dirty) {
             return true;
         }
+        // Only now: `file_modes` reads the app, which GPUI refuses while the
+        // app is being updated, and the app leaves files that way (18 Nov).
+        let autosave = self.file_modes(cx).1;
+        let Some(edit) = self.edit_mut(thread_id) else { return true };
         if edit.autosaves(autosave) {
             self.save_edit(thread_id, None, cx);
             return true;

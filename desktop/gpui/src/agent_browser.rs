@@ -852,8 +852,10 @@ impl crate::app::Threadbear {
         }
         self.browser_handoff_seen = key.clone();
         if key.is_some() && !self.dock.read(cx).controller.is_showing(BROWSER) {
+            // Once this update is over: choosing a section can leave a file
+            // or bring a preview back, and both read the app (18 Nov).
             let (side, id) = (self.side.clone(), thread.id.clone());
-            side.update(cx, |side, cx| side.choose_section(&id, BROWSER, cx));
+            cx.defer(move |cx| side.update(cx, |side, cx| side.choose_section(&id, BROWSER, cx)));
             self.show_pane(BROWSER, cx);
         }
     }

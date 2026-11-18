@@ -820,11 +820,15 @@ impl Threadbear {
             crate::web_panels::reload_requested(&thread, &request.panel, cx);
             // A file opened over the panel from its page would still cover
             // what the agent changed.
-            let (thread_id, from) = (thread.id.clone(), request.panel.clone());
-            self.side.update(cx, |side, cx| {
-                if side.previews.get(&thread_id).is_some_and(|pv| pv.from == from) {
-                    side.close_preview(&thread_id, cx);
-                }
+            // Once this update is over, as leaving a file reads the app; it
+            // still runs before the section `show_requested` picks below.
+            let (thread_id, from, side) = (thread.id.clone(), request.panel.clone(), self.side.clone());
+            cx.defer(move |cx| {
+                side.update(cx, |side, cx| {
+                    if side.previews.get(&thread_id).is_some_and(|pv| pv.from == from) {
+                        side.close_preview(&thread_id, cx);
+                    }
+                })
             });
         }
         self.show_requested(&panel, &requests::place(&request), &thread, cx);
