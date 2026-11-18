@@ -18,13 +18,27 @@
 
 - `convex/tasks.ts`, `convex/taskFields.ts`: authenticated cloud-owned tasks and synced preferences.
 - `runner/src/tasks.ts`: desktop/agent bridge and realtime invalidation.
-- `desktop/gpui/src/tasks_page.rs`: native Tasks quick-add list, board, row menu, editor and background controls.
+- `desktop/gpui/src/tasks_page.rs`: native Tasks list, scrolling/wrapped board, detail navigation and photo sliders.
+- `desktop/gpui/src/task_detail.rs`: task properties, calendar, sub-tasks, attachments and activity UI.
+- `desktop/core/src/task_dates.rs`: priority labels, calendar grids, due-date labels and date tests.
 - `web/src/tasks.tsx`, `web/src/tasks.css`: authenticated responsive Tasks route.
+- `web/src/tasks-issue.tsx`: browser task properties, attachments, sub-tasks and activity editor.
+- `web/src/tasks-fields.ts`: task priority/date labels and validated field helpers.
+- `web/src/tasks-fields.test.ts`: date, priority and field-helper regression checks.
 - `web/src/tasks-columns.ts`: stable column identity, names and ordering shared by web list and board.
 - `web/src/tasks-draft.ts`, `web/src/tasks-draft.test.ts`: field-specific edits that preserve concurrent changes.
 - `web/src/tasks-order.ts`, `desktop/core/src/task_order.rs`: where dropped tasks, columns, list sections and project groups land, and how a quick-added line splits into title and note. Same rules on both, each with tests.
 - `runner/test/unit/tasks*.test.ts`, `features/tasks.feature`: backend/bridge and native behavior checks.
 - `prds/realtime-tasks.md`: scope, delivery constraints and verification checkpoint.
+- `prds/mac-tasks-prints-polish.md`: both Mac polish batches and remaining installed verification.
+
+## Mac Prints and composer polish
+
+- `desktop/gpui/src/print_select.rs`: multi-selection, bulk project assignment and keyboard-aware delete confirmation.
+- `desktop/gpui/src/composer.rs`: attachment thumbnails that wrap and scroll after three rows.
+- `runner/skills/make-print/theme.mjs`, `charts.mjs`, `progress-view.mjs`: shared Print themes, charts and progress layouts.
+- `runner/src/page-doc.ts`: themed editable document rendering.
+- `web/src/print.tsx`, `web/src/print-doc.ts`: published Print theme selection and sandboxed document styling.
 
 ## GPUI Looks
 
@@ -74,6 +88,8 @@
 
 ## Bears, tables and webhooks
 
+- `desktop/core/src/bears_panel.rs`: native bear/table rows, selection and bulk-operation rules.
+- `desktop/gpui/src/bears_panel.rs`: Bears & Tables panel, rename and confirmed deletion controls.
 - `runner/src/bears.ts` bear folders, access state, shared worker lookup, managed memory rules, tidy refresh and the `bears.*` RPCs.
 - `runner/src/mentions.ts` routes mentions within mode and sandbox boundaries and matches replies to each asking turn.
 - `runner/src/runner/late-answers.ts` resumes expired tool answers once using the persisted event log and existing permission checks.

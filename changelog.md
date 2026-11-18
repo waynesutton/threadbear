@@ -8,6 +8,8 @@ How Prints work today, what's missing and what's next: [Prints status](https://g
 
 ### Fixed
 
+- Composer pictures wrap within the Mac message box and scroll after three rows, keeping later attachments reachable.
+- Tasks boards scroll horizontally between sidebars; list completion controls have more room, and board task entry fields are taller. Print web links open in the browser, and delete confirmation accepts Return or Escape.
 - Embedded Print and Git pages follow the app appearance, including changes while the panel is open without reloading.
 
 ### Removed
@@ -16,6 +18,9 @@ How Prints work today, what's missing and what's next: [Prints status](https://g
 
 ### Changed
 
+- Tasks appearance controls use an icon, photo sliders and an explicit List/Board default. Wrap Columns keeps every board column on the page.
+- Notes has readable Sans/Serif text and size controls while keeping line numbers.
+- Generated Prints uses updated light/dark dashboard and report layouts, metric changes and compact charts. Published Prints offers System, Light and Dark themes.
 - Scheduled follow-ups in the GPUI transcript start collapsed, with Show details and Hide details. Expanded instructions use selectable, left-aligned Markdown; the agent still receives the original message.
 - Tasks adds keyboard navigation, deletion confirmation, renamed and custom columns, and Send to thread with a link back to the created thread. Boards scroll within narrow windows and phones. Appearance uses Light/Dark with matching text; native photos are read by the picker’s app before upload and downloaded for display. The project-page Tasks tab matches Project typography. Requires backend API 86.
 
@@ -25,6 +30,8 @@ How Prints work today, what's missing and what's next: [Prints status](https://g
 
 ### Added
 
+- Task detail pages with priorities, due dates, sub-tasks, links, image attachments and activity/comments, backed by API 87. Project-related threads and Prints appear in the detail page; Highlights can add a task.
+- Native Bears & Tables management with rename, right-click actions and multi-selection deletion. Prints supports multi-selection for project assignment and confirmed deletion.
 - GPUI desktop: ⌘Z brings back archived threads, newest first, up to the last seven, outside a text box or in an empty message box. The Archived note has an x and goes away with a sideways trackpad swipe.
 - Clearer thread completion experiment: task progress across turns on the composer card, separate runner loose-end checks, and neutral action buttons with an amber left edge. Archive remains manual. Mirror support requires backend API 85.
 - GPUI Voice waits 1.5 seconds before sending, so a short pause mid-sentence doesn't cut you off; Settings > Voice & Audio > Pause before sending changes it.
