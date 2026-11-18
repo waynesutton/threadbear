@@ -456,3 +456,10 @@ fn an_encoded_name_is_limited_by_the_path_it_names() {
     f.write("index.html", &too_long);
     assert_eq!(f.site().allowed_count(), 1, "a decoded path past MAX_REFERENCE_BYTES isn't kept");
 }
+
+#[test]
+fn candidate_scan_keeps_case_overlaps_and_end_bounds() {
+    assert_eq!(find_all_ci(b"aAaA", b"aa").collect::<Vec<_>>(), [0, 1, 2]);
+    assert_eq!(find_all_ci(b"uRl(x) URL(y) ur", b"url(").collect::<Vec<_>>(), [0, 7]);
+    assert_eq!(find_all_ci(b"@IMPORT @import @impor", b"@import").collect::<Vec<_>>(), [0, 8]);
+}

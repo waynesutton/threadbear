@@ -434,7 +434,8 @@ impl<F: Fn(u8) -> bool> Seek<F> {
 /// Every place `word` starts (ASCII case folded), in order.
 fn find_all_ci<'a>(text: &'a [u8], word: &'a [u8]) -> impl Iterator<Item = usize> + 'a {
     let first = word[0].to_ascii_lowercase();
-    (0..text.len()).filter(move |&i| text[i].to_ascii_lowercase() == first && starts_ci(text, i, word))
+    // Skip bytes that cannot start the word in bulk, then check candidates.
+    memchr::memchr2_iter(first, first.to_ascii_uppercase(), text).filter(move |&i| starts_ci(text, i, word))
 }
 
 /// `text` with what's between each `<script ...>` and the `</script>` after

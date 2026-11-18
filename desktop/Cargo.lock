@@ -7400,6 +7400,7 @@ dependencies = [
  "dunce",
  "libc",
  "markdown",
+ "memchr",
  "qrcodegen",
  "ring",
  "roxmltree 0.21.2",
