@@ -114,3 +114,49 @@ When('I click the todo list\'s item {int} in version {int}', async function (thi
 Then('the Print {string} reads {string}', async function (this: ThreadbearWorld, title: string, detail: string) {
   await this.until(`"${title}" reading "${detail}"`, (d) => loose(d).prints?.list.some((p) => p.title === title && p.detail.startsWith(detail)));
 });
+
+// Several Prints at once (print_select.rs): the `print` command's `pick`
+// clicks a row of the rail's list with ⌘ or Shift held, and the dump's
+// `picked` and `askingDelete` say what's picked and what Delete asks about.
+type Picking = { picked?: string[]; askingDelete?: string[] | null };
+const picking = (d: unknown) => (loose(d).prints ?? {}) as Picking;
+const printTitles = (d: unknown) => ((loose(d).prints?.list ?? []) as unknown as { title: string; projects?: string }[]);
+
+When('I {string}-click the Print {string}', async function (this: ThreadbearWorld, key: string, title: string) {
+  await this.until('the Prints listed', (d) => (loose(d).prints?.list.length ?? 0) > 0);
+  await this.app.do({ cmd: 'print', id: title, do: 'pick', with: key === '⌘' ? 'cmd' : 'shift' });
+});
+
+Then('the Prints picked are {string}', async function (this: ThreadbearWorld, titles: string) {
+  const want = titles ? titles.split(', ').sort() : [];
+  await this.until(`picked: ${titles || 'none'}`, (d) => JSON.stringify([...(picking(d).picked ?? [])].sort()) === JSON.stringify(want));
+});
+
+When('I press Esc over the Prints', async function (this: ThreadbearWorld) {
+  await this.app.do({ cmd: 'escape' });
+});
+
+When('I delete the picked Prints', async function (this: ThreadbearWorld) {
+  await this.app.do({ cmd: 'print', do: 'deletePicked' });
+});
+
+Then('Delete asks once about {string}', async function (this: ThreadbearWorld, titles: string) {
+  const want = titles.split(', ').sort();
+  await this.until(`Delete asking about ${titles}`, (d) => JSON.stringify([...(picking(d).askingDelete ?? [])].sort()) === JSON.stringify(want));
+});
+
+When('I say Delete', async function (this: ThreadbearWorld) {
+  await this.app.do({ cmd: 'print', do: 'confirm' });
+});
+
+Then('no Print is called {string}', async function (this: ThreadbearWorld, title: string) {
+  await this.until(`"${title}" gone`, (d) => !printTitles(d).some((p) => p.title === title));
+});
+
+When('I take the picked Prints out of {string}', async function (this: ThreadbearWorld, project: string) {
+  await this.app.do({ cmd: 'print', do: 'projectPicked', project, add: false });
+});
+
+Then('the Print {string} is in {string}', async function (this: ThreadbearWorld, title: string, projects: string) {
+  await this.until(`"${title}" in ${projects}`, (d) => printTitles(d).some((p) => p.title === title && p.projects === projects));
+});

@@ -146,6 +146,12 @@ pub struct Saved {
     /// `notesListHidden`: the Notes page's list folded away for more room
     /// to write, kept across launches. None is showing.
     pub notes_list_hidden: Option<bool>,
+    /// `notesTextSize`: the Notes page's text size in points at 100%, from
+    /// its − and + buttons (12 to 22). None is 15. The GPUI app's own.
+    pub notes_text_size: Option<f32>,
+    /// `notesFont`: the Notes page's typeface, "serif" for Serif. None is
+    /// Sans, the app's own. The GPUI app's own.
+    pub notes_font: Option<String>,
     /// Settings > General > Look (looks.rs), under the Swift app's keys
     /// (Looks.swift), each off until turned on. `librarianLookOn`:
     /// Customize on the Librarian page.

@@ -32,6 +32,8 @@ pub(crate) const FILES: &str = "threadbear.files";
 /// Every Print, with its projects (prints.rs): shown while Prints is on and
 /// there's at least one, for this Mac's threads.
 pub(crate) const PRINTS: &str = "threadbear.prints";
+/// Bears & Tables (bears_panel.rs), while bears are on.
+pub(crate) const BEARS: &str = crate::bears_panel::BEARS;
 /// The Browser pane (agent_browser.rs).
 pub(crate) const BROWSER: &str = crate::agent_browser::BROWSER;
 
@@ -569,7 +571,7 @@ impl SidePane {
     /// there, else Highlights (`paneSection`). Previews open over it.
     pub(crate) fn section_for(&self, thread: &ThreadSummary) -> String {
         let remembered = self.chosen.get(&thread.id).cloned().unwrap_or_else(|| HIGHLIGHTS.to_owned());
-        let exists = remembered == HIGHLIGHTS || remembered == FILES || remembered == BROWSER || (remembered == PRINTS && !thread.is_remote()) || (remembered == PATCHES && thread.patches.as_ref().is_some_and(|p| !p.is_empty())) || thread.panels().iter().any(|p| p.id == remembered);
+        let exists = remembered == HIGHLIGHTS || remembered == FILES || remembered == BROWSER || (remembered == PRINTS && !thread.is_remote()) || (remembered == BEARS && !thread.is_remote()) || (remembered == PATCHES && thread.patches.as_ref().is_some_and(|p| !p.is_empty())) || thread.panels().iter().any(|p| p.id == remembered);
         if exists {
             remembered
         } else {
@@ -586,6 +588,7 @@ impl SidePane {
         ids.push(FILES.to_owned());
         if !thread.is_remote() {
             ids.push(PRINTS.to_owned());
+            ids.push(BEARS.to_owned());
         }
         if thread.patches.as_ref().is_some_and(|p| !p.is_empty()) {
             ids.push(PATCHES.to_owned());
@@ -680,7 +683,7 @@ impl SidePane {
     pub(crate) fn section_shown(&mut self, id: &str, thread_id: &str, cx: &mut Context<Self>) {
         if id == FILES {
             self.load_folder_for_files(thread_id, cx);
-        } else if id != HIGHLIGHTS && id != PATCHES && id != BROWSER && id != PRINTS {
+        } else if id != HIGHLIGHTS && id != PATCHES && id != BROWSER && id != PRINTS && id != BEARS {
             self.refresh_panel(thread_id, id, cx);
         }
     }
@@ -1178,6 +1181,8 @@ pub(crate) struct PaneRow {
     pub on_menu: Option<Rc<dyn Fn(&mut SidePane, Point<Pixels>, &mut Window, &mut Context<SidePane>)>>,
     /// A file on this Mac it drags out as (file_drag.rs).
     pub drag: Option<String>,
+    /// Picked (the Bears & Tables panel's ⌘-click): this fill behind it.
+    pub picked: Option<Hsla>,
 }
 
 impl PaneRow {
@@ -1200,6 +1205,7 @@ impl PaneRow {
             on_click: None,
             on_menu: None,
             drag: None,
+            picked: None,
         }
     }
 
@@ -1268,6 +1274,11 @@ impl PaneRow {
         self
     }
 
+    pub(crate) fn picked(mut self, fill: Option<Hsla>) -> Self {
+        self.picked = fill;
+        self
+    }
+
     pub(crate) fn on_click(mut self, f: impl Fn(&mut SidePane, &mut Window, &mut Context<SidePane>) + 'static) -> Self {
         self.on_click = Some(Rc::new(f));
         self
@@ -1319,6 +1330,7 @@ impl PaneRow {
             .when_some(self.icon, |s, symbol| s.child(div().w(px(16.)).flex_none().flex().justify_center().pt(px(1.)).child(icon(&symbol, 12., self.icon_color.unwrap_or(p.icon)))))
             .when(needs_blank_icon, |s| s.child(div().w(px(16.)).flex_none()))
             .child(body);
+        let row = row.when_some(self.picked, |s, fill| s.bg(fill));
         let row = row.when(self.on_click.is_some(), |s| s.hover(move |st| st.bg(hover)).cursor_pointer());
         let mut wrapper = div().id(self.id).px(px(OUTER_INSET)).child(row);
         if let Some(tip) = self.tip {
@@ -1625,8 +1637,9 @@ impl SidePane {
             let folded = self.is_folded(PRINTS_FOLD);
             list = list.child(self.heading(Heading { key: PRINTS_FOLD.to_owned(), title: "Prints".into(), icon: Some(icon("doc.richtext", 11., p.secondary).into_any_element()), count: Some(prints.len()), folded, foldable: true, accessory: None }, p, cx));
             if !folded {
+                let order: Rc<Vec<String>> = Rc::new(prints.iter().map(|pg| pg.id.clone()).collect());
                 for page in &prints {
-                    list = list.child(self.print_row(page, "hl", p, cx));
+                    list = list.child(self.print_row(page, "hl", order.clone(), p, cx));
                 }
             }
         }
@@ -1901,6 +1914,7 @@ impl SidePane {
                 FILES => (self.render_files_panel(&thread, window, cx), "files".to_owned()),
                 BROWSER => (self.render_browser_panel(&thread, window, cx), "browser".to_owned()),
                 PRINTS => (self.render_prints_list(cx), "prints".to_owned()),
+                BEARS => (self.render_bears_panel(&thread, cx), "bears".to_owned()),
                 id => (self.render_panel(&thread, id, window, cx), format!("panel {id}")),
             }
         };
@@ -2327,24 +2341,34 @@ impl SidePane {
     /// `PrintRow`: its kind's icon, title, kind and version, and the
     /// projects it's in. A click opens it beside the thread, where it
     /// follows new versions; its menu has the rest.
-    fn print_row(&mut self, page: &threadbear_core::prints::Page, index: &str, p: Palette, cx: &mut Context<Self>) -> AnyElement {
+    /// ⌘-click and Shift-click pick it among `order`, the list it's in
+    /// (print_select.rs); its menu is the picked ones' when it's one of them.
+    fn print_row(&mut self, page: &threadbear_core::prints::Page, index: &str, order: Rc<Vec<String>>, p: Palette, cx: &mut Context<Self>) -> AnyElement {
         let titles = self.project_titles(cx);
         let (open, menu) = (page.id.clone(), page.id.clone());
+        let picked = self.app.upgrade().is_some_and(|a| a.read(cx).print_picked(&page.id));
         PaneRow::new(SharedString::from(format!("print-{index}-{}", page.id)), page.title.clone())
             .icon(page.symbol())
             .trailing(Some(threadbear_core::prints::rows::kind_and_version(page)))
             .detail(Some(threadbear_core::prints::rows::projects(page, &titles)))
-            .tip(format!("Open {} beside the thread", page.title))
+            .tip(format!("Open {} beside the thread. \u{2318}-click or Shift-click picks several", page.title))
+            .picked(picked.then(|| style::primary_opacity(cx, 0.1)))
             .on_click(move |this, window, cx| {
                 if let Some(app) = this.app.upgrade() {
                     let id = open.clone();
-                    app.update(cx, |a, cx| a.open_print_here(&id, window, cx));
+                    let pick = crate::print_select::Pick::from(&window.modifiers());
+                    let order = order.clone();
+                    app.update(cx, |a, cx| {
+                        if !a.print_row_clicked(&id, &order, pick, cx) {
+                            a.open_print_here(&id, window, cx);
+                        }
+                    });
                 }
             })
             .on_menu(move |this, pos, window, cx| {
                 if let Some(app) = this.app.upgrade() {
                     let id = menu.clone();
-                    app.update(cx, |a, cx| a.open_print_menu(&id, true, pos, window, cx));
+                    app.update(cx, |a, cx| a.print_row_menu(&id, true, pos, window, cx));
                 }
             })
             .render(p, cx)
@@ -2359,9 +2383,15 @@ impl SidePane {
         if all.is_empty() {
             return crate::files::pane_note(threadbear_core::prints::words::RAIL_EMPTY, p).into_any_element();
         }
+        let order: Rc<Vec<String>> = Rc::new(all.iter().map(|pg| pg.id.clone()).collect());
         let mut list = v_flex().py(px(8.));
+        // Picked ones: the bar over the list says how many (print_select.rs).
+        if let Some(app) = self.app.upgrade() {
+            let picked = app.read(cx).picked_prints().len();
+            list = list.children(crate::print_select::picked_bar(app.downgrade(), picked, cx).map(|bar| div().px(px(8.)).child(bar)));
+        }
         for page in &all {
-            list = list.child(self.print_row(page, "rail", p, cx));
+            list = list.child(self.print_row(page, "rail", order.clone(), p, cx));
         }
         div().id("prints-list").size_full().overflow_y_scroll().child(list).into_any_element()
     }

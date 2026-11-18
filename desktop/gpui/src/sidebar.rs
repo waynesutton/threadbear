@@ -331,6 +331,8 @@ pub(crate) enum MenuAction {
     DeleteSchedule(String),
     /// A Print's menu (prints.rs).
     Print(crate::prints::PrintAction),
+    /// A row's menu in Bears & Tables (bears_panel.rs).
+    Bears(crate::bears_panel::BearsAction),
 }
 
 /// The sidebar's own state; the app holds one of these (`Threadbear::sidebar`).
@@ -989,6 +991,7 @@ impl Threadbear {
             MenuAction::Project(action) => return self.run_project_action(action, window, cx),
             MenuAction::BearColor(bear, color) => return self.set_bear_color(bear, color, cx),
             MenuAction::Print(action) => return self.run_print_action(action, window, cx),
+            MenuAction::Bears(action) => return self.run_bears_action(action, window, cx),
             _ => {}
         }
         let Some(id) = thread else { return };
@@ -1049,7 +1052,8 @@ impl Threadbear {
             | MenuAction::DeleteSchedule(_)
             | MenuAction::Project(_)
             | MenuAction::BearColor(..)
-            | MenuAction::Print(_) => {}
+            | MenuAction::Print(_)
+            | MenuAction::Bears(_) => {}
         }
         cx.notify();
     }

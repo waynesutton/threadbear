@@ -2,8 +2,9 @@
 // NoteEditor: your own notes over the main panel, as Settings is, with the
 // thread and its draft left where they were underneath. The list of notes,
 // newest first, down the left (it folds away for more room to write); the
-// open note on the right, its title above a code editor's box with line
-// numbers and basic Markdown coloured as you type.
+// open note on the right, its title above an editor's box with line numbers
+// and basic Markdown coloured as you type, in the app's own reading type (or
+// a serif) at a size the − and + buttons choose, kept across launches.
 //
 // The notes are read and written by threadbear_core::notes, in the same
 // sealed files the Swift app keeps, so both apps show the same notes. They
@@ -33,6 +34,28 @@ const NOTE_LANGUAGE: &str = "threadbear-note";
 const SAVE_DELAY: Duration = Duration::from_millis(500);
 /// The list's width at 100% (`.frame(width: 220)`).
 const LIST_WIDTH: f32 = 220.;
+/// The text's size at 100%, and the − and + buttons' bounds (Wayne, 17 Nov:
+/// Notes should read like a doc, not code).
+pub(crate) const TEXT_SIZE: f32 = 15.;
+pub(crate) const TEXT_MIN: f32 = 12.;
+pub(crate) const TEXT_MAX: f32 = 22.;
+/// The serif Notes offers beside the app's own sans (the Librarian's quote
+/// is set in it too).
+const SERIF: &str = "Georgia";
+
+/// A size one step smaller or larger, kept within the bounds and to whole
+/// points; a size from the settings file is brought within them too.
+pub(crate) fn stepped_size(size: f32, step: f32) -> f32 {
+    let size = if size.is_finite() { size } else { TEXT_SIZE };
+    (size.round() + step).clamp(TEXT_MIN, TEXT_MAX)
+}
+
+/// A comfortable line for reading, a doc's rather than code's: about 1.6
+/// times the size, in whole points so the line numbers sit on the same
+/// lines as the text at every size.
+pub(crate) fn line_height(size: f32) -> f32 {
+    (size * 1.6).round()
+}
 
 actions!(notes_page, [CloseNotes]);
 
@@ -67,8 +90,10 @@ impl Threadbear {
         self.close_settings(cx);
         let home = threadbear_client::config::RunnerConfig::from_env().home;
         let list_hidden = self.settings.saved.notes_list_hidden == Some(true);
+        let text_size = stepped_size(self.settings.saved.notes_text_size.unwrap_or(TEXT_SIZE), 0.);
+        let serif = self.settings.saved.notes_font.as_deref() == Some("serif");
         let app = cx.entity().downgrade();
-        let page = cx.new(|cx| NotesPage::new(app, &home, list_hidden, window, cx));
+        let page = cx.new(|cx| NotesPage::new(app, &home, list_hidden, text_size, serif, window, cx));
         self.notes_page = Some(page);
         self.sync_menus(cx);
         cx.notify();
@@ -128,6 +153,8 @@ impl Threadbear {
             "body": page.and_then(|p| p.selection.as_ref().map(|_| p.editor.read(cx).value().to_string())),
             "asking": page.and_then(|p| p.deleting.as_ref().map(|t| format!("Delete \u{201C}{t}\u{201D}?"))),
             "listHidden": page.map(|p| p.list_hidden),
+            "textSize": page.map(|p| p.text_size),
+            "font": page.map(|p| if p.serif { "serif" } else { "sans" }),
             "problem": page.and_then(|p| p.store.problem.clone()),
         })
     }
@@ -156,21 +183,24 @@ pub(crate) struct NotesPage {
     /// The title of the note a delete is asking about.
     deleting: Option<String>,
     list_hidden: bool,
+    /// The text's size at 100%, and whether it's set in the serif.
+    text_size: f32,
+    serif: bool,
     scroll: ScrollHandle,
     focus: FocusHandle,
     _subs: Vec<Subscription>,
 }
 
 impl NotesPage {
-    fn new(app: WeakEntity<Threadbear>, home: &std::path::Path, list_hidden: bool, window: &mut Window, cx: &mut Context<Self>) -> Self {
+    fn new(app: WeakEntity<Threadbear>, home: &std::path::Path, list_hidden: bool, text_size: f32, serif: bool, window: &mut Window, cx: &mut Context<Self>) -> Self {
         bind_keys(cx);
         let mut store = Store::new(home);
         store.load();
         let title = cx.new(|cx| InputState::new(window, cx).placeholder("Title"));
         let palette = Rc::new(RefCell::new(Palette::default()));
         let editor = cx.new(|cx| {
-            // A code editor's box, as the Swift app's (Sublime Text's): line
-            // numbers, and nothing closed, indented or folded for you.
+            // An editor's box with line numbers, as the Swift app's, and
+            // nothing closed, indented or folded for you.
             EditorState::new(window, cx)
                 .soft_wrap(true)
                 .line_number(true)
@@ -211,7 +241,7 @@ impl NotesPage {
             this.flush(cx);
             async {}
         }));
-        let mut page = NotesPage { app, store, selection: None, title, editor, palette, save_soon: None, deleting: None, list_hidden, scroll: ScrollHandle::new(), focus: cx.focus_handle(), _subs: subs };
+        let mut page = NotesPage { app, store, selection: None, title, editor, palette, save_soon: None, deleting: None, list_hidden, text_size, serif, scroll: ScrollHandle::new(), focus: cx.focus_handle(), _subs: subs };
         let first = page.store.sorted().first().map(|n| n.id.clone());
         page.pick(first, window, cx);
         if page.selection.is_none() {
@@ -349,6 +379,78 @@ impl NotesPage {
             })
             .ok();
         cx.notify();
+    }
+
+    /// − and +: the text a point smaller or larger, kept for next time.
+    fn step_text(&mut self, step: f32, cx: &mut Context<Self>) {
+        let size = stepped_size(self.text_size, step);
+        if size == self.text_size {
+            return;
+        }
+        self.text_size = size;
+        self.app
+            .update(cx, |app, cx| {
+                app.settings.saved.notes_text_size = (size != TEXT_SIZE).then_some(size);
+                app.save_settings_soon(cx);
+            })
+            .ok();
+        cx.notify();
+    }
+
+    /// Sans or Serif, kept for next time.
+    fn set_serif(&mut self, serif: bool, cx: &mut Context<Self>) {
+        if self.serif == serif {
+            return;
+        }
+        self.serif = serif;
+        self.app
+            .update(cx, |app, cx| {
+                app.settings.saved.notes_font = serif.then(|| "serif".to_owned());
+                app.save_settings_soon(cx);
+            })
+            .ok();
+        cx.notify();
+    }
+
+    /// The − and + buttons and the Sans and Serif choice, by the note's date.
+    fn text_controls(&self, cx: &mut Context<Self>) -> AnyElement {
+        let secondary = style::secondary_text(cx);
+        let faint = style::tertiary_label(cx);
+        let hover = style::primary_opacity(cx, 0.08);
+        let chosen_fill = style::primary_opacity(cx, 0.1);
+        let fg = cx.theme().foreground;
+        let step = |id: &'static str, symbol: &'static str, tip: &'static str, by: f32, enabled: bool, cx: &mut Context<Self>| {
+            tipped(div().id(id).size(px(24.)).rounded(px(5.)).flex().items_center().justify_center(), tip)
+                .text_color(if enabled { secondary } else { faint })
+                .when(enabled, |d| d.cursor_pointer().hover(move |s| s.bg(hover)).on_click(cx.listener(move |this, _, _, cx| this.step_text(by, cx))))
+                .child(icons::symbol(symbol).with_size(px(12.)))
+        };
+        let smaller = step("notes-text-smaller", "minus", "Smaller text", -1., self.text_size > TEXT_MIN, cx);
+        let larger = step("notes-text-larger", "plus", "Larger text", 1., self.text_size < TEXT_MAX, cx);
+        let face = |id: &'static str, label: &'static str, tip: &'static str, serif: bool, chosen: bool, family: SharedString, cx: &mut Context<Self>| {
+            tipped(div().id(id).h(px(22.)).px(px(8.)).rounded(px(5.)).flex().items_center().cursor_pointer(), tip)
+                .aria_selected(chosen)
+                .font_family(family)
+                .text_size(px(style::size::SMALL))
+                .text_color(if chosen { fg } else { secondary })
+                .when(chosen, |d| d.bg(chosen_fill))
+                .when(!chosen, |d| d.hover(move |s| s.bg(hover)))
+                .on_click(cx.listener(move |this, _, _, cx| this.set_serif(serif, cx)))
+                .child(label)
+        };
+        let sans = face("notes-font-sans", "Sans", "Set the note in the app's own type", false, !self.serif, cx.theme().font_family.clone(), cx);
+        let serif = face("notes-font-serif", "Serif", "Set the note in a serif, like a printed page", true, self.serif, SERIF.into(), cx);
+        h_flex()
+            .flex_none()
+            .gap(px(2.))
+            .items_center()
+            .child(smaller)
+            .child(div().w(px(22.)).text_center().text_size(px(style::size::SMALL)).text_color(secondary).child(format!("{}", self.text_size as i32)))
+            .child(larger)
+            .child(div().w(px(6.)))
+            .child(sans)
+            .child(serif)
+            .into_any_element()
     }
 
     fn close(&mut self, cx: &mut Context<Self>) {
@@ -541,24 +643,35 @@ impl NotesPage {
         // A holder round the kit's field, named for scripts and VoiceOver.
         let title = tipped_as(div().id("notes-title").flex_1().min_w_0(), "The note's name. Click to rename it", gpui_kit::Role::GenericContainer)
             .child(Input::new(&self.title).appearance(false).bordered(false).text_size(px(16.)).font_weight(FontWeight::SEMIBOLD));
-        let header = h_flex()
+        // The title and the bin, then the date with the type's controls
+        // under it, so a narrow page keeps room for the title.
+        let header = v_flex()
             .flex_none()
-            .gap(px(8.))
+            .gap(px(4.))
             .px(px(16.))
-            .py(px(10.))
-            .items_center()
+            .pt(px(10.))
+            .pb(px(6.))
             .border_b(gpui_kit::px(0.5))
             .border_color(style::hairline(cx))
-            .child(title)
-            .child(div().flex_none().text_size(px(style::size::SMALL)).text_color(style::tertiary_label(cx)).whitespace_nowrap().child(changed))
-            .child(bin);
+            .child(h_flex().gap(px(8.)).items_center().child(title).child(bin))
+            .child(
+                h_flex()
+                    .gap(px(8.))
+                    .items_center()
+                    .child(div().flex_1().min_w_0().truncate().text_size(px(style::size::SMALL)).text_color(style::tertiary_label(cx)).child(changed))
+                    .child(self.text_controls(cx)),
+            );
+        // A doc's type, not code's: the app's own sans or the serif, at the
+        // chosen size on a reading line. The line numbers are drawn in the
+        // same type on the same lines, so they stay level with the text.
+        let family: SharedString = if self.serif { SERIF.into() } else { cx.theme().font_family.clone() };
         let editor = Editor::new(&self.editor)
             .h_full()
             .appearance(false)
             .bordered(false)
-            .text_size(px(style::size::CODE))
-            .line_height(px(style::size::CODE * 1.25 + 3.))
-            .font_family(cx.theme().mono_font_family.clone());
+            .text_size(px(self.text_size))
+            .line_height(px(line_height(self.text_size)))
+            .font_family(family);
         let me = cx.entity().downgrade();
         let body = div()
             .id("notes-editor")
@@ -713,6 +826,14 @@ pub(crate) fn automation(app: &Entity<Threadbear>, cmd: &Value, window: &mut Win
         window.pointer_up(point, MouseButton::Left, cx);
         window.render_frame(cx);
     }
+    // `textSize` steps it (-1 or 1, through the buttons' own handler), and
+    // `font` sets "sans" or "serif".
+    if let Some(by) = cmd["textSize"].as_f64() {
+        page.update(cx, |p, cx| p.step_text(by.signum() as f32, cx));
+    }
+    if let Some(font) = cmd["font"].as_str() {
+        page.update(cx, |p, cx| p.set_serif(font == "serif", cx));
+    }
     if cmd["confirm"].as_bool() == Some(true) {
         let title = page.read(cx).deleting.clone().ok_or("no delete is asking")?;
         let id = page.read(cx).store.notes.iter().find(|n| n.title == title).map(|n| n.id.clone()).ok_or("the note has gone")?;
@@ -720,4 +841,29 @@ pub(crate) fn automation(app: &Entity<Threadbear>, cmd: &Value, window: &mut Win
         window.close_dialog(cx);
     }
     Ok(json!("ok"))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{line_height, stepped_size, TEXT_MAX, TEXT_MIN, TEXT_SIZE};
+
+    #[test]
+    fn the_text_size_stays_within_its_bounds() {
+        assert_eq!(stepped_size(TEXT_SIZE, 1.), 16.);
+        assert_eq!(stepped_size(TEXT_SIZE, -1.), 14.);
+        assert_eq!(stepped_size(TEXT_MAX, 1.), TEXT_MAX);
+        assert_eq!(stepped_size(TEXT_MIN, -1.), TEXT_MIN);
+        assert_eq!(stepped_size(40., 0.), TEXT_MAX, "a size from the file, brought within them");
+        assert_eq!(stepped_size(f32::NAN, 0.), TEXT_SIZE);
+        assert_eq!(stepped_size(14.6, 0.), 15.);
+    }
+
+    #[test]
+    fn lines_are_whole_points_and_roomier_than_code() {
+        for size in 12..=22 {
+            let line = line_height(size as f32);
+            assert_eq!(line, line.round());
+            assert!(line >= size as f32 * 1.5, "{size}");
+        }
+    }
 }

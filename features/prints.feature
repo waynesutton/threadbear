@@ -169,3 +169,49 @@ Feature: Prints
     When I choose Publish from its menu and say Publish
     Then its link is copied and its row says "published"
     And its menu offers Copy Link, Open on the Web and Unpublish
+
+  # Several at once (Wayne, 17 Nov): ⌘-click and Shift-click in the rail's
+  # Prints, Highlights' Prints or a project's page pick them, Esc lets them
+  # go, and the bar or a picked row's menu acts on them all.
+  @prints.list @swift-pending
+  Scenario: ⌘-click and Shift-click pick several Prints, and Esc lets them go
+    Given the app is connected to a runner with the demo threads
+    When I "⌘"-click the Print "Launch notes"
+    And I "Shift"-click the Print "How the export runs"
+    Then the Prints picked are "Launch notes, Invoice totals by month, How the export runs"
+    When I "⌘"-click the Print "Invoice totals by month"
+    Then the Prints picked are "Launch notes, How the export runs"
+    When I press Esc over the Prints
+    Then the Prints picked are ""
+
+  @prints.list @prints.menu @swift-pending
+  Scenario: Deleting picked Prints asks once and takes them all away
+    Given the app is connected to a runner with the demo threads
+    When I "⌘"-click the Print "Invoice totals by month"
+    And I "⌘"-click the Print "How the export runs"
+    And I delete the picked Prints
+    Then Delete asks once about "Invoice totals by month, How the export runs"
+    When I say Delete
+    Then no Print is called "Invoice totals by month"
+    And no Print is called "How the export runs"
+    And the Prints picked are ""
+
+  @prints.list @prints.menu @swift-pending
+  Scenario: Picked Prints come out of a project together
+    Given the app is connected to a runner with the demo threads
+    When I "⌘"-click the Print "Launch checklist"
+    And I "⌘"-click the Print "PR board"
+    And I take the picked Prints out of "Threadbear"
+    Then the Print "Launch checklist" is in "No project"
+    And the Print "PR board" is in "No project"
+    And the Print "Launch notes" is in "Threadbear"
+
+  # A click in the page itself needs the web runtime and a real pointer.
+  # Tried by hand: the rules are threadbear_web's preview_rules
+  # (`opens_in_browser`), tested there.
+  @prints.pane @manual
+  Scenario: A web link in a Print opens in the browser
+    Given a Print with a link to "https://example.com" is open beside the thread or in a window
+    When I click the link
+    Then example.com opens in my browser
+    And the Print stays where it was

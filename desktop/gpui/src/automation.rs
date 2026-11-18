@@ -529,6 +529,7 @@ fn step(app: &Entity<Threadbear>, cmd: &Value, window: &mut Window, cx: &mut App
         // page's search, and the sidebar's folded project rows.
         "project" | "projectParent" => crate::projects::automation(app, cmd, window, cx),
         "print" => crate::prints::automation(app, cmd, window, cx),
+        "bears" => crate::bears_panel::automation(app, cmd, window, cx),
         "decision" => crate::project_decisions::automation(app, cmd, window, cx),
         "projectTab" => crate::project_decisions::tab_automation(app, cmd, cx),
         "search" if cmd["projects"].as_bool() == Some(true) => crate::projects::automation(app, cmd, window, cx),
@@ -1152,6 +1153,9 @@ fn shell_step(app: &Entity<Threadbear>, cmd: &Value, window: &mut Window, cx: &m
                     let mut ids: Vec<String> = vec![shell::HIGHLIGHTS.to_string(), shell::FILES.to_string()];
                     if t.browser_rail(&thread.id, cx).is_some() {
                         ids.push(shell::BROWSER.to_string());
+                    }
+                    if t.shows_bears_rail(&thread) {
+                        ids.push(shell::BEARS.to_string());
                     }
                     ids.extend(thread.panels.iter().flatten().filter_map(|p| p["id"].as_str().map(String::from)));
                     if thread.patches.as_ref().is_some_and(|p| !p.is_empty()) {

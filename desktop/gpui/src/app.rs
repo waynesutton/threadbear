@@ -135,6 +135,8 @@ pub struct Threadbear {
     /// The bears this Mac's runner lists, for the @ list and a table's page
     /// (bears.rs).
     pub(crate) bear_list: crate::bears::BearList,
+    /// The Bears & Tables panel's list and picked rows (bears_panel.rs).
+    pub(crate) bears_panel: crate::bears_panel::BearsPanelState,
     /// Prints (prints.rs), with the pages experiment on.
     pub(crate) prints: crate::prints::PrintsState,
     pub(crate) done_note: Option<String>,
@@ -391,6 +393,8 @@ impl Threadbear {
         crate::terminal::install(&cx.entity(), cx);
         // A key with ⌘ held puts the keys shown beside the buttons away.
         crate::key_hints::install(cx.entity().downgrade(), cx);
+        // Esc lets picked Prints go (print_select.rs).
+        crate::print_select::install(cx.entity().downgrade(), cx);
         let search = cx.new(|cx| InputState::new(window, cx).placeholder("Search threads"));
         // The filter is worked out at render, so a change only needs a redraw.
         let searching = cx.subscribe(&search, |_, _, ev: &InputEvent, cx| {
@@ -552,6 +556,7 @@ impl Threadbear {
             connection_error: None,
             busy_notes: Vec::new(),
             bear_list: Default::default(),
+            bears_panel: Default::default(),
             prints: Default::default(),
             done_note: None,
             done_task: None,
@@ -1710,6 +1715,7 @@ impl Threadbear {
         // last slid off (row_swipe.rs), and the card that last arrived in
         // the box while it was on screen (composer_card.rs).
         dump["prints"] = crate::prints::dump(self, cx);
+        dump["bearsPanel"] = self.bears_panel_dump();
         dump["juice"] = json!({
             "slidOff": self.sidebar.gestures.last_slid(),
             "cardArrived": self.composer(cx).and_then(|c| c.read(cx).card_arrival.last),

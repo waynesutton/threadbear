@@ -68,6 +68,9 @@ struct RichWindow {
     page: Option<Rc<threadbear_web::Page>>,
     failed: Option<String>,
     _subs: Vec<Subscription>,
+    /// Its page's clicked web links, out to the browser.
+    #[cfg(target_os = "macos")]
+    _links: Option<Task<()>>,
 }
 
 impl RichWindow {
@@ -97,6 +100,8 @@ impl RichWindow {
             page: None,
             failed: None,
             _subs: subs,
+            #[cfg(target_os = "macos")]
+            _links: None,
         };
         this.make_page(window, cx);
         this
@@ -122,8 +127,19 @@ impl RichWindow {
             self.failed = Some("the window has no view to show it in".into());
             return;
         };
-        match threadbear_web::Page::sealed(parent, &threadbear_web::data_url(&html)) {
-            Ok(page) => self.page = Some(Rc::new(page)),
+        // A web link in it, clicked, opens in the browser through the gate;
+        // the page itself never goes anywhere (sealed.rs, `LinksOut`).
+        let (tx, mut rx) = futures::channel::mpsc::unbounded::<String>();
+        match threadbear_web::Page::sealed_with_links(parent, &threadbear_web::data_url(&html), move |url| drop(tx.unbounded_send(url))) {
+            Ok(page) => {
+                self.page = Some(Rc::new(page));
+                self._links = Some(cx.spawn(async move |_, cx| {
+                    use futures::StreamExt as _;
+                    while let Some(url) = rx.next().await {
+                        cx.update(|cx| crate::open_gate::open_web(&url, cx));
+                    }
+                }));
+            }
             Err(why) => self.failed = Some(why),
         }
         cx.notify();

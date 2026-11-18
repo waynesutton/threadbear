@@ -154,6 +154,32 @@ pub(crate) struct Guard {
     pub(crate) allowed: Arc<Mutex<String>>,
     /// Said when the page's process stops (a page too big, a crash).
     pub(crate) on_stop: Arc<dyn Fn() + Send + Sync>,
+    /// Where a person's click on a web link goes, for a page shown in a
+    /// window (a Print's, a reply's page full size); None for a picture.
+    pub(crate) links: Option<Arc<LinksOut>>,
+}
+
+/// A sealed page's clicked web links, out to the app to open in the browser,
+/// one for each click in the view and at most one a second (`LeaveGate`, as
+/// a panel's). The page itself never goes anywhere.
+pub(crate) struct LinksOut {
+    /// The page's native view, whose clicks and keys are counted.
+    pub(crate) view: std::sync::atomic::AtomicUsize,
+    pub(crate) gate: Mutex<crate::panel_rules::LeaveGate>,
+    pub(crate) send: Box<dyn Fn(String) + Send + Sync>,
+}
+
+impl LinksOut {
+    pub(crate) fn leave(&self, url: String) {
+        let view = self.view.load(std::sync::atomic::Ordering::Acquire) as *mut std::ffi::c_void;
+        if view.is_null() {
+            return;
+        }
+        let inputs = unsafe { super::host::tb_view_input_count(view) };
+        if self.gate.lock().is_ok_and(|mut gate| gate.allow(std::time::Instant::now(), inputs)) {
+            (self.send)(url);
+        }
+    }
 }
 
 wrap_request_handler! {
@@ -165,13 +191,20 @@ wrap_request_handler! {
         // The page the app gave, in the main frame; in a frame only what the
         // page carries in itself (its policy has frame-src 'none' anyway).
         // Never a link, a form, a refresh or a script's navigation.
-        fn on_before_browse(&self, _browser: Option<&mut Browser>, frame: Option<&mut Frame>, request: Option<&mut Request>, _user_gesture: c_int, _is_redirect: c_int) -> c_int {
+        // A web link, clicked, in a page shown in a window: the browser,
+        // and the page stays (`LinksOut`).
+        fn on_before_browse(&self, _browser: Option<&mut Browser>, frame: Option<&mut Frame>, request: Option<&mut Request>, user_gesture: c_int, is_redirect: c_int) -> c_int {
             let url = request.map(|r| CefString::from(&r.url()).to_string()).unwrap_or_default();
             let main = frame.is_some_and(|f| f.is_main() == 1);
             let allowed = if main { self.guard.allowed.lock().is_ok_and(|a| *a == url) || url == "about:blank" } else { may_load(&url) };
             if allowed {
                 0
             } else {
+                if let Some(links) = &self.guard.links {
+                    if crate::preview_rules::opens_in_browser(&url, main, user_gesture == 1, is_redirect == 1) {
+                        links.leave(url);
+                    }
+                }
                 1
             }
         }
@@ -216,6 +249,39 @@ wrap_life_span_handler! {
             _extra_info: Option<&mut Option<DictionaryValue>>,
             _no_javascript_access: Option<&mut c_int>,
         ) -> c_int {
+            1
+        }
+    }
+}
+
+wrap_life_span_handler! {
+    pub(crate) struct LinkPopups {
+        links: Arc<LinksOut>,
+    }
+
+    impl LifeSpanHandler {
+        // No window opens either, but a web link asking for one
+        // (`target="_blank"`), clicked, goes to the browser (`LinksOut`).
+        fn on_before_popup(
+            &self,
+            _browser: Option<&mut Browser>,
+            _frame: Option<&mut Frame>,
+            _popup_id: c_int,
+            target_url: Option<&CefString>,
+            _target_frame_name: Option<&CefString>,
+            _target_disposition: WindowOpenDisposition,
+            user_gesture: c_int,
+            _popup_features: Option<&PopupFeatures>,
+            _window_info: Option<&mut WindowInfo>,
+            _client: Option<&mut Option<Client>>,
+            _settings: Option<&mut BrowserSettings>,
+            _extra_info: Option<&mut Option<DictionaryValue>>,
+            _no_javascript_access: Option<&mut c_int>,
+        ) -> c_int {
+            let url = target_url.map(|u| u.to_string()).unwrap_or_default();
+            if crate::preview_rules::opens_in_browser(&url, true, user_gesture == 1, false) {
+                self.links.leave(url);
+            }
             1
         }
     }

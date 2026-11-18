@@ -4,6 +4,7 @@
 // libraries and take seconds.
 pub mod activity;
 pub mod bears;
+pub mod bears_panel;
 pub mod board;
 pub mod archive_flight;
 pub mod app_update;

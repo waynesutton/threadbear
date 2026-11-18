@@ -85,7 +85,7 @@ impl Shared {
 
     /// A page for the browser, one for each click and at most one a second
     /// from this panel; any more are dropped without a word (`LeaveGate`).
-    fn leave(&self, url: String) {
+    pub(crate) fn leave(&self, url: String) {
         let inputs = unsafe { tb_view_input_count(self.view.load(Ordering::Acquire) as *mut c_void) };
         let allowed = self.gate.lock().is_ok_and(|mut gate| gate.allow(std::time::Instant::now(), inputs));
         if allowed {

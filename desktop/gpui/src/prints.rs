@@ -49,6 +49,12 @@ pub(crate) struct PrintsState {
     pub(crate) sheet: Option<Entity<PrintSheet>>,
     /// The row under the pointer on a project's page.
     pub(crate) hovered: Option<String>,
+    /// Prints picked with ⌘- or Shift-click, in the order picked, and the
+    /// one a Shift-click's run starts from (print_select.rs).
+    pub(crate) picked: Vec<String>,
+    pub(crate) anchor: Option<String>,
+    /// The picked Prints a Delete is asking about.
+    pub(crate) asking_delete: Option<Vec<String>>,
 }
 
 /// What a Print's menu line does.
@@ -74,6 +80,10 @@ pub(crate) enum PrintAction {
     OpenOnWeb(String),
     Delete(String),
     Undelete(String),
+    /// Several picked at once (print_select.rs): Delete asks first.
+    DeleteMany(Vec<String>),
+    /// Each into the project (true) or out of it.
+    ProjectMany(Vec<String>, String, bool),
 }
 
 impl Threadbear {
@@ -342,6 +352,8 @@ impl Threadbear {
             }
             PrintAction::Delete(id) => self.delete_print(&id, cx),
             PrintAction::Undelete(id) => self.undelete_print(&id, cx),
+            PrintAction::DeleteMany(ids) => self.ask_delete_prints(ids, window, cx),
+            PrintAction::ProjectMany(ids, project, add) => self.set_prints_project(ids, project, add, cx),
         }
     }
 
@@ -680,9 +692,13 @@ impl Threadbear {
             section = section.child(div().text_size(px(style::size::LABEL)).line_height(px(16.)).text_color(faint).child(words::SECTION_EMPTY));
         }
         let now = now_ms();
+        // Picked ones in this list: the bar over it says how many.
+        let order: std::rc::Rc<Vec<String>> = std::rc::Rc::new(pages.iter().map(|p| p.id.clone()).collect());
+        let picked_here = self.picked_prints().iter().filter(|id| order.contains(id)).count();
+        section = section.children(crate::print_select::picked_bar(cx.entity().downgrade(), picked_here, cx));
         let mut rows = v_flex().w_full().gap(px(2.));
         for page in &pages {
-            rows = rows.child(self.render_print_row(page, now, cx));
+            rows = rows.child(self.render_print_row(page, now, order.clone(), cx));
         }
         section = section.child(rows);
         if !deleted.is_empty() {
@@ -736,10 +752,11 @@ impl Threadbear {
         Some(section.into_any_element())
     }
 
-    fn render_print_row(&mut self, page: &Page, now: i64, cx: &mut Context<Self>) -> AnyElement {
+    fn render_print_row(&mut self, page: &Page, now: i64, order: std::rc::Rc<Vec<String>>, cx: &mut Context<Self>) -> AnyElement {
         let (faint, fg) = (style::faint_text(cx), cx.theme().foreground);
         let key = format!("print:{}", page.id);
         let hovering = self.prints.hovered.as_deref() == Some(key.as_str());
+        let picked = self.print_picked(&page.id);
         let busy = self.print_busy(&page.id);
         let (open_id, menu_id, more_id) = (page.id.clone(), page.id.clone(), page.id.clone());
         let hover_key = key.clone();
@@ -775,8 +792,9 @@ impl Threadbear {
             .py(px(6.))
             .rounded(px(6.))
             .cursor_pointer()
-            .when(hovering, |s| s.bg(style::sidebar_hover(cx)))
-            .tip("Open this print in a window of its own")
+            .when(hovering && !picked, |s| s.bg(style::sidebar_hover(cx)))
+            .when(picked, |s| s.bg(style::primary_opacity(cx, 0.1)).aria_selected(true))
+            .tip("Open this print in a window of its own. \u{2318}-click or Shift-click picks several")
             .on_hover(cx.listener(move |this, on: &bool, _, cx| {
                 let now = if *on { Some(hover_key.clone()) } else { None };
                 if *on || this.prints.hovered.as_deref() == Some(hover_key.as_str()) {
@@ -784,12 +802,15 @@ impl Threadbear {
                     cx.notify();
                 }
             }))
-            .on_click(cx.listener(move |this, _: &ClickEvent, _, cx| {
+            .on_click(cx.listener(move |this, ev: &ClickEvent, _, cx| {
+                if this.print_row_clicked(&open_id, &order, crate::print_select::Pick::from(&ev.modifiers()), cx) {
+                    return;
+                }
                 if !this.print_busy(&open_id) {
                     this.open_print_window(&open_id, None, cx);
                 }
             }))
-            .on_mouse_down(MouseButton::Right, cx.listener(move |this, ev: &MouseDownEvent, window, cx| this.open_print_menu(&menu_id, false, ev.position, window, cx)))
+            .on_mouse_down(MouseButton::Right, cx.listener(move |this, ev: &MouseDownEvent, window, cx| this.print_row_menu(&menu_id, false, ev.position, window, cx)))
             .child(div().pt(px(2.)).w(px(16.)).flex_none().child(icons::symbol(page.symbol()).with_size(px(13.)).text_color(faint)))
             .child(
                 v_flex()
@@ -811,7 +832,7 @@ impl Threadbear {
 }
 
 /// The runner's words, without "pages." when it names a method.
-fn print_error(e: &RpcError) -> String {
+pub(crate) fn print_error(e: &RpcError) -> String {
     if e.code == -32601 {
         "This runner is too old for that. Update it and try again.".to_owned()
     } else {
@@ -1025,10 +1046,13 @@ pub(crate) fn dump(app: &Threadbear, cx: &App) -> Value {
         // What the open project's page draws in its Prints section.
         "projectPage": app.projects.open.as_ref().map(|id| core::rows::in_project(id, &app.prints.list).iter().map(|p| format!("{} {}", p.title, p.row_detail(now))).collect::<Vec<_>>()),
         "sheet": app.prints.sheet.as_ref().map_or(Value::Null, |s| s.read(cx).dump(cx)),
+        // Picked with ⌘- or Shift-click, by title, and the Delete asking.
+        "picked": app.picked_prints().iter().filter_map(|id| app.print(id)).map(|p| p.title.clone()).collect::<Vec<_>>(),
+        "askingDelete": app.prints.asking_delete.as_ref().map(|ids| ids.iter().filter_map(|id| app.print(id)).map(|p| p.title.clone()).collect::<Vec<_>>()),
     })
 }
 
-/// `print`: `{ id, do: "menu" | "open" | "here" | "ask" | "edit" | "type" | "save" | "close" | "pdf" | "link", text?, x?, y?, path?, url? }`:
+/// `print`: `{ id, do: "menu" | "open" | "here" | "ask" | "edit" | "type" | "save" | "close" | "pdf" | "link" | "pick" | "pickedMenu" | "deletePicked" | "confirm" | "clear", text?, x?, y?, path?, url?, with? }`:
 /// a Print's menu opened (at x, y), its window or side pane, its sheets,
 /// and what's typed in a sheet and saved.
 #[cfg(feature = "automation")]
@@ -1056,6 +1080,41 @@ pub(crate) fn automation(app: &Entity<Threadbear>, cmd: &Value, window: &mut Win
             _ => sheet.update(cx, |s, cx| s.close(window, cx)),
         }
         return Ok(json!("ok"));
+    }
+    // Several at once (print_select.rs): `pickedMenu` opens the picked
+    // ones' menu, `deletePicked` asks, `confirm` answers Delete, `clear` is Esc.
+    if matches!(what, "pickedMenu" | "deletePicked" | "confirm" | "clear" | "projectPicked") {
+        app.update(cx, |a, cx| match what {
+            // The picked ones into the project titled `project` (out with `add: false`).
+            "projectPicked" => {
+                let ids = a.picked_prints();
+                let title = cmd["project"].as_str().unwrap_or_default();
+                if let Some(project) = a.projects.list.iter().find(|p| p.title == title || p.id == title).map(|p| p.id.clone()) {
+                    a.set_prints_project(ids, project, cmd["add"].as_bool().unwrap_or(true), cx);
+                }
+            }
+            "pickedMenu" => {
+                let ids = a.picked_prints();
+                let rows = a.picked_menu_rows(&ids);
+                a.open_menu(None, rows, point(gpui_kit::px(400.), gpui_kit::px(300.)), false, window, cx);
+            }
+            "deletePicked" => {
+                let ids = a.picked_prints();
+                a.ask_delete_prints(ids, window, cx);
+            }
+            "confirm" => {
+                if let Some(ids) = a.prints.asking_delete.clone() {
+                    a.delete_prints(ids, cx);
+                }
+            }
+            _ => {
+                a.clear_picked_prints(cx);
+            }
+        });
+        if what == "confirm" {
+            window.close_dialog(cx);
+        }
+        return Ok(json!(format!("ok {what}")));
     }
     let key = cmd["id"].as_str().ok_or("give a Print's id or title")?;
     let id = {
@@ -1089,6 +1148,19 @@ pub(crate) fn automation(app: &Entity<Threadbear>, cmd: &Value, window: &mut Win
                 }
             }
             cx.notify();
+        }
+        // A click on its row in the rail's list, with `with` held: "cmd",
+        // "shift" or nothing (which opens it, and lets the picked go).
+        "pick" => {
+            let pick = match cmd["with"].as_str() {
+                Some("cmd") => crate::print_select::Pick::Toggle,
+                Some("shift") => crate::print_select::Pick::Range,
+                _ => crate::print_select::Pick::Plain,
+            };
+            let order: Vec<String> = core::rows::all(&a.prints.list).iter().map(|p| p.id.clone()).collect();
+            if !a.print_row_clicked(&id, &order, pick, cx) {
+                a.open_print_window(&id, None, cx);
+            }
         }
         other => a.show_error(format!("no Print action {other}"), cx),
     });

@@ -124,6 +124,20 @@ pub fn may_browse(url: &str, site: &PreviewSite, main: bool) -> bool {
     !site.scripts && (lower.starts_with("data:") || lower.starts_with("blob:"))
 }
 
+/// Whether a navigation the view won't show goes to the browser instead: a
+/// web link in its main frame or a new window, clicked by a person, not a
+/// redirect, and not to a preview's own made-up address (a Print's link that
+/// was never followed did nothing, Wayne 17 Nov). The page keeps its place;
+/// `LeaveGate` still allows one page a click, at most one a second.
+pub fn opens_in_browser(url: &str, main: bool, gesture: bool, redirect: bool) -> bool {
+    if !main || !gesture || redirect {
+        return false;
+    }
+    let Some(site) = crate::panel_rules::site(url) else { return false };
+    let host = site.split("://").nth(1).and_then(|h| h.rsplit_once(':')).map(|(h, _)| h).unwrap_or("");
+    host != PREVIEW_DOMAIN && !host.ends_with(&format!(".{PREVIEW_DOMAIN}")) && !host.ends_with(".invalid")
+}
+
 /// Whether a request from the view may start at all: its own origin, or
 /// what's made on the page. Everything else is cancelled.
 pub fn may_request(url: &str, site: &PreviewSite) -> bool {
@@ -219,6 +233,18 @@ mod tests {
         assert!(may_browse("about:blank", &p, true));
         for away in ["https://example.com/", "file:///etc/passwd", "data:text/html,hi", &format!("{}/other.html", p.origin), &format!("{}?x=1", p.page_url()), "javascript:alert(1)", &format!("{}.evil.com/my%20page.html", p.origin)] {
             assert!(!may_browse(away, &p, true), "{away}");
+        }
+    }
+
+    #[test]
+    fn a_clicked_web_link_goes_to_the_browser() {
+        assert!(opens_in_browser("https://example.com/a", true, true, false));
+        assert!(opens_in_browser("http://localhost:3000/", true, true, false));
+        assert!(!opens_in_browser("https://example.com/a", true, false, false), "a script's own navigation");
+        assert!(!opens_in_browser("https://example.com/a", true, true, true), "a redirect");
+        assert!(!opens_in_browser("https://example.com/a", false, true, false), "a frame inside it");
+        for away in ["file:///etc/passwd", "javascript:alert(1)", "data:text/html,hi", "threadbear-print:toggle?item=1", "about:blank", "https://abc.preview.threadbear.invalid/other.html", "https://tb-probe.invalid/x"] {
+            assert!(!opens_in_browser(away, true, true, false), "{away}");
         }
     }
 

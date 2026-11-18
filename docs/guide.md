@@ -1158,6 +1158,10 @@ Print previews and Git side panels follow the app’s light or dark appearance. 
 
 **In Highlights and on the rail.** A thread's Highlights list the Prints it made, under Prints, each with its kind, version and the projects it's in, or "No project". The Prints button on the right-hand rail, under Files, lists every Print you have, newest first, with the same details. It shows once there's at least one. Click a Print in either to open it beside the thread. Right-click one for everything a project's Print menu has: Show in Finder, Edit Text, Download, Versions, Publish, Delete and the rest. A deleted Print waits 7 days under **Recently deleted** on its project's page, where **Restore** brings it back.
 
+**Several at once.** In the rail's Prints, Highlights' Prints or a project's Prints, ⌘-click picks a Print or lets it go, and Shift-click picks every one from the last you picked to the one you click. Picked ones are shaded, and a bar over the list says how many, with **Projects** (put them all in a project, or take them all out of one; a tick means they're all in it already) and **Delete…**. Right-click a picked one for the same: **Projects for 3 prints** and **Delete 3 prints…**. Delete asks once, naming them, then takes them all away; any the runner couldn't delete come back, with why. Esc, the bar's ✕ or a plain click lets them all go (a plain click opens that Print as usual).
+
+**Links in a Print** open in your browser when you click them, beside the thread and in a Print's own window. The Print stays where it was. Only web addresses (http and https) go out, one for each click.
+
 **Every row under Prints on the project's page** opens its print in a window of its own when you click it. Its ⋯ menu, or a right-click, has:
 
 - **Show in Finder** shows the print's newest `index.html` in its folder, to copy, attach or look through its files.
@@ -2289,9 +2293,8 @@ kept for when you turn it back on.
 Notes, under Skills in the bar on the left (⌘6), is a place for your own
 notes. New Note starts one called "Untitled note" (then "Untitled note
 2" and so on); click its title above the text to rename it, and delete it
-with the bin or its right-click menu. The text box is a code editor's:
-line numbers down the side, a fixed-width font, and basic Markdown
-coloured as you type (headings, **bold**, *italics*, `code`, lists,
+with the bin or its right-click menu. The text box has line numbers down
+the side and basic Markdown coloured as you type (headings, **bold**, *italics*, `code`, lists,
 links and quotes). Headings get bigger by level: `#` is the biggest, then
 `##` and `###`. Start a line with `- [ ] ` for a task: click its box to
 tick it (it turns to `[x]` and the task is struck through) or untick it,
@@ -2314,8 +2317,12 @@ Experiments in Settings (⌘,); the notes are kept.
 
 The GPUI desktop app has Notes too, in the bar under the Librarian (⌘6),
 with the same notes as the Swift app. Back and ⌘W leave it as Esc does.
-Two things differ there for now: headings are bold but not bigger, and you
-can't dictate into a note.
+There a note reads like a doc rather than code: it's set in the app's own
+type on roomy lines, with the line numbers level with each line. Under the
+note's title, − and + make the text smaller or larger (12 to 22 points),
+and Sans or Serif picks the type; it remembers both. Two things differ
+there for now: headings are bold but not bigger, and you can't dictate
+into a note.
 
 With Voice on, you can dictate into any text box in Threadbear (the
 message box, a note, a search field) from the keyboard:
@@ -2893,8 +2900,17 @@ Suggested): it teaches every thread, bears included, the `tb bears`
 commands, faces and routines. Store skills you've added reach bear threads
 like any other thread.
 
-Until the new desktop app draws them, bears live in `tb bears` (and the
-Bears & Tables panel, if you have the home patch):
+In the desktop app, the paw on a thread's right-hand rail opens Bears &
+Tables: your bears under Pinned, Bears and Archived (the head bear marked),
+and with Tables on, your tables. Click one to open its newest thread.
+Right-click one for Rename… or Delete…. To delete several at once,
+⌘-click or Shift-click to pick them, then press Delete in the bar over the
+list or right-click one of them: one sheet lists what goes. Esc lets go of
+the picked rows. Deleting a bear moves its folder to the runner's trash;
+deleting a table stops it being a project and leaves its chat threads and
+folder where they are.
+
+The rest of what bears do lives in `tb bears`:
 
 - `tb bears new "Researcher" --does "Finds sources" --personality "dry and calm" --face round`
   makes one, with a daily "tidy memory" routine at 4:30. The routine runs

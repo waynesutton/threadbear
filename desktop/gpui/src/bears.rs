@@ -33,6 +33,12 @@ fn colour_key(bear: &str) -> String {
 }
 
 impl Threadbear {
+    /// A bear was renamed or deleted elsewhere in the app (bears_panel.rs):
+    /// the @ list asks again the next time it's wanted.
+    pub(crate) fn bears_changed(&mut self) {
+        self.bear_list.fetched_at = None;
+    }
+
     /// `refreshBears`: asks this Mac's runner for its bears, unless it did
     /// in the last 20 seconds or is asking now.
     pub(crate) fn refresh_bears(&mut self, cx: &mut Context<Self>) {

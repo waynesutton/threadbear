@@ -6,7 +6,7 @@
 // here or cancelled.
 use super::panel::Shared;
 use crate::panel_rules::Event;
-use crate::preview_rules::{may_browse, may_request, own_path, policy, PreviewSite};
+use crate::preview_rules::{may_browse, may_request, opens_in_browser, own_path, policy, PreviewSite};
 use cef::*;
 use std::os::raw::c_int;
 use std::sync::{Arc, Mutex};
@@ -20,7 +20,7 @@ wrap_request_handler! {
     impl RequestHandler {
         // The main frame shows its page and nothing else; a frame inside it
         // its own origin, or what preview_rules allows.
-        fn on_before_browse(&self, _browser: Option<&mut Browser>, frame: Option<&mut Frame>, request: Option<&mut Request>, user_gesture: c_int, _is_redirect: c_int) -> c_int {
+        fn on_before_browse(&self, _browser: Option<&mut Browser>, frame: Option<&mut Frame>, request: Option<&mut Request>, user_gesture: c_int, is_redirect: c_int) -> c_int {
             let url = request.map(|r| CefString::from(&r.url()).to_string()).unwrap_or_default();
             let main = frame.is_some_and(|f| f.is_main() == 1);
             // A todo list's box or a board's arrow, clicked: the app's to act
@@ -32,6 +32,10 @@ wrap_request_handler! {
             if may_browse(&url, &self.preview, main) {
                 0
             } else {
+                // A web link, clicked: the browser, and the page stays.
+                if opens_in_browser(&url, main, user_gesture == 1, is_redirect == 1) {
+                    self.shared.leave(url);
+                }
                 1
             }
         }
@@ -180,16 +184,17 @@ wrap_life_span_handler! {
     }
 
     impl LifeSpanHandler {
-        // No new windows: a preview has nowhere to send one.
+        // No new windows: a preview has nowhere to send one. A web link
+        // that asks for one (`target="_blank"`), clicked, goes to the browser.
         fn on_before_popup(
             &self,
             _browser: Option<&mut Browser>,
             _frame: Option<&mut Frame>,
             _popup_id: c_int,
-            _target_url: Option<&CefString>,
+            target_url: Option<&CefString>,
             _target_frame_name: Option<&CefString>,
             _target_disposition: WindowOpenDisposition,
-            _user_gesture: c_int,
+            user_gesture: c_int,
             _popup_features: Option<&PopupFeatures>,
             _window_info: Option<&mut WindowInfo>,
             _client: Option<&mut Option<Client>>,
@@ -197,6 +202,10 @@ wrap_life_span_handler! {
             _extra_info: Option<&mut Option<DictionaryValue>>,
             _no_javascript_access: Option<&mut c_int>,
         ) -> c_int {
+            let url = target_url.map(|u| u.to_string()).unwrap_or_default();
+            if opens_in_browser(&url, true, user_gesture == 1, false) {
+                self.shared.leave(url);
+            }
             1
         }
 

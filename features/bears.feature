@@ -105,3 +105,38 @@ Feature: Bear tiles in the sidebar
     Then the bear picker offers Writer
     When I move focus out of the bear message box
     Then the bear picker stays closed
+
+  # The panel needs a dev runner with bears and tables on, which the mock
+  # doesn't have yet, so these were checked by hand with dev-app.sh's
+  # {"cmd":"bears"} commands (bears_panel.rs) and screenshots.
+  @bears.panel @manual @swift-pending
+  Scenario: Bears and tables have a panel of their own on the right rail
+    Given bears and tables are on, with Head Bear, Writer and the table "Launch crew"
+    When I open Bears & Tables from the right rail
+    Then it lists Head Bear (head bear) under Pinned, Writer under Bears and Launch crew under Tables
+    When I click Writer
+    Then Writer's newest thread opens
+
+  @bears.panel @manual @swift-pending
+  Scenario: Rename a bear from its menu
+    When I right-click Writer in Bears & Tables and pick Rename…
+    And I type "Scribe" and press Rename
+    Then the row says Scribe at once
+    And if the runner refuses, it says Writer again and the error shows
+
+  @bears.panel @manual @swift-pending
+  Scenario: Delete several bears and tables with one sheet
+    When I ⌘-click Writer and Shift-click Launch crew in Bears & Tables
+    Then the rows from Writer to Launch crew are picked and a bar says "Delete 3"
+    When I right-click one of them
+    Then the menu offers "Delete 3 items…"
+    When I pick it
+    Then one sheet lists the bears and tables that go
+    When I press Delete
+    Then they leave the list at once, and any the runner refuses come back with the error
+
+  @bears.panel @manual @swift-pending
+  Scenario: Esc lets go of the picked rows
+    Given two bears are picked in Bears & Tables
+    When I press Esc
+    Then none are picked

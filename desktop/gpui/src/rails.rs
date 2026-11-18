@@ -451,6 +451,7 @@ impl Threadbear {
         let highlights_shown = showing(shell::HIGHLIGHTS);
         let files_shown = showing(shell::FILES);
         let prints_shown = showing(shell::PRINTS);
+        let bears_shown = showing(shell::BEARS);
         let patches_shown = showing(shell::PATCHES);
         let browser_shown = showing(shell::BROWSER);
         // The accent dot while the last turn's asks aren't all ticked.
@@ -497,6 +498,11 @@ impl Threadbear {
             let mut b = RailButton::new("rail-prints", "doc.richtext", "Every Print, and the projects each is in", prints_shown);
             b.badge = Some(threadbear_core::prints::rows::all(&self.prints.list).len());
             column.push(rail_button(b, |this, _, cx| this.click_rail(shell::PRINTS, cx), cx));
+        }
+        // Bears & Tables (bears_panel.rs), while bears are on.
+        if self.shows_bears_rail(&thread) {
+            let b = RailButton::new("rail-bears", "pawprint", if self.tables_on() { "Bears & Tables" } else { "Bears" }, bears_shown);
+            column.push(rail_button(b, |this, _, cx| this.click_rail(shell::BEARS, cx), cx));
         }
         let patches = thread.patches.as_ref().map_or(0, Vec::len);
         let hairline = cx.theme().border;
@@ -558,6 +564,9 @@ impl Threadbear {
             }
             if self.shows_prints_rail(&thread) {
                 right.push(json!({ "title": "Prints", "badge": threadbear_core::prints::rows::all(&self.prints.list).len(), "active": showing(shell::PRINTS) }));
+            }
+            if self.shows_bears_rail(&thread) {
+                right.push(json!({ "title": "Bears & Tables", "active": showing(shell::BEARS) }));
             }
             if thread.patches.as_ref().is_some_and(|p| !p.is_empty()) {
                 right.push(json!({ "title": "Patches", "badge": thread.patches.as_ref().map(Vec::len), "active": showing(shell::PATCHES) }));

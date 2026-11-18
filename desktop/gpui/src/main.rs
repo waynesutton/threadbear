@@ -6,6 +6,7 @@
 #![cfg_attr(not(feature = "automation"), allow(dead_code, unused_imports))]
 mod a11y;
 mod print_cards;
+mod print_select;
 mod prints;
 mod activity;
 mod activity_panels;
@@ -21,6 +22,7 @@ mod automation;
 #[cfg(feature = "automation")]
 mod automation_compat;
 mod bears;
+mod bears_panel;
 mod bear_picker;
 #[cfg(any(test, feature = "automation"))]
 mod automation_screenshot;

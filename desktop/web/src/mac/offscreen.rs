@@ -102,7 +102,7 @@ impl Offscreen {
             gone: AtomicBool::new(false),
         });
         let stopped = shared.clone();
-        let guard = sealed::Guard { allowed: shared.allowed.clone(), on_stop: Arc::new(move || stopped.fail_all("its page stopped")) };
+        let guard = sealed::Guard { allowed: shared.allowed.clone(), on_stop: Arc::new(move || stopped.fail_all("its page stopped")), links: None };
         let window_info = WindowInfo::default().set_as_windowless(std::ptr::null_mut());
         let off = if options.javascript { State::ENABLED } else { State::DISABLED };
         let settings = BrowserSettings {
