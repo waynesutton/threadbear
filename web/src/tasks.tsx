@@ -9,6 +9,7 @@ import { go } from './route';
 import { applyTheme, readTheme } from './theme';
 import { taskDraftChanges } from './tasks-draft';
 import { LIST_STATUSES, fullOrder, groupOrder, moveTo, positionAt, splitDraft } from './tasks-order';
+import { DueChip, DuePicker, IssueSections, PriorityIcon, PriorityPicker, SubTaskChip } from './tasks-issue';
 
 type Task = FunctionReturnType<typeof api.tasks.list>['items'][number];
 type Status = Task['status'];
@@ -63,7 +64,8 @@ const NoteIcon = () => (
 type Drag = { kind: 'task' | 'status' | 'project'; id: string; label: string };
 type Menu = { task: Task; x: number; y: number; page: 'main' | 'project' };
 
-function TasksContent({ token, projectFilter = '' }: { token: string; projectFilter?: string }) {
+// issues: the backend has API 87's priority, due dates, sub-tasks, links and activity.
+function TasksContent({ token, projectFilter = '', issues = false }: { token: string; projectFilter?: string; issues?: boolean }) {
   const auth = { token };
   const convex = useConvex();
   const connection = useConvexConnectionState();
@@ -202,7 +204,7 @@ function TasksContent({ token, projectFilter = '' }: { token: string; projectFil
     }
   }
   const patchTask = (id: string, patch: Partial<Task>) => {
-    const fields = Object.fromEntries(Object.entries(patch).filter(([k]) => ['title', 'notes', 'status', 'columnId', 'project', 'position'].includes(k)));
+    const fields = Object.fromEntries(Object.entries(patch).filter(([k]) => ['title', 'notes', 'status', 'columnId', 'project', 'position', 'priority', 'dueDate', 'parentId'].includes(k)));
     return write(
       () => update({ auth, id, ...fields }),
       (rows) => rows.map((t) => (t.id === id ? { ...t, ...patch } : t)),
@@ -217,6 +219,16 @@ function TasksContent({ token, projectFilter = '' }: { token: string; projectFil
   };
 
   const visible = tasks.filter((t) => !filter || projectKey(t.project) === filter);
+  const childrenOf = new Map<string, Task[]>();
+  for (const t of tasks) if (t.parentId) childrenOf.set(t.parentId, [...(childrenOf.get(t.parentId) ?? []), t]);
+  // What rows and cards show after the title: due date and sub-task progress.
+  const issueMeta = (t: Task) =>
+    issues && (
+      <>
+        {t.dueDate && <DueChip day={t.dueDate} done={t.status === 'done'} />}
+        <SubTaskChip items={childrenOf.get(t.id) ?? []} />
+      </>
+    );
   visible.sort((a, b) =>
     prefs?.sort === 'title'
       ? a.title.localeCompare(b.title)
@@ -286,7 +298,7 @@ function TasksContent({ token, projectFilter = '' }: { token: string; projectFil
     e.preventDefault();
     if (!editing?.id || !editing.title?.trim()) return;
     const { id, title = '', notes = '', status = 'todo', columnId, project = null } = editing;
-    const patch = { id, title, notes, status, columnId, project: project ? { id: project.id, runnerId: project.runnerId } : null };
+    const patch = { id, title, notes, status, columnId, project: project ? { id: project.id, runnerId: project.runnerId } : null, ...(issues ? { priority: editing.priority ?? null, dueDate: editing.dueDate ?? null } : {}) };
     const base = editingBaseline.current;
     const ok = base
       ? await write(
@@ -456,10 +468,12 @@ function TasksContent({ token, projectFilter = '' }: { token: string; projectFil
           <input type="checkbox" checked={t.status === 'done'} disabled={disabled} aria-label={`Mark ${t.title} ${t.status === 'done' ? 'not done' : 'done'}`} onChange={() => complete(t)} />
           <span aria-hidden="true" />
         </label>
+        {issues && t.priority && <PriorityIcon priority={t.priority} />}
         <button className="task-title" title="Open task" onClick={() => openEditor(t)}>
           <span>{t.title}</span>
           {t.notes && <NoteIcon />}
         </button>
+        {issueMeta(t)}
         {t.project && !byProject && !filter && <span className="task-chip">{projectName(projectKey(t.project))}</span>}
         <button className="task-more" title="More: project, note, status, delete" aria-label={`More for ${t.title}`} data-popover-toggle aria-haspopup="menu" aria-expanded={menu?.task.id === t.id} onClick={(e) => openMenu(t, e)}>
           <Dots />
@@ -492,9 +506,11 @@ function TasksContent({ token, projectFilter = '' }: { token: string; projectFil
         <button className="task-more" title="More: project, note, status, delete" aria-label={`More for ${t.title}`} data-popover-toggle aria-haspopup="menu" aria-expanded={menu?.task.id === t.id} onClick={(e) => openMenu(t, e)}>
           <Dots />
         </button>
-        {(t.notes || (t.project && !byProject && !filter)) && (
+        {(t.notes || (t.project && !byProject && !filter) || (issues && (t.priority || t.dueDate || childrenOf.has(t.id)))) && (
           <div className="task-meta">
+            {issues && t.priority && <PriorityIcon priority={t.priority} />}
             {t.notes && <NoteIcon />}
+            {issueMeta(t)}
             {t.project && !byProject && !filter && <span className="task-chip">{projectName(projectKey(t.project))}</span>}
           </div>
         )}
@@ -988,7 +1004,7 @@ function TasksContent({ token, projectFilter = '' }: { token: string; projectFil
         >
           <form
             ref={editorRef}
-            className="task-editor"
+            className={`task-editor ${issues ? 'has-issues' : ''}`}
             role="dialog"
             aria-modal="true"
             aria-label={editingBaseline.current ? 'Edit task' : 'New task'}
@@ -1043,7 +1059,13 @@ function TasksContent({ token, projectFilter = '' }: { token: string; projectFil
                   ))}
                 </select>
               </label>
+              {issues && <PriorityPicker value={editing.priority} disabled={disabled} onChange={(priority) => setEditing({ ...editing, priority })} />}
+              {issues && <DuePicker value={editing.dueDate} disabled={disabled} onChange={(dueDate) => setEditing({ ...editing, dueDate })} />}
             </div>
+            {issues && editingBaseline.current && (() => {
+              const live = tasks.find((t) => t.id === editing.id);
+              return live ? <IssueSections token={token} task={live} tasks={tasks} disabled={disabled} write={write} open={(t) => openEditor(t)} toggle={complete} statusIcon={(t) => <StatusIcon status={t.status} />} /> : null;
+            })()}
             <footer>
               {editingBaseline.current && (
                 <button
@@ -1064,7 +1086,7 @@ function TasksContent({ token, projectFilter = '' }: { token: string; projectFil
                 if (live?.thread || live?.threadCommandId) { void sendTask(live); return; }
                 if (!editing.id || !editing.title?.trim()) return;
                 const id = editing.id;
-                const fields = { title: editing.title, notes: editing.notes ?? '', status: editing.status ?? 'todo', columnId: editing.columnId, project: editing.project ?? null };
+                const fields = { title: editing.title, notes: editing.notes ?? '', status: editing.status ?? 'todo', columnId: editing.columnId, project: editing.project ?? null, ...(issues ? { priority: editing.priority ?? null, dueDate: editing.dueDate ?? null } : {}) };
                 void write(async () => {
                   if (baseline) await update({ auth, id, ...taskDraftChanges(baseline, fields) });
                   else await create({ auth, id, ...fields });
@@ -1090,7 +1112,7 @@ export function TasksPage(props: { token: string; projectFilter?: string }) {
   const me = useQuery(api.phone.me, { token: props.token });
   if (!me) return <p className="pad">Loading Tasks…</p>;
   if (me.apiVersion < 86) return <p className="pad">Update your Threadbear backend to use Tasks here.</p>;
-  return <TasksContent key={props.projectFilter ?? ''} {...props} />;
+  return <TasksContent key={props.projectFilter ?? ''} {...props} issues={me.apiVersion >= 87} />;
 }
 
 export function ProjectTasksLink({ token, runnerId, id }: { token: string; runnerId: string; id: string }) {

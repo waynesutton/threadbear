@@ -95,6 +95,8 @@ export function memoryBackend() {
   loadIndexes();
   const tables: Record<string, Row[]> = {};
   const files = new Set<string>();
+  // What system.get says of a file, for those a test gave (size, contentType).
+  const meta = new Map<string, Record<string, unknown>>();
   const deleted: string[] = [];
   let next = 0;
   const all = (t: string) => (tables[t] ??= []);
@@ -237,7 +239,7 @@ export function memoryBackend() {
     async delete(id: string) {
       for (const t of Object.keys(tables)) tables[t] = tables[t]!.filter((r) => r._id !== id);
     },
-    system: { get: async (id: string) => (files.has(id) ? { _id: id } : null) },
+    system: { get: async (id: string) => (files.has(id) ? { _id: id, ...meta.get(id) } : null) },
     normalizeId: (table: string, id: string) => (id.startsWith(`${table}:`) ? id : null),
   };
   const storage = {
@@ -265,7 +267,7 @@ export function memoryBackend() {
   return {
     ctx,
     rows: (t: string) => all(t),
-    file: (id: string) => (files.add(id), id),
+    file: (id: string, info?: { size: number; contentType: string }) => (files.add(id), info && meta.set(id, info), id),
     hasFile: (id: string) => files.has(id),
     deleted,
     scheduled,

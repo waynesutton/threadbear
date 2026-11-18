@@ -39,7 +39,7 @@ import { HookRegistry, revokeHooksFor, webhookCommands, webhooksMethods, EXPERIM
 import { xSearchMethods } from './x-search.ts';
 import { Reinstaller } from './reinstall.ts';
 import { MacScreen } from './mac-screen.ts';
-import { Tasks, taskMethods } from './tasks.ts';
+import { Tasks, relatedFor, taskMethods } from './tasks.ts';
 import { Projects, drainProjectMethods, projectMethods } from './projects.ts';
 import { Librarian, librarianMethods } from './librarian.ts';
 import { ConnectorsMonitor, connectorsMethods, findLauncher, gatewayIsLocal, readLocalIds } from './connectors.ts';
@@ -1103,7 +1103,19 @@ async function main(): Promise<void> {
       return { threadId: t.thread.id, started: true };
     }
   };
-  nativeTasks = new Tasks(() => sync.relaySource(), () => experimentOn(cfg.home, 'tasks'), () => rpcServer?.notifyClients({ method: 'tasks.updated', params: {} }));
+  nativeTasks = new Tasks(() => sync.relaySource(), () => experimentOn(cfg.home, 'tasks'), () => rpcServer?.notifyClients({ method: 'tasks.updated', params: {} }), () => ({
+    runnerId: syncRunnerId,
+    // tasks.related: this runner's own threads and prints for a task's project.
+    related: (projectId) =>
+      relatedFor(
+        {
+          threadIds: (id) => { try { return projects.get(id).threadIds; } catch { return undefined; } },
+          thread: (id) => { try { return runner.get(id); } catch { return undefined; } },
+          prints: (id) => pagesFor()?.list({ project: id }) ?? [],
+        },
+        projectId,
+      ),
+  }));
   const methods = { ...taskMethods(nativeTasks), ...profilePageMethods(publicProfile), ...restartMethods(restarter), ...scheduleMethods(scheduler), ...projectMethods(projects), ...pageMethods(pagesFor, askAboutPage, printPublisher), ...drainProjectMethods(projects), ...librarianMethods(librarian), ...connectorsMethods(connectors, { on: () => experimentOn(cfg.home, 'connectorsSetup'), start: (r) => startOwnThread(runner, r, undefined), open: openThread, local: () => experimentOn(cfg.home, 'localConnectors'), findLauncher: (l) => findLauncher(l) }), ...settingsMethods(settings), ...skillMethods(skills), ...instructionsMethods(instructions), ...modelMethods(models), ...devicesMethods(sync, (kind) => fullSyncOffer.trigger(kind)), ...agentsMethods(sync, () => experimentOn(cfg.home, OUTSIDE_AGENTS)), ...tablesMethods({ tables: () => tables, on: tablesOn }), ...bearsMethods({ bears, on: bearsOn, mention: (p) => mentions.ask(p), unseat: (id) => tables.unseatEverywhere(id), touch: () => runner.touchThreads(runner.list(['inbox', 'snoozed', 'archived']).filter((t) => bears.forCwd(t.cwd)).map((t) => t.id)), cwdOf: (id) => (runner.has(id) ? runner.get(id).cwd : undefined), revokeHooks: (folder) => (webhooksOn() ? revokeHooksFor(sync, folder) : Promise.resolve(0)) }), ...webhooksMethods({ backend: sync, registry: hookRegistry, on: webhooksOn, runnerId: syncRunnerId, needApi: WEBHOOKS_API_VERSION, modeOf: (id) => (runner.has(id) ? runner.get(id).permissionMode : undefined), bearFolder: (b) => { if (!bearsOn()) return undefined; try { return bears.get(b, { faces: false }).folder; } catch { return undefined; } } }), ...xSearchMethods({ on: () => experimentOn(cfg.home, 'xSearch'), secretsDir: paths.secrets(cfg.home) }), ...usageStatsMethods({ tally, history: usageHistory, clock: realClock }) };
   // runner.status carries the CLI statuses too (protocol, "runner.status").
   const restartStatus = methods['runner.status'];

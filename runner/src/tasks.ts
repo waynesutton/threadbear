@@ -2,6 +2,8 @@
 import { sniffImage } from './media.ts';
 import { readReplyImage } from './share-images.ts';
 import { randomUUID } from 'node:crypto';
+import path from 'node:path';
+import { USER_NAME } from './user-name.ts';
 import type { Post, Subscribe, Upload } from './sync.ts';
 export type TaskSource = {
   post: Post;
@@ -26,22 +28,85 @@ export type NativeTask = {
   createdAt: number;
   updatedAt: number;
   deleted: boolean;
+  // API 87.
+  priority?: TaskPriority | null;
+  dueDate?: string | null;
+  parentId?: string | null;
+  links?: TaskLink[];
+  commentCount?: number;
+  createdBy?: TaskAuthor;
 };
+export type TaskPriority = 'urgent' | 'high' | 'normal' | 'low';
+export type TaskAuthor = { kind: 'user' | 'agent'; name: string };
+export type TaskLink = { id: string; kind: 'link' | 'print' | 'image' | 'thread'; title: string; url?: string; printId?: string; thread?: { runnerId: string; id: string }; storageId?: string; imageUrl?: string };
 export type TaskPage = { items: NativeTask[]; next: string | null };
-const queries = new Set(['list', 'preferences', 'photo', 'projects', 'count']);
-const operations = new Set([...queries, 'create', 'update', 'remove', 'restore', 'setPreferences', 'uploadPhoto', 'projectCount', 'photoFile', 'photoData', 'startThread']);
+// tasks.related: this runner's own threads and prints for a task's project.
+export type TaskRelated = {
+  threads: { id: string; title: string; status: string; lastActivityAt: string }[];
+  prints: { id: string; title: string; kind: string }[];
+};
+export type TaskLocal = { runnerId: string; related: (projectId: string) => TaskRelated };
+const queries = new Set(['list', 'preferences', 'photo', 'projects', 'count', 'activity', 'get']);
+const operations = new Set([...queries, 'create', 'update', 'remove', 'restore', 'setPreferences', 'uploadPhoto', 'projectCount', 'photoFile', 'photoData', 'startThread', 'comment', 'removeComment', 'addImage', 'imageData', 'imageFile', 'related']);
+// What needs backend API 87: these operations, and these fields anywhere.
+const API87_OPERATIONS = new Set(['activity', 'get', 'comment', 'removeComment', 'addImage', 'imageData', 'imageFile']);
+const API87_FIELDS = ['priority', 'dueDate', 'parentId', 'links'];
+const AUTHORED = new Set(['create', 'update', 'comment']);
+const IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
+const IMAGE_LIMIT = 10 * 1024 * 1024;
+const invalidImage = () => new Error('Choose a PNG, JPEG, WebP or GIF under 10 MB.');
+// Bytes from a picker, checked as an image before anything is uploaded.
+function imageBytes(base64: unknown): { bytes: Buffer; mediaType: string } {
+  if (typeof base64 !== 'string' || base64.length > Math.ceil(IMAGE_LIMIT / 3) * 4 || !/^[A-Za-z0-9+/]*={0,2}$/.test(base64)) throw invalidImage();
+  const bytes = Buffer.from(base64, 'base64');
+  const image = sniffImage(bytes);
+  if (!image || bytes.length > IMAGE_LIMIT || !IMAGE_TYPES.includes(image.mediaType)) throw invalidImage();
+  return { bytes, mediaType: image.mediaType };
+}
+function imageFile(file: unknown): { bytes: Uint8Array; mediaType: string } {
+  if (typeof file !== 'string') throw new Error('Choose a photo on this Mac.');
+  const image = readReplyImage(file);
+  if ('skip' in image || image.bytes.byteLength > IMAGE_LIMIT || !IMAGE_TYPES.includes(image.mediaType)) throw invalidImage();
+  return image;
+}
+// The newest ten of each, from what this runner keeps for the project.
+export function relatedFor(
+  deps: {
+    threadIds: (projectId: string) => string[] | undefined;
+    thread: (id: string) => { id: string; title: string; status: string; lastActivityAt: string } | undefined;
+    prints: (projectId: string) => { id: string; title: string; kind?: string; updatedAt: string }[];
+  },
+  projectId: string,
+): TaskRelated {
+  const threads = (deps.threadIds(projectId) ?? [])
+    .flatMap((id) => {
+      const t = deps.thread(id);
+      return t ? [{ id: t.id, title: t.title, status: t.status, lastActivityAt: t.lastActivityAt }] : [];
+    })
+    .sort((a, b) => b.lastActivityAt.localeCompare(a.lastActivityAt))
+    .slice(0, 10);
+  const prints = [...deps.prints(projectId)]
+    .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
+    .slice(0, 10)
+    .map((p) => ({ id: p.id, title: p.title, kind: p.kind ?? 'page' }));
+  return { threads, prints };
+}
 export class Tasks {
   private stopWatch?: () => void;
   private watched?: { key: string; connection?: object };
   private source: () => TaskSource | undefined;
   private enabled: () => boolean;
   private changed: () => void;
-  constructor(source: () => TaskSource | undefined, enabled: () => boolean, changed: () => void) {
+  private local: () => TaskLocal | undefined;
+  constructor(source: () => TaskSource | undefined, enabled: () => boolean, changed: () => void, local: () => TaskLocal | undefined = () => undefined) {
     this.source = source;
     this.enabled = enabled;
     this.changed = changed;
+    this.local = local;
   }
-  async call(operation: string, args: Record<string, unknown> = {}): Promise<unknown> {
+  // author: who a create, update or comment is from. Left out, the user (the
+  // Mac app); agents' tools pass their own. Never taken from args.
+  async call(operation: string, args: Record<string, unknown> = {}, author?: TaskAuthor): Promise<unknown> {
     if (!this.enabled()) {
       this.stop();
       throw new Error('Turn on Tasks in Settings > Experiments.');
@@ -55,30 +120,40 @@ export class Tasks {
     if ((source.apiVersion ?? 84) < 84) throw new Error('Update the Threadbear backend to use Tasks.');
     if (source.apiVersion !== undefined && source.apiVersion < 86 && (operation === 'startThread' || ['columnId', 'columns', 'boardColumnOrder', 'sectionOrder'].some(field => field in args)))
       throw new Error('Update the Threadbear backend to use task columns and Send to thread.');
-    if (operation === 'photoData') {
-      const base64 = args.base64;
-      const limit = 10 * 1024 * 1024;
-      const invalid = () => new Error('Choose a PNG, JPEG, WebP or GIF under 10 MB.');
-      if (typeof base64 !== 'string' || base64.length > Math.ceil(limit / 3) * 4 || !/^[A-Za-z0-9+/]*={0,2}$/.test(base64)) throw invalid();
-      const bytes = Buffer.from(base64, 'base64');
-      const image = sniffImage(bytes);
-      if (!image || bytes.length > limit || !['image/jpeg', 'image/png', 'image/webp', 'image/gif'].includes(image.mediaType)) throw invalid();
-      if (!source.upload) throw new Error('Photo uploads are unavailable on this runner.');
-      const url = await this.call('uploadPhoto') as string;
-      const storageId = await source.upload(url, bytes, image.mediaType);
-      return this.call('setPreferences', { backgroundPhoto: storageId });
+    const api87 = source.apiVersion === undefined || source.apiVersion >= 87;
+    if (!api87 && (API87_OPERATIONS.has(operation) || API87_FIELDS.some((field) => field in args)))
+      throw new Error('Update the Threadbear backend to use task priority, due dates, sub-tasks, links and comments.');
+    if (operation === 'related') {
+      const local = this.local();
+      const empty: TaskRelated = { threads: [], prints: [] };
+      if (!local || typeof args.id !== 'string') return empty;
+      let project = args.project as NativeTask['project'] | undefined;
+      if (project === undefined) {
+        if (!api87) return empty;
+        project = ((await this.call('get', { id: args.id })) as NativeTask | null)?.project;
+      }
+      return project && project.runnerId === local.runnerId ? local.related(project.id) : empty;
     }
-    if (operation === 'photoFile') {
-      if (typeof args.path !== 'string' || !source.upload) throw new Error('Choose a photo on this Mac.');
-      const image = readReplyImage(args.path);
-      if ('skip' in image || image.bytes.byteLength > 10 * 1024 * 1024 || !['image/jpeg', 'image/png', 'image/webp', 'image/gif'].includes(image.mediaType))
-        throw new Error('Choose a PNG, JPEG, WebP or GIF under 10 MB.');
+    if (operation === 'photoData' || operation === 'photoFile') {
+      const image = operation === 'photoData' ? imageBytes(args.base64) : imageFile(args.path);
+      if (!source.upload) throw new Error('Photo uploads are unavailable on this runner.');
       const url = (await this.call('uploadPhoto')) as string;
       const storageId = await source.upload(url, image.bytes, image.mediaType);
       return this.call('setPreferences', { backgroundPhoto: storageId });
     }
-    // Never accept credentials from a UI or agent; this runner supplies its own.
-    const { auth: _auth, ...fields } = args;
+    if (operation === 'imageData' || operation === 'imageFile') {
+      if (typeof args.id !== 'string') throw new Error('Choose a task for the image.');
+      const image = operation === 'imageData' ? imageBytes(args.base64) : imageFile(args.path);
+      if (!source.upload) throw new Error('Image uploads are unavailable on this runner.');
+      const name = operation === 'imageFile' ? path.basename(args.path as string) : typeof args.name === 'string' ? args.name : undefined;
+      const url = (await this.call('uploadPhoto')) as string;
+      const storageId = await source.upload(url, image.bytes, image.mediaType);
+      return this.call('addImage', { id: args.id, storageId, ...(name ? { title: name.slice(0, 300) } : {}) });
+    }
+    // Never accept credentials or an author from a UI or agent; this runner supplies its own.
+    const { auth: _auth, author: _author, ...fields } = args;
+    // Only to a backend known to take it: an older one refuses the whole write.
+    if (source.apiVersion !== undefined && source.apiVersion >= 87 && AUTHORED.has(operation)) fields.author = author ?? { kind: 'user', name: USER_NAME ?? 'You' };
     if (typeof fields.project === 'string') {
       const options = (await this.call('projects')) as {
         id: string;

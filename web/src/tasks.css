@@ -1013,3 +1013,385 @@
 
 .tasks-page .task-column-name { border: 0; background: transparent; padding: 0; text-align: left; }
 .tasks-page .task-column-empty { flex: 1; min-height: 28px; }
+
+/* Issue fields (API 87): priority, due date, sub-tasks, links and activity. */
+.priority-icon {
+  flex: none;
+  color: var(--muted);
+}
+.priority-none {
+  color: var(--faint);
+}
+.task-due {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 22px;
+  padding: 0 7px;
+  border: 1px solid var(--line);
+  border-radius: 11px;
+  color: var(--muted);
+  font-size: 12px;
+  white-space: nowrap;
+}
+.task-due.is-late {
+  color: var(--red);
+  border-color: color-mix(in srgb, var(--red) 35%, var(--line));
+}
+.task-editor.has-issues {
+  max-height: calc(88vh - 16px);
+  overflow-y: auto;
+}
+.tasks-page .task-pill.is-button {
+  height: 28px;
+  padding: 0 10px;
+  border-radius: 14px;
+  background: transparent;
+  color: var(--text);
+}
+.tasks-page .task-pill.is-late {
+  color: var(--red);
+}
+.issue-anchor {
+  position: relative;
+}
+.issue-pop {
+  position: absolute;
+  z-index: 45;
+  top: calc(100% + 4px);
+  left: 0;
+  width: 248px;
+  padding: 4px;
+  border-radius: 10px;
+  background: var(--raised);
+  box-shadow: var(--shadow);
+  font-size: 13px;
+  animation: tasks-pop 0.1s ease-out;
+}
+.tasks-page .issue-pop [role='menu'] button,
+.tasks-page .issue-pop .issue-clear {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  height: 30px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text);
+  text-align: left;
+}
+.tasks-page .issue-pop [role='menu'] button:hover:not(:disabled),
+.tasks-page .issue-pop .issue-clear:hover:not(:disabled) {
+  background: var(--hover);
+}
+.tasks-page .issue-pop .issue-clear {
+  margin-top: 2px;
+  color: var(--muted);
+}
+.issue-pop .issue-check {
+  margin-left: auto;
+  color: var(--accent);
+}
+.issue-hint {
+  margin-left: auto;
+  color: var(--faint);
+  font-size: 12px;
+  white-space: nowrap;
+}
+.issue-quick {
+  padding-bottom: 4px;
+  border-bottom: 1px solid var(--line);
+}
+.issue-cal {
+  padding: 6px 4px 2px;
+}
+.issue-cal-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 2px 6px;
+  font-weight: 600;
+}
+.tasks-page .issue-cal-head button {
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  font-size: 16px;
+}
+.issue-cal-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 2px;
+  text-align: center;
+}
+.issue-cal-dow {
+  color: var(--faint);
+  font-size: 11px;
+  line-height: 22px;
+}
+.tasks-page .issue-cal-grid button {
+  height: 28px;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text);
+  font-size: 12px;
+}
+.tasks-page .issue-cal-grid button:hover:not(:disabled) {
+  background: var(--hover);
+}
+.tasks-page .issue-cal-grid button.is-out {
+  color: var(--faint);
+}
+.tasks-page .issue-cal-grid button.is-today {
+  color: var(--accent);
+  font-weight: 600;
+}
+.tasks-page .issue-cal-grid button.is-picked {
+  background: var(--accent);
+  color: #fff;
+}
+.issue-section {
+  padding: 10px 0 8px;
+  border-top: 1px solid var(--line);
+}
+.issue-section h3 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 6px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
+}
+.issue-section h3 .count {
+  color: var(--faint);
+  font-weight: 400;
+}
+.issue-section h3 .spacer {
+  flex: 1;
+}
+.tasks-page .issue-small {
+  flex: none;
+  height: 24px;
+  padding: 0 8px;
+  font-size: 12px;
+  font-weight: 400;
+}
+.issue-sub,
+.issue-linkrow,
+.issue-parent {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 30px;
+}
+.issue-parent {
+  color: var(--muted);
+  font-size: 13px;
+}
+.tasks-page .issue-sub-status {
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  display: grid;
+  place-items: center;
+  border: 0;
+  background: transparent;
+  color: var(--status-todo);
+}
+.issue-sub.is-done .issue-link-title {
+  color: var(--faint);
+  text-decoration: line-through;
+}
+.tasks-page .issue-link-title {
+  flex: 0 1 auto;
+  min-width: 0;
+  height: 26px;
+  padding: 0 4px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  font-size: 13px;
+  text-align: left;
+}
+.tasks-page .issue-link-title:hover:not(:disabled) {
+  background: var(--hover);
+}
+.tasks-page .issue-link-title:disabled {
+  opacity: 1;
+}
+.tasks-page .issue-remove {
+  flex: none;
+  width: 22px;
+  height: 22px;
+  margin-left: auto;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--faint);
+  font-size: 15px;
+}
+.issue-kind {
+  flex: none;
+  min-width: 44px;
+  padding: 1px 6px;
+  border-radius: 5px;
+  background: var(--fill);
+  color: var(--muted);
+  font-size: 11px;
+  text-align: center;
+}
+.issue-thumb {
+  flex: none;
+  width: 44px;
+  height: 30px;
+  border-radius: 5px;
+  object-fit: cover;
+  box-shadow: 0 0 0 1px var(--line);
+}
+.issue-add,
+.issue-linkform input,
+.issue-commentbox textarea {
+  width: 100%;
+  min-height: 30px;
+  padding: 5px 8px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: 13px;
+}
+.issue-add {
+  margin-top: 4px;
+  border-style: dashed;
+}
+.issue-add:focus,
+.issue-linkform input:focus,
+.issue-commentbox textarea:focus {
+  outline: 0;
+  border-color: var(--line-strong);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+.issue-linkform {
+  display: flex;
+  gap: 6px;
+  margin-top: 4px;
+}
+.issue-linkform input:first-child {
+  flex: 2;
+}
+.issue-linkform input {
+  flex: 1;
+  min-width: 0;
+}
+.issue-empty {
+  margin: 2px 0;
+  color: var(--faint);
+  font-size: 13px;
+}
+.issue-feed {
+  margin: 0 0 8px;
+  padding: 0;
+  list-style: none;
+}
+.issue-event {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 28px;
+  color: var(--muted);
+  font-size: 13px;
+}
+.issue-event strong,
+.issue-comment strong {
+  color: var(--text);
+  font-weight: 600;
+}
+.issue-avatar {
+  flex: none;
+  width: 18px;
+  height: 18px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--fill);
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 600;
+}
+.issue-avatar.is-agent {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+.issue-comment {
+  margin: 6px 0;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--raised) 94%, var(--text));
+}
+.issue-comment header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+}
+.issue-comment header .issue-hint {
+  margin-left: 0;
+}
+.issue-comment header .spacer {
+  flex: 1;
+}
+.issue-comment .task-chip {
+  height: 18px;
+  line-height: 16px;
+  font-size: 11px;
+}
+.issue-comment p {
+  margin: 6px 0 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font-size: 13px;
+  line-height: 1.5;
+}
+.issue-commentbox {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
+}
+.issue-commentbox textarea {
+  resize: vertical;
+}
+@media (max-width: 600px) {
+  .issue-linkform {
+    flex-wrap: wrap;
+  }
+  .issue-pop {
+    width: min(248px, calc(100vw - 48px));
+  }
+}
+.tasks-page .issue-section h3 .tasks-segment button {
+  font-weight: 400;
+}
+/* Save stays in reach while the editor scrolls. */
+.task-editor.has-issues footer {
+  position: sticky;
+  bottom: -14px;
+  z-index: 1;
+  margin-bottom: -14px;
+  padding-bottom: 14px;
+  background: var(--raised);
+}

@@ -143,7 +143,7 @@ export type SyncConfig = {
 // lower one means its backend hasn't been deployed since this runner was:
 // said in runner.status, tb status and the log rather than stopping, since
 // the runner only adds to what it sends while the number stays the same.
-export const BACKEND_API_VERSION = 86;
+export const BACKEND_API_VERSION = 87;
 // Optional agent-reported task summaries on thread cards.
 export const COMPLETION_API_VERSION = 85;
 // From this one a message row can be a login's note (role "note"): a thread

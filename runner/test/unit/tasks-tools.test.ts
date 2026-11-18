@@ -35,3 +35,22 @@ test('task tools are absent while disabled and use the shared task bridge when e
   assert.equal(NEVER_ASK_TOOLS.has('mcp__threadbear__list_tasks'), true);
   assert.equal(NEVER_ASK_TOOLS.has('mcp__threadbear__create_task'), false);
 });
+
+test('task tools take priority and due dates, and update_task comments as the agent', async () => {
+  const calls: [string, Record<string, unknown>][] = [];
+  const tasks = new Tasks(() => ({ key: 'owner', apiVersion: 87, post: async (_kind, fn, args) => { calls.push([fn, args]); return null; } }), () => true, () => {});
+  const named = new Proxy({}, { get: (_, p) => (p === 'get' ? () => ({ title: '  Fix  the login ' }) : () => undefined) }) as ThreadControl;
+  const on = buildThreadbearTools(named, 'self', Date.now, undefined, undefined, undefined, { tasks: () => tasks });
+  const invoke = async (name: string, args: Record<string, unknown>) => on.find((t) => t.name === name)!.handler(args as never, {});
+  const agent = { kind: 'agent', name: 'Fix the login' };
+  await invoke('create_task', { id: 'a', title: 'Ship', priority: 'urgent', dueDate: '2026-11-20' });
+  await invoke('update_task', { id: 'a', priority: null, comment: 'Done with the first pass' });
+  await invoke('update_task', { id: 'a', comment: 'Only a comment' });
+  assert.deepEqual(calls.map(([fn]) => fn), ['tasks:create', 'tasks:update', 'tasks:comment', 'tasks:comment']);
+  assert.equal(calls[0]![1].priority, 'urgent');
+  assert.equal(calls[0]![1].dueDate, '2026-11-20');
+  for (const [, args] of calls) assert.deepEqual(args.author, agent);
+  assert.equal(calls[1]![1].priority, null);
+  assert.equal('comment' in calls[1]![1], false);
+  assert.equal(calls[2]![1].body, 'Done with the first pass');
+});

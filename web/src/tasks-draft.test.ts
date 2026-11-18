@@ -14,3 +14,9 @@ test('unassigning a project and clearing notes are explicit edits', () => {
   assert.deepEqual(taskDraftChanges(original, { ...original, notes: '', project: null }), { notes: '', project: null });
   assert.deepEqual(taskDraftChanges(original, original), {});
 });
+test('priority and due date are sent only when the form changed them', () => {
+  const original: TaskDraft = { title: 'Draft', notes: '', status: 'todo', project: null };
+  assert.deepEqual(taskDraftChanges(original, { ...original, priority: null, dueDate: null }), {});
+  assert.deepEqual(taskDraftChanges({ ...original, priority: 'high' }, { ...original, priority: null, dueDate: '2026-11-20' }), { priority: null, dueDate: '2026-11-20' });
+  assert.deepEqual(taskDraftChanges({ ...original, priority: 'high' }, original), {});
+});

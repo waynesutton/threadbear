@@ -12,6 +12,29 @@ export function fullColumnOrder(order: readonly TaskStatus[] | undefined, fallba
 }
 export const taskView = v.union(v.literal('board'), v.literal('list'));
 export const taskProject = v.object({ runnerId: v.string(), id: v.string() });
+// API 87: Linear-style issue fields. All optional, so rows and clients from before keep working.
+export const taskPriority = v.union(v.literal('urgent'), v.literal('high'), v.literal('normal'), v.literal('low'));
+export const taskAuthor = v.object({ kind: v.union(v.literal('user'), v.literal('agent')), name: v.string() });
+const linkFields = {
+  id: v.string(),
+  kind: v.union(v.literal('link'), v.literal('print'), v.literal('image'), v.literal('thread')),
+  title: v.string(),
+  url: v.optional(v.string()),
+  printId: v.optional(v.string()),
+  thread: v.optional(v.object({ runnerId: v.string(), id: v.string() })),
+  storageId: v.optional(v.id('_storage')),
+};
+export const taskLink = v.object(linkFields);
+// What list returns: an image link also carries its storage URL.
+export const taskLinkOut = v.object({ ...linkFields, imageUrl: v.optional(v.string()) });
+export const taskActivityKind = v.union(v.literal('comment'), v.literal('event'));
+export const taskActivityFields = {
+  taskId: v.string(),
+  kind: taskActivityKind,
+  body: v.string(),
+  author: taskAuthor,
+  createdAt: v.number(),
+};
 export const taskFields = {
   id: v.string(),
   title: v.string(),
@@ -26,6 +49,16 @@ export const taskFields = {
   createdAt: v.number(),
   updatedAt: v.number(),
   deleted: v.boolean(),
+  priority: v.optional(v.union(taskPriority, v.null())),
+  // A calendar date, YYYY-MM-DD, with no time zone.
+  dueDate: v.optional(v.union(v.string(), v.null())),
+  // One level deep: a sub-task of that task's id.
+  parentId: v.optional(v.union(v.string(), v.null())),
+  links: v.optional(v.array(taskLink)),
+  commentCount: v.optional(v.number()),
+  createdBy: v.optional(taskAuthor),
+  // Deleted along with its parent, so restoring the parent brings it back. Never listed.
+  deletedWithParent: v.optional(v.boolean()),
 };
 export const taskPreferenceFields = {
   defaultView: v.optional(taskView),
@@ -44,4 +77,6 @@ export const taskPreferenceFields = {
   photoPosition: v.optional(v.union(v.literal('top'), v.literal('center'), v.literal('bottom'))),
   fade: v.optional(v.number()),
   theme: v.optional(v.union(v.literal('system'), v.literal('light'), v.literal('dark'))),
+  // API 87: the owner's first name, as the runner last gave it, for activity a browser writes.
+  ownerName: v.optional(v.string()),
 };

@@ -7987,3 +7987,70 @@ includes column definitions in preferences.
 process. The runner checks the decoded size (10 MB) and image signature before
 uploading; no file path permissions must cross between the app and runner.
 `tasks.photoFile {path}` remains supported for existing clients.
+
+### Tasks issue fields, sub-tasks, links and activity (API 87)
+
+Linear-style issue properties. Every field is optional, so rows and clients
+from before keep working; a runner refuses them (and the new operations)
+against a backend older than 87 with "Update the Threadbear backend".
+
+Task rows gain:
+
+- `priority?: 'urgent' | 'high' | 'normal' | 'low' | null`. Missing or null is
+  No priority.
+- `dueDate?: string | null`, a calendar date `YYYY-MM-DD` with no time zone.
+  Other strings, and dates that don't exist, are refused.
+- `parentId?: string | null`: a sub-task of that task's `id`. One level deep: a
+  task with sub-tasks can't become a sub-task, and a sub-task can't have any.
+  Removing a parent removes its sub-tasks; restoring it restores the ones that
+  went with it (not one removed before it). A sub-task restored while its parent
+  is removed comes back with `parentId: null`.
+- `links?: { id, kind: 'link' | 'print' | 'image' | 'thread', title, url?,
+  printId?, thread?: { runnerId, id }, storageId? }[]`, at most 50 with unique
+  ids. A `link` needs an http(s) `url`, a `print` its `printId`, a `thread`
+  its `thread`, an `image` a `storageId` in file storage (PNG/JPEG/WebP/GIF,
+  at most 10 MB). An empty title becomes the URL or the kind. List results
+  add `imageUrl` to image links. An image link dropped from the array deletes
+  its file.
+- `commentCount?: number`, the task's comments.
+- `createdBy?: { kind: 'user' | 'agent', name }`.
+
+`tasks.create` and `tasks.update` accept `priority`, `dueDate`, `parentId` and
+`links` (update's `links` replaces the array). New operations, each also a
+Convex function of the same name unless said:
+
+- `tasks.get {id}` returns one task (deleted or not) or null.
+- `tasks.activity {id}` returns `{ items: { id, taskId, kind: 'comment' |
+  'event', body, author: { kind, name }, createdAt }[] }`, oldest first (the
+  newest 300). The backend writes events itself on create ("created the
+  task") and on changes of status or column ("moved to Doing"), priority
+  ("set priority to Urgent", "removed the priority"), due date ("set the due
+  date to Nov 20, 2026", "removed the due date"), project ("moved to project
+  Launch", "removed the project") and parent ("made this a sub-task of X",
+  "removed this from X" on the sub-task; "added sub-task Y", "removed
+  sub-task Y" on the parent). A client shows an item as the author's name
+  then the body. Title and note edits make no event.
+- `tasks.comment {id, body}` returns the new item (body trimmed, 1 to 10,000
+  characters). `tasks.removeComment {id, commentId}` deletes a comment;
+  repeating it, or naming an event, does nothing.
+- `tasks.imageData {id, base64, name?}` and `tasks.imageFile {id, path}`
+  (runner only) check and upload an image as `photoData` and `photoFile` do,
+  then call `tasks.addImage {id, storageId, title?}` (Convex), which appends an
+  image link and returns it; repeating it with the same file returns the same
+  link. A browser uploads to `tasks.uploadPhoto`'s URL and calls `addImage`.
+- `tasks.related {id, project?}` (runner only): for a task whose project is
+  on this runner, `{ threads: { id, title, status, lastActivityAt }[], prints:
+  { id, title, kind }[] }` from this runner's own threads and prints in that
+  project, newest first, at most 10 each. Empty arrays for a task with no
+  project, another runner's project, or Prints off. `project` saves the
+  lookup when the client has the task.
+
+Who did it: a runner key passes `author` on create, update and comment (the
+Mac app's calls as the user, by the account's first name; an agent's tools as
+`{ kind: 'agent', name: <the thread's title> }`), and never takes one from an
+RPC's arguments. A paired browser is always the user, by the name the runner
+last gave (`ownerName` in preferences), or "You" before one has. The runner
+sends `author` only to a backend it knows is 87 or later.
+
+Agent tools: `create_task` takes `priority` and `dueDate`; `update_task` takes
+them too (null clears) and `comment`, which adds a comment as the agent.

@@ -160,6 +160,11 @@ test('every public task operation rejects an invalid account credential', async 
     restore: { id: 'never' },
     startThread: { id: 'never' },
     setPreferences: { defaultView: 'list' },
+    get: { id: 'never' },
+    activity: { id: 'never' },
+    comment: { id: 'never', body: 'Never said' },
+    removeComment: { id: 'never', commentId: 'never' },
+    addImage: { id: 'never', storageId: 'stored1' },
   };
   assert.deepEqual(Object.keys(tasks).sort(), Object.keys(cases).sort(), 'new operations need an auth case');
   for (const [operation, args] of Object.entries(cases)) {
@@ -249,4 +254,153 @@ test('a scoped runner may edit shared tasks but cannot queue agent work on anoth
   await b.run('create', { id: 'scoped', title: 'Shared task', auth: { key } });
   assert.equal(await outcome(b.run('startThread', { id: 'scoped', auth: { key } })), 'forbidden');
   assert.equal(b.rows('commands').length, 0);
+});
+
+
+// ---- API 87: issue fields, sub-tasks, links, comments and activity.
+const user = { kind: 'user', name: 'Wayne' };
+const agent = { kind: 'agent', name: 'Fix the login' };
+const bodies = async (b: Awaited<ReturnType<typeof setup>>, id: string, auth?: unknown) =>
+  (await b.run('activity', { id, ...(auth ? { auth } : {}) })).items.map((i: { author: { name: string }; body: string }) => `${i.author.name} ${i.body}`);
+
+test('priority and due date are kept, cleared with null, and old rows read without them', async () => {
+  const b = await setup();
+  await b.run('create', { id: 'old', title: 'From before' });
+  await b.run('create', { id: 'p', title: 'Urgent one', priority: 'urgent', dueDate: '2026-11-20', author: user });
+  let row = (await b.run('list')).items.find((t: { id: string }) => t.id === 'p');
+  assert.equal(row.priority, 'urgent');
+  assert.equal(row.dueDate, '2026-11-20');
+  assert.deepEqual(row.createdBy, user);
+  const old = (await b.run('list')).items.find((t: { id: string }) => t.id === 'old');
+  assert.equal(old.priority, undefined);
+  await b.run('update', { id: 'p', priority: null, dueDate: null });
+  row = (await b.run('list')).items.find((t: { id: string }) => t.id === 'p');
+  assert.equal(row.priority, null);
+  assert.equal(row.dueDate, null);
+  for (const dueDate of ['2026-02-30', '20-11-2026', 'tomorrow']) assert.equal(await outcome(b.run('update', { id: 'p', dueDate })), 'badArgs', dueDate);
+});
+
+test('the backend writes events for status, priority, due date, project and parent, by who did them', async () => {
+  const b = await setup();
+  await b.ctx.db.insert('projects', { runnerId: 'mac', id: 'launch', title: 'Launch', archived: false });
+  await b.run('create', { id: 'parent', title: 'Ship it', author: user });
+  await b.run('create', { id: 'child', title: 'Write notes', author: agent });
+  await b.run('update', { id: 'child', status: 'doing', priority: 'high', dueDate: '2026-11-20', project: { runnerId: 'mac', id: 'launch' }, parentId: 'parent', author: user });
+  // A title-only edit, and a repeat of the same values, say nothing.
+  await b.run('update', { id: 'child', title: 'Write the notes', priority: 'high', author: user });
+  assert.deepEqual(await bodies(b, 'child'), [
+    'Fix the login created the task',
+    'Wayne moved to Doing',
+    'Wayne set priority to High',
+    'Wayne set the due date to Nov 20, 2026',
+    'Wayne moved to project Launch',
+    'Wayne made this a sub-task of Ship it',
+  ]);
+  assert.deepEqual(await bodies(b, 'parent'), ['Wayne created the task', 'Wayne added sub-task Write notes']);
+  // A browser is the user, by the name the runner last gave; it can't claim to be an agent.
+  await b.run('update', { id: 'child', priority: 'urgent', auth: { token: 'phone' }, author: agent });
+  assert.equal((await bodies(b, 'child')).at(-1), 'Wayne set priority to Urgent');
+  const item = (await b.run('activity', { id: 'child' })).items.at(-1);
+  assert.deepEqual(item.author, { kind: 'user', name: 'Wayne' });
+  assert.equal(item.kind, 'event');
+});
+
+test('sub-tasks are one level deep', async () => {
+  const b = await setup();
+  await b.run('create', { id: 'a', title: 'A' });
+  await b.run('create', { id: 'b', title: 'B', parentId: 'a' });
+  await b.run('create', { id: 'c', title: 'C' });
+  assert.equal(await outcome(b.run('create', { id: 'd', title: 'D', parentId: 'b' })), 'badArgs');
+  assert.equal(await outcome(b.run('update', { id: 'a', parentId: 'c' })), 'badArgs');
+  assert.equal(await outcome(b.run('update', { id: 'c', parentId: 'c' })), 'badArgs');
+  assert.equal(await outcome(b.run('update', { id: 'c', parentId: 'missing' })), 'badArgs');
+  await b.run('update', { id: 'b', parentId: null });
+  assert.equal((await b.run('list')).items.find((t: { id: string }) => t.id === 'b').parentId, null);
+  assert.equal((await bodies(b, 'a')).at(-1), 'You removed sub-task B');
+});
+
+test('deleting a parent deletes its sub-tasks and restoring brings back only those', async () => {
+  const b = await setup();
+  await b.run('create', { id: 'p', title: 'Parent' });
+  await b.run('create', { id: 'k1', title: 'Kid one', parentId: 'p' });
+  await b.run('create', { id: 'k2', title: 'Kid two', parentId: 'p' });
+  await b.run('remove', { id: 'k2' });
+  await b.run('remove', { id: 'p' });
+  assert.deepEqual((await b.run('list')).items, []);
+  await b.run('restore', { id: 'p' });
+  const items = (await b.run('list')).items;
+  assert.deepEqual(items.map((t: { id: string }) => t.id), ['k1', 'p']);
+  assert.equal('deletedWithParent' in items[0], false);
+  // A sub-task restored while its parent is gone stands alone.
+  await b.run('remove', { id: 'p' });
+  await b.run('restore', { id: 'k1' });
+  assert.equal((await b.run('list')).items.find((t: { id: string }) => t.id === 'k1').parentId, null);
+});
+
+test('comments count, list oldest first with events, and remove', async () => {
+  const b = await setup();
+  await b.run('create', { id: 't', title: 'Talk about it' });
+  const first = await b.run('comment', { id: 't', body: '  First thought  ', author: agent });
+  assert.equal(first.body, 'First thought');
+  assert.deepEqual(first.author, agent);
+  await b.run('comment', { id: 't', body: 'From the web', auth: { token: 'phone' } });
+  let row = (await b.run('list')).items[0];
+  assert.equal(row.commentCount, 2);
+  const items = (await b.run('activity', { id: 't' })).items;
+  assert.deepEqual(items.map((i: { kind: string }) => i.kind), ['event', 'comment', 'comment']);
+  assert.equal(await outcome(b.run('comment', { id: 't', body: '   ' })), 'badArgs');
+  await b.run('removeComment', { id: 't', commentId: first.id });
+  await b.run('removeComment', { id: 't', commentId: first.id });
+  // An event isn't a comment to remove.
+  await b.run('removeComment', { id: 't', commentId: items[0].id });
+  row = (await b.run('list')).items[0];
+  assert.equal(row.commentCount, 1);
+  assert.equal((await b.run('activity', { id: 't' })).items.length, 2);
+});
+
+test('links are checked, capped at 50, replaced whole, and image links carry their URL', async () => {
+  const b = await setup();
+  const png = b.file('img1', { size: 1000, contentType: 'image/png' });
+  const text = b.file('txt1', { size: 10, contentType: 'text/plain' });
+  await b.run('create', { id: 't', title: 'Linked' });
+  const links = [
+    { id: 'l1', kind: 'link', title: '', url: 'https://example.com/a' },
+    { id: 'l2', kind: 'print', title: 'Report', printId: 'report-1' },
+    { id: 'l3', kind: 'thread', title: 'The thread', thread: { runnerId: 'mac', id: 'th1' } },
+    { id: 'l4', kind: 'image', title: 'Shot', storageId: png },
+  ];
+  await b.run('update', { id: 't', links });
+  let row = (await b.run('list')).items[0];
+  assert.equal(row.links[0].title, 'https://example.com/a');
+  assert.equal(row.links[3].imageUrl, 'https://files.example/img1');
+  for (const bad of [
+    [{ id: 'x', kind: 'link', title: 'No url' }],
+    [{ id: 'x', kind: 'link', title: 'Script', url: 'javascript:alert(1)' }],
+    [{ id: 'x', kind: 'image', title: 'Not a picture', storageId: text }],
+    [{ id: 'x', kind: 'print', title: 'No print' }],
+    [links[0], links[0]],
+    Array.from({ length: 51 }, (_, i) => ({ id: `l${i}`, kind: 'link', title: 'x', url: 'https://example.com' })),
+  ])
+    assert.equal(await outcome(b.run('update', { id: 't', links: bad })), 'badArgs');
+  // Dropping an image link deletes its file.
+  await b.run('update', { id: 't', links: links.slice(0, 1) });
+  assert.deepEqual(b.deleted, ['img1']);
+  // addImage appends once per file.
+  const pic = b.file('img2', { size: 2000, contentType: 'image/jpeg' });
+  const link = await b.run('addImage', { id: 't', storageId: pic, title: 'photo.jpg' });
+  assert.equal((await b.run('addImage', { id: 't', storageId: pic })).id, link.id);
+  row = (await b.run('list')).items[0];
+  assert.deepEqual(row.links.map((l: { kind: string }) => l.kind), ['link', 'image']);
+  assert.equal(row.links[1].title, 'photo.jpg');
+  assert.equal(await outcome(b.run('addImage', { id: 't', storageId: text })), 'badArgs');
+});
+
+test('get finds one task, and a deleted one too', async () => {
+  const b = await setup();
+  assert.equal(await b.run('get', { id: 'nope' }), null);
+  await b.run('create', { id: 'g', title: 'Get me', priority: 'low' });
+  await b.run('remove', { id: 'g' });
+  const row = await b.run('get', { id: 'g' });
+  assert.equal(row.priority, 'low');
+  assert.equal(row.deleted, true);
 });

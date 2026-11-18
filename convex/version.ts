@@ -394,4 +394,10 @@
 //    back with it.
 // 85: clearer completion task summaries on thread cards (experiment clearerCompletion).
 // 86: Tasks custom columns and ordered sections, with a retry-safe thread launch command.
-export const API_VERSION = 86;
+// 87: Tasks grow issue fields (this copy's): priority, dueDate, parentId
+//    (one level of sub-tasks; deleting a parent deletes them, restoring
+//    brings them back), links (link, print, image, thread; list adds
+//    imageUrl), commentCount and createdBy, and tasks:activity, comment,
+//    removeComment and addImage. create and update take an `author`
+//    from a runner key. A runner sends any of them only from 87.
+export const API_VERSION = 87;

@@ -5,7 +5,7 @@
 // are what an agent showed Mike on purpose or he pasted (replyImages), or a shared thread's.
 import { defineSchema, defineTable } from 'convex/server';
 import { v } from 'convex/values';
-import { taskFields, taskPreferenceFields } from './taskFields';
+import { taskActivityFields, taskFields, taskPreferenceFields } from './taskFields';
 
 // A thread's sharing, as the runner mirrors it (ThreadShare in
 // docs/protocol.md): "link" is readable by anyone with /s/<slug>; "off"
@@ -220,7 +220,9 @@ export const moveStates = ['asking', 'ready', 'packing', 'unpacking', 'claimed',
 
 export default defineSchema({
   // Cloud-owned tasks, not part of the runner's replaceable project mirror.
-  tasks: defineTable(taskFields).index('by_thread_command', ['threadCommandId']).index('by_task_id', ['id']).index('by_deleted_id', ['deleted', 'id']).index('by_updated', ['updatedAt']).index('by_project_deleted', ['project.runnerId', 'project.id', 'deleted']),
+  tasks: defineTable(taskFields).index('by_thread_command', ['threadCommandId']).index('by_task_id', ['id']).index('by_deleted_id', ['deleted', 'id']).index('by_updated', ['updatedAt']).index('by_project_deleted', ['project.runnerId', 'project.id', 'deleted']).index('by_parent', ['parentId', 'deleted']),
+  // A task's comments and the events the backend writes on changes (API 87).
+  taskActivity: defineTable(taskActivityFields).index('by_task', ['taskId', 'createdAt']),
   taskPreferences: defineTable({ name: v.string(), ...taskPreferenceFields }).index('by_name', ['name']),
   // One row per runner (the Mac, Tinker Desk later), written every minute.
   // A phone treats one not seen for 3 minutes as offline.

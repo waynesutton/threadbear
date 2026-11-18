@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { mkdtempSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { Tasks } from '../../src/tasks.ts';
+import { Tasks, relatedFor } from '../../src/tasks.ts';
 test('Tasks bridge supplies its own credentials and preserves retry ids', async () => {
   const calls: unknown[] = [];
   let changed = 0;
@@ -166,4 +166,71 @@ test('native picker can upload bytes without granting the runner access to its s
   await assert.rejects(tasks.call('photoData', {base64: Buffer.from('not an image').toString('base64')}), /PNG/);
   await assert.rejects(tasks.call('photoData', {base64: '!invalid'}), /PNG/);
   assert.equal(uploaded, 1);
+});
+
+
+test('issue fields and comments give an update message against a backend before 87', async () => {
+  const tasks = new Tasks(() => ({ key: 'owner', apiVersion: 86, post: async () => { throw Error('must not reach backend'); } }), () => true, () => {});
+  for (const [operation, args] of [['update', { id: 't', priority: 'urgent' }], ['update', { id: 't', dueDate: '2026-11-20' }], ['create', { title: 'T', parentId: 'p' }], ['update', { id: 't', links: [] }], ['comment', { id: 't', body: 'Hi' }], ['activity', { id: 't' }], ['removeComment', { id: 't', commentId: 'c' }], ['imageData', { id: 't', base64: '' }]] as const) {
+    await assert.rejects(tasks.call(operation, args), /Update the Threadbear backend/, operation);
+  }
+  // Plain edits still go to an 86 backend, without an author it would refuse.
+  const sent: unknown[] = [];
+  await new Tasks(() => ({ key: 'owner', apiVersion: 86, post: async (_k, _f, a) => void sent.push(a) }), () => true, () => {}).call('update', { id: 't', title: 'Plain', author: { kind: 'agent', name: 'x' } });
+  assert.deepEqual(sent, [{ id: 't', title: 'Plain', auth: { key: 'owner' } }]);
+});
+
+test('writes carry who they are from, and a client cannot choose it', async () => {
+  const sent: [string, Record<string, unknown>][] = [];
+  const tasks = new Tasks(() => ({ key: 'owner', apiVersion: 87, post: async (_k, fn, a) => void sent.push([fn, a]) }), () => true, () => {});
+  await tasks.call('comment', { id: 't', body: 'Hi', author: { kind: 'agent', name: 'Forged' } });
+  await tasks.call('update', { id: 't', priority: 'high' }, { kind: 'agent', name: 'Fix login' });
+  assert.equal((sent[0]![1].author as { kind: string }).kind, 'user');
+  assert.notEqual((sent[0]![1].author as { name: string }).name, 'Forged');
+  assert.deepEqual(sent[1]![1].author, { kind: 'agent', name: 'Fix login' });
+  // Reads and deletes have no author.
+  await tasks.call('activity', { id: 't' });
+  await tasks.call('remove', { id: 't' });
+  assert.equal('author' in sent[2]![1], false);
+  assert.equal('author' in sent[3]![1], false);
+});
+
+test('a task image uploads checked bytes and appends a link', async () => {
+  const base64 = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aD1sAAAAASUVORK5CYII=';
+  const calls: [string, unknown][] = [];
+  const tasks = new Tasks(() => ({ key: 'owner', apiVersion: 87, post: async (_k, fn, a) => { calls.push([fn, a]); return fn === 'tasks:uploadPhoto' ? 'https://example.test/upload' : { id: 'image-s' }; },
+    upload: async (_url, _bytes, mime) => { assert.equal(mime, 'image/png'); return 'storage-1'; } }), () => true, () => {});
+  assert.deepEqual(await tasks.call('imageData', { id: 't', base64, name: 'shot.png' }), { id: 'image-s' });
+  assert.deepEqual(calls.at(-1), ['tasks:addImage', { id: 't', storageId: 'storage-1', title: 'shot.png', auth: { key: 'owner' } }]);
+  await assert.rejects(tasks.call('imageData', { id: 't', base64: Buffer.from('not an image').toString('base64') }), /PNG/);
+  const dir = mkdtempSync(join(tmpdir(), 'tasks-image-'));
+  try {
+    writeFileSync(join(dir, 'pic.png'), Buffer.from(base64, 'base64'));
+    await tasks.call('imageFile', { id: 't', path: join(dir, 'pic.png') });
+    assert.deepEqual(calls.at(-1), ['tasks:addImage', { id: 't', storageId: 'storage-1', title: 'pic.png', auth: { key: 'owner' } }]);
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+test('related lists this runner\'s threads and prints for a task in one of its projects', async () => {
+  const related = relatedFor({
+    threadIds: (p) => (p === 'p1' ? ['old', 'gone', 'new', ...Array.from({ length: 12 }, (_, i) => `t${i}`)] : undefined),
+    thread: (id) => (id === 'gone' ? undefined : { id, title: id, status: 'idle', lastActivityAt: id === 'new' ? '2026-11-18T00:00:00Z' : id === 'old' ? '2026-01-01T00:00:00Z' : '2026-06-01T00:00:00Z', cwd: '/x' }),
+    prints: () => [{ id: 'a', title: 'A', updatedAt: '2026-01-01' }, { id: 'b', title: 'B', kind: 'doc', updatedAt: '2026-11-01' }],
+  }, 'p1');
+  assert.equal(related.threads.length, 10);
+  assert.equal(related.threads[0]!.id, 'new');
+  assert.equal(related.threads.some((t) => t.id === 'gone' || t.id === 'old'), false);
+  assert.deepEqual(related.prints, [{ id: 'b', title: 'B', kind: 'doc' }, { id: 'a', title: 'A', kind: 'page' }]);
+  assert.equal('cwd' in related.threads[0]!, false);
+
+  const asked: string[] = [];
+  const project = (runnerId: string) => ({ id: 't', project: { runnerId, id: 'p1' } });
+  let row = project('mac');
+  const tasks = new Tasks(() => ({ key: 'owner', apiVersion: 87, post: async (_k, fn) => (fn === 'tasks:get' ? row : null) }), () => true, () => {},
+    () => ({ runnerId: 'mac', related: (id) => (asked.push(id), { threads: [{ id: 'x', title: 'X', status: 'idle', lastActivityAt: '' }], prints: [] }) }));
+  assert.equal((await tasks.call('related', { id: 't' }) as { threads: unknown[] }).threads.length, 1);
+  row = project('other-mac');
+  assert.deepEqual(await tasks.call('related', { id: 't' }), { threads: [], prints: [] });
+  assert.deepEqual(await tasks.call('related', { id: 't', project: null }), { threads: [], prints: [] });
+  assert.deepEqual(asked, ['p1']);
 });

@@ -2037,8 +2037,13 @@ export function buildThreadbearTools(
     ...pocketTools,
     ...(opts.tasks?.() ? [
       tool('list_tasks', 'List synced Tasks. Follow next with after for more.', { after: z.string().optional() }, handle(async a => JSON.stringify({ ...(await opts.tasks!()!.call('list', a) as object), projects: await opts.tasks!()!.call('projects'), preferences: await opts.tasks!()!.call('preferences') }))),
-      tool('create_task', 'Add a synced task. Project is optional: its name, id, or runnerId/id from list_tasks. Supply id to retry safely.', { id: z.string().optional(), title: z.string(), notes: z.string().optional(), columnId: z.string().optional(), status: z.enum(['backlog', 'todo', 'doing', 'done']).optional(), project: z.union([z.string(), z.object({ runnerId: z.string(), id: z.string() })]).optional() }, handle(async a => JSON.stringify(await opts.tasks!()!.call('create', a)))),
-      tool('update_task', 'Edit or move a synced task. Only supplied fields change; null project unassigns it.', { id: z.string(), title: z.string().optional(), notes: z.string().optional(), columnId: z.string().optional(), status: z.enum(['backlog', 'todo', 'doing', 'done']).optional(), project: z.union([z.string(), z.object({ runnerId: z.string(), id: z.string() })]).nullable().optional(), position: z.number().optional() }, handle(async a => JSON.stringify(await opts.tasks!()!.call('update', a)))),
+      tool('create_task', 'Add a synced task. Project is optional: its name, id, or runnerId/id from list_tasks. Supply id to retry safely.', { id: z.string().optional(), title: z.string(), notes: z.string().optional(), columnId: z.string().optional(), status: z.enum(['backlog', 'todo', 'doing', 'done']).optional(), project: z.union([z.string(), z.object({ runnerId: z.string(), id: z.string() })]).optional(), priority: taskPriority.optional(), dueDate: z.string().optional().describe('YYYY-MM-DD') }, handle(async a => JSON.stringify(await opts.tasks!()!.call('create', a, await taskAgent(control, selfId))))),
+      tool('update_task', 'Edit or move a synced task. Only supplied fields change; null unsets. comment adds one as you.', { id: z.string(), title: z.string().optional(), notes: z.string().optional(), columnId: z.string().optional(), status: z.enum(['backlog', 'todo', 'doing', 'done']).optional(), project: z.union([z.string(), z.object({ runnerId: z.string(), id: z.string() })]).nullable().optional(), position: z.number().optional(), priority: taskPriority.nullable().optional(), dueDate: z.string().nullable().optional(), comment: z.string().optional() }, handle(async ({ comment, ...a }) => {
+        const tasks = opts.tasks!()!;
+        const author = await taskAgent(control, selfId);
+        const changed = Object.keys(a).length > 1 ? await tasks.call('update', a, author) : null;
+        return JSON.stringify(comment ? await tasks.call('comment', { id: a.id, body: comment }, author) : changed);
+      })),
       tool('delete_task', 'Delete a synced task, or restore it with undo.', { id: z.string(), undo: z.boolean().optional() }, handle(async ({ id, undo }) => JSON.stringify(await opts.tasks!()!.call(undo ? 'restore' : 'remove', { id })))),
     ] : []),
     ...(schedules ? scheduleTools : []),
@@ -2564,6 +2569,15 @@ export function serverInstructions(selfId: string, o: { one: boolean; bulletRepl
   );
 }
 
+// create_task and update_task's priority (API 87), and who their changes are from.
+const taskPriority = z.enum(['urgent', 'high', 'normal', 'low']);
+async function taskAgent(control: ThreadControl, selfId: string): Promise<{ kind: 'agent'; name: string }> {
+  try {
+    return { kind: 'agent', name: (await control.get(selfId))?.title?.replace(/\s+/g, ' ').trim().slice(0, 80) || 'Agent' };
+  } catch {
+    return { kind: 'agent', name: 'Agent' };
+  }
+}
 export function threadbearMcpServer(control: ThreadControl, selfId: string, schedules?: ScheduleControl, projects?: ProjectControl, appRestarts?: AppRestartControl, bulletReplies: () => boolean = () => true, pocket?: () => PocketControl | undefined, oneReply: () => boolean = () => false, gateway?: () => string | undefined, gatewayHealth?: () => Promise<ConnectorService[] | undefined>, remote?: () => RemoteControl | undefined, xSearch?: () => { secretsDir: string } | undefined, pages?: () => Pages | undefined, printPublisher?: () => PagePublisher | undefined, printsWhenAsked?: () => boolean, tasks?: () => import('./tasks.ts').Tasks | undefined, clearerCompletion?: () => boolean): McpSdkServerConfigWithInstance {
   const one = oneReply();
   const server = createSdkMcpServer({
