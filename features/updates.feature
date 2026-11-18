@@ -69,6 +69,9 @@ Feature: The Updates panel
     And it requests only that latest tree once no update build is running
     And a busy build Mac or one with timings queued makes it try again later
     And a build already running finishes with the host kept exclusive
+    And an app opened again during the wait counts it from when main moved
+    And the build starts when the quiet time ends, not at the next look
+    And a staged build that has waited ten minutes while main moved on is built over
 
   @system.selfupdate
   Scenario: The app's next version waiting says so in the Updates panel

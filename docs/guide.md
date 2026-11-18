@@ -2683,6 +2683,12 @@ The new desktop app follows `main` too, from the
 checkout you installed it from. Its build takes every core of a Mac for
 minutes. It waits for ten minutes with no changes to the desktop app before
 asking for a build, so several landings close together become one update.
+The ten minutes count from when `main` last moved, so quitting and opening
+the app again doesn't start them over, and the build starts as soon as
+they're up. A new version that's ready but can't go in yet (say you've left
+words typed in a card) gets replaced: once it has waited ten minutes and
+`main` has moved past it, the app builds the newer one, and the waiting
+version stays in place until the new one is made.
 If the build Mac is busy or has tests or timings queued, it tries again
 later, trying the other Macs on your build list first. While changes keep
 landing or those Macs stay busy, the update keeps waiting. A build already

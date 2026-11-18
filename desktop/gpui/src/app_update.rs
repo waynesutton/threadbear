@@ -57,6 +57,10 @@ pub(crate) struct AppUpdater {
     pub(crate) failed: Option<String>,
     quiet_main: rules::BuildDebounce,
     settling: bool,
+    /// The look booked for when main's quiet time ends, and the tree the log
+    /// last said was waiting, so it says so once per landing.
+    settled_look: Option<Task<()>>,
+    noted_waiting: Option<String>,
     /// The last build found no Mac to build on; the next look tries again.
     pub(crate) waiting_for_host: bool,
     /// The last build found no Mac trusted to build it (stage-update.sh's 5:
@@ -259,6 +263,20 @@ fn main_tree(checkout: &str) -> Option<String> {
         return None;
     }
     Some(rules::tree_from_rev_parse(&String::from_utf8_lossy(&out.stdout))).filter(|t| !t.is_empty())
+}
+
+/// How long ago main last moved, from its reflog, or none if git can't say.
+fn main_moved_ago(checkout: &str) -> Option<Duration> {
+    let out = Command::new("/usr/bin/git").args(rules::reflog_arguments(checkout)).stdin(Stdio::null()).stderr(Stdio::null()).output().ok()?;
+    let at = rules::moved_at_from_reflog(&String::from_utf8_lossy(&out.stdout))?;
+    let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).ok()?;
+    now.checked_sub(Duration::from_secs(at))
+}
+
+/// How long the staged bundle has been waiting to go in: since it was moved
+/// into place, so a relaunch doesn't start the count again.
+fn staged_waited() -> Option<Duration> {
+    std::fs::metadata(next_dir()).and_then(|m| m.modified()).ok()?.elapsed().ok()
 }
 
 fn open_log() -> Option<std::fs::File> {
@@ -466,10 +484,10 @@ impl Threadbear {
         }
         let checkout = running.checkout.clone();
         cx.spawn(async move |this, cx| {
-            let tree = cx.background_executor().spawn(async move { main_tree(&checkout) }).await;
+            let (tree, moved_ago) = cx.background_executor().spawn(async move { (main_tree(&checkout), main_moved_ago(&checkout)) }).await;
             this.update(cx, |t, cx| {
                 let Some(tree) = tree else { return };
-                let ready = t.updater.quiet_main.ready(&tree, std::time::Instant::now());
+                let wait = t.updater.quiet_main.wait(&tree, std::time::Instant::now(), moved_ago);
                 // followMain can have changed while git was being read.
                 if t.runner_settings.as_ref().and_then(|s| s["followMain"].as_bool()) == Some(false) {
                     t.updater.settling = false;
@@ -478,7 +496,8 @@ impl Threadbear {
                 // What's staged may have been swapped in or dropped by hand.
                 t.updater.staged = staged_build();
                 t.updater.settling = false;
-                match rules::decide(&tree, &running, t.updater.staged.as_ref(), t.updater.building.as_deref(), t.updater.failed.as_deref(), t.updater.restarting) {
+                let staged_stale = t.updater.staged.is_some() && staged_waited().is_some_and(|w| w >= rules::STALE_STAGED);
+                match rules::decide(&tree, &running, t.updater.staged.as_ref(), t.updater.building.as_deref(), t.updater.failed.as_deref(), t.updater.restarting, staged_stale) {
                     Action::Nothing => {}
                     Action::DropStaged => {
                         let _ = std::fs::remove_dir_all(next_dir());
@@ -486,11 +505,24 @@ impl Threadbear {
                         note("dropped the staged build; main is what's running again");
                     }
                     Action::Build(tree) => {
-                        if ready {
+                        if wait.is_zero() {
+                            if let Some(staged) = t.updater.staged.as_ref() {
+                                note(&format!("building main over the staged {}: it has waited {} minutes to go in, and main has moved on", staged.short, staged_waited().map_or(0, |w| w.as_secs() / 60)));
+                            }
                             t.start_update_build(tree, running.checkout.clone(), cx);
                         } else {
                             t.updater.settling = true;
                             t.updater.waiting_for_host = false;
+                            if t.updater.noted_waiting.as_deref() != Some(tree.as_str()) {
+                                note(&format!("main's desktop/ moved ({}); building it in {} min if main stays put", &tree[..tree.len().min(12)], wait.as_secs().div_ceil(60)));
+                                t.updater.noted_waiting = Some(tree);
+                            }
+                            // Built when the quiet time ends, not at the next
+                            // five-minute look after it.
+                            t.updater.settled_look = Some(cx.spawn(async move |this, cx| {
+                                cx.background_executor().timer(wait + Duration::from_secs(1)).await;
+                                this.update(cx, |t, cx| t.check_for_update(cx)).ok();
+                            }));
                         }
                     }
                 }

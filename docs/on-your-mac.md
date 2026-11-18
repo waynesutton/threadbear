@@ -479,8 +479,10 @@ the host's `CLAUDE.md`. Faces are drawn by the `open-bot-avatar` package
   follows the `main` of the checkout it was installed from in the same way
   (`desktop/gpui/src/app_update.rs`): it reads main's `desktop/` tree with
   `git rev-parse` 20 seconds after it opens, every 5 minutes and within
-  seconds of main changing. When that differs from what it runs, it waits
-  until that tree has stayed the same for ten minutes, then runs
+  seconds of main changing, and when main last moved from its reflog
+  (`git log -g`). When that differs from what it runs, it waits
+  until that tree has stayed the same for ten minutes (counted from main's
+  last move, so a relaunch doesn't restart them), then runs
   `stage-update.sh` from its own bundle at background priority
   (`desktop/scripts/stage-update.sh`). That clones the checkout into
   `~/Library/Caches/Threadbear/update-desktop`, and with `updateBuildHosts` in

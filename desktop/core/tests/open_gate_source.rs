@@ -69,6 +69,7 @@ const ALLOWED_LINES: &[(&str, &str, usize)] = &[
     // never anything from a thread (handover.rs).
     ("gpui/src/handover.rs", "let mut command = std::process::Command::new(\"/usr/bin/open\");", 1),
     ("gpui/src/app_update.rs", "let out = Command::new(\"/usr/bin/git\").args(rules::rev_parse_arguments(checkout)).stdin(Stdio::null()).output().ok()?;", 1),
+    ("gpui/src/app_update.rs", "let out = Command::new(\"/usr/bin/git\").args(rules::reflog_arguments(checkout)).stdin(Stdio::null()).stderr(Stdio::null()).output().ok()?;", 1),
     ("gpui/src/app_update.rs", "let child = Command::new(program).args(arguments).current_dir(installed::home_dir()).stdin(Stdio::null()).stdout(out).stderr(err).spawn();", 1),
     // Build-time SDK/compiler discovery and the fixed Translate source compile.
     // No app runtime, link, file or runner content supplies these commands.

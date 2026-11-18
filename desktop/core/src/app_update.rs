@@ -147,16 +147,42 @@ pub enum Action {
     DropStaged,
 }
 
-pub fn decide(main_tree: &str, running: &BuildInfo, staged: Option<&BuildInfo>, building: Option<&str>, failed: Option<&str>, restarting: bool) -> Action {
+/// When main last moved, from `git log -g` on main: a relaunch counts the
+/// quiet time from there rather than starting it again (17 Nov, a relaunch a
+/// minute after a landing put its build back by ten minutes).
+pub fn reflog_arguments(checkout: &str) -> Vec<String> {
+    ["-C", checkout, "log", "-g", "-1", "--format=%gd", "--date=unix", "refs/heads/main"].map(String::from).to_vec()
+}
+
+/// The seconds since 1970 in `main@{1794958340}`, or none.
+pub fn moved_at_from_reflog(output: &str) -> Option<u64> {
+    let line = output.lines().next()?.trim();
+    line.strip_suffix('}')?.rsplit_once("@{")?.1.parse().ok()
+}
+
+/// How long main's desktop tree stands still before it's built.
+pub const BUILD_QUIET: std::time::Duration = std::time::Duration::from_secs(10 * 60);
+
+/// How long a staged build older than main may wait to go in before main is
+/// built over it. Until then a staged build goes in first, so an idle restart
+/// doesn't cut off a build just started; past it, whatever holds the restart
+/// (words typed in a card, 17 Nov) has held it long enough that main has
+/// moved on, and the newer build replaces it only once it's made.
+pub const STALE_STAGED: std::time::Duration = std::time::Duration::from_secs(10 * 60);
+
+pub fn decide(main_tree: &str, running: &BuildInfo, staged: Option<&BuildInfo>, building: Option<&str>, failed: Option<&str>, restarting: bool, staged_stale: bool) -> Action {
     if restarting || building.is_some() {
         return Action::Nothing;
     }
     if main_tree == running.app_tree {
         return if staged.is_some() { Action::DropStaged } else { Action::Nothing };
     }
-    // Let a staged build go in before starting another. Otherwise an idle
-    // restart can cut off the new build just after it starts.
-    if staged.is_some() || failed == Some(main_tree) {
+    if failed == Some(main_tree) {
+        return Action::Nothing;
+    }
+    // Let a staged build go in before starting another, unless it has waited
+    // `STALE_STAGED` and main has moved past it.
+    if staged.is_some_and(|s| s.app_tree == main_tree || !staged_stale) {
         return Action::Nothing;
     }
     Action::Build(main_tree.to_owned())
@@ -171,13 +197,16 @@ pub struct BuildDebounce {
 }
 
 impl BuildDebounce {
-    pub fn ready(&mut self, tree: &str, now: std::time::Instant) -> bool {
-        let (last, since) = self.observed.get_or_insert_with(|| (tree.to_owned(), now));
-        if last != tree {
-            *last = tree.to_owned();
-            *since = now;
+    /// How long until `tree` has stood for `BUILD_QUIET`: zero once it has.
+    /// A tree new to this look counts from `moved_ago`, how long ago main
+    /// last moved, when git says; that's never later than the tree changed.
+    pub fn wait(&mut self, tree: &str, now: std::time::Instant, moved_ago: Option<std::time::Duration>) -> std::time::Duration {
+        if self.observed.as_ref().is_none_or(|(last, _)| last != tree) {
+            let since = moved_ago.and_then(|ago| now.checked_sub(ago)).unwrap_or(now);
+            self.observed = Some((tree.to_owned(), since));
         }
-        now.saturating_duration_since(*since) >= std::time::Duration::from_secs(10 * 60)
+        let since = self.observed.as_ref().map_or(now, |(_, since)| *since);
+        BUILD_QUIET.saturating_sub(now.saturating_duration_since(since))
     }
 }
 
@@ -470,40 +499,79 @@ mod tests {
     #[test]
     fn decides_whether_to_build() {
         let running = build("aaa", "t1");
-        assert_eq!(decide("t1", &running, None, None, None, false), Action::Nothing);
-        assert_eq!(decide("t2", &running, None, None, None, false), Action::Build("t2".into()));
+        assert_eq!(decide("t1", &running, None, None, None, false, false), Action::Nothing);
+        assert_eq!(decide("t2", &running, None, None, None, false, false), Action::Build("t2".into()));
         // Already staged, being built or known to fail: leave it.
-        assert_eq!(decide("t2", &running, Some(&build("bbb", "t2")), None, None, false), Action::Nothing);
-        assert_eq!(decide("t2", &running, None, Some("t2"), None, false), Action::Nothing);
+        assert_eq!(decide("t2", &running, Some(&build("bbb", "t2")), None, None, false, false), Action::Nothing);
+        assert_eq!(decide("t2", &running, None, Some("t2"), None, false, false), Action::Nothing);
         // A look that finishes after a newer main was read must not start
         // another build alongside the one already running.
-        assert_eq!(decide("t3", &running, None, Some("t2"), None, false), Action::Nothing);
-        assert_eq!(decide("t2", &running, None, None, Some("t2"), false), Action::Nothing);
+        assert_eq!(decide("t3", &running, None, Some("t2"), None, false, false), Action::Nothing);
+        assert_eq!(decide("t2", &running, None, None, Some("t2"), false, false), Action::Nothing);
         // A staged build goes in first; the new app considers the latest main.
-        assert_eq!(decide("t3", &running, Some(&build("bbb", "t2")), None, Some("t2"), false), Action::Nothing);
-        assert_eq!(decide("t3", &running, None, None, Some("t2"), false), Action::Build("t3".into()));
+        assert_eq!(decide("t3", &running, Some(&build("bbb", "t2")), None, Some("t2"), false, false), Action::Nothing);
+        assert_eq!(decide("t3", &running, None, None, Some("t2"), false, false), Action::Build("t3".into()));
         // Main is back to what's running while something else is staged.
-        assert_eq!(decide("t1", &running, Some(&build("bbb", "t2")), None, None, false), Action::DropStaged);
+        assert_eq!(decide("t1", &running, Some(&build("bbb", "t2")), None, None, false, false), Action::DropStaged);
         // During handover next has already moved into place, but the old
         // app is still alive. Its pending git read mustn't rebuild t2.
-        assert_eq!(decide("t2", &running, None, None, None, true), Action::Nothing);
+        assert_eq!(decide("t2", &running, None, None, None, true, false), Action::Nothing);
+    }
+
+    #[test]
+    fn a_staged_build_main_has_moved_past_is_built_over_once_stale() {
+        let running = build("aaa", "t1");
+        let staged = build("bbb", "t2");
+        // Fresh: it goes in first.
+        assert_eq!(decide("t3", &running, Some(&staged), None, None, false, false), Action::Nothing);
+        // Held past STALE_STAGED: main is built over it.
+        assert_eq!(decide("t3", &running, Some(&staged), None, None, false, true), Action::Build("t3".into()));
+        // Already main, or main's tree failed: nothing, however long it's waited.
+        assert_eq!(decide("t2", &running, Some(&staged), None, None, false, true), Action::Nothing);
+        assert_eq!(decide("t3", &running, Some(&staged), None, Some("t3"), false, true), Action::Nothing);
+        assert_eq!(decide("t3", &running, Some(&staged), Some("t3"), None, false, true), Action::Nothing);
     }
 
     #[test]
     fn update_builds_wait_for_the_latest_desktop_tree_to_settle() {
         use std::time::{Duration, Instant};
-        let now = Instant::now();
+        let now = Instant::now() + Duration::from_secs(3600);
+        let s = Duration::from_secs;
         let mut quiet = BuildDebounce::default();
-        assert!(!quiet.ready("t2", now));
-        assert!(!quiet.ready("t2", now + Duration::from_secs(599)));
-        assert!(quiet.ready("t2", now + Duration::from_secs(600)));
+        assert_eq!(quiet.wait("t2", now, None), s(600));
+        assert_eq!(quiet.wait("t2", now + s(599), None), s(1));
+        assert!(quiet.wait("t2", now + s(600), None).is_zero());
         // More landings during a build collapse into the newest tree.
-        assert!(!quiet.ready("t3", now + Duration::from_secs(601)));
-        assert!(!quiet.ready("t4", now + Duration::from_secs(900)));
-        assert!(!quiet.ready("t4", now + Duration::from_secs(1499)));
-        assert!(quiet.ready("t4", now + Duration::from_secs(1500)));
+        assert!(!quiet.wait("t3", now + s(601), None).is_zero());
+        assert!(!quiet.wait("t4", now + s(900), None).is_zero());
+        assert!(!quiet.wait("t4", now + s(1499), None).is_zero());
+        assert!(quiet.wait("t4", now + s(1500), None).is_zero());
         // A busy host retry, or a landing outside desktop/, keeps its wait.
-        assert!(quiet.ready("t4", now + Duration::from_secs(1800)));
+        assert!(quiet.wait("t4", now + s(1800), Some(s(5))).is_zero());
+    }
+
+    #[test]
+    fn a_relaunch_counts_the_quiet_time_from_when_main_moved() {
+        use std::time::{Duration, Instant};
+        let now = Instant::now() + Duration::from_secs(3600);
+        let s = Duration::from_secs;
+        // Main moved 90 s before the new app's first look (17 Nov).
+        let mut quiet = BuildDebounce::default();
+        assert_eq!(quiet.wait("t2", now, Some(s(90))), s(510));
+        // Long enough ago: ready at once.
+        let mut quiet = BuildDebounce::default();
+        assert!(quiet.wait("t2", now, Some(s(3000))).is_zero());
+        // A later look at the same tree keeps the first time it was seen.
+        assert!(quiet.wait("t2", now + s(1), Some(s(1))).is_zero());
+    }
+
+    #[test]
+    fn reads_when_main_moved_from_its_reflog() {
+        assert_eq!(reflog_arguments("/repo"), ["-C", "/repo", "log", "-g", "-1", "--format=%gd", "--date=unix", "refs/heads/main"]);
+        assert_eq!(moved_at_from_reflog("main@{1794958340}\n"), Some(1794958340));
+        assert_eq!(moved_at_from_reflog("refs/heads/main@{1794958340}"), Some(1794958340));
+        assert_eq!(moved_at_from_reflog("main@{0}x"), None);
+        assert_eq!(moved_at_from_reflog(""), None);
     }
 
     /// A moment that would restart: staged, loaded, nothing typed or under
