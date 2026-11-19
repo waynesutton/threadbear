@@ -501,6 +501,8 @@ export const count = query({
   },
 });
 
+// At most this many of a task's pictures go to its thread, as a phone's message takes.
+const TASK_THREAD_IMAGES = 6;
 // Queue through the same runner command path as the website's new-thread flow.
 // Keeping the command on the task makes retries (including a lost reply) harmless.
 export const startThread = mutation({
@@ -516,8 +518,19 @@ export const startThread = mutation({
     const project = row.project ? await ctx.db.query('projects').withIndex('by_runner_id', q => q.eq('runnerId', row.project!.runnerId).eq('id', row.project!.id)).unique() : null;
     if (row.project && !project) bad('That project is no longer available');
     const runnerId = project?.runnerId ?? await mainRunner(ctx);
+    // The task's pictures reach the agent as pictures, after the words. They
+    // go as taskImages, not images: a finished command deletes its images'
+    // files, and these belong to the task.
+    const taskImages: { url: string }[] = [];
+    for (const l of row.links ?? []) {
+      if (l.kind !== 'image' || !l.storageId || taskImages.length >= TASK_THREAD_IMAGES) continue;
+      const url = await ctx.storage.getUrl(l.storageId);
+      if (url) taskImages.push({ url });
+    }
+    const pictures = taskImages.length ? '\n\nPictures attached to this task:\n' + taskImages.map((_, i) => `[Picture ${i + 1}]`).join('\n') : '';
     const commandId = await queue(ctx, runnerId, 'create', undefined, {
-      text: row.title + (row.notes ? '\n\n' + row.notes : ''),
+      text: row.title + (row.notes ? '\n\n' + row.notes : '') + pictures,
+      ...(taskImages.length ? { taskImages } : {}),
       title: row.title,
       ...(project ? { projectIds: [project.id], ...(project.folders[0] ? { cwd: project.folders[0] } : {}) } : {}),
     });

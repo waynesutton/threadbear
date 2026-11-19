@@ -3232,7 +3232,7 @@ Each task's ⋯ menu opens it, adds a note, moves it to a project, sets its
 priority or due date (Today, Tomorrow, End of week, Pick a date… for any day on a
 calendar, with a time if you tick At a time, or Clear), sets its status
 or asks before deleting it (with Undo afterward). Send to thread starts a new
-thread with the task title, notes and project. It shows Starting while queued,
+thread with the task title, notes, pictures (up to 6) and project. It shows Starting while queued,
 then View thread; repeated clicks reuse the same request. Projects are optional,
 and their pages link to their tasks. Display picks a project, groups by status or project, sets the order,
 and makes the view you're in the one Tasks opens with. The sliders button next

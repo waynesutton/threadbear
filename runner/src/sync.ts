@@ -4456,9 +4456,12 @@ export class ConvexSync {
   // Fetches a command's photos into inbox/ for as long as the send takes:
   // the runner copies them into the thread's media folder as it takes the
   // message, and a draining runner does the same on this Mac.
-  private async withPhoneImages<T>(raw: unknown, send: (images: ImageRef[]) => T | Promise<T>): Promise<T> {
+  // A task's pictures (taskImages, Send to thread) come after: one that's
+  // gone or isn't an image is left out rather than stopping the thread.
+  private async withPhoneImages<T>(raw: unknown, send: (images: ImageRef[]) => T | Promise<T>, optional?: unknown): Promise<T> {
     const wanted = Array.isArray(raw) ? (raw as { url?: unknown }[]) : [];
-    if (!wanted.length) return send([]);
+    const extra = Array.isArray(optional) ? (optional as { url?: unknown }[]).slice(0, 6) : [];
+    if (!wanted.length && !extra.length) return send([]);
     const dir = paths.inbox(this.deps.home ?? os.tmpdir());
     const download = this.deps.download ?? convexDownloader();
     const images: ImageRef[] = [];
@@ -4470,6 +4473,15 @@ export class ConvexSync {
         const info = sniffImage(bytes);
         if (!info) throw new Error('that photo is not an image');
         const file = path.join(dir, `phone-${crypto.randomUUID()}.${extForMediaType(info.mediaType)}`);
+        fs.writeFileSync(file, bytes);
+        images.push({ path: file, mediaType: info.mediaType });
+      }
+      for (const { url } of extra) {
+        if (typeof url !== 'string') continue;
+        const bytes = await download(url).then((b) => Buffer.from(b), () => undefined);
+        const info = bytes && sniffImage(bytes);
+        if (!bytes || !info) continue;
+        const file = path.join(dir, `task-${crypto.randomUUID()}.${extForMediaType(info.mediaType)}`);
         fs.writeFileSync(file, bytes);
         images.push({ path: file, mediaType: info.mediaType });
       }
@@ -4636,7 +4648,7 @@ export class ConvexSync {
           ...(typeof a.title === 'string' ? { title: a.title } : {}),
           ...(Array.isArray(a.projectIds) && a.projectIds.every(id => typeof id === 'string') ? { projectIds: a.projectIds as string[] } : {}),
           ...origin,
-        }));
+        }), a.taskImages);
         return { threadId: thread.id };
       }
       case 'quickAsk': {

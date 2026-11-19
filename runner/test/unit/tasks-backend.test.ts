@@ -221,6 +221,23 @@ test('sending a task queues one thread even after a repeated click', async () =>
 });
 
 
+test('sending a task carries its pictures without handing their files to the command', async () => {
+  const b = await setup();
+  const shot = b.file('shot1', { size: 1000, contentType: 'image/png' });
+  await b.run('create', { id: 'pics', title: 'Fix the header', notes: 'See the screenshot', links: [
+    { id: 'l1', kind: 'link', title: 'Docs', url: 'https://example.com' },
+    { id: 'l2', kind: 'image', title: 'Shot', storageId: shot },
+  ] });
+  const commandId = await b.run('startThread', { id: 'pics' });
+  const command = b.rows('commands').find(c => c._id === commandId)!;
+  assert.deepEqual(command.args.taskImages, [{ url: 'https://files.example/shot1' }]);
+  assert.equal(command.args.images, undefined);
+  assert.match(command.args.text, /See the screenshot\n\nPictures attached to this task:\n\[Picture 1\]$/);
+  // Finishing the thread leaves the task's picture alone.
+  await call(b.ctx, load('sync').finishCommand, { key: 'task-owner', commandId, ok: false, note: 'x' });
+  assert.deepEqual(b.deleted, []);
+});
+
 test('task launch carries project context and records the created thread across devices', async () => {
   const b = await setup();
   const sync = load('sync');

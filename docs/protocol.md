@@ -7979,7 +7979,12 @@ writes preserve column membership. Names never serve as ids.
 Preferences also carry `boardColumnOrder` and `sectionOrder` as stable column ids;
 legacy enum orders remain accepted. `tasks.startThread {id}` queues a create
 command once per task, using its title, notes and project's runner/folder.
-Repeated requests return the same command id. Tasks expose `threadCommandId`,
+Repeated requests return the same command id. The task's image links (up to 6) go along
+as `taskImages: {url}[]`, with a `[Picture N]` marker for each after the
+notes. They are not `images`, so finishing the command never deletes the
+task's files. The runner downloads them as it does a phone's photos, and
+skips one that has gone or isn't an image rather than failing the
+command. Tasks expose `threadCommandId`,
 then `thread: {runnerId,id}` when the command finishes, or `threadError` on
 failure. Web and native both use this backend operation; no agent starts until
 the user presses Send to thread. Existing create-command permission defaults

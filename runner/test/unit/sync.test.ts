@@ -4102,6 +4102,19 @@ test("handover: an entry with no events doesn't stop the cards after it", async 
 });
 
 
+test('commands: a task sent to a thread brings its pictures, skipping one that is not an image', async () => {
+  const { h, sync, calls, push } = setupFull();
+  sync.start();
+  await sync.flushNow();
+  push([{ commandId: 'task-pics', kind: 'create', args: { text: 'Fix it\n\nPictures attached to this task:\n[Picture 1]', title: 'Fix it', cwd: h.cfg.defaults.cwd, accountId: 'claude-3', taskImages: [{ url: 'https://x/shot' }, { url: 'https://x/notimage' }] }, createdAt: 1 }]);
+  await tick(20);
+  const finished = calls.find(c => c.fn === 'sync:finishCommand' && c.args.commandId === 'task-pics');
+  assert.equal(finished?.args.ok, true, String(finished?.args.note));
+  const ev = h.events(finished!.args.resultThreadId as string).find((e: { type: string }) => e.type === 'user.message') as { images: { path: string }[] };
+  assert.equal(ev.images.length, 1);
+  await sync.stop();
+});
+
 test('commands: Tasks creation preserves its title and does not launch twice', async () => {
   const { h, sync, calls, push, applied } = setupFull();
   sync.start();
