@@ -9,7 +9,6 @@ Status and gap list: prds/prints-status.md
 
 ## In Progress
 
-- [ ] 2026-11-18 UTC Respect owner-specific PR reminder preferences in the automatic Still open card, preserving unpushed-work warnings. prds/loose-end-pr-preferences.md
 
 
 
@@ -25,6 +24,8 @@ Status and gap list: prds/prints-status.md
 - [ ] Land verified Settings review fixes when the Mac is quiet, then verify the installed update.
 
 ## Completed
+
+- [x] 2026-11-19 00:01 UTC Respect owner-specific PR reminder preferences in the automatic Still open card. Product 6765143e landed after the 1600-second required check; automatic runner release 20261118T235248Z-6765143e started at 23:52:58 UTC and was marked good. The real thread card recomputed at 2026-11-18 23:59:03.280 UTC with only unpushed and scheduled entries, confirming the unwanted reminder is omitted while local-work warnings remain. Fourteen focused tests, typecheck, required check and deployment tests pass. prds/loose-end-pr-preferences.md
 
 - [x] 2026-11-18 21:09 UTC Separate Prints/Bears/Tables search, visible selection and bulk archive/delete landed and installed as f405c0de. Native build/typecheck, focus guard, 62 isolated scenarios/865 steps and 570-second landing check pass. Installed desktop tree matches; automatic handover and runner connection confirmed at21:08UTC, with no new panic/hang reports through21:09UTC. Release provenance verified separately from headless interactions. desktop/gpui/src/sidebar_lists.rs, bears_panel.rs, highlights.rs, settings.rs; prds/sidebar-bulk-selection.md
 
