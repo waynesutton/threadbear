@@ -397,8 +397,11 @@ Feature: The Terminal
     Given the thread "Rename the Settings tabs" works in a folder of its own
     When I open the thread "Rename the Settings tabs"
     And I press ⌘J
-    And I type "printf 'needle\nhay\nneedle\n'" and press Return in the Terminal
-    And I find "needle" in the Terminal
+    # The word is split on the command line, so only what it prints has it,
+    # and Find waits for that to be drawn.
+    And I type "printf 'nee%sdle\nhay\nnee%sdle\n' '' ''" and press Return in the Terminal
+    Then the Terminal shows the line "hay"
+    When I find "needle" in the Terminal
     Then the Terminal's Find says "2 of 2"
     When I press "enter" in the Terminal's Find
     Then the Terminal's Find says "1 of 2"
