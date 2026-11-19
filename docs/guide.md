@@ -3211,7 +3211,8 @@ Display > Wrap Columns puts the columns on as many rows as they need instead, so
 every column shows without scrolling sideways.
 
 Each task's ⋯ menu opens it, adds a note, moves it to a project, sets its
-priority or due date (Today, Tomorrow, End of week or Clear), sets its status
+priority or due date (Today, Tomorrow, End of week, Pick a date… for any day on a
+calendar, or Clear), sets its status
 or asks before deleting it (with Undo afterward). Send to thread starts a new
 thread with the task title, notes and project. It shows Starting while queued,
 then View thread; repeated clicks reuse the same request. Projects are optional,

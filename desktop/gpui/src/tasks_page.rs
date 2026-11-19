@@ -789,6 +789,32 @@ impl TasksPage {
                 })
         });
     }
+    /// "Pick a date…" in a task's menu: any day, past the quick picks, on
+    /// the same calendar the snooze picker uses.
+    fn pick_due_date(&mut self, row: &TaskRow, window: &mut Window, cx: &mut Context<Self>) {
+        use gpui_kit::component::calendar::{Calendar, CalendarState};
+        let start = row.due_date.as_deref().and_then(threadbear_core::task_dates::parse).unwrap_or_else(detail::today);
+        let calendar = cx.new(|cx| {
+            let mut state = CalendarState::new(window, cx);
+            state.set_date(start, window, cx);
+            state
+        });
+        let (page, id, title) = (cx.entity().downgrade(), row.id.clone(), row.title.clone());
+        window.open_alert_dialog(cx, move |dialog, _, _| {
+            let (page, id, calendar) = (page.clone(), id.clone(), calendar.clone());
+            dialog
+                .title(format!("Due date for {title}"))
+                .width(px(360.))
+                .child(v_flex().items_center().child(div().id("task-due-day").tip("Day it's due").child(Calendar::new(&calendar))))
+                .button_props(DialogButtonProps::default().ok_text("Set due date").show_cancel(true))
+                .on_ok(move |_, _, cx| {
+                    let Some(day) = calendar.read(cx).date().start() else { return false };
+                    let value = threadbear_core::task_dates::format(day);
+                    page.update(cx, |p, cx| p.set_field(&id, "dueDate", json!(value), cx)).ok();
+                    true
+                })
+        });
+    }
     fn delete(&mut self, id: &str, cx: &mut Context<Self>) {
         let before = self.rows.clone();
         let title = self.rows.iter().find(|r| r.id == id).map(|r| r.title.clone()).unwrap_or_default();
@@ -1244,6 +1270,10 @@ impl TasksPage {
                             p.update(cx, |p, cx| p.set_field(&id, "dueDate", json!(value), cx)).ok();
                         }));
                     }
+                    let (picker, pick) = (p.clone(), row.clone());
+                    sub = sub.item(PopupMenuItem::new("Pick a date…").on_click(move |_, window, cx| {
+                        picker.update(cx, |p, cx| p.pick_due_date(&pick, window, cx)).ok();
+                    }));
                     let (p, id) = (p.clone(), row.id.clone());
                     sub.separator().item(PopupMenuItem::new("Clear").disabled(current.is_none()).on_click(move |_, _, cx| {
                         p.update(cx, |p, cx| p.set_field(&id, "dueDate", Value::Null, cx)).ok();
