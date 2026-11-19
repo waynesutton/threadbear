@@ -892,6 +892,29 @@ impl Threadbear {
         RT.spawn(async move { client.call("threads.panelShown", params).await });
     }
 
+    /// A task came due: an alert in the window too, as macOS refuses
+    /// notifications to an ad-hoc signed build. It stays until it's
+    /// dismissed or clicked, and a click opens the task.
+    fn task_due_alert(&mut self, params: &Value, cx: &mut Context<Self>) {
+        let (Some(id), Some(title)) = (params["id"].as_str().map(str::to_owned), params["title"].as_str().map(str::to_owned)) else { return };
+        let when = params["when"].as_str().unwrap_or("now").to_owned();
+        let (me, window) = (cx.entity().downgrade(), self.main_window);
+        cx.defer(move |cx| {
+            window
+                .update(cx, |_, window, cx| {
+                    use gpui_kit::component::{notification::Notification, WindowExt as _};
+                    let alert = Notification::new()
+                        .title(format!("Task due: {title}"))
+                        .message(format!("Due {when}. Click to open it."))
+                        .autohide(false)
+                        .on_click(move |_, window, cx| {
+                            me.update(cx, |this, cx| this.open_task(id.clone(), window, cx)).ok();
+                        });
+                    window.push_notification(alert, cx);
+                })
+                .ok();
+        });
+    }
     fn on_seen(&mut self, seen: Seen, cx: &mut Context<Self>) {
         match seen {
             Seen::Status(status) => {
@@ -1074,7 +1097,10 @@ impl Threadbear {
                 "runner.updates" => self.runner_updates_changed(&params),
                 "connectors.updated" => self.connectors_updated(&params),
                 "tasks.updated" => self.tasks_updated(cx),
-                "tasks.due" => crate::notify::post_task_due(&params, cx),
+                "tasks.due" => {
+                    crate::notify::post_task_due(&params, cx);
+                    self.task_due_alert(&params, cx);
+                }
                 "skills.updated" => self.skills_updated(&params, cx),
                 "thread.event" => {
                     // An open review window hears its review change whichever

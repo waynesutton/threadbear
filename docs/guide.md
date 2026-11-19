@@ -3241,7 +3241,11 @@ sliders, and Notifications. A dot on it means a photo is set. (Which view
 Tasks opens in is under Display.)
 
 A task with a due time reminds you when it comes. Notifications sets how:
-**Notify me on this Mac** shows a notification (click it to open the task),
+**Notify me on this Mac** shows an alert in Threadbear's window (click it to
+open the task) and a macOS notification. A build signed only on this Mac
+(ad-hoc) isn't allowed macOS notifications of its own, so that one comes
+through macOS's script runner and is labelled Script Editor; clicking it
+doesn't open the task. With Focus on, macOS holds banners back.
 **Remind** picks when (when it's due, or 5 minutes to a day before), and
 **Also send** can add an email or a Slack message to the address or channel
 in **To**. Email and Slack go through your connectors (Gmail or Slack on

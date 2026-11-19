@@ -52,7 +52,7 @@ import { ClaudeAdapter } from './adapters/claude/adapter.ts';
 import { ProcessRegistry } from './proc.ts';
 import { Runner } from './runner.ts';
 import { startOwnThread } from './own-threads.ts';
-import { TaskReminders, reminderThread } from './task-reminders.ts';
+import { TaskReminders, macBanner, reminderThread } from './task-reminders.ts';
 import { askBrief, ConvexUseTally, FullSyncOffer, fullSyncAnswerer, fullSyncQuestion, fullSyncReason } from './convex-use.ts';
 // How long after starting the runner looks for a reason to ask about full sync,
 // and how long after a pairing or a new machine it asks (convex-use.ts).
@@ -1125,7 +1125,10 @@ async function main(): Promise<void> {
     enabled: () => experimentOn(cfg.home, 'tasks'),
     apiVersion: () => sync.relaySource()?.apiVersion,
     call: (op, args) => nativeTasks!.call(op, args),
-    notify: (params) => rpcServer?.notifyClients({ method: 'tasks.due', params }),
+    notify: (params) => {
+      rpcServer?.notifyClients({ method: 'tasks.due', params });
+      macBanner(`Task due: ${params.title}`, `Due ${params.when}`);
+    },
     send: (text) => {
       const id = remindersThread.get();
       const live = id && runner.has(id) && !runner.get(id).archivedAt ? id : undefined;

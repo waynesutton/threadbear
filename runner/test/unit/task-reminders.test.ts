@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { TaskReminders, dueNow, readReminders, remindAt, sendBrief, type DueTask } from '../../src/task-reminders.ts';
+import { TaskReminders, bannerArgs, dueNow, readReminders, remindAt, sendBrief, type DueTask } from '../../src/task-reminders.ts';
 
 const at = (s: string) => new Date(s).getTime();
 const task = (over: Partial<DueTask> = {}): DueTask => ({ id: 't1', title: 'Ship it', status: 'todo', dueDate: '2026-11-20', dueTime: '09:30', ...over });
@@ -77,4 +77,11 @@ test('another Mac claimed it first: nothing shows here', async () => {
 test('an older backend is left alone', async () => {
   const r = new TaskReminders({ enabled: () => true, apiVersion: () => 87, call: async () => assert.fail('no calls'), notify: () => {}, send: () => {} });
   assert.equal(await r.tick(), 0);
+});
+
+test('the backup banner passes the words as arguments, not script', () => {
+  const args = bannerArgs('Task due: "x" & tell app "Finder" to quit', 'Due Thu 9:30 AM');
+  assert.equal(args.filter((a) => a === '-e').length, 3);
+  assert.equal(args.at(-2), 'Task due: "x" & tell app "Finder" to quit');
+  assert.ok(!args.slice(0, 6).join(' ').includes('Finder'));
 });

@@ -910,7 +910,10 @@ Due reminders (API 88): while Tasks is on, the runner reads the task list
 (on a change, or every 10 minutes) and checks once a minute for a task whose
 due time has come (`runner/src/task-reminders.ts`). It claims each one in
 Convex (`tasks:claimReminder`) so only one Mac reminds, then asks the desktop
-app to show a notification. When Notifications' Also send is Email or Slack,
+app to show a notification and an in-window alert, and runs
+`/usr/bin/osascript` once to post a backup macOS notification (the task's
+title and when it's due, passed as arguments), as an ad-hoc signed app is
+refused notifications of its own. When Notifications' Also send is Email or Slack,
 it queues the reminder in a "Task reminders" thread, whose agent sends it
 through your connectors to the address or channel you typed; that thread's id
 is kept in `task-reminders.json` in the runner's data folder. Nothing is

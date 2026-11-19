@@ -32,7 +32,7 @@ const KNOWN: Record<string, { everywhere: true } | { linux: string; files: strin
   '/usr/bin/vm_stat': { linux: 'behind a darwin check; /proc/meminfo on Linux', files: ['runner-stats.ts'] },
   '/usr/bin/sw_vers': { linux: 'behind a darwin check; /etc/os-release on Linux', files: ['runner-stats.ts'] },
   '/usr/sbin/ioreg': { linux: 'behind a darwin check', files: ['presence.ts'] },
-  '/usr/bin/osascript': { linux: 'the Mac screen check, only started on darwin (main.ts)', files: ['mac-screen.ts'] },
+  '/usr/bin/osascript': { linux: 'the Mac screen check, only started on darwin (main.ts), and the task reminder banner, which returns off darwin', files: ['mac-screen.ts', 'task-reminders.ts'] },
   '/usr/bin/sandbox-exec': { linux: "a failed sample counts as not stuck", files: ['frozen-cli.ts'] },
   '/usr/bin/sample': { linux: "a failed sample counts as not stuck", files: ['frozen-cli.ts'] },
   '/usr/bin/open': { linux: "rejects with Couldn't open", files: ['runner.ts'] },
