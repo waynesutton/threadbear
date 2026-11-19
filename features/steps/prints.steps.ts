@@ -201,9 +201,11 @@ When('I click the sidebar item {string}', async function (this: ThreadbearWorld,
   await this.app.do({ cmd: 'click', title });
 });
 When('I confirm the sidebar action with {string}', async function (this: ThreadbearWorld, button: string) {
-  // Let the native alert finish its entrance before aiming at its button.
-  await sleep(300);
-  await this.app.do({ cmd: 'click', title: button });
+  // The alert answers Return (its OK button: Archive, Unarchive, Delete) and
+  // Escape (Cancel) as soon as it's up. A click had to wait out its entrance,
+  // and on GitHub's slower Mac a click 300 ms in still missed Unarchive (18 Nov).
+  await sleep(100);
+  await this.app.do({ cmd: 'menu-key', key: button === 'Cancel' ? 'escape' : 'enter' });
   await this.until('archive action finished', d => !sidebarList(d, 'Bears')?.busy && !sidebarList(d, 'Tables')?.busy);
 });
 Then('the {string} sidebar has {int} selected and {int} visible', async function (this: ThreadbearWorld, section: string, selected: number, visible: number) {

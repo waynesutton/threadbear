@@ -75,6 +75,8 @@ pub(super) struct Detail {
     pub comments_only: bool,
     pub picker: Option<&'static str>,
     pub picker_closed_at: Option<std::time::Instant>,
+    /// The Print search was just opened: scroll it into view once it's laid out.
+    pub reveal_picker: std::rc::Rc<std::cell::Cell<bool>>,
     pub month: (i32, u32),
     pub adding_sub: bool,
     pub adding_link: bool,
@@ -105,6 +107,26 @@ fn link_symbol(kind: &str) -> &'static str {
 }
 
 impl TasksPage {
+    /// The Print search opens under Attach Print, which can sit at the foot
+    /// of a short window: on GitHub's 1024 by 768 Mac it opened out of sight
+    /// (18 Nov). Scrolled into view as it's laid out the first time, so it
+    /// doesn't wait on another frame (a window kept behind may not draw one).
+    fn reveal_print_picker(&self) -> AnyElement {
+        let (scroll, pending) = (self.detail_scroll.clone(), self.detail.reveal_picker.clone());
+        canvas(move |rect, window, _| {
+            if !pending.replace(false) {
+                return;
+            }
+            let pane = scroll.bounds();
+            if rect.bottom() > pane.bottom() {
+                let mut offset = scroll.offset();
+                offset.y -= (rect.bottom() - pane.bottom()).min(rect.top() - pane.top());
+                scroll.set_offset(offset);
+                window.refresh();
+            }
+        }, |_, _, _, _| {}).absolute().inset_0().size_full().into_any_element()
+    }
+
     pub(super) fn open_row(&self) -> Option<&TaskRow> {
         let id = self.editing.as_ref()?;
         self.rows.iter().find(|r| &r.id == id)
@@ -304,7 +326,8 @@ impl TasksPage {
                 .tooltip(tip).disabled(attached)
                 .on_click(cx.listener(move |this, _, window, cx| this.pick_print(&id, &title, window, cx))));
         }
-        v_flex().id("task-print-picker").w_full().gap(px(6.)).my(px(6.)).p(px(8.)).rounded(px(8.))
+        v_flex().id("task-print-picker").relative().w_full().gap(px(6.)).my(px(6.)).p(px(8.)).rounded(px(8.))
+            .child(self.reveal_print_picker())
             .border_1().border_color(style::card_border(cx)).bg(style::card_background(cx))
             .child(h_flex().gap(px(6.))
                 .child(div().flex_1().min_w_0().child(Input::new(&self.print_search).small()))
@@ -704,6 +727,7 @@ impl TasksPage {
                     field.focus(window, cx);
                 });
                 crate::web_panels::keyboard_to_app(window);
+                this.detail.reveal_picker.set(true);
             }
         }));
         let actions = h_flex().gap(px(4.)).flex_wrap()

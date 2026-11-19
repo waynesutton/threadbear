@@ -253,6 +253,7 @@ Feature: Tasks
 
   @tasks.page @tasks.detail
   Scenario: Find and attach a Print without scrolling through the full library
+    Given the window is the size GitHub's Mac runner gives it
     When I open Tasks
     And I add the task "Attach a launch Print"
     Then Tasks contains "Attach a launch Print"

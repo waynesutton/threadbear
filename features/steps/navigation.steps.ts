@@ -139,6 +139,13 @@ Given('the window is short', async function (this: ThreadbearWorld) {
   await this.app.do({ cmd: 'resize', w: 1000, h: 480 });
 });
 
+// GitHub's macOS runners have a 1024 by 768 display, so the window comes up
+// 1024 by 675 there, not the 1180 by 800 it opens at on a bigger screen. A
+// picker opening near the window's foot passed here and failed there (18 Nov).
+Given("the window is the size GitHub's Mac runner gives it", async function (this: ThreadbearWorld) {
+  await this.app.do({ cmd: 'resize', w: 1024, h: 675 });
+});
+
 Then("the open thread's row is in view in the sidebar", async function (this: ThreadbearWorld) {
   await this.until('the open row in view', (d) => {
     const id = d.selection?.id;
