@@ -763,7 +763,7 @@ impl Threadbear {
         let next = rules::next(&self.scheduled.list);
         let status = next.map_or_else(|| "Nothing coming up".to_owned(), |s| format!("Next: {}, {}", rules::title(s), rules::when(s, &local)));
         let status = self.with_due_summary(status, next.is_some());
-        let stats = if self.schedules_supported { rules::stats(&self.scheduled.list, now) } else { Vec::new() };
+        let stats = self.scheduled_stats(now);
         let about = v_flex()
             .gap(px(12.))
             .child(home_title("Scheduled", "Messages that send themselves later, once or on repeat.", SCHEDULED_MORE, cx))
@@ -773,6 +773,20 @@ impl Threadbear {
             return self.render_customized_scheduled(about.into_any_element(), &stats, cx);
         }
         self.render_home_page(Art::Scheduled, about.into_any_element(), &stats, None, cx)
+    }
+
+    /// The page's numbers: the schedules', then with Tasks on, how many tasks
+    /// are due, due today and overdue. None until the runner has schedules,
+    /// so the tiles never line up with the wrong names in a saved look.
+    fn scheduled_stats(&self, now: i64) -> Vec<threadbear_core::home::HomeStat> {
+        if !self.schedules_supported {
+            return Vec::new();
+        }
+        let mut stats = rules::stats(&self.scheduled.list, now);
+        if self.experiment_on("tasks") {
+            stats.extend(task_dates::due_stats(&self.scheduled.due, Local::now().date_naive()));
+        }
+        stats
     }
 
     /// The page's status with what's due in Tasks after it: "Next: …. 2
@@ -834,7 +848,7 @@ impl Threadbear {
         let next = rules::next(&self.scheduled.list);
         let status = next.map_or_else(|| "Nothing coming up".to_owned(), |s| format!("Next: {}, {}", rules::title(s), rules::when(s, &local)));
         let status = self.with_due_summary(status, next.is_some());
-        let stats = if self.schedules_supported { rules::stats(&self.scheduled.list, now_ms()) } else { Vec::new() };
+        let stats = self.scheduled_stats(now_ms());
         json!({
             "title": "Scheduled",
             "status": status,

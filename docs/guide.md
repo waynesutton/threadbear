@@ -1365,7 +1365,9 @@ you've promised sits beside what's booked. Click a row to open the task in
 Tasks, with the Scheduled list still beside it, so you can click through
 them one after another. Folded, the heading counts the ones due today or
 overdue, and the page's status line says how many there are ("1 task
-overdue, 2 due today"). Mark a task done or clear its date and it leaves
+overdue, 2 due today"). The page's numbers add three tiles too: Tasks due,
+Tasks due today and Tasks overdue. With Customize the Scheduled page on,
+each can be hidden like the others. Mark a task done or clear its date and it leaves
 the list.
 
 In the Mac app’s conversation, a scheduled follow-up starts with its title,

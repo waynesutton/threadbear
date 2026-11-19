@@ -176,6 +176,19 @@ pub fn due_summary(tasks: &[DueTask], today: NaiveDate) -> Option<String> {
     }
 }
 
+/// The Scheduled page's tiles for Tasks, after the schedules' own: every
+/// task with a date, the ones due today and the ones overdue.
+pub fn due_stats(tasks: &[DueTask], today: NaiveDate) -> Vec<crate::home::HomeStat> {
+    use crate::home::HomeStat;
+    let now = tasks.iter().filter(|t| t.due == today).count();
+    let overdue = tasks.iter().filter(|t| t.due < today).count();
+    vec![
+        HomeStat::new(tasks.len(), if tasks.len() == 1 { "Task due" } else { "Tasks due" }, "Tasks with a due date that aren't done yet"),
+        HomeStat::new(now, if now == 1 { "Task due today" } else { "Tasks due today" }, "Tasks whose due date is today"),
+        HomeStat::new(overdue, if overdue == 1 { "Task overdue" } else { "Tasks overdue" }, "Tasks whose due date has passed and aren't done"),
+    ]
+}
+
 /// True for the quick pick's Sunday, so tests can see the week ends there.
 pub fn is_sunday(day: NaiveDate) -> bool {
     day.weekday() == Weekday::Sun
@@ -241,6 +254,9 @@ mod tests {
         assert_eq!(due_summary(&due, d("2026-11-30")).as_deref(), Some("3 tasks overdue, 1 due today"));
         assert_eq!(due_summary(&due[3..], d("2026-12-01")).as_deref(), Some("1 task overdue"));
         assert_eq!(due_summary(&due, d("2026-11-01")), None);
+        let tiles: Vec<(String, String)> = due_stats(&due, d("2026-11-17")).into_iter().map(|s| (s.value, s.label)).collect();
+        assert_eq!(tiles, [("4".into(), "Tasks due".into()), ("3".into(), "Tasks due today".into()), ("0".into(), "Tasks overdue".into())]);
+        assert_eq!(due_stats(&due[3..], d("2026-12-01"))[2].label, "Task overdue");
     }
 
     #[test]

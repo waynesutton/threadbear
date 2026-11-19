@@ -17,8 +17,11 @@ use threadbear_core::home::HomeStat;
 use threadbear_core::looks::{PictureLook as _, Place, ScheduledBlock, ScheduledLook};
 
 /// The numbers' keys, in the order core's `schedules::stats` makes them, as
-/// the Swift app's ScheduledHome names them in a saved look.
-pub(crate) const NUMBERS: [(&str, &str); 6] = [("on", "On"), ("dueSoon", "Due in a day"), ("repeating", "Repeating"), ("byThreads", "Set by threads"), ("paused", "Paused"), ("runs", "Runs so far")];
+/// the Swift app's ScheduledHome names them in a saved look, then Tasks'
+/// three (`task_dates::due_stats`), which show only with Tasks on.
+pub(crate) const NUMBERS: [(&str, &str); 9] = [("on", "On"), ("dueSoon", "Due in a day"), ("repeating", "Repeating"), ("byThreads", "Set by threads"), ("paused", "Paused"), ("runs", "Runs so far"), ("tasksDue", "Tasks due"), ("tasksToday", "Tasks due today"), ("tasksOverdue", "Tasks overdue")];
+/// How many of NUMBERS are the schedules' own.
+const SCHEDULE_NUMBERS: usize = 6;
 
 const CUSTOMIZE_TIP: &str = "Change the picture, the background, and where each part of this page sits";
 
@@ -69,7 +72,8 @@ impl Threadbear {
         sections.push(panel_section("Layout", None, rows, cx));
 
         let numbers_hidden = look.hidden.contains(&ScheduledBlock::Numbers);
-        let rows = NUMBERS
+        let shown = if self.experiment_on("tasks") { NUMBERS.len() } else { SCHEDULE_NUMBERS };
+        let rows = NUMBERS[..shown]
             .iter()
             .map(|&(key, title)| {
                 switch_row(format!("look-scheduled-number-{key}"), title, !look.hidden_numbers.contains(key), format!("Show or hide {}", title.to_lowercase()), numbers_hidden, cx, move |this, on, cx| {

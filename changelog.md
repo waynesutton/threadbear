@@ -37,7 +37,7 @@ How Prints work today, what's missing and what's next: [Prints status](https://g
 
 ### Added
 
-- Tasks with a due date show in the Mac app's Scheduled view under Tasks due, soonest first, with overdue in red and today in amber. Click one to open it in Tasks while the Scheduled list stays beside it.
+- Tasks with a due date show in the Mac app's Scheduled view under Tasks due, soonest first, with overdue in red and today in amber. Click one to open it in Tasks while the Scheduled list stays beside it. The Scheduled page adds Tasks due, Tasks due today and Tasks overdue tiles.
 
 - Search Prints by title when attaching one to a task. Bears & Tables menus add Open, Edit, Show in Finder, Copy Folder Path and Refresh.
 
