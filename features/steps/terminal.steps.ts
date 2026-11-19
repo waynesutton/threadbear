@@ -373,7 +373,7 @@ When('I rename the current Terminal tab to {string}', async function (this: Thre
   await this.app.do({ cmd: 'terminal', name });
   await this.until('renamed tab', d => d.terminal?.tabs?.some(t => t.title === name && t.current));
 });
-Then('the Terminal has {int} tab', async function (this: ThreadbearWorld, count: number) {
+Then('the Terminal has {int} tab(s)', async function (this: ThreadbearWorld, count: number) {
   await this.until('tab count', d => d.terminal?.tabs?.length === count);
 });
 Then('the Terminal tab {string} is selected', async function (this: ThreadbearWorld, title: string) {
@@ -399,4 +399,27 @@ When('I rename the Terminal tab {string} from its menu to {string}', async funct
   await this.until('rename field', d => d.terminal?.renaming != null);
   await this.app.do({ cmd: 'terminal', name });
   await this.until('renamed tab', d => d.terminal?.tabs?.some(t => t.title === name && t.current));
+});
+
+When('I type {string} in the Terminal', async function (this: ThreadbearWorld, text: string) {
+  await this.until('a shell running', (d) => d.terminal?.shell === 'running');
+  await this.app.do({ cmd: 'terminal', keys: text });
+});
+When('I press {string} in the Terminal', async function (this: ThreadbearWorld, key: string) {
+  await this.app.do({ cmd: 'terminal', press: key });
+});
+When('I find {string} in the Terminal', async function (this: ThreadbearWorld, text: string) {
+  await this.app.do({ cmd: 'terminal', find: text });
+});
+When("I press {string} in the Terminal's Find", async function (this: ThreadbearWorld, key: string) {
+  await this.app.do({ cmd: 'terminal', findKey: key });
+});
+Then("the Terminal's Find says {string}", async function (this: ThreadbearWorld, count: string) {
+  await this.until(`Find saying "${count}"`, (d) => d.terminal?.find?.count === count);
+});
+Then('the Terminal has {string} selected', async function (this: ThreadbearWorld, text: string) {
+  await this.until(`"${text}" selected`, (d) => d.terminal?.selection === text);
+});
+Then('a Terminal tab has rung its bell', async function (this: ThreadbearWorld) {
+  await this.until('a tab with the bell\'s dot', (d) => (d.terminal?.rang ?? 0) > 0);
 });

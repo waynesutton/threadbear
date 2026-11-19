@@ -361,3 +361,66 @@ Feature: The Terminal
     When I press ⌘J
     And I click "Terminal" in the right rail
     Then the Terminal shows the line "rail-kept-shell"
+
+  # Terminal.app's keys and comforts, where Threadbear's own keys don't
+  # already have them (⌘K is Open Anything, so ⌘L clears). The GPUI app's;
+  # the frozen Swift app doesn't get new features.
+  @terminal.mackeys @swift-pending @windows-pending @linux-pending
+  Scenario: ⌘← and ⌘→ go to the start and end of the line, and ⌘⌫ deletes it
+    Given the thread "Rename the Settings tabs" works in a folder of its own
+    When I open the thread "Rename the Settings tabs"
+    And I press ⌘J
+    And I type "echo middle" in the Terminal
+    And I press "cmd-left" in the Terminal
+    And I type "X" in the Terminal
+    And I press "cmd-right" in the Terminal
+    And I type "Y" in the Terminal
+    Then the Terminal's prompt has "Xecho middleY" on it
+    When I press "cmd-backspace" in the Terminal
+    And I type "echo fresh" and press Return in the Terminal
+    Then the Terminal shows the line "fresh"
+
+  @terminal.mackeys @swift-pending @windows-pending @linux-pending
+  Scenario: ⌘L clears everything above the prompt
+    Given the thread "Rename the Settings tabs" works in a folder of its own
+    When I open the thread "Rename the Settings tabs"
+    And I press ⌘J
+    And I type "echo old-output" and press Return in the Terminal
+    Then the Terminal shows the line "old-output"
+    When I type "echo kept" in the Terminal
+    And I press "cmd-l" in the Terminal
+    Then the Terminal doesn't show the line "old-output"
+    And the Terminal's prompt has "echo kept" on it
+
+  @terminal.mackeys @swift-pending @windows-pending @linux-pending
+  Scenario: ⌘F finds words in the Terminal and counts them
+    Given the thread "Rename the Settings tabs" works in a folder of its own
+    When I open the thread "Rename the Settings tabs"
+    And I press ⌘J
+    And I type "printf 'needle\nhay\nneedle\n'" and press Return in the Terminal
+    And I find "needle" in the Terminal
+    Then the Terminal's Find says "2 of 2"
+    When I press "enter" in the Terminal's Find
+    Then the Terminal's Find says "1 of 2"
+    And the Terminal has "needle" selected
+
+  @terminal.mackeys @swift-pending @windows-pending @linux-pending
+  Scenario: ⌘T opens another shell and ⌃Tab goes between them
+    Given the thread "Rename the Settings tabs" works in a folder of its own
+    When I open the thread "Rename the Settings tabs"
+    And I press ⌘J
+    And I press "cmd-t" in the Terminal
+    Then the Terminal has 2 tabs
+    And the Terminal tab "Terminal 2" is selected
+    When I press "ctrl-tab" in the Terminal
+    Then the Terminal tab "Terminal 1" is selected
+
+  @terminal.mackeys @swift-pending @windows-pending @linux-pending
+  Scenario: The bell in a tab I'm not looking at puts a dot on it
+    Given the thread "Rename the Settings tabs" works in a folder of its own
+    When I open the thread "Rename the Settings tabs"
+    And I press ⌘J
+    And I press "cmd-t" in the Terminal
+    And I type "sleep 1; printf '\a'" and press Return in the Terminal
+    And I press "ctrl-tab" in the Terminal
+    Then a Terminal tab has rung its bell

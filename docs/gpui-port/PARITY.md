@@ -37,7 +37,7 @@ earlier four-platform run.
 
 <!-- parity:start -->
 
-290 of 389 features have a spec so far, across 825 scenarios.
+291 of 390 features have a spec so far, across 841 scenarios.
 
 Scenarios passing: Swift: not run, Mac: not run, Windows: not run, Linux: not run.
 
@@ -316,6 +316,7 @@ Scenarios passing: Swift: not run, Mac: not run, Windows: not run, Linux: not ru
 | `terminal.lifecycle` Shell lifecycle | pending | pending | pending | pending |
 | `terminal.tabs` Terminal tabs | pending | pending | pending | pending |
 | `terminal.linkhover` Terminal link hover | pending | pending | pending | pending |
+| `terminal.mackeys` Terminal.app keys | pending | pending | pending | pending |
 
 ### 14. Projects, Librarian, Schedules, Usage, Runners, Connectors, Updates
 

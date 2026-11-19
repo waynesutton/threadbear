@@ -174,6 +174,9 @@ export type Dump = {
     tabs?: { title: string; current: boolean }[];
     renaming?: string | null;
     hoveredLink?: string | null;
+    find?: { text: string; count: string } | null;
+    selection?: string | null;
+    rang?: number | null;
   } | null;
 };
 

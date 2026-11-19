@@ -877,6 +877,33 @@ stops when the thread is archived or deleted, and they all stop when you
 quit Threadbear. The Terminal is a panel like the others: drag it
 beside the thread, into a tab, or out into a window of its own.
 
+It has Terminal.app's keys, except where Threadbear already uses one:
+
+| Key | What it does |
+|---|---|
+| ⌘⌫ | Deletes back to the start of the line |
+| ⌘← / ⌘→ | Start and end of the line (Home and End in vim and other full-screen programs) |
+| ⌥-click | Moves the cursor there on the line you're typing |
+| ⌥-drag | Selects a rectangle |
+| ⌘L | Clears everything above the prompt, scrollback too (⌘K is Open Anything) |
+| ⌥⌘K | Clears only the scrollback |
+| ⌥⌘R | Resets the terminal after a program leaves it in a mess |
+| ⌘F, ⌘G, ⇧⌘G | Find, then the match above or below. Return and Shift-Return do the same in the Find field, Escape closes it |
+| ⌘↑ / ⌘↓ | Jumps to the command before or after, each line you pressed Return on |
+| ⌘Home / ⌘End | Top or bottom of the scrollback |
+| ⌘T | Another shell in a new tab |
+| ⌃Tab / ⌃⇧Tab | The next or previous tab |
+| ⌃⌘V | Pastes the clipboard escaped for the shell, as one word |
+
+Right-click (or Control-click) for a menu with the same: Open Link, Copy,
+Paste, Paste Escaped Text, Find, the clears and New Shell. Drop files on
+the Terminal to type their paths, escaped. When a program rings the bell,
+the Terminal flashes, and a tab you aren't looking at gets a dot until you
+go to it. Closing a tab with a program still running in it (a dev server,
+vim) asks first. When you quit, each tab's last 1,000 lines are kept, and
+the next time you open that thread's Terminal its tabs come back with that
+text above a new prompt, once, within 14 days.
+
 ⌘-click a web address, a file path or a labelled link printed in the
 Terminal to open it (Ctrl-click on Windows and Linux). Web addresses underline under the pointer, with a tip showing how to open them. Programs and links
 that start another app ask first, as they do elsewhere in Threadbear.
