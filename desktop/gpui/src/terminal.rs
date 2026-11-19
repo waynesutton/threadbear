@@ -2255,6 +2255,7 @@ impl Session {
             field.update(cx, |s, cx| s.select_all(window, cx));
             let handle = field.read(cx).focus_handle(cx);
             window.focus(&handle, cx);
+            crate::web_panels::keyboard_to_app(window);
             return;
         }
         let seed = self.term.lock().selection_to_string().filter(|s| !s.contains('\n') && s.chars().count() <= 200).unwrap_or_default();
@@ -2590,21 +2591,11 @@ fn saved_dir() -> PathBuf {
 /// Saved text older than this is never brought back, and goes.
 const SAVED_FOR: Duration = Duration::from_secs(14 * 24 * 60 * 60);
 
-/// Writes a file only you can read, in a folder only you can open: a
-/// shell's text can have anything in it.
+/// Writes a file only you can read, in a folder only you can open
+/// (private_file.rs): a shell's text can have anything in it.
 fn write_private(dir: &std::path::Path, name: &str, bytes: &[u8]) {
-    use std::io::Write as _;
-    let _ = std::fs::create_dir_all(dir);
-    let mut options = std::fs::OpenOptions::new();
-    options.write(true).create(true).truncate(true);
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::{OpenOptionsExt as _, PermissionsExt as _};
-        let _ = std::fs::set_permissions(dir, std::fs::Permissions::from_mode(0o700));
-        options.mode(0o600);
-    }
-    if let Ok(mut file) = options.open(dir.join(name)) {
-        let _ = file.write_all(bytes);
+    if threadbear_core::private_file::dir(dir).is_ok() {
+        let _ = threadbear_core::private_file::write(&dir.join(name), bytes);
     }
 }
 
