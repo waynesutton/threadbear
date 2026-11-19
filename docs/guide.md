@@ -3241,8 +3241,9 @@ sliders, and Notifications. A dot on it means a photo is set. (Which view
 Tasks opens in is under Display.)
 
 A task with a due time reminds you when it comes. Notifications sets how:
-**Notify me on this Mac** shows an alert in Threadbear's window (click it to
-open the task) and a macOS notification. A build signed only on this Mac
+**Notify me on this Mac** shows an amber alert with a bell in Threadbear's
+window, with your Mac's alert sound (click it to open the task; it stays until
+you close it) and a macOS notification. A build signed only on this Mac
 (ad-hoc) isn't allowed macOS notifications of its own, so that one comes
 through macOS's script runner and is labelled Script Editor; clicking it
 doesn't open the task. With Focus on, macOS holds banners back.

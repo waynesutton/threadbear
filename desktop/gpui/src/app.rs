@@ -903,14 +903,23 @@ impl Threadbear {
             window
                 .update(cx, |_, window, cx| {
                     use gpui_kit::component::{notification::Notification, WindowExt as _};
+                    // Amber, the colour of things that need you, with a bell, so it
+                    // doesn't pass for a Highlights card (Wayne missed the plain one).
+                    let amber = crate::style::needs_you(cx);
                     let alert = Notification::new()
+                        .icon(crate::icons::symbol("bell").text_color(amber))
                         .title(format!("Task due: {title}"))
                         .message(format!("Due {when}. Click to open it."))
                         .autohide(false)
+                        .border_color(amber)
+                        .border_l(gpui_kit::px(4.))
                         .on_click(move |_, window, cx| {
                             me.update(cx, |this, cx| this.open_task(id.clone(), window, cx)).ok();
                         });
                     window.push_notification(alert, cx);
+                    // The Mac's own alert sound, as set in Sound settings.
+                    #[cfg(target_os = "macos")]
+                    objc2_app_kit::NSBeep();
                 })
                 .ok();
         });
