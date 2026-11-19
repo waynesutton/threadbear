@@ -933,6 +933,7 @@ impl Threadbear {
                     self.load_projects(cx);
                     self.load_runner_settings(cx);
                     self.load_schedules(cx);
+                    self.due_tasks_changed(cx);
                     self.load_prints(cx);
                     self.load_remote(cx);
                     self.load_clis(cx);
@@ -1611,7 +1612,9 @@ impl Threadbear {
         sidebar["mode"] = json!(self.mode.name());
         // The Scheduled view in the thread shape, as the Swift app's dump has it.
         if self.mode == SidebarMode::Scheduled {
-            sidebar["sections"] = self.scheduled_dump()["sections"].clone();
+            let scheduled = self.scheduled_dump();
+            sidebar["sections"] = scheduled["sections"].clone();
+            sidebar["dueTasks"] = scheduled["dueTasks"].clone();
         }
         let (librarian_sections, librarian_state) = self.librarian_dump();
         if self.mode == SidebarMode::Librarian {

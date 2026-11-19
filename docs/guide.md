@@ -1356,6 +1356,18 @@ folded one shows how many are under it. Its page
 says what's coming up next with a few numbers: how many are on, due in the
 next day, repeating, set by threads, paused, and how often they've run.
 
+With Tasks on (an experiment), any task with a due date that isn't done
+also shows in the Scheduled view, under **Tasks due**, between Active and
+Paused. Soonest first: each row has the task's title and its day (red once
+it has passed, amber on the day), then its project, its status and an
+Urgent or High priority. Nothing about it runs or sends: it's there so what
+you've promised sits beside what's booked. Click a row to open the task in
+Tasks, with the Scheduled list still beside it, so you can click through
+them one after another. Folded, the heading counts the ones due today or
+overdue, and the page's status line says how many there are ("1 task
+overdue, 2 due today"). Mark a task done or clear its date and it leaves
+the list.
+
 In the Mac app’s conversation, a scheduled follow-up starts with its title,
 time and **Show details**. Its instructions stay collapsed until you open
 them; **Hide details** closes them again. Expanded details use left-aligned
@@ -3171,7 +3183,8 @@ A task can have a priority (Urgent, High, Normal or Low), a due date (Today,
 Tomorrow, End of this week, In one week, or any day from the calendar),
 sub-tasks (one level: "1/2 closed" counts the done ones), and links to a web
 page, a print, a picture or a thread. List rows and board cards show the
-priority and the due date. Activity under a task lists its comments and what
+priority and the due date. In the Mac app, a task with a due date also
+shows in the Scheduled view under Tasks due, and clicking it there opens it. Activity under a task lists its comments and what
 changed and who did it, you or an agent ("set priority to Urgent"); leave a comment in the box
 at the bottom. Deleting a task deletes its sub-tasks, and Undo brings them back.
 In the Mac app, a task in one of this Mac's projects also lists that project's

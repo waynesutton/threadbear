@@ -109,6 +109,73 @@ pub fn chip_label(due: NaiveDate, today: NaiveDate) -> String {
     }
 }
 
+/// A task with a due date, as the Scheduled view lists it beside the
+/// schedules. It only shows when it's due: nothing here runs or sends.
+#[derive(Clone, Debug, PartialEq)]
+pub struct DueTask {
+    pub id: String,
+    pub title: String,
+    pub due: NaiveDate,
+    pub status: String,
+    pub priority: Option<String>,
+    /// Its project's id, when it has one, for the row's project name.
+    pub project_id: Option<String>,
+    /// Set on a sub-task: the parent's title, so the row says what it's part of.
+    pub parent_title: Option<String>,
+}
+
+fn priority_rank(priority: Option<&str>) -> usize {
+    PRIORITIES.iter().position(|(id, _)| Some(*id) == priority).unwrap_or(PRIORITIES.len())
+}
+
+/// The tasks from `tasks.list` that have a due date and aren't done, soonest
+/// first, then the most pressing, then by title. A day that doesn't parse
+/// is left out rather than guessed at.
+pub fn due_tasks(items: &[serde_json::Value]) -> Vec<DueTask> {
+    let titles: std::collections::HashMap<&str, &str> = items.iter().filter_map(|t| Some((t["id"].as_str()?, t["title"].as_str().unwrap_or("")))).collect();
+    let mut out: Vec<DueTask> = items
+        .iter()
+        .filter_map(|t| {
+            let status = t["status"].as_str().unwrap_or("todo");
+            if status == "done" {
+                return None;
+            }
+            let due = parse(t["dueDate"].as_str()?)?;
+            let parent_title = t["parentId"].as_str().and_then(|p| titles.get(p)).map(|s| s.to_string());
+            Some(DueTask {
+                id: t["id"].as_str()?.to_string(),
+                title: t["title"].as_str().unwrap_or("").to_string(),
+                due,
+                status: status.to_string(),
+                priority: t["priority"].as_str().map(String::from),
+                project_id: t["project"]["id"].as_str().map(String::from),
+                parent_title,
+            })
+        })
+        .collect();
+    out.sort_by(|a, b| a.due.cmp(&b.due).then(priority_rank(a.priority.as_deref()).cmp(&priority_rank(b.priority.as_deref()))).then_with(|| a.title.to_lowercase().cmp(&b.title.to_lowercase())));
+    out
+}
+
+/// How many are overdue or due today: the heading's count when it's folded.
+pub fn due_now_count(tasks: &[DueTask], today: NaiveDate) -> usize {
+    tasks.iter().filter(|t| t.due <= today).count()
+}
+
+/// The Scheduled page's line about tasks: "1 task overdue, 2 due today",
+/// None when nothing is due yet.
+pub fn due_summary(tasks: &[DueTask], today: NaiveDate) -> Option<String> {
+    let overdue = tasks.iter().filter(|t| t.due < today).count();
+    let now = tasks.iter().filter(|t| t.due == today).count();
+    let noun = |n: usize| if n == 1 { "task" } else { "tasks" };
+    match (overdue, now) {
+        (0, 0) => None,
+        (0, n) => Some(format!("{n} {} due today", noun(n))),
+        (o, 0) => Some(format!("{o} {} overdue", noun(o))),
+        (o, n) => Some(format!("{o} {} overdue, {n} due today", noun(o))),
+    }
+}
+
 /// True for the quick pick's Sunday, so tests can see the week ends there.
 pub fn is_sunday(day: NaiveDate) -> bool {
     day.weekday() == Weekday::Sun
@@ -147,6 +214,33 @@ mod tests {
         assert_eq!(shift_month(2026, 12, 1), (2027, 1));
         assert_eq!(shift_month(2026, 1, -1), (2025, 12));
         assert_eq!(month_title(2026, 11), "November 2026");
+    }
+
+    #[test]
+    fn due_tasks_are_soonest_first_and_skip_done() {
+        use serde_json::json;
+        let items = vec![
+            json!({"id":"a","title":"Later one","status":"todo","dueDate":"2026-11-30"}),
+            json!({"id":"b","title":"No date","status":"todo"}),
+            json!({"id":"c","title":"Finished","status":"done","dueDate":"2026-11-10"}),
+            json!({"id":"d","title":"beta","status":"doing","dueDate":"2026-11-17","priority":"low","project":{"runnerId":"r","id":"p1"}}),
+            json!({"id":"e","title":"Alpha","status":"todo","dueDate":"2026-11-17","priority":"urgent","parentId":"a"}),
+            json!({"id":"f","title":"Bad day","status":"todo","dueDate":"soon"}),
+            json!({"id":"g","title":"Gamma","status":"todo","dueDate":"2026-11-17"}),
+        ];
+        let due = due_tasks(&items);
+        let ids: Vec<&str> = due.iter().map(|t| t.id.as_str()).collect();
+        assert_eq!(ids, ["e", "d", "g", "a"]);
+        assert_eq!(due[0].parent_title.as_deref(), Some("Later one"));
+        assert_eq!(due[1].project_id.as_deref(), Some("p1"));
+        assert_eq!(due[1].status, "doing");
+        assert_eq!(due_now_count(&due, d("2026-11-17")), 3);
+        assert_eq!(due_now_count(&due, d("2026-11-16")), 0);
+        assert_eq!(due_summary(&due, d("2026-11-17")).as_deref(), Some("3 tasks due today"));
+        assert_eq!(due_summary(&due, d("2026-11-18")).as_deref(), Some("3 tasks overdue"));
+        assert_eq!(due_summary(&due, d("2026-11-30")).as_deref(), Some("3 tasks overdue, 1 due today"));
+        assert_eq!(due_summary(&due[3..], d("2026-12-01")).as_deref(), Some("1 task overdue"));
+        assert_eq!(due_summary(&due, d("2026-11-01")), None);
     }
 
     #[test]

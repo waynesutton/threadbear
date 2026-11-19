@@ -196,6 +196,20 @@ Feature: Tasks
     Then the Tasks editor is closed
     And Tasks shows "Due Today"
 
+  @tasks.page @schedule.list
+  Scenario: A task with a due date shows under Tasks due in Scheduled and opens from there
+    When I open Tasks
+    And I add the task "Send the invoice"
+    Then Tasks contains "Send the invoice"
+    When I edit the task "Send the invoice"
+    And I set the task's due date to "today"
+    Then the task "Send the invoice" has a due date
+    When I click "Scheduled" in the activity bar
+    Then the Scheduled list's Tasks due shows "Send the invoice" due "Today"
+    When I click the due task "Send the invoice" in Scheduled
+    Then the task's page is open on "Send the invoice"
+    And the sidebar shows the "scheduled" view
+
   @tasks.page @tasks.detail
   Scenario: The due date picker offers quick picks and a calendar
     When I open Tasks

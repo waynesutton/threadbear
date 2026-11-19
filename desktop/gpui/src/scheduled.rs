@@ -9,6 +9,11 @@
 // runner hears and go back if it says no, and Run now, which has nothing to
 // guess, spins in the row and takes no more clicks until it lands. Another
 // Mac's Run now waits on a line under the row until that Mac has run it.
+//
+// With Tasks on, the tasks that have a due date and aren't done sit under
+// their own Tasks due heading, soonest first. They're there to be seen
+// beside what's coming up, not run: clicking one opens it in Tasks, with
+// this list still beside it.
 use crate::app::Threadbear;
 use crate::home_page::{home_status_line, home_title, mode_header, Art, Pokes};
 use crate::sidebar::{icon, icon_button, palette, tipped, MenuAction, MenuRow, Palette, CORNER, LEADING, OUTER_INSET, TRAILING};
@@ -26,6 +31,7 @@ use std::collections::HashSet;
 use threadbear_core::chrono::Local;
 use threadbear_core::highlights::Schedule;
 use threadbear_core::schedules::{self as rules, ScheduleSection};
+use threadbear_core::task_dates::{self, Due, DueTask};
 use crate::tips::Tip as _;
 
 
@@ -46,16 +52,22 @@ pub(crate) struct ScheduledState {
     scroll: ScrollHandle,
     /// What the page's picture says when it's poked (home_page.rs).
     pub(crate) pokes: Pokes,
+    /// Tasks with a due date that aren't done (`task_dates::due_tasks`).
+    pub(crate) due: Vec<DueTask>,
+    /// The list needs reading again: drawn while it is, the view reads it,
+    /// so a change in Tasks costs nothing until Scheduled is looked at.
+    pub(crate) due_stale: bool,
+    due_loading: bool,
 }
 
 impl ScheduledState {
     pub(crate) fn new(saved_folded: Option<&[String]>) -> Self {
         let folded = match saved_folded {
-            Some(saved) => ScheduleSection::ALL.into_iter().map(ScheduleSection::key).filter(|k| saved.iter().any(|s| s == k)).collect(),
+            Some(saved) => ScheduleSection::ALL.into_iter().map(ScheduleSection::key).chain([DUE_KEY]).filter(|k| saved.iter().any(|s| s == k)).collect(),
             // Done starts folded (`storedCollapsedScheduleSections`).
             None => HashSet::from(["done"]),
         };
-        ScheduledState { list: Vec::new(), folded, hovered: None, busy: HashSet::new(), scroll: ScrollHandle::new(), pokes: Pokes::new(Art::Scheduled) }
+        ScheduledState { list: Vec::new(), folded, hovered: None, busy: HashSet::new(), scroll: ScrollHandle::new(), pokes: Pokes::new(Art::Scheduled), due: Vec::new(), due_stale: true, due_loading: false }
     }
 
     /// `activeScheduleCount`: the activity bar's badge and the view's count.
@@ -64,7 +76,72 @@ impl ScheduledState {
     }
 }
 
+/// The Tasks due heading's fold key, saved with the schedules' headings.
+const DUE_KEY: &str = "tasks";
+
 impl Threadbear {
+    /// Reads the due tasks from `tasks.list`, page by page. One at a time: a
+    /// change while it reads marks it stale again, and the next draw reads it.
+    fn load_due_tasks(&mut self, cx: &mut Context<Self>) {
+        if self.scheduled.due_loading {
+            return;
+        }
+        if !self.experiment_on("tasks") {
+            // Stays stale, so turning Tasks on reads it at the next draw.
+            self.scheduled.due.clear();
+            return;
+        }
+        self.scheduled.due_stale = false;
+        self.scheduled.due_loading = true;
+        let client = self.client.clone();
+        cx.spawn(async move |this, cx| {
+            let result = async {
+                let mut items = Vec::new();
+                let mut after = Value::Null;
+                loop {
+                    let mut args = json!({ "limit": 250 });
+                    if !after.is_null() {
+                        args["after"] = after;
+                    }
+                    let page = call(client.clone(), "tasks.list", args).await?;
+                    items.extend(page["items"].as_array().cloned().unwrap_or_default());
+                    after = page["next"].clone();
+                    if after.is_null() {
+                        break;
+                    }
+                }
+                Ok::<_, threadbear_client::runner::RpcError>(items)
+            }
+            .await;
+            this.update(cx, |this, cx| {
+                this.scheduled.due_loading = false;
+                // A failed read keeps what it had: the next change or
+                // reconnect tries again, rather than a loop of retries.
+                if let Ok(items) = result {
+                    this.scheduled.due = task_dates::due_tasks(&items);
+                    let live: HashSet<String> = this.scheduled.due.iter().map(|t| format!("task:{}", t.id)).collect();
+                    if this.scheduled.hovered.as_deref().is_some_and(|id| id.starts_with("task:") && !live.contains(id)) {
+                        this.scheduled.hovered = None;
+                    }
+                }
+                cx.notify();
+            })
+            .ok();
+        })
+        .detach();
+    }
+
+    /// Tasks changed (`tasks.updated`, or a reconnect): read again when next shown.
+    pub(crate) fn due_tasks_changed(&mut self, cx: &mut Context<Self>) {
+        self.scheduled.due_stale = true;
+        cx.notify();
+    }
+
+    /// The due tasks this view shows: none with Tasks off.
+    fn shown_due_tasks(&self) -> &[DueTask] {
+        if self.experiment_on("tasks") { &self.scheduled.due } else { &[] }
+    }
+
     pub(crate) fn schedule(&self, id: &str) -> Option<&Schedule> {
         self.scheduled.list.iter().find(|s| s.id == id)
     }
@@ -304,9 +381,19 @@ impl Threadbear {
     pub(crate) fn render_scheduled_list(&mut self, cx: &mut Context<Self>) -> AnyElement {
         let p = palette(cx);
         let now = now_ms();
+        if self.scheduled.due_stale {
+            self.load_due_tasks(cx);
+        }
         let groups = ScheduleSection::group(&self.scheduled.list);
+        let due = self.shown_due_tasks().to_vec();
         let mut list = v_flex().px(px(OUTER_INSET)).pt(px(4.)).pb(px(32.));
+        let mut due_drawn = false;
         for (section, rows) in &groups {
+            // Tasks due go after what's coming up, ahead of the paused and done.
+            if *section != ScheduleSection::Active && !due_drawn {
+                due_drawn = true;
+                list = list.child(self.render_due_tasks(&due, &p, cx));
+            }
             let key = section.key();
             let folded = self.scheduled.folded.contains(key);
             let heading = self.section_heading(
@@ -333,7 +420,10 @@ impl Threadbear {
                 }
             }
         }
-        if self.scheduled.list.is_empty() {
+        if !due_drawn {
+            list = list.child(self.render_due_tasks(&due, &p, cx));
+        }
+        if self.scheduled.list.is_empty() && due.is_empty() {
             list = list.child(div().pl(px(LEADING)).pt(px(10.)).text_size(px(style::size::SIDEBAR_PREVIEW)).text_color(p.secondary).child("Nothing scheduled."));
         }
         let count = self.scheduled.active_count();
@@ -353,6 +443,127 @@ impl Threadbear {
                     .child(div().id("scheduled-list").size_full().overflow_y_scroll().track_scroll(&self.scheduled.scroll).child(list))
                     .child(div().absolute().left_0().right_0().bottom_0().h(px(34.)).bg(linear_gradient(180., linear_color_stop(side.opacity(0.), 0.), linear_color_stop(side, 0.88)))),
             )
+            .into_any_element()
+    }
+
+    /// The Tasks due heading and its rows; nothing when no task has a date.
+    /// Folded, its count is how many are due today or overdue.
+    fn render_due_tasks(&mut self, due: &[DueTask], p: &Palette, cx: &mut Context<Self>) -> AnyElement {
+        if due.is_empty() {
+            return div().into_any_element();
+        }
+        let today = Local::now().date_naive();
+        let folded = self.scheduled.folded.contains(DUE_KEY);
+        let count = if folded { task_dates::due_now_count(due, today) } else { due.len() };
+        let heading = self.section_heading(
+            &format!("schedule-{DUE_KEY}"),
+            "Tasks due",
+            "checklist",
+            count,
+            folded,
+            true,
+            None,
+            p,
+            |this, cx| {
+                if !this.scheduled.folded.remove(DUE_KEY) {
+                    this.scheduled.folded.insert(DUE_KEY);
+                }
+                this.schedule_settings_changed(cx);
+            },
+            cx,
+        );
+        let mut out = v_flex().child(heading);
+        if !folded {
+            let open = self.tasks_page.as_ref().and_then(|t| t.read(cx).open_task_id().map(String::from));
+            for task in due {
+                let selected = open.as_deref() == Some(task.id.as_str());
+                out = out.child(self.render_due_task_row(task, today, selected, p, cx));
+            }
+        }
+        out.into_any_element()
+    }
+
+    /// A due task's row: its title and when it's due (red once it's passed,
+    /// amber today), then what it's part of and where it stands. Clicking it
+    /// opens the task.
+    fn render_due_task_row(&mut self, task: &DueTask, today: threadbear_core::chrono::NaiveDate, selected: bool, p: &Palette, cx: &mut Context<Self>) -> AnyElement {
+        let key = format!("task:{}", task.id);
+        let hovered = self.sidebar.hover_override.as_deref().or(self.scheduled.hovered.as_deref()) == Some(key.as_str());
+        let state = task_dates::due_state(task.due, today);
+        let (fg, secondary, faint) = (p.fg, p.secondary, p.faint);
+        // The Tasks page's own chip colours (task_detail.rs).
+        let when_color = match state {
+            Due::Overdue => p.failed,
+            Due::Today => Hsla::from(rgb(0xd9870b)),
+            Due::Later => faint,
+        };
+        let label = task_dates::chip_label(task.due, today);
+        let when_tip = match state {
+            Due::Overdue => format!("Was due {}", task_dates::long_label(task.due)),
+            _ => format!("Due {}", task_dates::long_label(task.due)),
+        };
+        let title = if task.title.trim().is_empty() { "Untitled".to_owned() } else { task.title.clone() };
+        let project = task.project_id.as_deref().and_then(|id| self.all_projects.iter().find(|(pid, _, _)| pid == id)).map(|(_, t, _)| t.clone());
+        let status = match task.status.as_str() {
+            "backlog" => "Backlog",
+            "doing" => "Doing",
+            _ => "Todo",
+        };
+        let mut place: Vec<String> = Vec::new();
+        if let Some(parent) = &task.parent_title {
+            place.push(format!("Part of {parent}"));
+        }
+        if let Some(project) = project {
+            place.push(project);
+        }
+        place.push(status.to_owned());
+        if let Some(priority) = task.priority.as_deref().filter(|p| matches!(*p, "urgent" | "high")) {
+            place.push(task_dates::priority_name(Some(priority)).to_owned());
+        }
+        let (hover_key, id) = (key.clone(), task.id.clone());
+        let (hover_bg, selected_bg) = (p.hover, p.selected);
+        let aria = format!("{title}, due {label}");
+        v_flex()
+            .id(ElementId::Name(format!("due-task-{}", task.id).into()))
+            .test_support()
+            .role(Role::ListItem)
+            .aria_label(aria)
+            .tip("Open the task")
+            .gap(px(3.))
+            .pt(px(8.))
+            .pb(px(8.))
+            .pl(px(LEADING))
+            .pr(px(TRAILING))
+            .rounded(px(CORNER))
+            .cursor_pointer()
+            .when(selected, |s| s.bg(selected_bg))
+            .when(hovered && !selected, |s| s.bg(hover_bg))
+            .on_hover(cx.listener(move |this, hovered: &bool, _, cx| {
+                if *hovered {
+                    this.scheduled.hovered = Some(hover_key.clone());
+                } else if this.scheduled.hovered.as_deref() == Some(hover_key.as_str()) {
+                    this.scheduled.hovered = None;
+                }
+                cx.notify();
+            }))
+            .on_click(cx.listener(move |this, _: &ClickEvent, window, cx| this.open_task(id.clone(), window, cx)))
+            .child(
+                h_flex()
+                    .items_baseline()
+                    .gap(px(6.))
+                    .child(div().flex_1().min_w_0().truncate().text_size(px(style::size::SIDEBAR_TITLE)).line_height(px(17.)).text_color(fg).child(title))
+                    .child(
+                        div()
+                            .id(ElementId::Name(format!("due-task-when-{}", task.id).into()))
+                            .flex_none()
+                            .text_size(px(style::size::SIDEBAR_META))
+                            .line_height(px(14.))
+                            .text_color(when_color)
+                            .tip(when_tip)
+                            .child(label),
+                    ),
+            )
+            .child(div().min_w_0().truncate().text_size(px(style::size::SIDEBAR_PREVIEW)).line_height(px(16.)).text_color(secondary).child(place.join(" \u{00B7} ")))
             .into_any_element()
     }
 
@@ -551,16 +762,27 @@ impl Threadbear {
         let local = Local::now();
         let next = rules::next(&self.scheduled.list);
         let status = next.map_or_else(|| "Nothing coming up".to_owned(), |s| format!("Next: {}, {}", rules::title(s), rules::when(s, &local)));
+        let status = self.with_due_summary(status, next.is_some());
         let stats = if self.schedules_supported { rules::stats(&self.scheduled.list, now) } else { Vec::new() };
         let about = v_flex()
             .gap(px(12.))
             .child(home_title("Scheduled", "Messages that send themselves later, once or on repeat.", SCHEDULED_MORE, cx))
-            .child(home_status_line(&status, next.is_some(), cx));
+            .child(home_status_line(&status, next.is_some() || !self.shown_due_tasks().is_empty(), cx));
         // Settings > General > Look, as the Librarian page.
         if self.customizable(crate::looks::Page::Scheduled) {
             return self.render_customized_scheduled(about.into_any_element(), &stats, cx);
         }
         self.render_home_page(Art::Scheduled, about.into_any_element(), &stats, None, cx)
+    }
+
+    /// The page's status with what's due in Tasks after it: "Next: …. 2
+    /// tasks due today". With nothing scheduled the tasks are the news.
+    fn with_due_summary(&self, status: String, has_next: bool) -> String {
+        match task_dates::due_summary(self.shown_due_tasks(), Local::now().date_naive()) {
+            Some(due) if has_next => format!("{status}. {due}"),
+            Some(due) => due,
+            None => status,
+        }
     }
 
     /// The Scheduled view in the dump, in the Swift app's shape: its
@@ -600,7 +822,9 @@ impl Threadbear {
                 json!({ "name": section.title(), "collapsed": self.scheduled.folded.contains(section.key()), "threads": threads })
             })
             .collect();
-        json!({ "sections": sections, "count": self.scheduled.active_count() })
+        let today = Local::now().date_naive();
+        let due: Vec<Value> = self.shown_due_tasks().iter().map(|t| json!({ "id": t.id, "title": t.title, "due": task_dates::format(t.due), "label": task_dates::chip_label(t.due, today), "status": t.status })).collect();
+        json!({ "sections": sections, "count": self.scheduled.active_count(), "dueTasks": { "collapsed": self.scheduled.folded.contains(DUE_KEY), "tasks": due } })
     }
 
     /// The page in the main panel, for the dump (`homePage`).
@@ -609,6 +833,7 @@ impl Threadbear {
         let local = Local::now();
         let next = rules::next(&self.scheduled.list);
         let status = next.map_or_else(|| "Nothing coming up".to_owned(), |s| format!("Next: {}, {}", rules::title(s), rules::when(s, &local)));
+        let status = self.with_due_summary(status, next.is_some());
         let stats = if self.schedules_supported { rules::stats(&self.scheduled.list, now_ms()) } else { Vec::new() };
         json!({
             "title": "Scheduled",
@@ -631,7 +856,7 @@ pub(crate) fn automation(app: &Entity<Threadbear>, cmd: &Value, cx: &mut App) ->
     match name {
         "expand" | "collapse" => {
             let raw = cmd["scheduleSection"].as_str().unwrap_or("");
-            let key = ScheduleSection::ALL.into_iter().map(ScheduleSection::key).find(|k| *k == raw).ok_or_else(|| format!("scheduleSection must be one of active, paused, done, not {raw:?}"))?;
+            let key = ScheduleSection::ALL.into_iter().map(ScheduleSection::key).chain([DUE_KEY]).find(|k| *k == raw).ok_or_else(|| format!("scheduleSection must be one of active, paused, done, tasks, not {raw:?}"))?;
             app.update(cx, |t, cx| {
                 if name == "expand" {
                     t.scheduled.folded.remove(key);

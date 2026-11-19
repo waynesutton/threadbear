@@ -177,7 +177,25 @@ impl Threadbear {
             });
         }
     }
+    /// One task's page, from a row outside Tasks (Scheduled's Tasks due).
+    /// Tasks opens over the main panel with the sidebar left as it is, and
+    /// the task opens once its rows are in.
+    pub(crate) fn open_task(&mut self, id: String, window: &mut Window, cx: &mut Context<Self>) {
+        if self.tasks_page.is_none() {
+            self.toggle_tasks(window, cx);
+        }
+        let Some(page) = self.tasks_page.clone() else {
+            self.show_error("Tasks is off. Turn it on in Settings, General, Experiments.".into(), cx);
+            return;
+        };
+        page.update(cx, |p, cx| {
+            p.opening = Some(id);
+            p.open_pending(window, cx);
+        });
+        cx.notify();
+    }
     pub(crate) fn tasks_updated(&mut self, cx: &mut Context<Self>) {
+        self.due_tasks_changed(cx);
         self.task_counts.clear();
         if let Some(page) = &self.tasks_page {
             page.update(cx, |p, cx| p.refresh(cx));
@@ -277,6 +295,8 @@ pub(crate) struct TasksPage {
     refresh_again: bool,
     draft_id: String,
     project_filter_id: Option<String>,
+    /// A task to open once the rows have it (`Threadbear::open_task`).
+    opening: Option<String>,
     focus: FocusHandle,
     selected_task: Option<String>,
     editing: Option<String>,
@@ -420,6 +440,7 @@ impl TasksPage {
             refresh_again: false,
             draft_id: threadbear_core::notes::new_id(),
             project_filter_id: None,
+            opening: None,
             focus,
             selected_task: None,
             editing: None,
@@ -892,6 +913,26 @@ impl TasksPage {
         self.notes.update(cx, |f, cx| f.set_value("", window, cx));
         window.focus(&self.focus, cx);
         crate::web_panels::keyboard_to_app(window);
+    }
+    /// The task whose page is open, for a row elsewhere to show it's the one.
+    pub(crate) fn open_task_id(&self) -> Option<&str> {
+        self.editing.as_deref().filter(|_| self.editor_open && self.editing_baseline.is_some())
+    }
+    /// Opens the task asked for once the list has it. Still loading, it waits
+    /// for the next draw; loaded without it (deleted, or done and gone), it
+    /// says so rather than leaving the click to do nothing.
+    fn open_pending(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let Some(id) = self.opening.clone() else { return };
+        if let Some(row) = self.rows.iter().find(|r| r.id == id).cloned() {
+            self.opening = None;
+            if self.open_task_id() != Some(id.as_str()) {
+                self.open_editor(&row, false, window, cx);
+            }
+        } else if !self.loading && self.prefs["defaultView"].is_string() {
+            self.opening = None;
+            self.error = Some("That task isn't in Tasks any more.".into());
+            cx.notify();
+        }
     }
     fn open_editor(&mut self, task: &TaskRow, notes_first: bool, window: &mut Window, cx: &mut Context<Self>) {
         if self.busy || (self.editor_open && self.draft_dirty_editor(cx)) {
@@ -1828,6 +1869,9 @@ impl TasksPage {
 
 impl Render for TasksPage {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        if self.opening.is_some() && !self.loading {
+            self.open_pending(window, cx);
+        }
         self.viewport_height = f32::from(window.viewport_size().height) / style::zoomed(1.);
         let view = self.view_name();
         let rows = self.visible();

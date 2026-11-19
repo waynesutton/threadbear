@@ -184,6 +184,20 @@ When("I set the task's due date to {string}", async function (this: ThreadbearWo
 Then('the task {string} has priority {string} and a due date', async function (this: ThreadbearWorld, title: string, priority: string) {
   await this.until(`${title} ${priority}, due`, (d) => full(d, title)?.priority === priority && !!full(d, title)?.dueDate);
 });
+Then('the task {string} has a due date', async function (this: ThreadbearWorld, title: string) {
+  await this.until(`${title} due`, (d) => !!full(d, title)?.dueDate);
+});
+// Scheduled's Tasks due section (desktop/gpui/src/scheduled.rs).
+type DueRow = { id: string; title: string; label: string };
+const dueRows = (d: unknown) => (d as { sidebar?: { dueTasks?: { tasks?: DueRow[] } } }).sidebar?.dueTasks?.tasks ?? [];
+Then("the Scheduled list's Tasks due shows {string} due {string}", async function (this: ThreadbearWorld, title: string, label: string) {
+  await this.until(`${title} due ${label} in Scheduled`, (d) => dueRows(d).some((t) => t.title === title && t.label === label));
+});
+When('I click the due task {string} in Scheduled', async function (this: ThreadbearWorld, title: string) {
+  const row = dueRows(await this.app.dump()).find((t) => t.title === title);
+  if (!row) throw new Error(`no due task ${title} in Scheduled`);
+  await this.app.do({ cmd: 'click', title: `${title}, due ${row.label}` });
+});
 Then('the task {string} has no due date', async function (this: ThreadbearWorld, title: string) {
   await this.until(`${title} not due`, (d) => !!full(d, title) && !full(d, title)?.dueDate);
 });
