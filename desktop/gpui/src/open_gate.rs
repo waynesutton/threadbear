@@ -485,7 +485,23 @@ fn open_the_file(look: &policy::Look, with: &policy::Opener, url: &str, cx: &mut
         }
         // Shown selected in Finder: a window rooted at it, or Finder asked
         // to open it, launched an app swapped in there; revealing didn't.
-        policy::Opener::FileViewer => ws.activateFileViewerSelectingURLs(&files),
+        //
+        // Off the main thread, as gpui's own reveal_path is: on the main
+        // thread AppKit can spin a nested run loop inside this call (its
+        // Services handler), which runs a spinner frame while the click
+        // still holds the app, a double lease that aborted the app twice
+        // on 19 Nov 2026. The reference goes over as its string, so it's
+        // still the inode that was checked.
+        policy::Opener::FileViewer => {
+            let reference = files.objectAtIndex(0).absoluteString().map(|s| s.to_string()).ok_or(changed)?;
+            cx.background_executor()
+                .spawn(async move {
+                    if let Some(url) = NSURL::URLWithString(&NSString::from_str(&reference)) {
+                        NSWorkspace::sharedWorkspace().activateFileViewerSelectingURLs(&NSArray::from_retained_slice(&[url]));
+                    }
+                })
+                .detach();
+        }
         // What was said yes to (an app opening as itself), by its reference.
         policy::Opener::System => {
             ws.openURL(&files.objectAtIndex(0));
