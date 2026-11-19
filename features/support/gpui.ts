@@ -128,6 +128,13 @@ export class GpuiDriver implements Driver {
       THREADBEAR_REDUCE_MOTION: process.env.TB_REDUCE_MOTION ?? 'off',
       ...specShell(),
     };
+    // On a Mac someone is using, each scenario's window flashed up over their
+    // work (Wayne, 18 Nov). Off GitHub, keep it behind and unseen as
+    // dev-app.sh's are; it still draws for dump and shot. TB_SHOW_WINDOW=1
+    // shows it, for a run you want to watch.
+    if (process.platform === 'darwin' && !process.env.CI && process.env.TB_SHOW_WINDOW !== '1') {
+      env.THREADBEAR_KEEP_BEHIND = '1';
+    }
     if (process.platform === 'linux' && !process.env.DISPLAY && !process.env.WAYLAND_DISPLAY) {
       // A server: a virtual screen, and a session bus of its own for the
       // desktop settings and portals the app asks for.

@@ -63,6 +63,7 @@ TB_APP=gpui  node_modules/.bin/cucumber-js        # or swift
 TB_TAGS='@sidebar.search' ...                     # just these
 TB_INCLUDE_PENDING=1 ...                          # to see what's left
 TB_REDUCE_MOTION=on ...                           # GPUI with Reduce Motion (off otherwise, whatever the Mac says)
+TB_SHOW_WINDOW=1 ...                              # GPUI on a Mac: show each app (kept behind and unseen otherwise, outside CI)
 ```
 
 Never `npx cucumber-js`: if the package isn't installed it goes and fetches
