@@ -1,7 +1,7 @@
 //! Tasks' due dates and priorities: the quick picks, the month calendar and
 //! the chip's words. Due dates are plain days (`YYYY-MM-DD`), no time or zone.
 
-use chrono::{Datelike, Duration, NaiveDate, Weekday};
+use chrono::{Datelike, Duration, NaiveDate, NaiveTime, Weekday};
 
 /// The priorities, most pressing first, with their menu names.
 pub const PRIORITIES: [(&str, &str); 4] = [("urgent", "Urgent"), ("high", "High"), ("normal", "Normal"), ("low", "Low")];
@@ -18,6 +18,19 @@ pub fn priority_bars(priority: &str) -> usize {
         "low" => 1,
         _ => 0,
     }
+}
+
+/// A due time, HH:MM on the 24-hour clock in the Macs' own time zone (API 88).
+pub fn parse_time(time: &str) -> Option<NaiveTime> {
+    if time.len() != 5 { return None; }
+    NaiveTime::parse_from_str(time, "%H:%M").ok()
+}
+pub fn format_time(time: NaiveTime) -> String {
+    time.format("%H:%M").to_string()
+}
+/// "9:30 AM", or "09:30" on a 24-hour clock.
+pub fn time_label(time: NaiveTime, twenty_four: bool) -> String {
+    if twenty_four { time.format("%H:%M").to_string() } else { time.format("%-I:%M %p").to_string() }
 }
 
 pub fn parse(day: &str) -> Option<NaiveDate> {
@@ -272,5 +285,20 @@ mod tests {
         assert_eq!(priority_name(Some("high")), "High");
         assert_eq!(priority_name(None), "No priority");
         assert_eq!(priority_bars("low"), 1);
+    }
+}
+
+#[cfg(test)]
+mod due_time_tests {
+    use super::*;
+    #[test]
+    fn due_times_are_hh_mm_and_read_both_clocks() {
+        let t = parse_time("09:30").unwrap();
+        assert_eq!(format_time(t), "09:30");
+        assert_eq!(time_label(t, false), "9:30 AM");
+        assert_eq!(time_label(parse_time("17:05").unwrap(), true), "17:05");
+        for bad in ["9:30", "24:00", "09:60", "noon", "09:30:00"] {
+            assert!(parse_time(bad).is_none(), "{bad}");
+        }
     }
 }

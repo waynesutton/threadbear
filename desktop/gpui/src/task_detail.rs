@@ -41,15 +41,21 @@ pub(super) fn today() -> NaiveDate {
 }
 
 /// The due date's chip on a row or card: red when it's passed, amber today.
-pub(super) fn due_chip(due: &str, cx: &App) -> Option<AnyElement> {
+pub(super) fn due_chip(due: &str, time: Option<&str>, cx: &App) -> Option<AnyElement> {
     let day = task_dates::parse(due)?;
     let now = today();
-    let color = match task_dates::due_state(day, now) {
+    let time = time.and_then(task_dates::parse_time);
+    // Today with its time already gone counts as overdue.
+    let passed = time.is_some_and(|t| day == now && t <= Local::now().time());
+    let color = match if passed { Due::Overdue } else { task_dates::due_state(day, now) } {
         Due::Overdue => urgent_red(),
         Due::Today => Hsla::from(rgb(0xd9870b)),
         Due::Later => style::secondary_label(cx),
     };
-    let label = task_dates::chip_label(day, now);
+    let mut label = task_dates::chip_label(day, now);
+    if let Some(t) = time {
+        label = format!("{label} {}", task_dates::time_label(t, style::uses_24_hour_clock()));
+    }
     Some(
         h_flex().flex_none().gap(px(3.)).px(px(6.)).py(px(1.)).rounded_full().border_1().border_color(style::hairline(cx)).text_size(px(12.)).text_color(color)
             .child(icons::symbol("calendar").with_size(px(11.)).text_color(color))
@@ -701,7 +707,7 @@ impl TasksPage {
                         .child(h_flex().id(SharedString::from(format!("sub-open-{}", sub.id))).role(Role::Button).aria_label(SharedString::from(format!("Open {}", sub.title))).flex_1().min_w_0().cursor_pointer().tip("Open the sub-task")
                             .on_click(cx.listener(move |this, _, window, cx| { this.leave_detail(window, cx); this.open_editor(&open, false, window, cx); }))
                             .child(div().min_w_0().truncate().text_size(px(14.)).when(done, |d| d.line_through().text_color(tertiary)).child(sub.title.clone().test_text(sub.title.clone()))))
-                        .children(sub.due_date.as_deref().and_then(|d| due_chip(d, cx)))
+                        .children(sub.due_date.as_deref().and_then(|d| due_chip(d, sub.due_time.as_deref(), cx)))
                         .when(sub.priority.is_some(), |d| d.child(priority_icon(sub.priority.as_deref(), 14., cx))),
                 );
             }

@@ -57,10 +57,6 @@ When('I make this the default Tasks view', async function (this: ThreadbearWorld
 When('I open the Tasks customize panel', async function (this: ThreadbearWorld) {
   await this.app.do({ cmd: 'click', title: 'Customize Tasks' });
 });
-When('I choose Board under Open Tasks in', async function (this: ThreadbearWorld) {
-  await this.app.do({ cmd: 'click', title: 'Open Tasks in Board' });
-  await this.until('board saved as the default', (d) => (d as { tasksPage?: { defaultView?: string } }).tasksPage?.defaultView === 'board');
-});
 When('I close and reopen Tasks', async function (this: ThreadbearWorld) {
   await this.app.do({ cmd: 'click', title: 'Close' });
   await this.until('Tasks closed', (d) => !tasks(d)?.open);

@@ -174,6 +174,8 @@ import { COPIED_REFUSAL, neutraliseCopied, realCopy } from './real-copy.ts';
 
 export type Notification =
   | { method: 'tasks.updated'; params: Record<string, never> }
+  // A task's due time came and this Mac claimed its reminder (task-reminders.ts).
+  | { method: 'tasks.due'; params: { id: string; title: string; dueDate: string; dueTime: string; when: string } }
   | { method: 'thread.updated'; params: { thread: ThreadSummary } }
   | { method: 'thread.event'; params: { threadId: string; event: AnyEvent } }
   | { method: 'thread.deleted'; params: { threadId: string } }

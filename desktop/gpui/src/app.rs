@@ -1069,6 +1069,7 @@ impl Threadbear {
                 "runner.updates" => self.runner_updates_changed(&params),
                 "connectors.updated" => self.connectors_updated(&params),
                 "tasks.updated" => self.tasks_updated(cx),
+                "tasks.due" => crate::notify::post_task_due(&params, cx),
                 "skills.updated" => self.skills_updated(&params, cx),
                 "thread.event" => {
                     // An open review window hears its review change whichever

@@ -41,7 +41,13 @@ export function dueLabel(day: string, now = new Date()): string {
   const d = dateOf(day);
   return `${MONTHS[d.getMonth()]} ${d.getDate()}${d.getFullYear() === now.getFullYear() ? '' : `, ${d.getFullYear()}`}`;
 }
-export const overdue = (day: string, now = new Date()) => day < dayOf(now);
+export const overdue = (day: string, now = new Date(), time?: string | null) =>
+  day < dayOf(now) || (!!time && day === dayOf(now) && time <= `${pad(now.getHours())}:${pad(now.getMinutes())}`);
+// API 88: "9:30 AM" from HH:MM.
+export const timeLabel = (time: string) => {
+  const [h, m] = time.split(':').map(Number);
+  return new Date(2000, 0, 1, h!, m!).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+};
 export const shortDay = (day: string) => {
   const d = dateOf(day);
   return `${['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][d.getDay()]}, ${MONTHS[d.getMonth()]} ${d.getDate()}`;

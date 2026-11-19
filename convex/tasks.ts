@@ -78,6 +78,15 @@ function dueDate(value: string | null | undefined) {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(value) || Number.isNaN(day.getTime()) || day.toISOString().slice(0, 10) !== value) bad('Use a due date like 2026-11-20');
   return value;
 }
+function dueTime(value: string | null | undefined) {
+  if (value === undefined || value === null) return value;
+  if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(value)) bad('Use a due time like 09:30');
+  return value;
+}
+const timeLabel = (value: string) => {
+  const [h, m] = value.split(':').map(Number);
+  return `${((h! + 11) % 12) + 1}:${String(m).padStart(2, '0')} ${h! < 12 ? 'AM' : 'PM'}`;
+};
 const dayLabel = (value: string) => {
   const [y, m, d] = value.split('-').map(Number);
   return `${MONTHS[m! - 1]} ${d}, ${y}`;
@@ -216,6 +225,8 @@ export const create = mutation({
     // API 87.
     priority: v.optional(v.union(taskPriority, v.null())),
     dueDate: v.optional(v.union(v.string(), v.null())),
+    // API 88.
+    dueTime: v.optional(v.union(v.string(), v.null())),
     parentId: v.optional(v.union(v.string(), v.null())),
     links: v.optional(v.array(taskLink)),
     author: v.optional(taskAuthor),
@@ -243,6 +254,7 @@ export const create = mutation({
       deleted: false,
       ...(a.priority ? { priority: a.priority } : {}),
       ...(a.dueDate ? { dueDate: dueDate(a.dueDate) } : {}),
+      ...(a.dueDate && a.dueTime ? { dueTime: dueTime(a.dueTime) } : {}),
       ...(parent ? { parentId: parent.id } : {}),
       ...(links?.length ? { links } : {}),
       createdBy: author,
@@ -265,6 +277,8 @@ export const update = mutation({
     // API 87. links replaces the whole array.
     priority: v.optional(v.union(taskPriority, v.null())),
     dueDate: v.optional(v.union(v.string(), v.null())),
+    // API 88. A time needs a date; clearing the date clears the time.
+    dueTime: v.optional(v.union(v.string(), v.null())),
     parentId: v.optional(v.union(v.string(), v.null())),
     links: v.optional(v.array(taskLink)),
     author: v.optional(taskAuthor),
@@ -279,6 +293,9 @@ export const update = mutation({
     if (patch.notes !== undefined) text(patch.notes, 20000, 'Notes');
     if (patch.position !== undefined && !Number.isFinite(patch.position)) bad('Invalid position');
     dueDate(patch.dueDate);
+    dueTime(patch.dueTime);
+    if (patch.dueDate === null) patch.dueTime = null;
+    if (patch.dueTime && !(patch.dueDate ?? row.dueDate)) bad('Set a due date before a time');
     const parentChanged = patch.parentId !== undefined && (patch.parentId ?? null) !== (row.parentId ?? null);
     const parent = parentChanged ? await checkParent(ctx, row.id, patch.parentId) : null;
     if (patch.links) patch.links = await cleanLinks(ctx, patch.links, row.links);
@@ -293,6 +310,8 @@ export const update = mutation({
       events.push([was.id, patch.priority ? `set priority to ${PRIORITY_NAMES[patch.priority]}` : 'removed the priority']);
     if (patch.dueDate !== undefined && (patch.dueDate ?? null) !== (was.dueDate ?? null))
       events.push([was.id, patch.dueDate ? `set the due date to ${dayLabel(patch.dueDate)}` : 'removed the due date']);
+    if (patch.dueTime !== undefined && patch.dueDate !== null && (patch.dueTime ?? null) !== (was.dueTime ?? null))
+      events.push([was.id, patch.dueTime ? `set the due time to ${timeLabel(patch.dueTime)}` : 'removed the due time']);
     if (patch.project !== undefined && (patch.project?.runnerId ?? '') + '/' + (patch.project?.id ?? '') !== (was.project?.runnerId ?? '') + '/' + (was.project?.id ?? ''))
       events.push([was.id, patch.project ? `moved to project ${await projectTitle(ctx, patch.project)}` : 'removed the project']);
     if (parentChanged) {
@@ -412,6 +431,11 @@ export const setPreferences = mutation({
       patch.listOrder = fullColumnOrder(patch.listOrder, listStatuses);
     }
     if (patch.projectOrder && (patch.projectOrder.length > 1000 || patch.projectOrder.some((k) => k.length > 300) || new Set(patch.projectOrder).size !== patch.projectOrder.length)) bad('Use each project once');
+    if (patch.reminders) {
+      patch.reminders.to = patch.reminders.to.trim();
+      if (patch.reminders.to.length > 200) bad('Use an address or channel under 201 characters');
+      if (!Number.isInteger(patch.reminders.lead) || patch.reminders.lead < 0 || patch.reminders.lead > 1440) bad('Remind between 0 and 1440 minutes early');
+    }
     if (patch.fade !== undefined && (!Number.isFinite(patch.fade) || patch.fade < 0 || patch.fade > 1)) bad('Fade must be between 0 and 1');
     if (patch.backgroundColor !== undefined && patch.backgroundColor !== '' && !/^#[0-9a-f]{6}$/i.test(patch.backgroundColor)) bad('Choose a hex color');
     if (patch.backgroundPhoto) {
@@ -574,5 +598,20 @@ export const addImage = mutation({
     const link: Link = { id: `image-${String(a.storageId).replace(/[^\w-]/g, '').slice(0, 90)}`, kind: 'image', title: text((a.title ?? '').trim(), 300, 'Image name') || 'Image', storageId: a.storageId };
     await ctx.db.patch(row._id, { links: [...links, link], updatedAt: await changedAt(ctx) });
     return link;
+  },
+});
+
+// API 88: the one Mac that gets here first for a due date and time sends its
+// reminder; every other one (and the same Mac after a restart) is told no.
+export const claimReminder = mutation({
+  args: { auth: authField, id: v.string(), key: v.string() },
+  returns: v.boolean(),
+  handler: async (ctx, a) => {
+    await authenticate(ctx, a.auth);
+    const row = await find(ctx, a.id);
+    if (!row || row.deleted || row.status === 'done' || !row.dueDate || !row.dueTime) return false;
+    if (a.key !== `${row.dueDate}T${row.dueTime}` || row.remindedFor === a.key) return false;
+    await ctx.db.patch(row._id, { remindedFor: a.key });
+    return true;
   },
 });

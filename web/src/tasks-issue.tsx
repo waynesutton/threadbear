@@ -7,7 +7,7 @@ import type { FunctionReturnType } from 'convex/server';
 import type { Id } from '../../convex/_generated/dataModel';
 import { api } from '../../convex/_generated/api';
 import { go } from './route';
-import { MONTH_NAMES, PRIORITIES, PRIORITY_BARS, cleanUrl, dateOf, dayOf, dueLabel, monthGrid, overdue, priorityName, quickDues, shiftMonth, shortDay, subTaskProgress, type Priority } from './tasks-fields';
+import { MONTH_NAMES, PRIORITIES, PRIORITY_BARS, cleanUrl, dateOf, dayOf, dueLabel, monthGrid, overdue, priorityName, quickDues, shiftMonth, shortDay, subTaskProgress, timeLabel, type Priority } from './tasks-fields';
 
 type Task = FunctionReturnType<typeof api.tasks.list>['items'][number];
 type Link = NonNullable<Task['links']>[number];
@@ -52,12 +52,13 @@ const Check = () => (
 );
 
 // The chip rows and cards show: the due day, red once it's passed and the task isn't done.
-export function DueChip({ day, done }: { day: string; done: boolean }) {
-  const late = !done && overdue(day);
+export function DueChip({ day, time, done }: { day: string; time?: string | null; done: boolean }) {
+  const late = !done && overdue(day, new Date(), time);
+  const at = time ? ` ${timeLabel(time)}` : '';
   return (
-    <span className={`task-due ${late ? 'is-late' : ''}`} title={`Due ${shortDay(day)}${late ? ', overdue' : ''}`}>
+    <span className={`task-due ${late ? 'is-late' : ''}`} title={`Due ${shortDay(day)}${at}${late ? ', overdue' : ''}`}>
       <CalendarIcon />
-      {dueLabel(day)}
+      {dueLabel(day)}{at}
     </span>
   );
 }
@@ -319,7 +320,7 @@ export function IssueSections(props: {
                 {c.title}
               </button>
               {c.priority && <PriorityIcon priority={c.priority} />}
-              {c.dueDate && <DueChip day={c.dueDate} done={c.status === 'done'} />}
+              {c.dueDate && <DueChip day={c.dueDate} time={c.dueTime} done={c.status === 'done'} />}
             </div>
           ))}
           <input className="issue-add" aria-label="New sub-task" placeholder="Add a sub-task, then Enter" maxLength={500} value={subDraft} disabled={disabled} onChange={(e) => setSubDraft(e.target.value)} onKeyDown={enterOnly(addSubTask)} />

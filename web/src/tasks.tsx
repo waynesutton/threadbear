@@ -225,7 +225,7 @@ function TasksContent({ token, projectFilter = '', issues = false }: { token: st
   const issueMeta = (t: Task) =>
     issues && (
       <>
-        {t.dueDate && <DueChip day={t.dueDate} done={t.status === 'done'} />}
+        {t.dueDate && <DueChip day={t.dueDate} time={t.dueTime} done={t.status === 'done'} />}
         <SubTaskChip items={childrenOf.get(t.id) ?? []} />
       </>
     );

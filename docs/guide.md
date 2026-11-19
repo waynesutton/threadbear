@@ -1390,8 +1390,9 @@ With Tasks on (an experiment), any task with a due date that isn't done
 also shows in the Scheduled view, under **Tasks due**, between Active and
 Paused. Soonest first: each row has the task's title and its day (red once
 it has passed, amber on the day), then its project, its status and an
-Urgent or High priority. Nothing about it runs or sends: it's there so what
-you've promised sits beside what's booked. Click a row to open the task in
+Urgent or High priority. A task with only a date sends nothing; one with a
+due time reminds you (see Tasks, Notifications). It's there so what you've
+promised sits beside what's booked. Click a row to open the task in
 Tasks, with the Scheduled list still beside it, so you can click through
 them one after another. Folded, the heading counts the ones due today or
 overdue, and the page's status line says how many there are ("1 task
@@ -3215,14 +3216,27 @@ every column shows without scrolling sideways.
 
 Each task's ⋯ menu opens it, adds a note, moves it to a project, sets its
 priority or due date (Today, Tomorrow, End of week, Pick a date… for any day on a
-calendar, or Clear), sets its status
+calendar, with a time if you tick At a time, or Clear), sets its status
 or asks before deleting it (with Undo afterward). Send to thread starts a new
 thread with the task title, notes and project. It shows Starting while queued,
 then View thread; repeated clicks reuse the same request. Projects are optional,
 and their pages link to their tasks. Display picks a project, groups by status or project, sets the order,
 and makes the view you're in the one Tasks opens with. The sliders button next
 to Display offers Light and Dark appearance, a photo with Fade and Position
-sliders, and Open Tasks in List or Board. A dot on it means a photo is set.
+sliders, and Notifications. A dot on it means a photo is set. (Which view
+Tasks opens in is under Display.)
+
+A task with a due time reminds you when it comes. Notifications sets how:
+**Notify me on this Mac** shows a notification (click it to open the task),
+**Remind** picks when (when it's due, or 5 minutes to a day before), and
+**Also send** can add an email or a Slack message to the address or channel
+in **To**. Email and Slack go through your connectors (Gmail or Slack on
+claude.ai, or your Connectors gateway): connectors only work inside an agent's
+turn, so a short turn in a **Task reminders** thread sends each one. If the
+connector isn't connected, that thread says so. One Mac sends each reminder,
+even with several running, and a reminder missed while the Mac slept goes out
+late, up to a day late. Changing the time reminds again. Due times need
+backend API 88.
 Text follows the selected theme. On the board, swipe sideways anywhere under the
 columns to scroll them.
 A task can have a priority (Urgent, High, Normal or Low), a due date (Today,

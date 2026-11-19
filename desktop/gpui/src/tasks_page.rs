@@ -48,6 +48,9 @@ struct TaskRow {
     priority: Option<String>,
     #[serde(default)]
     due_date: Option<String>,
+    // API 88: HH:MM on due_date.
+    #[serde(default)]
+    due_time: Option<String>,
     #[serde(default)]
     parent_id: Option<String>,
     #[serde(default, deserialize_with = "links_or_none")]
@@ -221,7 +224,7 @@ impl Threadbear {
             "quickDraft":page.map(|p| p.composer.read(cx).value().to_string()),
             "toast":page.and_then(|p| p.toast.as_ref().map(|t| t.0.clone())),
             "tasks":page.map(|p| p.rows.iter().map(|t| json!({"id":t.id,"title":t.title,"status":t.status,"columnId":column_id(t),"thread":t.thread,"notes":t.notes,"project":project_key(&t.project),
-                "priority":t.priority,"dueDate":t.due_date,"parentId":t.parent_id,"links":t.links,"commentCount":t.comment_count})).collect::<Vec<_>>()),
+                "priority":t.priority,"dueDate":t.due_date,"dueTime":t.due_time,"parentId":t.parent_id,"links":t.links,"commentCount":t.comment_count})).collect::<Vec<_>>()),
             "topLevel":page.map(|p| p.visible().iter().map(|t| t.title.clone()).collect::<Vec<_>>()),
             "wrapColumns":page.map(|p| p.wrap_columns),
             "detail":page.filter(|p| p.editor_open && p.editing_baseline.is_some()).map(|p| json!({"task":p.editing,"picker":p.detail.picker,"commentsOnly":p.detail.comments_only,
@@ -322,6 +325,8 @@ pub(crate) struct TasksPage {
     // The photo's fade and place: drawn live while dragged, saved on release.
     fade_slider: Entity<SliderState>,
     place_slider: Entity<SliderState>,
+    // Who due reminders go to by email or Slack: saved as you leave it.
+    remind_to: Entity<InputState>,
     // The open task's page (task_detail.rs).
     detail: detail::Detail,
     detail_scroll: ScrollHandle,
@@ -363,6 +368,7 @@ impl TasksPage {
         let link_title = cx.new(|cx| InputState::new(window, cx).placeholder("Title (optional)"));
         let print_search = cx.new(|cx| InputState::new(window, cx).placeholder("Search Prints"));
         let place_slider = cx.new(|_| SliderState::new().min(0.).max(1.).step(0.5).default_value(0.5_f32));
+        let remind_to = cx.new(|cx| InputState::new(window, cx).placeholder("Address or #channel"));
         let subs = vec![
             cx.subscribe_in(&print_search, window, |this, _, ev: &InputEvent, window, cx| {
                 if let InputEvent::PressEnter { .. } = ev {
@@ -399,6 +405,12 @@ impl TasksPage {
             // The task's page saves its title and description as you leave them.
             cx.subscribe_in(&title, window, |this, _, ev: &InputEvent, window, cx| {
                 if matches!(ev, InputEvent::PressEnter { .. } | InputEvent::Blur) { this.autosave(window, cx); }
+            }),
+            cx.subscribe_in(&remind_to, window, |this, input, ev: &InputEvent, _, cx| {
+                if matches!(ev, InputEvent::PressEnter { .. } | InputEvent::Blur) {
+                    let to = input.read(cx).value().trim().to_string();
+                    if to != this.reminders()["to"].as_str().unwrap_or("") { this.set_reminder("to", json!(to), cx); }
+                }
             }),
             cx.subscribe_in(&notes, window, |this, _, ev: &InputEvent, window, cx| {
                 if matches!(ev, InputEvent::Blur) { this.autosave(window, cx); }
@@ -464,6 +476,7 @@ impl TasksPage {
             background_size: (0., 0.),
             fade_slider,
             place_slider,
+            remind_to,
             detail: Default::default(),
             detail_scroll: ScrollHandle::new(),
             comment_input,
@@ -710,6 +723,10 @@ impl TasksPage {
             }
             if patch.get("dueDate").is_some() {
                 row.due_date = patch["dueDate"].as_str().map(String::from);
+                if row.due_date.is_none() { row.due_time = None; }
+            }
+            if patch.get("dueTime").is_some() {
+                row.due_time = patch["dueTime"].as_str().map(String::from);
             }
             if let Some(links) = patch["links"].as_array() {
                 row.links = links.clone();
@@ -789,28 +806,50 @@ impl TasksPage {
                 })
         });
     }
-    /// "Pick a date…" in a task's menu: any day, past the quick picks, on
-    /// the same calendar the snooze picker uses.
+    /// "Pick a date…" in a task's menu: any day on a calendar, and a time
+    /// if you want one. A task with a time reminds you when it comes (the
+    /// runner's task-reminders.ts, as set in the sliders popover).
     fn pick_due_date(&mut self, row: &TaskRow, window: &mut Window, cx: &mut Context<Self>) {
         use gpui_kit::component::calendar::{Calendar, CalendarState};
-        let start = row.due_date.as_deref().and_then(threadbear_core::task_dates::parse).unwrap_or_else(detail::today);
+        use gpui_kit::component::time_field::{HourCycle, TimeField, TimeFieldState, TimePrecision};
+        use threadbear_core::task_dates;
+        style::refresh_system_clock();
+        let start = row.due_date.as_deref().and_then(task_dates::parse).unwrap_or_else(detail::today);
+        let had_time = row.due_time.as_deref().and_then(task_dates::parse_time);
         let calendar = cx.new(|cx| {
             let mut state = CalendarState::new(window, cx);
             state.set_date(start, window, cx);
             state
         });
+        let time = cx.new(|cx| {
+            let cycle = if style::uses_24_hour_clock() { HourCycle::H23 } else { HourCycle::H12 };
+            let mut state = TimeFieldState::new(window, cx).precision(TimePrecision::Minute).hour_cycle(cycle);
+            state.set_time(had_time.unwrap_or_else(|| threadbear_core::chrono::NaiveTime::from_hms_opt(9, 0, 0).unwrap()), window, cx);
+            state
+        });
+        let timed = Rc::new(std::cell::Cell::new(had_time.is_some()));
         let (page, id, title) = (cx.entity().downgrade(), row.id.clone(), row.title.clone());
         window.open_alert_dialog(cx, move |dialog, _, _| {
-            let (page, id, calendar) = (page.clone(), id.clone(), calendar.clone());
+            let (page, id, calendar, time, timed) = (page.clone(), id.clone(), calendar.clone(), time.clone(), timed.clone());
+            let toggle = timed.clone();
             dialog
                 .title(format!("Due date for {title}"))
                 .width(px(360.))
-                .child(v_flex().items_center().child(div().id("task-due-day").tip("Day it's due").child(Calendar::new(&calendar))))
+                .child(v_flex().items_center().gap(px(10.))
+                    .child(div().id("task-due-day").tip("Day it's due").child(Calendar::new(&calendar)))
+                    .child(h_flex().gap(px(10.)).items_center()
+                        .child(Checkbox::new("task-due-timed").label("At a time").checked(timed.get())
+                            .tooltip("Remind me when it's due, as set in Tasks' sliders")
+                            .on_click(move |on: &bool, window, _| { toggle.set(*on); window.refresh(); }))
+                        .child(div().id("task-due-time").w(px(125.)).tip("Time it's due").when(!timed.get(), |d| d.opacity(0.4)).child(TimeField::new(&time)))))
                 .button_props(DialogButtonProps::default().ok_text("Set due date").show_cancel(true))
                 .on_ok(move |_, _, cx| {
                     let Some(day) = calendar.read(cx).date().start() else { return false };
-                    let value = threadbear_core::task_dates::format(day);
-                    page.update(cx, |p, cx| p.set_field(&id, "dueDate", json!(value), cx)).ok();
+                    let mut patch = json!({"dueDate": task_dates::format(day)});
+                    // Only sent when there's a time, or one to clear: a backend before 88 refuses the field.
+                    if timed.get() { patch["dueTime"] = json!(task_dates::format_time(time.read(cx).time())); }
+                    else if had_time.is_some() { patch["dueTime"] = Value::Null; }
+                    page.update(cx, |p, cx| p.patch(&id, patch, None, cx)).ok();
                     true
                 })
         });
@@ -836,7 +875,7 @@ impl TasksPage {
         let project = if group != "all" { self.group_project(group) } else if self.filter.is_object() { self.filter.clone() } else { Value::Null };
         let position = self.rows.iter().filter(|r| column_id(r) == status).map(|r| r.position).min_by(f64::total_cmp).map_or(crate::now_ms() as f64, |p| p - 1000.);
         let id = threadbear_core::notes::new_id();
-        self.rows.push(TaskRow { id: id.clone(), title: title.clone(), notes: notes.clone(), status: self.canonical(status), column_id: Some(status.into()), thread: None, thread_command_id: None, thread_error: None, project: (!project.is_null()).then(|| project.clone()), position, created_at: crate::now_ms() as f64, priority: None, due_date: None, parent_id: None, links: vec![], comment_count: None, created_by: None });
+        self.rows.push(TaskRow { id: id.clone(), title: title.clone(), notes: notes.clone(), status: self.canonical(status), column_id: Some(status.into()), thread: None, thread_command_id: None, thread_error: None, project: (!project.is_null()).then(|| project.clone()), position, created_at: crate::now_ms() as f64, priority: None, due_date: None, due_time: None, parent_id: None, links: vec![], comment_count: None, created_by: None });
         self.busy = true;
         self.error = None;
         cx.notify();
@@ -880,7 +919,7 @@ impl TasksPage {
             let (base, col) = if item.done { ("done".to_string(), "done".to_string()) } else { (self.canonical(status), status.to_string()) };
             let position = top - (count - i as f64) * 1000.;
             let parent = item.parent.map(|p| ids[p].clone());
-            self.rows.push(TaskRow { id: ids[i].clone(), title: item.title.clone(), notes: item.notes.clone(), status: base.clone(), column_id: Some(col.clone()), thread: None, thread_command_id: None, thread_error: None, project: (!project.is_null()).then(|| project.clone()), position, created_at: crate::now_ms() as f64, priority: None, due_date: None, parent_id: parent.clone(), links: vec![], comment_count: None, created_by: None });
+            self.rows.push(TaskRow { id: ids[i].clone(), title: item.title.clone(), notes: item.notes.clone(), status: base.clone(), column_id: Some(col.clone()), thread: None, thread_command_id: None, thread_error: None, project: (!project.is_null()).then(|| project.clone()), position, created_at: crate::now_ms() as f64, priority: None, due_date: None, due_time: None, parent_id: parent.clone(), links: vec![], comment_count: None, created_by: None });
             calls.push(json!({"id": ids[i], "title": item.title, "notes": item.notes, "status": base, "columnId": col, "project": project, "position": position, "parentId": parent}));
         }
         self.busy = true;
@@ -1305,7 +1344,7 @@ impl TasksPage {
     fn meta_chips(&self, task: &TaskRow, cx: &App) -> Vec<AnyElement> {
         let mut out = Vec::new();
         if task.status != "done" {
-            out.extend(task.due_date.as_deref().and_then(|d| due_chip(d, cx)));
+            out.extend(task.due_date.as_deref().and_then(|d| due_chip(d, task.due_time.as_deref(), cx)));
         }
         let (done, all) = self.subtask_counts(&task.id);
         if all > 0 { out.push(subtask_chip(done, all, cx)); }
@@ -1734,6 +1773,81 @@ impl TasksPage {
             })
             .into_any_element()
     }
+    /// Due reminders, as the runner reads them (task-reminders.ts), with its defaults.
+    fn reminders(&self) -> Value {
+        let r = &self.prefs["reminders"];
+        json!({
+            "mac": r["mac"].as_bool().unwrap_or(true),
+            "channel": r["channel"].as_str().unwrap_or("none"),
+            "to": r["to"].as_str().unwrap_or(""),
+            "lead": r["lead"].as_u64().unwrap_or(0),
+        })
+    }
+    fn set_reminder(&mut self, field: &str, value: Value, cx: &mut Context<Self>) {
+        let mut r = self.reminders();
+        r[field] = value;
+        self.set_pref("reminders", r, cx);
+    }
+    /// The popover's Notifications: a Mac notification when a task's due time
+    /// comes, and email or Slack through the connectors, which an agent sends.
+    fn notifications_section(&self, cx: &mut Context<Self>) -> AnyElement {
+        let r = self.reminders();
+        let (mac, channel, lead) = (r["mac"].as_bool().unwrap_or(true), r["channel"].as_str().unwrap_or("none").to_string(), r["lead"].as_u64().unwrap_or(0));
+        let label = |text: &'static str, cx: &App| div().text_size(px(12.)).text_color(style::secondary_label(cx)).child(text);
+        let hint = |text: String, cx: &App| div().text_size(px(11.)).text_color(style::tertiary_label(cx)).child(text);
+        // The address follows another Mac's or the web's change, unless it's being typed in.
+        let to = r["to"].as_str().unwrap_or("").to_string();
+        let input = self.remind_to.clone();
+        if input.read(cx).value().as_ref() != to.as_str() {
+            cx.defer(move |cx| {
+                if let Some(window) = cx.active_window() {
+                    window.update(cx, |_, window, cx| {
+                        if !input.read(cx).focus_handle(cx).contains_focused(window, cx) {
+                            input.update(cx, |s, cx| s.set_value(to.clone(), window, cx));
+                        }
+                    }).ok();
+                }
+            });
+        }
+        let mut channels = h_flex().self_start().gap(px(2.)).p(px(2.)).rounded(px(7.)).bg(style::hover_fill(cx));
+        for (name, text, tip) in [("none", "Off", "Only this Mac"), ("email", "Email", "Also send an email through your email connector (Gmail)"), ("slack", "Slack", "Also post in Slack through your Slack connector")] {
+            channels = channels.child(Button::new(SharedString::from(format!("tasks-remind-{name}"))).label(text).small().ghost().selected(channel == name).tooltip(tip)
+                .on_click(cx.listener(move |this, _, window, cx| {
+                    this.set_reminder("channel", json!(name), cx);
+                    let placeholder = if name == "slack" { "#channel or @name" } else { "you@example.com" };
+                    this.remind_to.update(cx, |s, cx| s.set_placeholder(placeholder, window, cx));
+                })));
+        }
+        let leads: [(u64, &str); 6] = [(0, "When it's due"), (5, "5 minutes before"), (15, "15 minutes before"), (30, "30 minutes before"), (60, "1 hour before"), (1440, "1 day before")];
+        let lead_name = leads.iter().find(|(m, _)| *m == lead).map(|(_, n)| *n).unwrap_or("When it's due");
+        let page = cx.entity().downgrade();
+        let lead_button = Button::new("tasks-remind-lead").label(lead_name).small().outline().tooltip("When the reminder comes").dropdown_menu(move |menu: PopupMenu, _, _| {
+            let mut menu = menu;
+            for (minutes, name) in leads {
+                let p = page.clone();
+                menu = menu.item(PopupMenuItem::new(name).checked(minutes == lead).on_click(move |_, _, cx| {
+                    p.update(cx, |p, cx| p.set_reminder("lead", json!(minutes), cx)).ok();
+                }));
+            }
+            menu
+        });
+        let mut section = v_flex().gap(px(8.))
+            .child(div().h(px(1.)).bg(style::hairline(cx)))
+            .child(label("Notifications", cx))
+            .child(Checkbox::new("tasks-remind-mac").label("Notify me on this Mac").checked(mac)
+                .tooltip("A notification when a task with a due time comes due")
+                .on_click(cx.listener(|this, on: &bool, _, cx| this.set_reminder("mac", json!(*on), cx))))
+            .child(h_flex().gap(px(10.)).child(div().w(px(56.)).flex_none().child(label("Remind", cx))).child(lead_button))
+            .child(h_flex().gap(px(10.)).child(div().w(px(56.)).flex_none().child(label("Also send", cx))).child(channels));
+        if channel != "none" {
+            let what = if channel == "slack" { "Slack channel or person" } else { "Email address" };
+            section = section
+                .child(h_flex().gap(px(10.)).child(div().w(px(56.)).flex_none().child(label("To", cx)))
+                    .child(div().id("tasks-remind-to").flex_1().min_w_0().tip(what).child(Input::new(&self.remind_to).small())))
+                .child(hint(format!("An agent sends it through your {} connector, in a Task reminders thread. If it isn't connected, that thread says so.", if channel == "slack" { "Slack" } else { "email (Gmail)" }), cx));
+        }
+        section.child(hint("Only tasks with a time remind. Pick one in a task's ⋯ menu: Due date, Pick a date….".into(), cx)).into_any_element()
+    }
     /// Wrap Columns: kept on this Mac, beside the app's other display choices.
     fn set_wrap(&mut self, on: bool, cx: &mut Context<Self>) {
         self.wrap_columns = on;
@@ -1838,20 +1952,7 @@ impl TasksPage {
                 .child(slider_row("Fade", "tasks-fade", "How much the photo fades behind your tasks", &self.fade_slider, format!("{}%", (fade * 100.).round() as i32), cx))
                 .child(slider_row("Position", "tasks-place", "Which part of the photo shows: top, center or bottom", &self.place_slider, place_label.to_string(), cx));
         }
-        let default_view = self.prefs["defaultView"].as_str().unwrap_or("list").to_string();
-        let mut views = h_flex().self_start().gap(px(2.)).p(px(2.)).rounded(px(7.)).bg(style::hover_fill(cx));
-        for (name, label) in [("list", "List"), ("board", "Board")] {
-            views = views.child(Button::new(SharedString::from(format!("tasks-default-{name}"))).label(label).accessibility_label(format!("Open Tasks in {label}")).small().ghost().selected(default_view == name)
-                .tooltip(format!("Open Tasks in the {} every time", label.to_lowercase()))
-                .on_click(cx.listener(move |this, _, _, cx| {
-                    this.set_pref("defaultView", json!(name), cx);
-                    this.view = Some(name.into());
-                    cx.notify();
-                })));
-        }
-        panel = panel.child(div().h(px(1.)).bg(style::hairline(cx)))
-            .child(div().text_size(px(12.)).text_color(style::secondary_label(cx)).child("Open Tasks in"))
-            .child(views);
+        panel = panel.child(self.notifications_section(cx));
         panel.into_any_element()
     }
     fn editor_sheet(&self, cx: &mut Context<Self>) -> AnyElement {

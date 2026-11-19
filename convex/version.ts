@@ -400,4 +400,8 @@
 //    imageUrl), commentCount and createdBy, and tasks:activity, comment,
 //    removeComment and addImage. create and update take an `author`
 //    from a runner key. A runner sends any of them only from 87.
-export const API_VERSION = 87;
+// 88: (this copy's) Tasks take an optional dueTime (HH:MM, the Macs' local time) on a
+//    dueDate, preferences take reminders { mac, channel, to, lead }, and
+//    tasks:claimReminder hands each due time's reminder to one Mac. A runner
+//    sends dueTime and reminders, and claims, only from 88.
+export const API_VERSION = 88;

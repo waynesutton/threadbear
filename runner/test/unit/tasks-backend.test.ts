@@ -165,6 +165,7 @@ test('every public task operation rejects an invalid account credential', async 
     comment: { id: 'never', body: 'Never said' },
     removeComment: { id: 'never', commentId: 'never' },
     addImage: { id: 'never', storageId: 'stored1' },
+    claimReminder: { id: 'never', key: '2026-11-20T09:30' },
   };
   assert.deepEqual(Object.keys(tasks).sort(), Object.keys(cases).sort(), 'new operations need an auth case');
   for (const [operation, args] of Object.entries(cases)) {
@@ -278,6 +279,28 @@ test('priority and due date are kept, cleared with null, and old rows read witho
   assert.equal(row.priority, null);
   assert.equal(row.dueDate, null);
   for (const dueDate of ['2026-02-30', '20-11-2026', 'tomorrow']) assert.equal(await outcome(b.run('update', { id: 'p', dueDate })), 'badArgs', dueDate);
+});
+
+test('a due time rides on a due date, and one Mac claims each reminder', async () => {
+  const b = await setup();
+  await b.run('create', { id: 't', title: 'Call Sam', dueDate: '2026-11-20', dueTime: '09:30' });
+  let row = (await b.run('list')).items.find((t: { id: string }) => t.id === 't');
+  assert.equal(row.dueTime, '09:30');
+  for (const dueTime of ['9:30', '24:00', '09:60', 'noon']) assert.equal(await outcome(b.run('update', { id: 't', dueTime })), 'badArgs', dueTime);
+  assert.equal(await b.run('claimReminder', { id: 't', key: '2026-11-20T09:30' }), true);
+  assert.equal(await b.run('claimReminder', { id: 't', key: '2026-11-20T09:30' }), false);
+  assert.equal(await b.run('claimReminder', { id: 't', key: '2026-11-20T08:00' }), false);
+  // A new time reminds again.
+  await b.run('update', { id: 't', dueTime: '10:00' });
+  assert.equal(await b.run('claimReminder', { id: 't', key: '2026-11-20T10:00' }), true);
+  // Clearing the date clears the time; a time needs a date.
+  await b.run('update', { id: 't', dueDate: null });
+  row = (await b.run('list')).items.find((t: { id: string }) => t.id === 't');
+  assert.equal(row.dueTime, null);
+  assert.equal(await outcome(b.run('update', { id: 't', dueTime: '10:00' })), 'badArgs');
+  await b.run('setPreferences', { reminders: { mac: true, channel: 'slack', to: ' #ops ', lead: 15 } });
+  assert.deepEqual((await b.run('preferences')).reminders, { mac: true, channel: 'slack', to: '#ops', lead: 15 });
+  assert.equal(await outcome(b.run('setPreferences', { reminders: { mac: true, channel: 'none', to: '', lead: -1 } })), 'badArgs');
 });
 
 test('the backend writes events for status, priority, due date, project and parent, by who did them', async () => {

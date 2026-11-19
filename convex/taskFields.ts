@@ -52,6 +52,11 @@ export const taskFields = {
   priority: v.optional(v.union(taskPriority, v.null())),
   // A calendar date, YYYY-MM-DD, with no time zone.
   dueDate: v.optional(v.union(v.string(), v.null())),
+  // API 88: a wall-clock time on dueDate, HH:MM, in the owner's Macs' time zone.
+  dueTime: v.optional(v.union(v.string(), v.null())),
+  // API 88: the due date and time (YYYY-MM-DDTHH:MM) a reminder already went
+  // out for, so two Macs never send one twice. Changing the time reminds again.
+  remindedFor: v.optional(v.string()),
   // One level deep: a sub-task of that task's id.
   parentId: v.optional(v.union(v.string(), v.null())),
   links: v.optional(v.array(taskLink)),
@@ -77,6 +82,15 @@ export const taskPreferenceFields = {
   photoPosition: v.optional(v.union(v.literal('top'), v.literal('center'), v.literal('bottom'))),
   fade: v.optional(v.number()),
   theme: v.optional(v.union(v.literal('system'), v.literal('light'), v.literal('dark'))),
+  // API 88: what happens when a task with a due time comes due. mac shows a
+  // notification on the Macs; channel asks an agent to send it through a
+  // connector to `to` (an address or a Slack channel); lead is minutes early.
+  reminders: v.optional(v.object({
+    mac: v.boolean(),
+    channel: v.union(v.literal('none'), v.literal('email'), v.literal('slack')),
+    to: v.string(),
+    lead: v.number(),
+  })),
   // API 87: the owner's first name, as the runner last gave it, for activity a browser writes.
   ownerName: v.optional(v.string()),
 };

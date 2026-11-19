@@ -52,6 +52,7 @@ import { ClaudeAdapter } from './adapters/claude/adapter.ts';
 import { ProcessRegistry } from './proc.ts';
 import { Runner } from './runner.ts';
 import { startOwnThread } from './own-threads.ts';
+import { TaskReminders, reminderThread } from './task-reminders.ts';
 import { askBrief, ConvexUseTally, FullSyncOffer, fullSyncAnswerer, fullSyncQuestion, fullSyncReason } from './convex-use.ts';
 // How long after starting the runner looks for a reason to ask about full sync,
 // and how long after a pairing or a new machine it asks (convex-use.ts).
@@ -311,6 +312,7 @@ async function main(): Promise<void> {
         })))
       : undefined;
   let nativeTasks: Tasks | undefined;
+  let taskReminders: TaskReminders = new TaskReminders({ enabled: () => false, apiVersion: () => undefined, call: async () => undefined, notify: () => {}, send: () => {} });
   const claude = new ClaudeAdapter({
     plugins: () => skills.plugins(),
     claudePath: cfg.claudePath,
@@ -1103,7 +1105,7 @@ async function main(): Promise<void> {
       return { threadId: t.thread.id, started: true };
     }
   };
-  nativeTasks = new Tasks(() => sync.relaySource(), () => experimentOn(cfg.home, 'tasks'), () => rpcServer?.notifyClients({ method: 'tasks.updated', params: {} }), () => ({
+  nativeTasks = new Tasks(() => sync.relaySource(), () => experimentOn(cfg.home, 'tasks'), () => { taskReminders.changed(); rpcServer?.notifyClients({ method: 'tasks.updated', params: {} }); }, () => ({
     runnerId: syncRunnerId,
     // tasks.related: this runner's own threads and prints for a task's project.
     related: (projectId) =>
@@ -1116,6 +1118,22 @@ async function main(): Promise<void> {
         projectId,
       ),
   }));
+  // Due reminders: the apps show the notification; email and Slack go
+  // through one reused thread, since connectors only work in an agent turn.
+  const remindersThread = reminderThread(cfg.home);
+  taskReminders = new TaskReminders({
+    enabled: () => experimentOn(cfg.home, 'tasks'),
+    apiVersion: () => sync.relaySource()?.apiVersion,
+    call: (op, args) => nativeTasks!.call(op, args),
+    notify: (params) => rpcServer?.notifyClients({ method: 'tasks.due', params }),
+    send: (text) => {
+      const id = remindersThread.get();
+      const live = id && runner.has(id) && !runner.get(id).archivedAt ? id : undefined;
+      if (live) void runner.send(live, text, [], { queue: true });
+      else remindersThread.set(startOwnThread(runner, { text, title: 'Task reminders', why: 'Send a due task reminder by email or Slack, as set in Tasks' }, undefined));
+    },
+  });
+  taskReminders.start();
   const methods = { ...taskMethods(nativeTasks), ...profilePageMethods(publicProfile), ...restartMethods(restarter), ...scheduleMethods(scheduler), ...projectMethods(projects), ...pageMethods(pagesFor, askAboutPage, printPublisher), ...drainProjectMethods(projects), ...librarianMethods(librarian), ...connectorsMethods(connectors, { on: () => experimentOn(cfg.home, 'connectorsSetup'), start: (r) => startOwnThread(runner, r, undefined), open: openThread, local: () => experimentOn(cfg.home, 'localConnectors'), findLauncher: (l) => findLauncher(l) }), ...settingsMethods(settings), ...skillMethods(skills), ...instructionsMethods(instructions), ...modelMethods(models), ...devicesMethods(sync, (kind) => fullSyncOffer.trigger(kind)), ...agentsMethods(sync, () => experimentOn(cfg.home, OUTSIDE_AGENTS)), ...tablesMethods({ tables: () => tables, on: tablesOn }), ...bearsMethods({ bears, on: bearsOn, mention: (p) => mentions.ask(p), unseat: (id) => tables.unseatEverywhere(id), touch: () => runner.touchThreads(runner.list(['inbox', 'snoozed', 'archived']).filter((t) => bears.forCwd(t.cwd)).map((t) => t.id)), cwdOf: (id) => (runner.has(id) ? runner.get(id).cwd : undefined), revokeHooks: (folder) => (webhooksOn() ? revokeHooksFor(sync, folder) : Promise.resolve(0)) }), ...webhooksMethods({ backend: sync, registry: hookRegistry, on: webhooksOn, runnerId: syncRunnerId, needApi: WEBHOOKS_API_VERSION, modeOf: (id) => (runner.has(id) ? runner.get(id).permissionMode : undefined), bearFolder: (b) => { if (!bearsOn()) return undefined; try { return bears.get(b, { faces: false }).folder; } catch { return undefined; } } }), ...xSearchMethods({ on: () => experimentOn(cfg.home, 'xSearch'), secretsDir: paths.secrets(cfg.home) }), ...usageStatsMethods({ tally, history: usageHistory, clock: realClock }) };
   // runner.status carries the CLI statuses too (protocol, "runner.status").
   const restartStatus = methods['runner.status'];
@@ -1535,6 +1553,7 @@ async function main(): Promise<void> {
     keepAwake.stop();
     connectors.stop();
     nativeTasks?.stop();
+    taskReminders.stop();
     projects.stop();
     usage.stop();
     tally.stop();

@@ -31,6 +31,9 @@ export type NativeTask = {
   // API 87.
   priority?: TaskPriority | null;
   dueDate?: string | null;
+  // API 88.
+  dueTime?: string | null;
+  remindedFor?: string;
   parentId?: string | null;
   links?: TaskLink[];
   commentCount?: number;
@@ -47,10 +50,12 @@ export type TaskRelated = {
 };
 export type TaskLocal = { runnerId: string; related: (projectId: string) => TaskRelated };
 const queries = new Set(['list', 'preferences', 'photo', 'projects', 'count', 'activity', 'get']);
-const operations = new Set([...queries, 'create', 'update', 'remove', 'restore', 'setPreferences', 'uploadPhoto', 'projectCount', 'photoFile', 'photoData', 'startThread', 'comment', 'removeComment', 'addImage', 'imageData', 'imageFile', 'related']);
+const operations = new Set([...queries, 'create', 'update', 'remove', 'restore', 'setPreferences', 'uploadPhoto', 'projectCount', 'photoFile', 'photoData', 'startThread', 'comment', 'removeComment', 'addImage', 'imageData', 'imageFile', 'related', 'claimReminder']);
 // What needs backend API 87: these operations, and these fields anywhere.
 const API87_OPERATIONS = new Set(['activity', 'get', 'comment', 'removeComment', 'addImage', 'imageData', 'imageFile']);
 const API87_FIELDS = ['priority', 'dueDate', 'parentId', 'links'];
+// What needs backend API 88: due times, reminder settings and claiming one.
+const API88_FIELDS = ['dueTime', 'reminders'];
 const AUTHORED = new Set(['create', 'update', 'comment']);
 const IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
 const IMAGE_LIMIT = 10 * 1024 * 1024;
@@ -123,6 +128,8 @@ export class Tasks {
     const api87 = source.apiVersion === undefined || source.apiVersion >= 87;
     if (!api87 && (API87_OPERATIONS.has(operation) || API87_FIELDS.some((field) => field in args)))
       throw new Error('Update the Threadbear backend to use task priority, due dates, sub-tasks, links and comments.');
+    if (source.apiVersion !== undefined && source.apiVersion < 88 && (operation === 'claimReminder' || API88_FIELDS.some((field) => field in args)))
+      throw new Error('Update the Threadbear backend to use due times and reminders.');
     if (operation === 'related') {
       const local = this.local();
       const empty: TaskRelated = { threads: [], prints: [] };

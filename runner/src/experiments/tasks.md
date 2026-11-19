@@ -15,7 +15,7 @@ Requires backend API 86 for custom columns and Send to thread (83 for the origin
 
 ## Lives in
 
-`convex/tasks.ts`, `convex/taskFields.ts` and their schema tables; `runner/src/tasks.ts` and its RPC/tool wiring; `desktop/gpui/src/tasks_page.rs` and Command-7; `web/src/tasks.tsx` and `tasks.css`.
+`convex/tasks.ts`, `convex/taskFields.ts` and their schema tables; `runner/src/tasks.ts` and its RPC/tool wiring; `desktop/gpui/src/tasks_page.rs` and Command-7; `web/src/tasks.tsx` and `tasks.css`. Due times and reminders (API 88): `runner/src/task-reminders.ts`, `tasks:claimReminder`, the sliders popover's Notifications and `desktop/gpui/src/notify.rs`.
 
 ## Taking it out
 

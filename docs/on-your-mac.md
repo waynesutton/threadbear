@@ -905,3 +905,13 @@ authenticated clients. The desktop app downloads the selected photo from that
 storage URL in the background (up to 10 MB, with a 20-second timeout) and
 keeps its image in memory while Tasks is open. There is no offline edit queue
 or local task database.
+
+Due reminders (API 88): while Tasks is on, the runner reads the task list
+(on a change, or every 10 minutes) and checks once a minute for a task whose
+due time has come (`runner/src/task-reminders.ts`). It claims each one in
+Convex (`tasks:claimReminder`) so only one Mac reminds, then asks the desktop
+app to show a notification. When Notifications' Also send is Email or Slack,
+it queues the reminder in a "Task reminders" thread, whose agent sends it
+through your connectors to the address or channel you typed; that thread's id
+is kept in `task-reminders.json` in the runner's data folder. Nothing is
+sent anywhere else, and with Also send off, no agent runs.
