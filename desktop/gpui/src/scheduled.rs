@@ -21,7 +21,7 @@ use crate::{call, icons, now_ms, style};
 use gpui_kit::base::TestSupportExt as _;
 use gpui_kit::component::dialog::DialogButtonProps;
 use crate::spinner::Spinner;
-use gpui_kit::component::{h_flex, v_flex, Sizable as _, WindowExt as _};
+use gpui_kit::component::{h_flex, v_flex, Sizable as _, StyledExt as _, WindowExt as _};
 use gpui_kit::prelude::*;
 use gpui_kit::*;
 // The zoom-aware px (style.rs), in place of GPUI's.
@@ -503,23 +503,7 @@ impl Threadbear {
             _ => format!("Due {}", task_dates::long_label(task.due)),
         };
         let title = if task.title.trim().is_empty() { "Untitled".to_owned() } else { task.title.clone() };
-        let project = task.project_id.as_deref().and_then(|id| self.all_projects.iter().find(|(pid, _, _)| pid == id)).map(|(_, t, _)| t.clone());
-        let status = match task.status.as_str() {
-            "backlog" => "Backlog",
-            "doing" => "Doing",
-            _ => "Todo",
-        };
-        let mut place: Vec<String> = Vec::new();
-        if let Some(parent) = &task.parent_title {
-            place.push(format!("Part of {parent}"));
-        }
-        if let Some(project) = project {
-            place.push(project);
-        }
-        place.push(status.to_owned());
-        if let Some(priority) = task.priority.as_deref().filter(|p| matches!(*p, "urgent" | "high")) {
-            place.push(task_dates::priority_name(Some(priority)).to_owned());
-        }
+        let place = self.due_task_meta(task);
         let (hover_key, id) = (key.clone(), task.id.clone());
         let (hover_bg, selected_bg) = (p.hover, p.selected);
         let aria = format!("{title}, due {label}");
@@ -563,7 +547,7 @@ impl Threadbear {
                             .child(label),
                     ),
             )
-            .child(div().min_w_0().truncate().text_size(px(style::size::SIDEBAR_PREVIEW)).line_height(px(16.)).text_color(secondary).child(place.join(" \u{00B7} ")))
+            .child(div().min_w_0().truncate().text_size(px(style::size::SIDEBAR_PREVIEW)).line_height(px(16.)).text_color(secondary).child(place))
             .into_any_element()
     }
 
@@ -768,11 +752,110 @@ impl Threadbear {
             .gap(px(12.))
             .child(home_title("Scheduled", "Messages that send themselves later, once or on repeat.", SCHEDULED_MORE, cx))
             .child(home_status_line(&status, next.is_some() || !self.shown_due_tasks().is_empty(), cx));
+        let customized = self.customizable(crate::looks::Page::Scheduled);
+        // Frosted like the tiles when a customized page has a photo behind it.
+        let on_picture = customized && { use threadbear_core::looks::PictureLook as _; self.look::<threadbear_core::looks::ScheduledLook>().pic().background.is_some() };
+        let about = about.children(self.render_upcoming_tasks(on_picture, cx));
         // Settings > General > Look, as the Librarian page.
-        if self.customizable(crate::looks::Page::Scheduled) {
+        if customized {
             return self.render_customized_scheduled(about.into_any_element(), &stats, cx);
         }
         self.render_home_page(Art::Scheduled, about.into_any_element(), &stats, None, cx)
+    }
+
+    /// The page's Upcoming tasks: the soonest due tasks in a card, as the
+    /// sidebar's Tasks due lists them, each opening its task. Past
+    /// UPCOMING_ROWS, a last row opens Tasks for the rest.
+    fn render_upcoming_tasks(&mut self, on_picture: bool, cx: &mut Context<Self>) -> Option<AnyElement> {
+        let due = self.shown_due_tasks().to_vec();
+        if due.is_empty() {
+            return None;
+        }
+        let today = Local::now().date_naive();
+        let p = palette(cx);
+        let (fg, secondary, faint, hover, hairline) = (p.fg, p.secondary, p.faint, style::hover_fill(cx), p.hairline);
+        let fill = crate::looks::tile_fill(on_picture, cx);
+        let mut card = v_flex().rounded(px(10.)).bg(fill).py(px(4.));
+        for (i, task) in due.iter().take(UPCOMING_ROWS).enumerate() {
+            let state = task_dates::due_state(task.due, today);
+            let when_color = match state {
+                Due::Overdue => p.failed,
+                Due::Today => Hsla::from(rgb(0xd9870b)),
+                Due::Later => secondary,
+            };
+            let label = task_dates::chip_label(task.due, today);
+            let title = if task.title.trim().is_empty() { "Untitled".to_owned() } else { task.title.clone() };
+            let meta = self.due_task_meta(task);
+            let id = task.id.clone();
+            card = card.when(i > 0, |c| c.child(div().mx(px(14.)).h(px(1.)).bg(hairline))).child(
+                h_flex()
+                    .id(ElementId::Name(format!("upcoming-task-{}", task.id).into()))
+                    .test_support()
+                    .role(Role::ListItem)
+                    .aria_label(format!("{title}, due {label}"))
+                    .tip("Open the task")
+                    .gap(px(10.))
+                    .px(px(14.))
+                    .py(px(9.))
+                    .mx(px(4.))
+                    .rounded(px(7.))
+                    .cursor_pointer()
+                    .hover(move |s| s.bg(hover))
+                    .on_click(cx.listener(move |this, _: &ClickEvent, window, cx| this.open_task(id.clone(), window, cx)))
+                    .child(icon("calendar", 13., when_color).flex_none())
+                    .child(
+                        v_flex()
+                            .flex_1()
+                            .min_w_0()
+                            .gap(px(2.))
+                            .child(div().truncate().text_size(px(style::size::LABEL + 1.)).line_height(px(18.)).text_color(fg).child(title))
+                            .child(div().truncate().text_size(px(style::size::LABEL - 1.)).line_height(px(15.)).text_color(secondary).child(meta)),
+                    )
+                    .child(div().flex_none().text_size(px(style::size::LABEL)).text_color(when_color).child(label)),
+            );
+        }
+        if due.len() > UPCOMING_ROWS {
+            let more = due.len() - UPCOMING_ROWS;
+            card = card.child(div().mx(px(14.)).h(px(1.)).bg(hairline)).child(
+                tipped!(h_flex().px(px(14.)).py(px(9.)).mx(px(4.)).rounded(px(7.)).gap(px(6.)).cursor_pointer().hover(move |s| s.bg(hover)), "upcoming-tasks-more", "Open Tasks")
+                    .on_click(cx.listener(|this, _: &ClickEvent, window, cx| {
+                        if this.tasks_page.is_none() {
+                            this.toggle_tasks(window, cx);
+                        }
+                    }))
+                    .child(div().text_size(px(style::size::LABEL)).text_color(secondary).child(format!("{more} more in Tasks")))
+                    .child(icon("chevron.right", 9., faint)),
+            );
+        }
+        Some(
+            v_flex()
+                .pt(px(12.))
+                .gap(px(8.))
+                .child(div().text_size(px(style::size::LABEL)).font_semibold().text_color(secondary).child("Upcoming tasks"))
+                .child(card)
+                .into_any_element(),
+        )
+    }
+
+    /// What a due task's second line says: what it's part of, its project,
+    /// its status and a pressing priority. The sidebar's row and the page's.
+    fn due_task_meta(&self, task: &DueTask) -> String {
+        let project = task.project_id.as_deref().and_then(|id| self.all_projects.iter().find(|(pid, _, _)| pid == id)).map(|(_, t, _)| t.clone());
+        let status = match task.status.as_str() {
+            "backlog" => "Backlog",
+            "doing" => "Doing",
+            _ => "Todo",
+        };
+        let mut place: Vec<String> = Vec::new();
+        if let Some(parent) = &task.parent_title {
+            place.push(format!("Part of {parent}"));
+        }
+        place.extend(project);
+        place.push(status.to_owned());
+        if let Some(priority) = task.priority.as_deref().filter(|p| matches!(*p, "urgent" | "high")) {
+            place.push(task_dates::priority_name(Some(priority)).to_owned());
+        }
+        place.join(" \u{00B7} ")
     }
 
     /// The page's numbers: the schedules', then with Tasks on, how many tasks
@@ -857,6 +940,9 @@ impl Threadbear {
         })
     }
 }
+
+/// How many due tasks the page's Upcoming tasks lists before "N more in Tasks".
+const UPCOMING_ROWS: usize = 5;
 
 /// What the ⓘ beside the page's title says.
 const SCHEDULED_MORE: &str = "Once at a set time, or over and over, like every weekday at 9. Each goes to a thread, or starts a new thread each time. Agents book them too, to check back on something. Make one with New schedule in the list, from Schedule\u{2026} in a composer, or by asking an agent. A schedule that sends to a thread puts it under Waiting until then. A schedule that starts a new thread can run on another of your Macs (Runs on). Schedules live in your Convex backend, so with no internet they wait.";
