@@ -361,7 +361,7 @@ impl TasksPage {
         let column_input = cx.new(|cx| TextareaState::new(window, cx).placeholder("Task title, then Return").auto_grow(2, 6).submit_on_enter(true));
         let fade_slider = cx.new(|_| SliderState::new().min(0.).max(0.95).step(0.01).default_value(0.85_f32));
         let title = cx.new(|cx| InputState::new(window, cx).placeholder("Task title"));
-        let notes = cx.new(|cx| TextareaState::new(window, cx).placeholder("Add a description…").auto_grow(3, 20));
+        let notes = cx.new(|cx| TextareaState::new(window, cx).placeholder("Add a description. Paste or drop pictures here too.").auto_grow(3, 20));
         let comment_input = cx.new(|cx| TextareaState::new(window, cx).placeholder("Leave a comment. Return to send, Shift-Return for a new line").auto_grow(1, 8).submit_on_enter(true));
         let sub_input = cx.new(|cx| InputState::new(window, cx).placeholder("Sub-task title, then Return"));
         let link_url = cx.new(|cx| InputState::new(window, cx).placeholder("https://"));

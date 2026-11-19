@@ -3280,6 +3280,11 @@ starts a new line. The title and description save when you leave them. Back or
 Escape goes back to the list or board, and J and K (or Down and Up) step to the
 next and previous task.
 
+Paste a picture into the description (a screenshot, or pictures copied in
+Finder) or drop one on it, and it attaches to the task like Attach image does.
+The task's pictures show as previews under the description: click one to open
+it, or hover and press the x to remove it.
+
 Attach Print opens a search field: type part of a title, then click a result
 or press Return for the first match. Escape closes the search.
 

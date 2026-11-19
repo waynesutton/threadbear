@@ -1855,7 +1855,7 @@ pub(crate) fn is_markdown(path: &Path) -> bool {
 /// saved to a file the runner can import, as ComposerTextView.takeImages does.
 /// PNG and JPEG go as they are; the runner turns TIFF and BMP into PNG
 /// (`media.import`). An SVG stays out: the runner doesn't take them.
-fn save_pasted_image(image: &gpui_kit::Image) -> Option<PathBuf> {
+pub(crate) fn save_pasted_image(image: &gpui_kit::Image) -> Option<PathBuf> {
     let ext = match image.format {
         ImageFormat::Png => "png",
         ImageFormat::Jpeg => "jpeg",

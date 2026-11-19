@@ -361,35 +361,74 @@ impl TasksPage {
     /// A picture onto the open task: read here, where the picker granted it,
     /// and sent as bytes, as the Tasks photo is.
     pub(super) fn attach_image(&mut self, path: std::path::PathBuf, cx: &mut Context<Self>) {
+        self.attach_images(vec![path], cx);
+    }
+    /// Several pictures go up one after another in one task, so a drop or
+    /// paste of three attaches all three rather than only the first.
+    pub(super) fn attach_images(&mut self, paths: Vec<std::path::PathBuf>, cx: &mut Context<Self>) {
         let Some(id) = self.editing.clone() else { return };
-        if self.detail.attaching { return; }
+        if self.detail.attaching || paths.is_empty() { return; }
         self.detail.attaching = true;
         self.detail.error = None;
         cx.notify();
         let client = self.client.clone();
-        let name = path.file_name().map(|n| n.to_string_lossy().to_string());
         cx.spawn(async move |this, cx| {
-            let image = cx.background_executor().spawn(async move {
-                let read = threadbear_core::local_files::read(&json!({"path":path,"maxBytes":10*1024*1024})).map_err(|e| format!("Could not read that picture: {e}"))?;
-                if read["truncated"] == true { return Err("Choose a picture under 10 MB.".to_string()); }
-                Ok(read["data"].clone())
-            }).await;
-            let result = match image {
-                Ok(base64) => call(client, "tasks.imageData", json!({"id": id, "base64": base64, "name": name})).await.map_err(|e| e.message),
-                Err(error) => Err(error),
-            };
+            let mut error = None;
+            for path in paths {
+                let name = path.file_name().map(|n| n.to_string_lossy().to_string());
+                let staged = path.clone();
+                let image = cx.background_executor().spawn(async move {
+                    let read = threadbear_core::local_files::read(&json!({"path":path,"maxBytes":10*1024*1024})).map_err(|e| format!("Could not read that picture: {e}"))?;
+                    if read["truncated"] == true { return Err("Choose a picture under 10 MB.".to_string()); }
+                    Ok(read["data"].clone())
+                }).await;
+                // A pasted picture's private copy is only needed until it's read.
+                crate::composer::unstage(&staged);
+                let result = match image {
+                    Ok(base64) => call(client.clone(), "tasks.imageData", json!({"id": id, "base64": base64, "name": name})).await.map_err(|e| e.message),
+                    Err(error) => Err(error),
+                };
+                if let Err(e) = result { error = Some(e); }
+            }
             this.update(cx, |this, cx| {
                 this.detail.attaching = false;
-                match result { Ok(_) => { this.refresh(cx); this.load_activity(cx); }, Err(error) => this.detail.error = Some(error) }
+                this.detail.error = error;
+                this.refresh(cx);
+                this.load_activity(cx);
                 cx.notify();
             }).ok();
         }).detach();
+    }
+    /// Paste into the description: pictures (a screenshot, files copied in
+    /// Finder) attach to the task; words paste as words.
+    fn paste_pictures(&mut self, cx: &mut Context<Self>) -> bool {
+        let mut pictures: Vec<std::path::PathBuf> = crate::composer_media::read(false).unwrap_or_default();
+        if pictures.is_empty() {
+            if let Some(item) = cx.read_from_clipboard() {
+                let (mut images, mut has_text) = (Vec::new(), false);
+                for entry in item.entries() {
+                    match entry {
+                        ClipboardEntry::ExternalPaths(p) => pictures.extend(p.paths().iter().cloned()),
+                        ClipboardEntry::Image(image) => images.push(image.clone()),
+                        ClipboardEntry::String(_) => has_text = true,
+                    }
+                }
+                // Rich text from a browser carries an image flavour too: it stays text.
+                if pictures.is_empty() && !has_text {
+                    pictures = images.iter().filter_map(crate::composer::save_pasted_image).collect();
+                }
+            }
+        }
+        let pictures: Vec<_> = pictures.into_iter().filter(|p| crate::composer::is_picture(p)).collect();
+        if pictures.is_empty() { return false; }
+        self.attach_images(pictures, cx);
+        true
     }
     fn choose_image(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         let paths = cx.prompt_for_paths(PathPromptOptions { files: true, directories: false, multiple: true, prompt: Some("Attach".into()) });
         cx.spawn_in(window, async move |this, cx| {
             match paths.await {
-                Ok(Ok(Some(paths))) => { this.update(cx, |this, cx| for path in paths { this.attach_image(path, cx); }).ok(); }
+                Ok(Ok(Some(paths))) => { this.update(cx, |this, cx| this.attach_images(paths, cx)).ok(); }
                 Ok(Ok(None)) => {}
                 _ => { this.update(cx, |this, cx| { this.detail.error = Some("Could not open the picker. Try again, or drop a picture here.".into()); cx.notify(); }).ok(); }
             }
@@ -688,8 +727,49 @@ impl TasksPage {
         body = body.child(props);
 
         // Description.
+        // Pictures pasted or dropped here attach to the task (as Attach image
+        // does) and show as previews under the words.
+        let accent_soft = style::accent(cx).opacity(0.08);
+        let mut previews = h_flex().id("task-description-images").gap(px(8.)).flex_wrap().mt(px(6.));
+        let mut preview_count = 0;
+        for link in row.links.iter().filter(|l| l["kind"] == "image") {
+            let Some(url) = link["imageUrl"].as_str() else { continue };
+            preview_count += 1;
+            let lid = link["id"].as_str().unwrap_or("").to_string();
+            let title = link["title"].as_str().filter(|t| !t.is_empty()).unwrap_or("Image").to_string();
+            let (open, remove) = (link.clone(), lid.clone());
+            let picture = match self.detail.images.get(url).cloned().flatten() {
+                Some(image) => img(ImageSource::Image(image)).h(px(120.)).max_w(px(220.)).rounded(px(6.)).object_fit(ObjectFit::Cover).into_any_element(),
+                None => div().h(px(120.)).w(px(160.)).rounded(px(6.)).bg(style::card_background(cx)).flex().items_center().justify_center()
+                    .child(icons::symbol("photo").with_size(px(18.)).text_color(tertiary)).into_any_element(),
+            };
+            previews = previews.child(
+                div().id(SharedString::from(format!("desc-image-{lid}"))).group("desc-image").relative().rounded(px(6.)).border_1().border_color(style::card_border(cx)).overflow_hidden().cursor_pointer()
+                    .role(Role::Link).aria_label(SharedString::from(format!("Open {title}"))).tip(format!("Open {title}"))
+                    .on_click(cx.listener(move |this, _, window, cx| this.open_link(&open, window, cx)))
+                    .child(picture)
+                    .child(div().absolute().top(px(4.)).right(px(4.)).invisible().group_hover("desc-image", |s| s.visible())
+                        .child(Button::new(SharedString::from(format!("desc-image-remove-{lid}"))).icon(icons::symbol("xmark")).xsmall().tooltip(format!("Remove {title}"))
+                            .on_click(cx.listener(move |this, _, _, cx| { cx.stop_propagation(); this.remove_link(&remove, cx); })))),
+            );
+        }
+        if self.detail.attaching {
+            previews = previews.child(div().h(px(120.)).w(px(160.)).rounded(px(6.)).border_1().border_color(style::card_border(cx)).flex().items_center().justify_center()
+                .child(div().text_size(px(12.)).text_color(tertiary).child("Adding picture…")));
+            preview_count += 1;
+        }
         body = body.child(self.section_head("Description", None, cx))
-            .child(div().id("task-description").px(px(2.)).child(Textarea::new(&self.notes).appearance(false).disabled(self.busy)));
+            .child(div().id("task-description").px(px(2.)).rounded(px(8.))
+                .drag_over::<ExternalPaths>(move |s, _, _, _| s.bg(accent_soft))
+                .on_drop(cx.listener(|this, paths: &ExternalPaths, _, cx| {
+                    let pictures: Vec<_> = paths.paths().iter().filter(|p| crate::composer::is_picture(p)).cloned().collect();
+                    this.attach_images(pictures, cx);
+                }))
+                .capture_action(cx.listener(|this, _: &gpui_kit::base::input::Paste, _, cx| {
+                    if this.paste_pictures(cx) { cx.stop_propagation(); }
+                }))
+                .child(Textarea::new(&self.notes).appearance(false).disabled(self.busy))
+                .when(preview_count > 0, |d| d.child(previews)));
 
         // Sub-tasks (one level: a sub-task has none of its own).
         if row.parent_id.is_none() {
@@ -746,7 +826,7 @@ impl TasksPage {
             .child(Button::new("task-attach-image").label("Attach image").icon(icons::symbol("photo")).small().ghost().loading(self.detail.attaching).disabled(self.detail.attaching).tooltip("Attach a picture. You can drop one here too.").on_click(cx.listener(|this, _, window, cx| this.choose_image(window, cx))));
         let accent_soft = style::accent(cx).opacity(0.08);
         let mut links = v_flex().id("task-links").rounded(px(8.)).drag_over::<ExternalPaths>(move |s, _, _, _| s.bg(accent_soft))
-            .on_drop(cx.listener(|this, paths: &ExternalPaths, _, cx| for path in paths.paths() { this.attach_image(path.clone(), cx); }))
+            .on_drop(cx.listener(|this, paths: &ExternalPaths, _, cx| this.attach_images(paths.paths().to_vec(), cx)))
             .child(actions);
         if self.detail.picker == Some("print") {
             links = links.child(self.print_picker(cx));
