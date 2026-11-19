@@ -225,6 +225,9 @@ pub struct Threadbear {
     /// A `threadbear://` link's thread waiting for the lists it could be in,
     /// and since when (deep_links.rs).
     pub(crate) waiting_link: Option<(String, std::time::Instant)>,
+    /// A thread a click just had the runner start, and when, opened once
+    /// its `thread.updated` lists it (`open_started_thread`).
+    pub(crate) waiting_started: Option<(String, i64)>,
     /// What the Dock badge says now (notify.rs), so it's only set when that changes.
     pub(crate) dock_badge: Option<String>,
     /// The sub-agent whose transcript is in the main panel, by its thread and
@@ -602,6 +605,7 @@ impl Threadbear {
             pending_open: None,
             pending_restore: None,
             waiting_link: None,
+            waiting_started: None,
             dock_badge: None,
             panel_gate: Default::default(),
             browser_handoff_seen: None,
@@ -987,6 +991,7 @@ impl Threadbear {
                             self.remote.recent.note(&t);
                         }
                         let before = self.threads.insert(t.id.clone(), Arc::new(t.clone()));
+                        if self.waiting_started.as_ref().is_some_and(|(id, _)| *id == t.id) { self.try_started_thread(cx); }
                         self.note_failed_account(before.as_deref(), &t);
                         self.thread_changed_outside(before.as_deref(), &t, cx);
                         if t.panel_request.is_some() && self.selected.as_deref() == Some(t.id.as_str()) {
@@ -1207,6 +1212,7 @@ impl Threadbear {
                         this.refresh_dock_badge();
                         this.open_pending(cx);
                         this.try_waiting_link(cx);
+                        this.try_started_thread(cx);
                     }
                     // A load the connection cut off says nothing here: the
                     // connection banner speaks for that (quietly through a
@@ -1335,6 +1341,9 @@ impl Threadbear {
     /// `open`, with the pane of a thread brought back from a panel of its own
     /// (thread_panels.rs), which goes on reading it rather than reading it again.
     pub(crate) fn open_with(&mut self, id: String, moved: Option<Entity<ThreadPane>>, window: &mut Window, cx: &mut Context<Self>) {
+        // Opening anything means a started thread arriving later no longer
+        // takes over the window.
+        self.waiting_started = None;
         self.close_settings(cx);
         self.close_tasks(cx);
         self.close_notes(cx);
@@ -1420,6 +1429,42 @@ impl Threadbear {
         }
         crate::composer_answers::beep();
         self.show_error(threadbear_core::thread_link::unopened_link_message(matches.len()), cx);
+    }
+
+    /// A thread the runner says it just started for a click: opened now if
+    /// it's listed, or once its `thread.updated` comes, as the reply naming
+    /// it can arrive first (Add Linear in the Connectors panel, 19 Nov).
+    pub(crate) fn open_started_thread(&mut self, id: String, window: &mut Window, cx: &mut Context<Self>) {
+        if self.threads.contains_key(&id) {
+            return self.open_thread_link(&id, window, cx);
+        }
+        self.waiting_started = Some((id, crate::now_ms()));
+        cx.spawn(async move |this, cx| {
+            cx.background_executor().timer(std::time::Duration::from_millis(threadbear_core::thread_link::STARTED_WAIT_MS as u64)).await;
+            this.update(cx, |this, cx| this.try_started_thread(cx)).ok();
+        })
+        .detach();
+    }
+
+    pub(crate) fn try_started_thread(&mut self, cx: &mut Context<Self>) {
+        use threadbear_core::thread_link::{started_thread, started_thread_missing_message, StartedThread};
+        let Some((id, since)) = self.waiting_started.clone() else { return };
+        match started_thread(self.threads.contains_key(&id), since, crate::now_ms()) {
+            StartedThread::Wait => {}
+            StartedThread::GiveUp => {
+                self.waiting_started = None;
+                self.show_error(started_thread_missing_message(), cx);
+            }
+            StartedThread::Open => {
+                self.waiting_started = None;
+                let (me, window) = (cx.entity().downgrade(), self.main_window);
+                // Not from inside this update: opening needs the window, and
+                // the window's update comes back to this entity.
+                cx.defer(move |cx| {
+                    window.update(cx, |_, window, cx| { me.update(cx, |this, cx| this.open_thread_link(&id, window, cx)).ok(); }).ok();
+                });
+            }
+        }
     }
 
     /// The pane holding a thread now, if one does: the main panel's, the

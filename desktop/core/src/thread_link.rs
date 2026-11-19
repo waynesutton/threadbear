@@ -67,9 +67,48 @@ pub fn unopened_link_message(matches: usize) -> String {
     }
 }
 
+/// How long a thread a click just had the runner start may take to reach
+/// the sidebar before the app stops waiting for it.
+pub const STARTED_WAIT_MS: i64 = 10_000;
+
+/// What to do with a thread the runner says it just started (Add or Set up
+/// in the Connectors panel). The reply naming it can come before the
+/// `thread.updated` that lists it, and opening it then went nowhere and
+/// said it was deleted (19 Nov, Add Linear).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum StartedThread {
+    Open,
+    Wait,
+    GiveUp,
+}
+
+pub fn started_thread(listed: bool, since_ms: i64, now_ms: i64) -> StartedThread {
+    if listed {
+        StartedThread::Open
+    } else if now_ms - since_ms < STARTED_WAIT_MS {
+        StartedThread::Wait
+    } else {
+        StartedThread::GiveUp
+    }
+}
+
+/// The error bar's words when a started thread never reached the sidebar.
+pub fn started_thread_missing_message() -> String {
+    "The runner started that thread, but it hasn't reached your sidebar yet. It shows there once it does.".to_owned()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_started_thread_opens_once_listed_and_waits_until_then() {
+        assert_eq!(started_thread(true, 0, 0), StartedThread::Open, "listed before the reply came");
+        assert_eq!(started_thread(false, 1_000, 1_050), StartedThread::Wait, "the reply came first");
+        assert_eq!(started_thread(true, 1_000, 1_050), StartedThread::Open, "then its thread.updated");
+        assert_eq!(started_thread(false, 1_000, 1_000 + STARTED_WAIT_MS), StartedThread::GiveUp);
+        assert!(!started_thread_missing_message().contains("deleted"), "it was just made, not deleted");
+    }
 
     #[test]
     fn a_link_that_opens_nothing_says_why() {

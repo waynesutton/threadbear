@@ -108,7 +108,7 @@ impl Threadbear {
                 this.connectors_panel.setup.busy.remove(&key);
                 match result {
                     Ok(v) => match v["threadId"].as_str().filter(|s| !s.is_empty()) {
-                        Some(id) => this.open_thread_link(id, window, cx),
+                        Some(id) => this.open_started_thread(id.to_owned(), window, cx),
                         None => this.show_error("The runner didn't return the setup thread.".into(), cx),
                     },
                     Err(e) => this.show_error(e.message, cx),
