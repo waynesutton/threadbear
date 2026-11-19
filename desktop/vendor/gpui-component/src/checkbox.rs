@@ -6,7 +6,7 @@ use crate::{
 };
 use crate::{StyleSized as _, StyledExt as _, ThemeStyled as _};
 use gpui::{
-    AnyElement, App, ElementId, InteractiveElement, IntoElement, MouseButton, ParentElement,
+    AnyElement, App, BoxShadow, ElementId, Hsla, InteractiveElement, IntoElement, MouseButton, ParentElement,
     RenderOnce, SharedString, StatefulInteractiveElement, StyleRefinement, Styled, Window, div,
     prelude::FluentBuilder as _, px, relative, rems, svg,
 };
@@ -32,6 +32,26 @@ pub struct Checkbox {
     tooltip: ComponentTooltip,
     role: RoleOverride,
     focus_ring_enabled: bool,
+    unchecked_look: Option<UncheckedLook>,
+}
+
+/// How an unchecked box is drawn when the theme's input border is too faint,
+/// as on a list over a wallpaper. Checked and disabled boxes keep the theme's.
+#[derive(Clone)]
+pub struct UncheckedLook {
+    pub border: Hsla,
+    pub background: Hsla,
+    /// Restyles the box while this group (see `group`) is hovered.
+    pub hover: Option<UncheckedHover>,
+}
+
+#[derive(Clone)]
+pub struct UncheckedHover {
+    pub group: SharedString,
+    pub border: Hsla,
+    pub background: Hsla,
+    /// A soft ring drawn outside the box.
+    pub ring: Hsla,
 }
 
 impl Checkbox {
@@ -54,7 +74,14 @@ impl Checkbox {
             tooltip: ComponentTooltip::default(),
             role: RoleOverride::default(),
             focus_ring_enabled: true,
+            unchecked_look: None,
         }
+    }
+
+    /// Draw the unchecked box with these colours instead of the theme's.
+    pub fn unchecked_look(mut self, look: UncheckedLook) -> Self {
+        self.unchecked_look = Some(look);
+        self
     }
 
     pub fn role(mut self, role: impl Into<RoleOverride>) -> Self {
@@ -256,6 +283,7 @@ impl RenderOnce for Checkbox {
         let radius = cx.theme().radius.min(px(4.));
         let disabled_text_color = cx.theme().muted_foreground;
         let instance_style = self.style.clone();
+        let look = self.unchecked_look.filter(|_| !checked && !self.disabled);
         base.role(self.role)
             .checked(checked)
             .disabled(self.disabled)
@@ -306,6 +334,19 @@ impl RenderOnce for Checkbox {
                     .when(!checked, |this| {
                         this.bg(cx.theme().input_background())
                             .when(!self.disabled, |this| this.border_color(unchecked_border))
+                    })
+                    .when_some(look, |this, look| {
+                        this.border_color(look.border).bg(look.background).when_some(
+                            look.hover,
+                            |this, hover| {
+                                this.group_hover(hover.group, move |s| {
+                                    s.border_color(hover.border).bg(hover.background).shadow(
+                                        vec![BoxShadow::new(px(0.), px(0.), hover.ring)
+                                            .spread_radius(px(3.))],
+                                    )
+                                })
+                            },
+                        )
                     })
                     .styles(|styles| {
                         styles

@@ -462,6 +462,24 @@ pub fn hover_fill(cx: &App) -> Hsla {
     pick(cx, white(0.05), black(0.04))
 }
 
+/// The task list's unchecked box. The theme's input border is near invisible
+/// over a wallpaper, so the box gets a stronger edge and a backing of its own,
+/// and lights up while its row (the `group`) is hovered. Neutral, so the
+/// accent still only means done.
+pub fn list_checkbox(cx: &App, group: &'static str) -> gpui_kit::component::checkbox::UncheckedLook {
+    use gpui_kit::component::checkbox::{UncheckedHover, UncheckedLook};
+    UncheckedLook {
+        border: contrast_colour(cx, 2, pick(cx, white(0.34), black(0.3))),
+        background: pick(cx, black(0.35), white(0.9)),
+        hover: Some(UncheckedHover {
+            group: group.into(),
+            border: pick(cx, white(0.75), black(0.55)),
+            background: pick(cx, white(0.08), white(1.)),
+            ring: pick(cx, white(0.1), black(0.07)),
+        }),
+    }
+}
+
 pub fn hairline(cx: &App) -> Hsla {
     contrast_colour(cx, 3, pick(cx, white(0.1), black(0.1)))
 }

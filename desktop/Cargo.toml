@@ -23,7 +23,10 @@ exclude = ["vendor"]
 # "can't select all the way to the start of the line"). And a test
 # snapshot's `visible_bounds`, what's drawn of an element inside its clips,
 # so scripted clicks land on it rather than its whole middle, which for one
-# scrolled half out of a pane is over its neighbour (13 Nov).
+# scrolled half out of a pane is over its neighbour (13 Nov). And
+# Checkbox::unchecked_look, with the indicator taking group_hover, so the
+# task list's boxes show over a wallpaper and light up on row hover (Wayne,
+# 19 Nov: "give the check boxes a border color so they are easy to see").
 [patch.crates-io]
 gpui-component = { path = "vendor/gpui-component" }
 gpui-base = { path = "vendor/gpui-base" }

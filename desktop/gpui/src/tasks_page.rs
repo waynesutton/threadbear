@@ -1386,6 +1386,7 @@ impl TasksPage {
                 div().pt(px(2.)).mr(px(10.)).flex_none().child(
                     Checkbox::new(SharedString::from(format!("check-{id}")))
                         .checked(done)
+                        .unchecked_look(style::list_checkbox(cx, "task-row"))
                         .accessibility_label(format!("Mark {} {}", task.title, next))
                         .tooltip(if done { "Mark not done" } else { "Mark done" })
                         .on_click(cx.listener(move |this, _: &bool, _, cx| this.complete(&check_task, cx))),

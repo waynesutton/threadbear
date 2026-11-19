@@ -334,6 +334,13 @@ impl Styled for CheckboxIndicator {
     }
 }
 
+// Lets an app restyle the box when a group (a list row, say) is hovered.
+impl InteractiveElement for CheckboxIndicator {
+    fn interactivity(&mut self) -> &mut Interactivity {
+        self.base.interactivity()
+    }
+}
+
 impl ParentElement for CheckboxIndicator {
     fn extend(&mut self, elements: impl IntoIterator<Item = AnyElement>) {
         self.children.extend(elements);
