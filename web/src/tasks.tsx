@@ -8,7 +8,7 @@ import { columnDefinitions, orderedColumns, taskColumn } from './tasks-columns';
 import { go } from './route';
 import { applyTheme, readTheme } from './theme';
 import { taskDraftChanges } from './tasks-draft';
-import { LIST_STATUSES, fullOrder, groupOrder, moveTo, positionAt, splitDraft } from './tasks-order';
+import { LIST_STATUSES, fullOrder, groupOrder, moveTo, positionAt, splitDraft, splitList } from './tasks-order';
 import { DueChip, DuePicker, IssueSections, PriorityIcon, PriorityPicker, SubTaskChip } from './tasks-issue';
 
 type Task = FunctionReturnType<typeof api.tasks.list>['items'][number];
@@ -244,6 +244,8 @@ function TasksContent({ token, projectFilter = '', issues = false }: { token: st
   const inGroup = (t: Task, group: string) => group === 'all' || projectKey(t.project) === group;
 
   function addTask(text: string, columnId = 'todo', group = 'all') {
+    const list = splitList(text);
+    if (list) return addList(list, columnId, group);
     const status = canonical(columnId);
     const { title, notes } = splitDraft(text);
     if (!title) return Promise.resolve(false);
@@ -259,6 +261,41 @@ function TasksContent({ token, projectFilter = '', issues = false }: { token: st
       () => create({ auth, id, title, notes, status, columnId, project, position }),
       (rows) => [...rows, row],
     );
+  }
+  /** A pasted Markdown list: one task per item in order on top, indented ones as sub-tasks, ticked ones in Done. */
+  function addList(items: NonNullable<ReturnType<typeof splitList>>, columnId: string, group: string) {
+    const key = group !== 'all' ? group : filter;
+    const project = key ? projectRef(key) : null;
+    const status = canonical(columnId);
+    const peers = visible.filter((t) => t.status === status);
+    const top = peers.length ? Math.min(...peers.map((t) => t.position)) : Date.now();
+    const now = Date.now();
+    const rows: Task[] = items.map((item, i) => ({
+      id: crypto.randomUUID(),
+      title: item.title,
+      notes: item.notes,
+      status: item.done ? 'done' : status,
+      columnId: item.done ? 'done' : columnId,
+      project,
+      position: top - (items.length - i) * 1000,
+      createdAt: now,
+      updatedAt: now,
+      deleted: false,
+    }));
+    items.forEach((item, i) => { if (item.parent !== null) rows[i].parentId = rows[item.parent].id; });
+    return write(
+      // One at a time, so a sub-task's parent exists first. create is idempotent by id, so a retry is safe.
+      async () => {
+        for (const r of rows) await create({ auth, id: r.id, title: r.title, notes: r.notes, status: r.status, columnId: r.columnId, project, position: r.position, parentId: r.parentId ?? null });
+      },
+      (before) => [...before, ...rows],
+    );
+  }
+  function listHint(text: string) {
+    const items = splitList(text);
+    if (!items) return null;
+    const subs = items.filter((i) => i.parent !== null).length;
+    return <div className="tasks-list-hint">Enter adds {items.length} tasks{subs ? ` (${subs} as sub-tasks)` : ''}</div>;
   }
   async function submitComposer(e?: FormEvent) {
     e?.preventDefault();
@@ -843,6 +880,7 @@ function TasksContent({ token, projectFilter = '', issues = false }: { token: st
             </button>
           </form>
         )}
+        {view === 'list' && listHint(draft)}
 
         {!online && <p className="tasks-note" role="status">Offline. You're seeing your last loaded tasks. Reconnect to edit.</p>}
         {error && (

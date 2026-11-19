@@ -3163,6 +3163,11 @@ Experiments, then use Tasks below Notes or Command-7.
 
 It opens on the list. Type a task in the box at the top and press Return; Shift-Return
 starts a new line, and anything after the first line becomes the task's note.
+Paste a Markdown list (`-`, `*`, `1.` or `- [ ]` items) and Return adds one task
+per item, in order, at the top; the box says how many first. Indented items become
+sub-tasks of the item above, ticked `- [x]` items go straight to Done, and
+headings are skipped. Text that starts with a plain line stays one task with the
+list as its note. On the Mac, a board column's add box takes a list too.
 Tick a task's box to mark it done: it leaves the list, and Undo brings it back.
 Show Done Tasks in Display (or the "done" link at the bottom) shows them again.
 The list runs Doing, Todo, Backlog, each a section you can fold.

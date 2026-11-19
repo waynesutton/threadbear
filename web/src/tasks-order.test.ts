@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { LIST_STATUSES, fullOrder, moveTo, groupOrder, positionAt, splitDraft } from './tasks-order.ts';
+import { LIST_STATUSES, fullOrder, moveTo, groupOrder, positionAt, splitDraft, splitList } from './tasks-order.ts';
 
 test('a column order saved before Doing gets Doing back after Todo', () => {
   assert.deepEqual(fullOrder(['done', 'todo', 'backlog']), ['done', 'todo', 'doing', 'backlog']);
@@ -31,4 +31,20 @@ test('a dragged column lands where it was dropped, whichever way it went', () =>
   assert.deepEqual(moveTo(cols, 'backlog', 'doing'), ['todo', 'doing', 'backlog', 'done']);
   assert.deepEqual(moveTo(cols, 'done', 'todo'), ['backlog', 'done', 'todo', 'doing']);
   assert.deepEqual(moveTo(cols, 'todo', 'todo'), cols);
+});
+test('a pasted list is one task per item, indented ones as sub-tasks', () => {
+  const items = splitList('## Launch\n- [ ] Write the post\n  - [x] Pick a title\n    - Draft the hook\n  with a picture\n* Ship it\n\n1. Tell Sam');
+  assert.deepEqual(items, [
+    { title: 'Write the post', notes: '', done: false, parent: null },
+    { title: 'Pick a title', notes: '', done: true, parent: 0 },
+    { title: 'Draft the hook', notes: 'with a picture', done: false, parent: 0 },
+    { title: 'Ship it', notes: '', done: false, parent: null },
+    { title: 'Tell Sam', notes: '', done: false, parent: null },
+  ]);
+});
+test('text that is not a list stays one task', () => {
+  assert.equal(splitList('Plan the launch\n- post\n- tweet'), null);
+  assert.equal(splitList('- just one'), null);
+  assert.equal(splitList('**bold**\n---'), null);
+  assert.equal(splitList('Call Sam'), null);
 });

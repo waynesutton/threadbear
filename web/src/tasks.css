@@ -292,6 +292,12 @@
   border-color: var(--line-strong);
   box-shadow: 0 0 0 3px var(--accent-soft);
 }
+/* Sits under the composer, inside its bottom margin, while it holds a pasted list. */
+.tasks-list-hint {
+  margin: -13px 0 14px 12px;
+  font-size: 12px;
+  color: var(--faint);
+}
 .tasks-composer-box {
   flex: none;
   width: 15px;

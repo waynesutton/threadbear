@@ -71,6 +71,72 @@ pub fn split_draft(text: &str) -> (String, String) {
     (title, lines[first + 1..].join("\n").trim().to_string())
 }
 
+/// One line of a pasted Markdown list, as a task to make.
+#[derive(Debug, Clone, PartialEq)]
+pub struct ListItem {
+    pub title: String,
+    pub notes: String,
+    /// Ticked (`- [x]`), so it goes straight to Done.
+    pub done: bool,
+    /// The index of the item it's indented under: tasks have one level of sub-tasks,
+    /// so anything deeper hangs off its top-level item too.
+    pub parent: Option<usize>,
+}
+
+/// A pasted Markdown list (`-`, `*`, `+`, `1.`, `1)`, with or without `[ ]`) as one task per
+/// item, or None when the text isn't a list of two or more, so it stays one task with a note.
+/// Headings are skipped and indented plain lines join the note of the item above them.
+pub fn split_list(text: &str) -> Option<Vec<ListItem>> {
+    let text = text.replace("\r\n", "\n").replace('\t', "    ");
+    let mut items: Vec<ListItem> = Vec::new();
+    let mut top: Option<(usize, usize)> = None;
+    for line in text.split('\n') {
+        let body = line.trim_start();
+        if body.trim().is_empty() || body.starts_with('#') {
+            continue;
+        }
+        let indent = line.len() - body.len();
+        let Some(rest) = list_marker(body) else {
+            let last = items.last_mut().filter(|_| indent > 0)?;
+            if !last.notes.is_empty() {
+                last.notes.push('\n');
+            }
+            last.notes.push_str(body.trim_end());
+            continue;
+        };
+        let (done, rest) = match rest.get(..3).map(|b| b.to_ascii_lowercase()) {
+            Some(b) if (b == "[ ]" || b == "[x]") && rest[3..].chars().next().is_none_or(char::is_whitespace) => (b == "[x]", &rest[3..]),
+            _ => (false, rest),
+        };
+        let title: String = rest.trim().chars().take(500).collect();
+        if title.is_empty() {
+            continue;
+        }
+        let parent = match top {
+            Some((at, top_indent)) if indent > top_indent => Some(at),
+            _ => {
+                top = Some((items.len(), indent));
+                None
+            }
+        };
+        items.push(ListItem { title, notes: String::new(), done, parent });
+    }
+    (items.len() >= 2).then_some(items)
+}
+
+/// What follows a list marker and its space, or None for a line that isn't a list item.
+fn list_marker(line: &str) -> Option<&str> {
+    let digits = line.bytes().take_while(u8::is_ascii_digit).count();
+    let after = if digits > 0 && digits <= 9 && matches!(line.as_bytes().get(digits), Some(b'.' | b')')) {
+        &line[digits + 1..]
+    } else if matches!(line.as_bytes().first(), Some(b'-' | b'*' | b'+')) {
+        &line[1..]
+    } else {
+        return None;
+    };
+    if after.is_empty() { Some(after) } else { after.strip_prefix(' ') }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -110,5 +176,25 @@ mod tests {
     fn the_first_typed_line_is_the_title() {
         assert_eq!(split_draft("Call Sam\nabout the beta\n"), ("Call Sam".into(), "about the beta".into()));
         assert_eq!(split_draft("  \n "), (String::new(), String::new()));
+    }
+    #[test]
+    fn a_pasted_list_is_one_task_per_item() {
+        let items = split_list("## Launch\n- [ ] Write the post\n  - [x] Pick a title\n    - Draft the hook\n  with a picture\n* Ship it\n\n1. Tell Sam").unwrap();
+        let got: Vec<(&str, &str, bool, Option<usize>)> = items.iter().map(|i| (i.title.as_str(), i.notes.as_str(), i.done, i.parent)).collect();
+        assert_eq!(got, vec![
+            ("Write the post", "", false, None),
+            ("Pick a title", "", true, Some(0)),
+            ("Draft the hook", "with a picture", false, Some(0)),
+            ("Ship it", "", false, None),
+            ("Tell Sam", "", false, None),
+        ]);
+    }
+
+    #[test]
+    fn text_that_isnt_a_list_stays_one_task() {
+        assert_eq!(split_list("Plan the launch\n- post\n- tweet"), None);
+        assert_eq!(split_list("- just one"), None);
+        assert_eq!(split_list("**bold**\n---"), None);
+        assert_eq!(split_list("Call Sam"), None);
     }
 }

@@ -800,6 +800,9 @@ impl TasksPage {
         self.projects.iter().find(|p| format!("{}/{}", p["runnerId"].as_str().unwrap_or(""), p["id"].as_str().unwrap_or("")) == group).map(|p| json!({"runnerId":p["runnerId"],"id":p["id"]})).unwrap_or(Value::Null)
     }
     fn add_task(&mut self, text: &str, status: &str, group: &str, column: bool, window: &mut Window, cx: &mut Context<Self>) {
+        if let Some(items) = task_order::split_list(text) {
+            return self.add_list(items, status, group, column, window, cx);
+        }
         let (title, notes) = task_order::split_draft(text);
         if title.is_empty() || self.busy {
             return;
@@ -835,6 +838,69 @@ impl TasksPage {
                 cx.notify();
             }).ok();
         }).detach();
+    }
+    /// A pasted Markdown list: one task per item, in the list's order, on top of the column,
+    /// indented items as sub-tasks and ticked ones in Done.
+    fn add_list(&mut self, items: Vec<task_order::ListItem>, status: &str, group: &str, column: bool, window: &mut Window, cx: &mut Context<Self>) {
+        if self.busy {
+            return;
+        }
+        let project = if group != "all" { self.group_project(group) } else if self.filter.is_object() { self.filter.clone() } else { Value::Null };
+        let top = self.rows.iter().filter(|r| column_id(r) == status).map(|r| r.position).min_by(f64::total_cmp).unwrap_or(crate::now_ms() as f64);
+        let ids: Vec<String> = items.iter().map(|_| threadbear_core::notes::new_id()).collect();
+        let count = items.len() as f64;
+        let mut calls = Vec::new();
+        for (i, item) in items.iter().enumerate() {
+            let (base, col) = if item.done { ("done".to_string(), "done".to_string()) } else { (self.canonical(status), status.to_string()) };
+            let position = top - (count - i as f64) * 1000.;
+            let parent = item.parent.map(|p| ids[p].clone());
+            self.rows.push(TaskRow { id: ids[i].clone(), title: item.title.clone(), notes: item.notes.clone(), status: base.clone(), column_id: Some(col.clone()), thread: None, thread_command_id: None, thread_error: None, project: (!project.is_null()).then(|| project.clone()), position, created_at: crate::now_ms() as f64, priority: None, due_date: None, parent_id: parent.clone(), links: vec![], comment_count: None, created_by: None });
+            calls.push(json!({"id": ids[i], "title": item.title, "notes": item.notes, "status": base, "columnId": col, "project": project, "position": position, "parentId": parent}));
+        }
+        self.busy = true;
+        self.error = None;
+        cx.notify();
+        let client = self.client.clone();
+        // One at a time, so a sub-task's parent exists before it does.
+        cx.spawn_in(window, async move |this, cx| {
+            let mut failed = None;
+            let mut made = 0;
+            for args in calls {
+                match call(client.clone(), "tasks.create", args).await {
+                    Ok(_) => made += 1,
+                    Err(e) => {
+                        failed = Some(e.message);
+                        break;
+                    }
+                }
+            }
+            this.update_in(cx, |this, window, cx| {
+                this.busy = false;
+                match failed {
+                    None => {
+                        let input = if column { &this.column_input } else { &this.composer };
+                        input.update(cx, |c, cx| c.set_value("", window, cx));
+                    }
+                    Some(e) => {
+                        let unmade: HashSet<&String> = ids[made..].iter().collect();
+                        this.rows.retain(|r| !unmade.contains(&r.id));
+                        this.error = Some(if made == 0 { e } else { format!("Added {made} of {} tasks. {e}", ids.len()) });
+                    }
+                }
+                this.refresh(cx);
+                cx.notify();
+            }).ok();
+        }).detach();
+    }
+    /// "Return adds 5 tasks" under a box holding a pasted list, so the split isn't a surprise.
+    fn list_hint(&self, input: &Entity<TextareaState>, cx: &App) -> Option<AnyElement> {
+        let items = task_order::split_list(input.read(cx).value().as_ref())?;
+        let subs = items.iter().filter(|i| i.parent.is_some()).count();
+        let text = match subs {
+            0 => format!("Return adds {} tasks", items.len()),
+            n => format!("Return adds {} tasks ({n} as sub-tasks)", items.len()),
+        };
+        Some(div().text_xs().text_color(style::tertiary_label(cx)).child(text).into_any_element())
     }
     fn submit_composer(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         let text = self.composer.read(cx).value().to_string();
@@ -1419,7 +1485,7 @@ impl TasksPage {
                 .border_1()
                 .border_color(style::card_border(cx))
                 .bg(style::card_background(cx))
-                .child(div().flex_1().child(Textarea::new(&self.composer).appearance(false).disabled(self.busy)))
+                .child(v_flex().flex_1().gap(px(4.)).child(Textarea::new(&self.composer).appearance(false).disabled(self.busy)).children(self.list_hint(&self.composer, cx)))
                 .child(Button::new("tasks-add").icon(icons::symbol("arrow.up")).small().primary().loading(self.busy).disabled(self.busy).tooltip("Add task (Return)").on_click(cx.listener(|this, _, window, cx| this.submit_composer(window, cx)))),
         );
         if rows.is_empty() && !self.loading {
@@ -1526,7 +1592,8 @@ impl TasksPage {
                 .when(!wrap, |d| d.max_h(px((self.viewport_height - 210.).max(140.))).overflow_y_scroll().track_scroll(&self.pane_scroll(&column_key)));
             if adding {
                 cards = cards.child(div().mb(px(6.)).px(px(10.)).py(px(8.)).min_h(px(64.)).rounded(px(8.)).border_1().border_color(style::accent(cx)).bg(cx.theme().background).text_size(px(14.))
-                    .child(Textarea::new(&self.column_input).appearance(false).disabled(self.busy)));
+                    .child(Textarea::new(&self.column_input).appearance(false).disabled(self.busy))
+                    .children(self.list_hint(&self.column_input, cx)));
             }
             for task in &items {
                 cards = cards.child(self.card(task, group, cx));

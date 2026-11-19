@@ -37,6 +37,40 @@ export function splitDraft(text: string): { title: string; notes: string } {
   return { title: lines[first].trim().slice(0, 500), notes: lines.slice(first + 1).join('\n').trim() };
 }
 
+/** One item of a pasted Markdown list. `parent` is the index it's indented under (one level deep). */
+export type ListItem = { title: string; notes: string; done: boolean; parent: number | null };
+
+/**
+ * A pasted Markdown list as one task per item, or null when it isn't a list of two or more.
+ * Same rules as split_list in desktop/core/src/task_order.rs.
+ */
+export function splitList(text: string): ListItem[] | null {
+  const items: ListItem[] = [];
+  let top: { at: number; indent: number } | null = null;
+  for (const line of text.replace(/\r\n/g, '\n').replace(/\t/g, '    ').split('\n')) {
+    const body = line.trimStart();
+    if (!body.trim() || body.startsWith('#')) continue;
+    const indent = line.length - body.length;
+    const m = /^(?:[-*+]|\d{1,9}[.)])(?: (.*))?$/.exec(body);
+    if (!m) {
+      const last = items[items.length - 1];
+      if (!last || indent === 0) return null;
+      last.notes += (last.notes ? '\n' : '') + body.trimEnd();
+      continue;
+    }
+    let rest = m[1] ?? '';
+    const box = /^\[( |x|X)\](?=\s|$)/.exec(rest);
+    if (box) rest = rest.slice(3);
+    const title = [...rest.trim()].slice(0, 500).join('');
+    if (!title) continue;
+    let parent: number | null = null;
+    if (top && indent > top.indent) parent = top.at;
+    else top = { at: items.length, indent };
+    items.push({ title, notes: '', done: box?.[1].toLowerCase() === 'x', parent });
+  }
+  return items.length >= 2 ? items : null;
+}
+
 /** Moves `item` to where `target` is: dragged right or down, it lands after it; left or up, before. */
 export function moveTo<T>(list: readonly T[], item: T, target: T): T[] {
   const from = list.indexOf(item);
