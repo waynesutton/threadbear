@@ -1205,6 +1205,8 @@ pub(crate) struct PaneRow {
     pub drag: Option<String>,
     /// Picked (the Bears & Tables panel's ⌘-click): this fill behind it.
     pub picked: Option<Hsla>,
+    /// A picture drawn where the icon goes (a bear's or table's photo).
+    pub picture: Option<std::path::PathBuf>,
 }
 
 impl PaneRow {
@@ -1228,7 +1230,13 @@ impl PaneRow {
             on_menu: None,
             drag: None,
             picked: None,
+            picture: None,
         }
+    }
+
+    pub(crate) fn picture(mut self, path: Option<std::path::PathBuf>) -> Self {
+        self.picture = path;
+        self
     }
 
     pub(crate) fn icon(mut self, symbol: impl Into<String>) -> Self {
@@ -1341,7 +1349,8 @@ impl PaneRow {
                 d = if self.detail_lines > 1 { d.line_clamp(self.detail_lines).overflow_hidden().text_ellipsis() } else { d.truncate() };
                 s.child(d.child(detail))
             });
-        let needs_blank_icon = self.reserves_icon && self.icon.is_none();
+        let needs_blank_icon = self.reserves_icon && self.icon.is_none() && self.picture.is_none();
+        let symbol = if self.picture.is_some() { None } else { self.icon };
         let row = h_flex()
             .items_start()
             .gap(px(8.))
@@ -1349,7 +1358,8 @@ impl PaneRow {
             .pr(px(TRAILING))
             .py(px(6.))
             .rounded(px(CORNER))
-            .when_some(self.icon, |s, symbol| s.child(div().w(px(16.)).flex_none().flex().justify_center().pt(px(1.)).child(icon(&symbol, 12., self.icon_color.unwrap_or(p.icon)))))
+            .when_some(self.picture, |s, path| s.child(div().w(px(16.)).flex_none().flex().justify_center().pt(px(1.)).child(img(path).size(px(16.)).rounded(px(4.)).object_fit(ObjectFit::Cover))))
+            .when_some(symbol, |s, symbol| s.child(div().w(px(16.)).flex_none().flex().justify_center().pt(px(1.)).child(icon(&symbol, 12., self.icon_color.unwrap_or(p.icon)))))
             .when(needs_blank_icon, |s| s.child(div().w(px(16.)).flex_none()))
             .child(body);
         let row = row.when_some(self.picked, |s, fill| s.bg(fill));

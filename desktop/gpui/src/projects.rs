@@ -181,7 +181,7 @@ impl Threadbear {
         self.remote.experiments.iter().any(|e| e == "projectDecisions")
     }
 
-    fn replace_project(&mut self, project: Project) {
+    pub(crate) fn replace_project(&mut self, project: Project) {
         match self.projects.list.iter_mut().find(|p| p.id == project.id) {
             Some(slot) => *slot = project,
             None => self.projects.list.insert(0, project),

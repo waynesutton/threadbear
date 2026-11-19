@@ -2971,9 +2971,22 @@ plain clicks. ⌘-click toggles one, Shift-click selects a range within that
 section, and **All** or ⌘A selects its visible results. Search changes clear
 only that section's selection. **Done** or Esc ends selection.
 
-Right-click one for Open, Edit, Show in Finder, Copy Folder Path, Refresh,
-Rename… or Delete…. Editing a bear opens its configuration file; editing a
-table opens its project goals. **Delete** in a section's selection bar asks
+**New** at the top of each section makes one. A new bear takes a name,
+what it does, a personality and an optional photo; a new table takes a
+title, a goal, the bears that sit at it, the project it's part of and an
+optional photo. A table that's part of a project shows on that project's
+page.
+
+Right-click one for Open, Edit, Change in a Thread…, Tables & Projects…
+(a bear) or Bears & Project… (a table), Set Photo…, Show in Finder, Copy
+Folder Path, Refresh, Rename… or Delete…. Editing a bear opens its
+configuration file; editing a table opens its project goals. **Change in a
+Thread** asks what should change, then starts a thread that makes the
+change with the bears skill and opens it. **Tables & Projects** seats a
+bear at tables and picks the projects its new threads join; **Bears &
+Project** seats bears at a table and picks its parent project. A bear's
+photo is a copy kept in its folder (`photo-<time>.png`, or drop a
+`photo.png` there yourself); a table's photo is its project icon. **Delete** in a section's selection bar asks
 once about that section's selected items. Deleting a bear moves its folder
 to the runner's trash; deleting a table leaves its chat threads and folder.
 

@@ -12,6 +12,9 @@
 //   a project, `projects.update { projectId, title }`) and Delete… (a
 //   sheet, then `bears.delete`, or `projects.delete` for a table: its chat
 //   threads and folder stay).
+// - New (each section's controls), Change in a Thread…, Tables & Projects…
+//   or Bears & Project…, and Set Photo… are bears_sheets.rs's. A row with a
+//   photo draws it in place of its icon.
 // - ⌘-click picks rows, Shift-click a run of them, Esc lets go. With some
 //   picked, a bar over the list and the menu offer Delete N, one sheet for
 //   them all.
@@ -80,6 +83,14 @@ pub(crate) enum BearsAction {
     Rename(String),
     Delete(Vec<String>),
     ClearSelection(Kind),
+    /// A new thread that changes it (bears_sheets.rs).
+    Change(String),
+    /// A bear's tables and projects, or a table's bears and parent.
+    Seats(String),
+    SetPhoto(String),
+    RemovePhoto(String),
+    NewBear,
+    NewTable,
 }
 
 /// What a click on a row opens.
@@ -101,6 +112,8 @@ pub(crate) struct Row {
     pub(crate) icon: String,
     pub(crate) working: bool,
     pub(crate) trailing: Option<String>,
+    /// Its photo, drawn in place of the icon.
+    pub(crate) picture: Option<std::path::PathBuf>,
     opens: Option<Opens>,
 }
 
@@ -167,7 +180,12 @@ impl Threadbear {
                 let wait = if res.is_ok() { REFRESH } else { RETRY };
                 state.fetched_at = Some(Instant::now() - (REFRESH - wait));
                 if let Ok(value) = res {
-                    state.bears = Some(rules::decode(&value).unwrap_or_default());
+                    let mut bears = rules::decode(&value).unwrap_or_default();
+                    // A few small folders on this Mac, read as the list comes.
+                    for bear in &mut bears {
+                        bear.photo = rules::find_photo(&expand_home(&bear.folder));
+                    }
+                    state.bears = Some(bears);
                 }
                 let order: Vec<String> = this.bears_panel_rows().into_iter().map(|r| r.key).collect();
                 this.bears_panel.selection.retain(&order);
@@ -220,6 +238,7 @@ impl Threadbear {
                 icon: if bear.head { "crown".to_owned() } else { bear.icon.clone().unwrap_or_else(|| "pawprint".to_owned()) },
                 working,
                 trailing: (bear.routines > 0).then(|| format!("{} routine{}", bear.routines, if bear.routines == 1 { "" } else { "s" })),
+                picture: bear.photo.clone(),
                 opens,
             });
         }
@@ -241,6 +260,7 @@ impl Threadbear {
                     icon: "person.3".to_owned(),
                     working: thread.as_ref().is_some_and(is_working),
                     trailing: None,
+                    picture: project.icon.as_ref().and_then(|i| i.image_path.clone()).map(std::path::PathBuf::from),
                     opens: Some(match thread {
                         Some(t) => Opens::Thread(t.id.clone()),
                         None => Opens::Project(project.id.clone()),
@@ -325,6 +345,15 @@ impl Threadbear {
         if key.starts_with("table:") || self.bears_row_folder(key).is_some() {
             rows.push(MenuRow::item(if key.starts_with("bear:") { "Edit Settings\u{2026}" } else { "Edit Table\u{2026}" }, "pencil", MenuAction::Bears(BearsAction::Edit(key.to_owned()))));
         }
+        let is_bear = key.starts_with("bear:");
+        rows.push(MenuRow::item("Change in a Thread\u{2026}", "bubble.left", MenuAction::Bears(BearsAction::Change(key.to_owned()))));
+        rows.push(MenuRow::item(if is_bear { "Tables & Projects\u{2026}" } else { "Bears & Project\u{2026}" }, "person.3", MenuAction::Bears(BearsAction::Seats(key.to_owned()))));
+        if !is_bear || self.bears_row_folder(key).is_some() {
+            rows.push(MenuRow::item(if self.has_bears_photo(key) { "Change Photo\u{2026}" } else { "Set Photo\u{2026}" }, "photo", MenuAction::Bears(BearsAction::SetPhoto(key.to_owned()))));
+            if self.has_bears_photo(key) {
+                rows.push(MenuRow::item("Remove Photo", "xmark", MenuAction::Bears(BearsAction::RemovePhoto(key.to_owned()))));
+            }
+        }
         if self.bears_row_folder(key).is_some() {
             rows.push(MenuRow::item("Show in Finder", "folder", MenuAction::Bears(BearsAction::Reveal(key.to_owned()))));
             rows.push(MenuRow::item("Copy Folder Path", "doc.on.doc", MenuAction::Bears(BearsAction::CopyFolder(key.to_owned()))));
@@ -373,10 +402,16 @@ impl Threadbear {
             BearsAction::Rename(key) => self.open_bears_rename(&key, window, cx),
             BearsAction::Delete(keys) => self.open_bears_delete(keys, window, cx),
             BearsAction::ClearSelection(kind) => self.sidebar_clear(kind, cx),
+            BearsAction::Change(key) => self.open_bears_sheet(crate::bears_sheets::Mode::Change(key), window, cx),
+            BearsAction::Seats(key) => self.open_bears_sheet(crate::bears_sheets::Mode::Seats(key), window, cx),
+            BearsAction::SetPhoto(key) => self.choose_bears_photo(&key, window, cx),
+            BearsAction::RemovePhoto(key) => self.set_bears_photo(&key, None, cx),
+            BearsAction::NewBear => self.open_bears_sheet(crate::bears_sheets::Mode::NewBear, window, cx),
+            BearsAction::NewTable => self.open_bears_sheet(crate::bears_sheets::Mode::NewTable, window, cx),
         }
     }
 
-    fn bears_row_folder(&self, key: &str) -> Option<String> {
+    pub(crate) fn bears_row_folder(&self, key: &str) -> Option<String> {
         let folder = if let Some(id) = key.strip_prefix("bear:") {
             self.bears_panel.bears.as_ref()?.iter().find(|b| b.id == id)?.folder.as_str()
         } else {
@@ -404,7 +439,7 @@ impl Threadbear {
         });
     }
 
-    fn bears_row_name(&self, key: &str) -> Option<String> {
+    pub(crate) fn bears_row_name(&self, key: &str) -> Option<String> {
         if let Some(id) = key.strip_prefix("bear:") {
             return self.bears_panel.bears.as_ref()?.iter().find(|b| b.id == id).map(|b| b.name.clone());
         }
@@ -677,6 +712,7 @@ impl SidePane {
         let selecting = self.app.upgrade().is_some_and(|a| a.read(cx).sidebar_list(kind).selecting);
         let pane_row = PaneRow::new(SharedString::from(format!("bears-row-{}", row.key)), row.title.clone())
             .icon(if selecting { if picked { "checkmark.circle.fill" } else { "circle" }.to_owned() } else { row.icon.clone() })
+            .picture(if selecting { None } else { row.picture.clone() })
             .tinted(row.working.then_some(p.needs_you))
             .reserves_icon(reserves)
             .trailing(row.trailing.clone())

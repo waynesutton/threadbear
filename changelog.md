@@ -8,6 +8,8 @@ How Prints work today, what's missing and what's next: [Prints status](https://g
 
 ### Fixed
 
+- Clicking a file link that shows it in Finder no longer crashes the GPUI app.
+
 - Automatic Still open cards can omit PR reminders for selected GitHub owners while retaining local-work warnings.
 
 - Task list sections leave a gap before the first row so its hover area stays clear of the toggle.
@@ -20,6 +22,10 @@ How Prints work today, what's missing and what's next: [Prints status](https://g
 
 - Late answers experiment. It was never turned on and no tool card ever expired, so an expired card is simply closed again.
 - GPUI Notes microphone and Use with Notes setting. Thread Voice, keyboard dictation and Pause before sending remain available.
+
+### Added
+
+- Bears & Tables makes bears and tables itself: **New** in each section, with a photo, the bears at a table and the project it's part of. Right-click adds Change in a Thread…, Tables & Projects… or Bears & Project…, and Set Photo… (GPUI app).
 
 ### Changed
 

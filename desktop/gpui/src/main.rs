@@ -24,6 +24,7 @@ mod automation;
 mod automation_compat;
 mod bears;
 mod bears_panel;
+mod bears_sheets;
 mod bear_picker;
 #[cfg(any(test, feature = "automation"))]
 mod automation_screenshot;

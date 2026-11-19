@@ -22,7 +22,7 @@ impl Kind {
 #[derive(Default)]
 pub(crate) struct ListState { pub selecting: bool, pub archived: bool, pub query: String }
 #[derive(Clone, Copy)]
-enum Action { Select, All, Archive, Delete, View }
+enum Action { Select, All, Archive, Delete, View, New }
 
 impl Threadbear {
     pub(crate) fn sidebar_list(&self, kind: Kind) -> &ListState {
@@ -83,6 +83,11 @@ impl Threadbear {
                 self.sidebar_list_mut(kind).selecting = selecting;
             }
             Action::All => self.sidebar_all(kind, cx),
+            // Bears and tables are made here, in their own lists.
+            Action::New => {
+                let action = if kind == Kind::Tables { crate::bears_panel::BearsAction::NewTable } else { crate::bears_panel::BearsAction::NewBear };
+                if kind != Kind::Prints { self.run_bears_action(action, window, cx); }
+            }
             Action::View => {
                 self.sidebar_list_mut(kind).archived = !self.sidebar_list(kind).archived;
                 self.sidebar_clear(kind, cx);
@@ -196,6 +201,7 @@ impl SidePane {
             .child(Input::new(&self.list_search[kind.index()]).small().cleanable(true))
             .child(h_flex().gap(px(4.))
                 .child(div().text_size(px(style::size::SMALL)).flex_1().text_color(cx.theme().muted_foreground).child(format!("{} {}", total, if archived { "archived" } else if total == 1 { "item" } else { "items" })).test_text(format!("{} {}", total, if archived { "archived" } else if total == 1 { "item" } else { "items" })))
+                .when(kind != Kind::Prints && !archived && !active, |row| row.child(button("New", Action::New, busy, if kind == Kind::Tables { "Make a table: pick its bears, its project and a photo".into() } else { "Make a bear: its name, what it does and a photo".into() })))
                 .child(button(if archived { "Active" } else { "Archived" }, Action::View, busy, format!("Show {} {}", if archived { "active" } else { "archived" }, kind.name())))
                 .child(button(if active { "Done" } else { "Select" }, Action::Select, busy, format!("{} {} selection", if active { "Finish" } else { "Start" }, kind.name()))))
             .when(active, |view| view.child(h_flex().gap(px(3.))

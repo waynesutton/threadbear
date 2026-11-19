@@ -530,6 +530,7 @@ fn step(app: &Entity<Threadbear>, cmd: &Value, window: &mut Window, cx: &mut App
         "project" | "projectParent" => crate::projects::automation(app, cmd, window, cx),
         "print" => crate::prints::automation(app, cmd, window, cx),
         "bears" => crate::bears_panel::automation(app, cmd, window, cx),
+        "bearsSheet" => crate::bears_sheets::automation(app, cmd, window, cx),
         "decision" => crate::project_decisions::automation(app, cmd, window, cx),
         "projectTab" => crate::project_decisions::tab_automation(app, cmd, cx),
         "search" if cmd["projects"].as_bool() == Some(true) => crate::projects::automation(app, cmd, window, cx),
