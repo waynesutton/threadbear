@@ -18,6 +18,7 @@ How Prints work today, what's missing and what's next: [Prints status](https://g
 
 ### Removed
 
+- Late answers experiment. It was never turned on and no tool card ever expired, so an expired card is simply closed again.
 - GPUI Notes microphone and Use with Notes setting. Thread Voice, keyboard dictation and Pause before sending remain available.
 
 ### Changed

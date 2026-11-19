@@ -386,10 +386,7 @@ block in the bear's two instruction files and its built-in tidy schedule;
 it preserves other text and custom routines. Directly created Claude
 tidies use Auto, Codex and agent-created ones Ask; an authorized refresh
 moves Claude tidies to Auto. The tidy's instructions limit edits to memory.
-The `lateAnswers` experiment reads existing approval events from the
-thread log and queues a message containing the original request and late
-answer. That message follows the thread's usual sync rules; it creates no
-separate retained-input store. Deleting a bear moves its folder to the runner's `trash/`. With
+Deleting a bear moves its folder to the runner's `trash/`. With
 Tables on, `tb tables new` makes `~/ThreadbearThreads/Tables/<id>/` with
 the host's `CLAUDE.md`. Faces are drawn by the `open-bot-avatar` package
 (0.2.1, MIT, no dependencies), installed with the runner's packages.

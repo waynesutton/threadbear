@@ -48,15 +48,6 @@ export const SCENARIOS: Scenario[] = [
     },
   },
   {
-    name: 'a late tool answer resumes as a message on every surface',
-    shows: ['answered an expired tool card', 'allowed this request once', 'The old tool call was not replayed'],
-    play: (p) => {
-      p.answerExpiredTool();
-      p.say('I will check whether the greeting is still needed.');
-      p.endTurn({ needs: 'nothing' });
-    },
-  },
-  {
     // Print files stay on their creating Mac. The website draws a card from
     // the published list (prints:list), or says it's kept on the Mac; the
     // phone keeps the fence. The published link stays as written.

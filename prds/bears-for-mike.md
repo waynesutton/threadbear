@@ -55,7 +55,6 @@ On the runner, a command with `args.webhook` goes only to `webhooks.ts`. It need
 ## Known issues
 
 - **Codex tidies still ask.** Auto applies only to Claude. Built-in Claude tidies can use Auto without widening the bear's other work; Codex keeps Ask.
-- **Late answers UI.** The off-by-default `lateAnswers` experiment handles delayed tool-card answers for 24 hours. A deliberate late-answer button remains GPUI work; the frozen Swift app is unchanged.
 
 ## What it asks of Mike's code
 
@@ -119,4 +118,4 @@ Runner: `bears` 17, `webhooks` 9, `webhooks-backend` 13, `mentions` 8, `tables` 
 
 ## Always-on improvements (14 Nov 2026)
 
-Implemented on this fork; current verification and landing status: `prds/bears-always-on.md`. Routines, folder webhooks and mentions share a worker without crossing access boundaries. Slow recurring jobs skip their next tick; mention replies match the asking turn. Managed memory rules track prior reports and unfinished tasks. Empty unattended runs explicitly opt into quiet completion, which preserves earlier reports and unfinished work. Late answers reuse the persisted request and queue a one-time decision without replaying a tool or granting more access. This revision is not yet added to the upstream PR. GPUI presentation is listed in `prds/bears-gpui.md`.
+Implemented on this fork; current verification and landing status: `prds/bears-always-on.md`. Routines, folder webhooks and mentions share a worker without crossing access boundaries. Slow recurring jobs skip their next tick; mention replies match the asking turn. Managed memory rules track prior reports and unfinished tasks. Empty unattended runs explicitly opt into quiet completion, which preserves earlier reports and unfinished work. This revision is not yet added to the upstream PR. GPUI presentation is listed in `prds/bears-gpui.md`.
