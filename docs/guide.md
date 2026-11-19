@@ -208,6 +208,9 @@ when the runner next starts; agents should also respect it in their replies.
 Action buttons such as It works and Archive keep their neutral fill with
 a thin amber left edge. Archive stays manual. A thread without reported
 tasks keeps its usual card; turning the experiment off restores that view.
+In the desktop app, a done card with tasks, loose ends or follow-ups has the
+same chevron beside Archive: it folds the card to its heading line until the
+next card comes.
 
 To answer a Needs you card, click its buttons: your picks show on the
 card and go with your next message. To answer an ask in your own

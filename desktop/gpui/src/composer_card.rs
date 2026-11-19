@@ -414,6 +414,8 @@ impl Composer {
     /// follow-ups under "Or carry on", each a row with a tick and a "?".
     fn render_done_card(&mut self, card: &AsksCard, drawing: Option<Instant>, window: &mut Window, cx: &mut Context<Self>) -> AnyElement {
         let mut column = v_flex().w_full();
+        let collapsed = self.card.collapsed;
+        let foldable = card.completion.is_some() || card.loose_ends.as_ref().is_some_and(|e| !e.is_empty()) || !card.next.is_empty();
         let this = cx.entity().downgrade();
         // Arriving, its tick draws itself on; then it's the tick as ever.
         let green = style::tick_green(cx);
@@ -432,15 +434,21 @@ impl Composer {
                 .h(px(metrics::PAGED_HEADING))
                 .justify_between()
                 .child(card_title(tick, 2.5, &card.completion.as_ref().map(CompletionSummary::heading).unwrap_or_else(|| "Done".to_owned()), cx))
-                .child(completion_button(("done-archive", 0usize), "Archive", ButtonLook::Plain, "Archive this thread", card.completion.is_some(), cx).on_click({
-                    let this = this.clone();
-                    move |_, window, cx| {
-                        if let Some(this) = this.upgrade() {
-                            this.update(cx, |this, cx| this.archive_thread(window, cx));
+                .child(h_flex().flex_none().items_center().gap(px(6.))
+                    .child(completion_button(("done-archive", 0usize), "Archive", ButtonLook::Plain, "Archive this thread", card.completion.is_some(), cx).on_click({
+                        let this = this.clone();
+                        move |_, window, cx| {
+                            if let Some(this) = this.upgrade() {
+                                this.update(cx, |this, cx| this.archive_thread(window, cx));
+                            }
                         }
-                    }
-                })),
+                    }))
+                    // Only when there's something under the heading to fold away.
+                    .when(foldable, |d| d.child(collapse_chevron(collapsed, this.clone(), cx)))),
         );
+        if collapsed && foldable {
+            return column.into_any_element();
+        }
         if let Some(summary) = &card.completion {
             column = column.child(completion_tasks(summary, false, cx));
             if card.loose_ends.as_ref().is_some_and(Vec::is_empty) {
@@ -581,29 +589,7 @@ impl Composer {
                 // The arrows end 7 short of the chevron (the heading's tab stop).
                 .child(div().w(px(7.)));
         }
-        right = right.child(
-            div()
-                .id("card-collapse").role(Role::Button)
-                .flex_none()
-                .size(px(metrics::TOGGLE))
-                .flex()
-                .items_center()
-                .justify_center()
-                .rounded(px(5.))
-                .cursor_pointer()
-                .text_color(style::secondary_text(cx))
-                .hover(|s| s.bg(style::primary_opacity(cx, 0.08)).text_color(style::label_text(cx)))
-                .active(|s| s.bg(style::primary_opacity(cx, 0.14)))
-                // SF's chevron at 11 pt semibold is about 10 by 6; Lucide's,
-                // a 12 by 6 stroke in 24, comes to that at 17.
-                .child(Icon::from(if collapsed { IconName::ChevronUp } else { IconName::ChevronDown }).with_size(px(17.)))
-                .tip(if collapsed { "Expand" } else { "Collapse" })
-                .on_click(move |_, window, cx| {
-                    if let Some(this) = collapse_this.upgrade() {
-                        this.update(cx, |this, cx| this.toggle_collapsed(window, cx));
-                    }
-                }),
-        );
+        right = right.child(collapse_chevron(collapsed, collapse_this, cx));
         // On a work line the chevron, a little taller than the line, hangs
         // from its top (placeToggle).
         heading = heading.child(right.when(!paged, |r| r.self_start()));
@@ -1273,7 +1259,7 @@ impl Composer {
         let mut lines = Vec::new();
         if let Some(summary) = &card.completion {
             lines.push(summary.heading());
-            if !self.card.collapsed || card.is_done() {
+            if !self.card.collapsed {
                 lines.push("Reported by the agent".to_owned());
                 lines.extend(summary.tasks.iter().map(|task| format!("{}: {}", task.status.label(), task.title)));
             }
@@ -1290,7 +1276,9 @@ impl Composer {
             (crate::chips::card_shown(&key, crate::chips::SLOWER) && crate::reply_links::has_card(&target)).then_some(())?;
             self.pane.upgrade()?.read(cx).ask_link_words(&link.title, &target)
         });
-        if card.is_done() {
+        if card.is_done() && self.card.collapsed {
+            lines.push("Done (collapsed)".to_owned());
+        } else if card.is_done() {
             if card.completion.is_none() { lines.push("Done".to_owned()); }
             for (i, next) in card.next.iter().enumerate() {
                 let tick = if self.card.next_picks.contains(&(i as i64)) { "[x]" } else { "[ ]" };
@@ -1662,4 +1650,30 @@ mod tests {
             assert!(!starts_a_block(text), "{text}");
         }
     }
+}
+
+/// The chevron at a card's top right: folds it to its heading and back.
+fn collapse_chevron(collapsed: bool, this: WeakEntity<Composer>, cx: &App) -> AnyElement {
+    div()
+        .id("card-collapse").role(Role::Button)
+        .flex_none()
+        .size(px(metrics::TOGGLE))
+        .flex()
+        .items_center()
+        .justify_center()
+        .rounded(px(5.))
+        .cursor_pointer()
+        .text_color(style::secondary_text(cx))
+        .hover(|s| s.bg(style::primary_opacity(cx, 0.08)).text_color(style::label_text(cx)))
+        .active(|s| s.bg(style::primary_opacity(cx, 0.14)))
+        // SF's chevron at 11 pt semibold is about 10 by 6; Lucide's,
+        // a 12 by 6 stroke in 24, comes to that at 17.
+        .child(Icon::from(if collapsed { IconName::ChevronUp } else { IconName::ChevronDown }).with_size(px(17.)))
+        .tip(if collapsed { "Expand" } else { "Collapse" })
+        .on_click(move |_, window, cx| {
+            if let Some(this) = this.upgrade() {
+                this.update(cx, |this, cx| this.toggle_collapsed(window, cx));
+            }
+        })
+        .into_any_element()
 }
