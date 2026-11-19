@@ -23,6 +23,9 @@ use threadbear_core::bears::{self, BearEntry, ThreadBear};
 #[derive(Default)]
 pub(crate) struct BearList {
     pub(crate) bears: Vec<BearEntry>,
+    /// Each bear's photo on this Mac, by id (core's `find_photo` in its
+    /// folder), for its threads' sidebar tiles.
+    pub(crate) photos: std::collections::HashMap<String, std::path::PathBuf>,
     fetched_at: Option<Instant>,
     fetching: bool,
 }
@@ -54,12 +57,28 @@ impl Threadbear {
                 this.bear_list.fetched_at = Some(Instant::now());
                 if let Ok(value) = res {
                     this.bear_list.bears = bears::decode_list(&value);
+                    // A few small folders on this Mac, read as the list comes.
+                    let home = std::env::var("HOME").unwrap_or_default();
+                    this.bear_list.photos = value["bears"].as_array().into_iter().flatten().filter_map(|b| {
+                        let folder = b["folder"].as_str()?;
+                        let folder = folder.strip_prefix('~').map_or_else(|| folder.to_owned(), |rest| format!("{home}{rest}"));
+                        Some((b["id"].as_str()?.to_owned(), threadbear_core::bears_panel::find_photo(&folder)?))
+                    }).collect();
                 }
                 cx.notify();
             })
             .ok();
         })
         .detach();
+    }
+
+    /// A bear's photo: the panel's list when it has the bear (it changes
+    /// there first), else the @ list's.
+    pub(crate) fn bear_photo(&self, id: &str) -> Option<std::path::PathBuf> {
+        match self.bears_panel.bears.iter().flatten().find(|b| b.id == id) {
+            Some(b) => b.photo.clone(),
+            None => self.bear_list.photos.get(id).cloned(),
+        }
     }
 
     /// `setBearColor`: colours a bear's tile (`bears.update { bear, color }`,

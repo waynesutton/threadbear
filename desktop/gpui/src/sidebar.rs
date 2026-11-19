@@ -1730,13 +1730,18 @@ impl Threadbear {
 
         // The tile with the unread dot or tick in the gutter to its left.
         let behind = if selected { p.tile_ring.blend(p.selected) } else if show_buttons { p.tile_ring.blend(p.hover) } else { p.tile_ring };
+        // A bear's photo (Bears & Tables' Set Photo…) stands in for its tile.
+        let bear_photo = t.bear.as_ref().filter(|_| !t.is_remote()).and_then(|b| {
+            self.refresh_bears(cx);
+            self.bear_photo(&b.id)
+        });
         let project_icon = t.projects.as_ref().and_then(|ps| ps.first()).and_then(|first| self.sidebar.project_icons.get(&first.id));
         // Another runner's thread with no project shows its machine's icon
         // where the folder would be (`ProjectTiles.runnerIcon`) and its name
         // in the tile's tooltip, faded when that machine's offline
         // (`ThreadRowView.body`).
         let runner_tile = t.runner_id.as_deref().filter(|_| t.projects.as_ref().is_none_or(|ps| ps.is_empty())).map(|id| (self.runner_icon_symbol(Some(id)), self.runner_place_of(id)));
-        let tile = render_tile(t, &look, behind, project_icon, runner_tile, if nested_row { NEST_TILE } else { TILE }, p);
+        let tile = render_tile(t, &look, behind, project_icon, runner_tile, bear_photo, if nested_row { NEST_TILE } else { TILE }, p);
         let offline = t.runner_id.as_deref().is_some_and(|id| self.remote.runners.iter().any(|r| r.id == id && !r.online));
 
         // A nested thread's row says where it's up to, not who started it:
@@ -2178,7 +2183,8 @@ fn abbreviate_home(path: &str) -> String {
 /// reads as Swift's cut-out does. `runner_tile`: another runner's thread with
 /// no project draws its machine's icon (a little larger, as a Mac mini is a
 /// flat box) in place of the folder, and names it in the tooltip.
-fn render_tile(t: &ThreadSummary, look: &RowLook, behind: Hsla, project_icon: Option<&ProjectIcon>, runner_tile: Option<(&'static str, String)>, tile_size: f32, p: &Palette) -> impl IntoElement {
+#[allow(clippy::too_many_arguments)]
+fn render_tile(t: &ThreadSummary, look: &RowLook, behind: Hsla, project_icon: Option<&ProjectIcon>, runner_tile: Option<(&'static str, String)>, bear_photo: Option<std::path::PathBuf>, tile_size: f32, p: &Palette) -> impl IntoElement {
     // A nested thread's tile is smaller than its starter's (mockup sub-A).
     let scaled = move |n: f32| n * tile_size / TILE;
     let (tile, stacked) = rows::tile(t);
@@ -2193,7 +2199,10 @@ fn render_tile(t: &ThreadSummary, look: &RowLook, behind: Hsla, project_icon: Op
     let size = px(tile_size);
     let tinted = |content: AnyElement| div().flex().items_center().justify_center().size(size).rounded(px(7.)).bg(p.tile).child(content).into_any_element();
     let face = match (&tile, project_icon) {
-        _ if t.bear.is_some() => t.bear.as_ref().map(|bear| crate::bears::tile(bear, TILE).into_any_element()).unwrap_or_else(|| div().into_any_element()),
+        _ if t.bear.is_some() => match bear_photo {
+            Some(path) => img(path).size(px(TILE)).rounded(px(TILE * 7. / 30.)).object_fit(ObjectFit::Cover).into_any_element(),
+            None => t.bear.as_ref().map(|bear| crate::bears::tile(bear, TILE).into_any_element()).unwrap_or_else(|| div().into_any_element()),
+        },
         (Tile::Folder, _) => {
             let glyph = match &runner_tile {
                 Some((symbol, _)) => icon(symbol, scaled(16.), p.secondary),
