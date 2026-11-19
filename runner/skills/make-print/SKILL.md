@@ -79,7 +79,7 @@ When the request doesn't name a chart type, choose by what the data has to show 
    - Leave `projects` out so the print follows the thread's project, or pass `[]` to keep it out of projects.
 5. **Reply.** Put the ```` ```print <id> ```` block in your reply, then give two or three lines on what the data says.
 
-Look at the page before you say it's done. The anatomy skill's `scripts/capture.mjs` takes a shot, with `--theme dark` and `--theme light`, and at `--width 390` for a phone.
+Look at the page before you say it's done. The anatomy skill's `scripts/capture.mjs` takes a shot, with `--theme dark` and `--theme light`, and at `--width 390` for a phone. Pass `--select body` and a tall `--height`: without it, capture.mjs clips to the first figure it finds, which on a print is a single chart.
 
 ## Convex insights reports
 

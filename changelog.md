@@ -8,6 +8,8 @@ How Prints work today, what's missing and what's next: [Prints status](https://g
 
 ### Fixed
 
+- make-print's screenshot check captures the whole print, not just its first chart.
+
 - Clicking a file link that shows it in Finder no longer crashes the GPUI app.
 
 - Automatic Still open cards can omit PR reminders for selected GitHub owners while retaining local-work warnings.
