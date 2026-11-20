@@ -58,11 +58,6 @@
       "count": 2
     }
   },
-  "convex/mcp.ts": {
-    "@convex-dev/explicit-table-ids": {
-      "count": 9
-    }
-  },
   "convex/memorySync.ts": {
     "@convex-dev/explicit-table-ids": {
       "count": 3
@@ -110,11 +105,6 @@
     },
     "@convex-dev/no-process-env": {
       "count": 2
-    }
-  },
-  "convex/profile.ts": {
-    "@convex-dev/explicit-table-ids": {
-      "count": 4
     }
   },
   "convex/projectHeads.ts": {
@@ -177,7 +167,7 @@
   },
   "convex/sync.ts": {
     "@convex-dev/explicit-table-ids": {
-      "count": 121
+      "count": 117
     },
     "@convex-dev/no-collect-in-query": {
       "count": 17
@@ -192,11 +182,6 @@
       "count": 10
     }
   },
-  "convex/tasks.ts": {
-    "@convex-dev/explicit-table-ids": {
-      "count": 17
-    }
-  },
   "convex/tokens.ts": {
     "@convex-dev/explicit-table-ids": {
       "count": 8
@@ -205,11 +190,6 @@
   "convex/wakes.ts": {
     "@convex-dev/explicit-table-ids": {
       "count": 3
-    }
-  },
-  "convex/webhooks.ts": {
-    "@convex-dev/explicit-table-ids": {
-      "count": 13
     }
   },
   "relay/convex/apns.ts": {
@@ -290,11 +270,6 @@
   "runner/test/unit/codex-appserver.test.ts": {
     "mikecann-lint/no-sleep-in-tests": {
       "count": 2
-    }
-  },
-  "runner/test/unit/completion.test.ts": {
-    "mikecann-lint/no-sleep-in-tests": {
-      "count": 1
     }
   },
   "runner/test/unit/context-budget.test.ts": {
@@ -427,11 +402,6 @@
       "count": 1
     }
   },
-  "runner/test/unit/tables.test.ts": {
-    "mikecann-lint/no-sleep-in-tests": {
-      "count": 1
-    }
-  },
   "runner/test/unit/tb-dev.test.ts": {
     "mikecann-lint/no-sleep-in-tests": {
       "count": 1
@@ -517,19 +487,6 @@
       "count": 1
     }
   },
-  "web/src/print.tsx": {
-    "react-hooks/set-state-in-effect": {
-      "count": 1
-    }
-  },
-  "web/src/profile.tsx": {
-    "mikecann-lint/click-shows-progress": {
-      "count": 1
-    },
-    "react-hooks/refs": {
-      "count": 1
-    }
-  },
   "web/src/rail.tsx": {
     "react-hooks/globals": {
       "count": 1
@@ -554,31 +511,6 @@
   "web/src/sidebar.tsx": {
     "react-hooks/purity": {
       "count": 2
-    }
-  },
-  "web/src/tasks-issue.tsx": {
-    "react-hooks/exhaustive-deps": {
-      "count": 2
-    },
-    "react-hooks/purity": {
-      "count": 1
-    },
-    "react-hooks/set-state-in-effect": {
-      "count": 1
-    }
-  },
-  "web/src/tasks.tsx": {
-    "mikecann-lint/click-shows-progress": {
-      "count": 2
-    },
-    "react-hooks/exhaustive-deps": {
-      "count": 1
-    },
-    "react-hooks/purity": {
-      "count": 4
-    },
-    "react-hooks/refs": {
-      "count": 7
     }
   },
   "web/src/transcript.ts": {

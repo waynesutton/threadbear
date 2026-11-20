@@ -91,7 +91,8 @@ function TasksContent({ token, projectFilter = '', issues = false }: { token: st
   const [saving, setSaving] = useState(0);
   const [currentView, setView] = useState<'list' | 'board' | null>(null);
   const [filter, setFilter] = useState(projectFilter || '');
-  const editingBaseline = useRef<Task | null>(null);
+  // The task as it was when the editor opened, for the save's diff.
+  const [editingBaseline, setEditingBaseline] = useState<Task | null>(null);
   const [editing, setEditing] = useState<(Partial<Task> & { focusNotes?: boolean }) | null>(null);
   const [panel, setPanel] = useState<'display' | 'customize' | null>(null);
   const [toast, setToast] = useState<{ text: string; undo: () => Promise<unknown> } | null>(null);
@@ -135,12 +136,16 @@ function TasksContent({ token, projectFilter = '', issues = false }: { token: st
     applyTheme(prefs.theme);
     return () => applyTheme(readTheme());
   }, [prefs?.theme]);
+  // Focus moves in when the editor opens on a task, and back when it closes;
+  // not on each keystroke, which also changes editing.
+  const editingId = editing?.id;
+  const focusNotes = editing?.focusNotes;
   useEffect(() => {
-    if (!editing) return;
+    if (!editingId) return;
     const previous = document.activeElement as HTMLElement | null;
-    editorRef.current?.querySelector<HTMLElement>(editing.focusNotes ? 'textarea' : 'input')?.focus();
+    editorRef.current?.querySelector<HTMLElement>(focusNotes ? 'textarea' : 'input')?.focus();
     return () => previous?.focus();
-  }, [editing?.id]);
+  }, [editingId, focusNotes]);
   useEffect(() => {
     if (!toast) return;
     const timer = setTimeout(() => setToast(null), 6000);
@@ -245,8 +250,13 @@ function TasksContent({ token, projectFilter = '', issues = false }: { token: st
   const inGroup = (t: Task, group: string) => group === 'all' || projectKey(t.project) === group;
 
   function addTask(text: string, columnId = 'todo', group = 'all') {
+    // Only ever called from the composer's and a column's submit, never while
+    // rendering; the React compiler can't follow that through submitComposer
+    // and the column form, so it reads this as render-time.
+    // eslint-disable-next-line react-hooks/purity -- runs on submit only (see above)
+    const now = Date.now();
     const list = splitList(text);
-    if (list) return addList(list, columnId, group);
+    if (list) return addList(list, now, columnId, group);
     const status = canonical(columnId);
     const { title, notes } = splitDraft(text);
     if (!title) return Promise.resolve(false);
@@ -254,8 +264,7 @@ function TasksContent({ token, projectFilter = '', issues = false }: { token: st
     const project = key ? projectRef(key) : null;
     const id = crypto.randomUUID();
     const peers = visible.filter((t) => t.status === status);
-    const position = peers.length ? Math.min(...peers.map((t) => t.position)) - 1000 : Date.now();
-    const now = Date.now();
+    const position = peers.length ? Math.min(...peers.map((t) => t.position)) - 1000 : now;
     const row: Task = { id, title, notes, status, columnId, project, position, createdAt: now, updatedAt: now, deleted: false };
     return write(
       // New tasks go on top, where the composer is.
@@ -264,13 +273,12 @@ function TasksContent({ token, projectFilter = '', issues = false }: { token: st
     );
   }
   /** A pasted Markdown list: one task per item in order on top, indented ones as sub-tasks, ticked ones in Done. */
-  function addList(items: NonNullable<ReturnType<typeof splitList>>, columnId: string, group: string) {
+  function addList(items: NonNullable<ReturnType<typeof splitList>>, now: number, columnId: string, group: string) {
     const key = group !== 'all' ? group : filter;
     const project = key ? projectRef(key) : null;
     const status = canonical(columnId);
     const peers = visible.filter((t) => t.status === status);
-    const top = peers.length ? Math.min(...peers.map((t) => t.position)) : Date.now();
-    const now = Date.now();
+    const top = peers.length ? Math.min(...peers.map((t) => t.position)) : now;
     const rows: Task[] = items.map((item, i) => ({
       id: crypto.randomUUID(),
       title: item.title,
@@ -337,7 +345,7 @@ function TasksContent({ token, projectFilter = '', issues = false }: { token: st
     if (!editing?.id || !editing.title?.trim()) return;
     const { id, title = '', notes = '', status = 'todo', columnId, project = null } = editing;
     const patch = { id, title, notes, status, columnId, project: project ? { id: project.id, runnerId: project.runnerId } : null, ...(issues ? { priority: editing.priority ?? null, dueDate: editing.dueDate ?? null } : {}) };
-    const base = editingBaseline.current;
+    const base = editingBaseline;
     const ok = base
       ? await write(
           () => update({ auth, id, ...taskDraftChanges(base, patch) }),
@@ -347,7 +355,7 @@ function TasksContent({ token, projectFilter = '', issues = false }: { token: st
     if (ok) setEditing(null);
   }
   const openEditor = (t: Task, focusNotes = false) => {
-    editingBaseline.current = t;
+    setEditingBaseline(t);
     setEditing({ ...t, focusNotes });
     setMenu(null);
   };
@@ -930,6 +938,7 @@ function TasksContent({ token, projectFilter = '', issues = false }: { token: st
                     role="menuitemradio"
                     aria-checked={membership(menu.task) === s}
                     title={`Move to ${names[s]}`}
+                    // eslint-disable-next-line mikecann-lint/click-shows-progress -- optimistic: patchTask moves the row at once and the menu closes, so there's nothing to press twice
                     onClick={() => {
                       void patchTask(menu.task.id, { status: canonical(s), columnId: s });
                       setMenu(null);
@@ -965,6 +974,7 @@ function TasksContent({ token, projectFilter = '', issues = false }: { token: st
                     role="menuitemradio"
                     aria-checked={projectKey(menu.task.project) === p.key}
                     title={`Move to ${p.title}`}
+                    // eslint-disable-next-line mikecann-lint/click-shows-progress -- optimistic: patchTask moves the row at once and the menu closes, so there's nothing to press twice
                     onClick={() => {
                       void patchTask(menu.task.id, { project: projectRef(p.key) });
                       setMenu(null);
@@ -1056,7 +1066,7 @@ function TasksContent({ token, projectFilter = '', issues = false }: { token: st
             className={`task-editor ${issues ? 'has-issues' : ''}`}
             role="dialog"
             aria-modal="true"
-            aria-label={editingBaseline.current ? 'Edit task' : 'New task'}
+            aria-label={editingBaseline ? 'Edit task' : 'New task'}
             onSubmit={saveEditor}
             onKeyDown={(e) => {
               if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
@@ -1111,26 +1121,26 @@ function TasksContent({ token, projectFilter = '', issues = false }: { token: st
               {issues && <PriorityPicker value={editing.priority} disabled={disabled} onChange={(priority) => setEditing({ ...editing, priority })} />}
               {issues && <DuePicker value={editing.dueDate} disabled={disabled} onChange={(dueDate) => setEditing({ ...editing, dueDate })} />}
             </div>
-            {issues && editingBaseline.current && (() => {
+            {issues && editingBaseline && (() => {
               const live = tasks.find((t) => t.id === editing.id);
               return live ? <IssueSections token={token} task={live} tasks={tasks} disabled={disabled} write={write} open={(t) => openEditor(t)} toggle={complete} statusIcon={(t) => <StatusIcon status={t.status} />} /> : null;
             })()}
             <footer>
-              {editingBaseline.current && (
+              {editingBaseline && (
                 <button
                   type="button"
                   className="is-danger"
                   title="Delete the task. You can undo it."
                   disabled={disabled}
                   onClick={() => {
-                    deleteTask(editingBaseline.current!);
+                    deleteTask(editingBaseline);
                   }}
                 >
                   Delete
                 </button>
               )}
               <button type="button" title="Save changes and start a thread" disabled={disabled || !editing.title?.trim()} onClick={() => {
-                const baseline = editingBaseline.current;
+                const baseline = editingBaseline;
                 const live = tasks.find(t => t.id === editing.id) ?? baseline;
                 if (live?.thread || live?.threadCommandId) { void sendTask(live); return; }
                 if (!editing.id || !editing.title?.trim()) return;
@@ -1141,7 +1151,7 @@ function TasksContent({ token, projectFilter = '', issues = false }: { token: st
                   else await create({ auth, id, ...fields });
                   await startThread({ auth, id });
                 }).then(ok => { if (ok) setEditing(null); });
-              }}>{threadLabel(tasks.find(t => t.id === editing.id) ?? editingBaseline.current ?? editing)}</button>
+              }}>{threadLabel(tasks.find(t => t.id === editing.id) ?? editingBaseline ?? editing)}</button>
               <span className="spacer" />
               <button type="button" title="Close without saving" onClick={() => setEditing(null)}>
                 Cancel

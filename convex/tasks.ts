@@ -99,7 +99,7 @@ async function actor(ctx: MutationCtx, auth: Auth, given: Author | undefined): P
   if ('key' in auth && given) {
     const name = given.name.trim().slice(0, 80) || (given.kind === 'agent' ? 'Agent' : 'You');
     if (given.kind === 'user' && name !== prefs?.ownerName) {
-      if (prefs) await ctx.db.patch(prefs._id, { ownerName: name });
+      if (prefs) await ctx.db.patch("taskPreferences", prefs._id, { ownerName: name });
       else await ctx.db.insert('taskPreferences', { name: 'tasks', ownerName: name });
     }
     return { kind: given.kind, name };
@@ -155,7 +155,7 @@ async function cleanLinks(ctx: Ctx, links: Link[], before: Link[] = []): Promise
   return out;
 }
 async function checkImage(ctx: Ctx, storageId: Id<'_storage'>) {
-  const file = await ctx.db.system.get(storageId);
+  const file = await ctx.db.system.get("_storage", storageId);
   if (!file || file.size > 10 * 1024 * 1024 || !IMAGE_TYPES.includes(file.contentType ?? '')) bad('Choose a PNG, JPEG, WebP or GIF under 10 MB');
 }
 // Images a links change dropped go from storage too.
@@ -304,7 +304,7 @@ export const update = mutation({
     if (patch.links) patch.links = await cleanLinks(ctx, patch.links, row.links);
     const column = patch.columnId !== undefined || patch.status !== undefined ? await columnFields(ctx, patch.columnId, patch.status, row) : undefined;
     const was = { ...row };
-    await ctx.db.patch(row._id, { ...patch, ...column, updatedAt: await changedAt(ctx) });
+    await ctx.db.patch("tasks", row._id, { ...patch, ...column, updatedAt: await changedAt(ctx) });
     if (patch.links) await dropImages(ctx, was.links, patch.links);
     // The activity: what changed, in words, by whom.
     const events: [string, string][] = [];
@@ -340,15 +340,15 @@ async function deleted(ctx: MutationCtx, auth: Auth, id: string, value: boolean)
   const parent = !value && row.parentId ? await find(ctx, row.parentId) : null;
   const orphan = !value && row.parentId && (!parent || parent.deleted);
   const child = Boolean(row.parentId);
-  await ctx.db.patch(row._id, { deleted: value, deletedWithParent: undefined, ...(orphan ? { parentId: null } : {}), updatedAt });
+  await ctx.db.patch("tasks", row._id, { deleted: value, deletedWithParent: undefined, ...(orphan ? { parentId: null } : {}), updatedAt });
   if (child) return null;
   const children = await ctx.db
     .query('tasks')
     .withIndex('by_parent', (q) => q.eq('parentId', row.id).eq('deleted', !value))
     .take(500);
   for (const child of children) {
-    if (value) await ctx.db.patch(child._id, { deleted: true, deletedWithParent: true, updatedAt });
-    else if (child.deletedWithParent) await ctx.db.patch(child._id, { deleted: false, deletedWithParent: undefined, updatedAt });
+    if (value) await ctx.db.patch("tasks", child._id, { deleted: true, deletedWithParent: true, updatedAt });
+    else if (child.deletedWithParent) await ctx.db.patch("tasks", child._id, { deleted: false, deletedWithParent: undefined, updatedAt });
   }
   return null;
 }
@@ -490,11 +490,11 @@ export const setPreferences = mutation({
     if (patch.fade !== undefined && (!Number.isFinite(patch.fade) || patch.fade < 0 || patch.fade > 1)) bad('Fade must be between 0 and 1');
     if (patch.backgroundColor !== undefined && patch.backgroundColor !== '' && !/^#[0-9a-f]{6}$/i.test(patch.backgroundColor)) bad('Choose a hex color');
     if (patch.backgroundPhoto) {
-      const file = await ctx.db.system.get(patch.backgroundPhoto);
+      const file = await ctx.db.system.get("_storage", patch.backgroundPhoto);
       if (!file || file.size > 10 * 1024 * 1024 || !['image/jpeg', 'image/png', 'image/webp', 'image/gif'].includes(file.contentType ?? '')) bad('Choose a PNG, JPEG, WebP or GIF under 10 MB');
     }
     const row = await prefRow(ctx);
-    if (row) await ctx.db.patch(row._id, patch);
+    if (row) await ctx.db.patch("taskPreferences", row._id, patch);
     else await ctx.db.insert('taskPreferences', { name: 'tasks', ...patch });
     return null;
   },
@@ -518,7 +518,7 @@ export const deleteColumn = mutation({
     if (!gone) return null;
     const target = columnForStatus(board, gone.status);
     const prefs = { columns: rest, boardColumnOrder: board.order, sectionOrder: sectionOrder(row, rest) };
-    if (row) await ctx.db.patch(row._id, prefs);
+    if (row) await ctx.db.patch("taskPreferences", row._id, prefs);
     else await ctx.db.insert('taskPreferences', { name: 'tasks', ...prefs });
     await moveTasks(ctx, id, target);
     return { movedTo: target.id };
@@ -533,7 +533,7 @@ async function moveTasks(ctx: MutationCtx, from: string, to: TaskColumn) {
     ? await ctx.db.query('tasks').withIndex('by_column_status', (q) => q.eq('columnId', undefined).eq('status', from as TaskStatus)).take(MOVE_BATCH - rows.length)
     : [];
   let updatedAt = await changedAt(ctx);
-  for (const t of [...rows, ...legacy]) await ctx.db.patch(t._id, { columnId: to.id, status: to.status, updatedAt: updatedAt++ });
+  for (const t of [...rows, ...legacy]) await ctx.db.patch("tasks", t._id, { columnId: to.id, status: to.status, updatedAt: updatedAt++ });
   if (rows.length + legacy.length === MOVE_BATCH) await ctx.scheduler.runAfter(0, internal.tasks.moveColumnTasks, { from, to: to.id });
 }
 export const moveColumnTasks = internalMutation({
@@ -631,7 +631,7 @@ export const startThread = mutation({
       title: row.title,
       ...(project ? { projectIds: [project.id], ...(project.folders[0] ? { cwd: project.folders[0] } : {}) } : {}),
     });
-    await ctx.db.patch(row._id, { threadCommandId: commandId, updatedAt: await changedAt(ctx) });
+    await ctx.db.patch("tasks", row._id, { threadCommandId: commandId, updatedAt: await changedAt(ctx) });
     return commandId;
   },
 });
@@ -674,7 +674,7 @@ export const comment = mutation({
     const body = text(a.body.trim(), 10000, 'Comment');
     if (!body) bad('Write a comment first');
     const item = await log(ctx, row.id, await actor(ctx, a.auth, a.author), body, 'comment');
-    await ctx.db.patch(row._id, { commentCount: (row.commentCount ?? 0) + 1, updatedAt: await changedAt(ctx) });
+    await ctx.db.patch("tasks", row._id, { commentCount: (row.commentCount ?? 0) + 1, updatedAt: await changedAt(ctx) });
     return item;
   },
 });
@@ -684,11 +684,11 @@ export const removeComment = mutation({
   handler: async (ctx, a) => {
     await authenticate(ctx, a.auth);
     const itemId = ctx.db.normalizeId('taskActivity', a.commentId);
-    const item = itemId ? await ctx.db.get(itemId) : null;
+    const item = itemId ? await ctx.db.get("taskActivity", itemId) : null;
     if (!item || item.taskId !== a.id || item.kind !== 'comment') return null;
-    await ctx.db.delete(item._id);
+    await ctx.db.delete("taskActivity", item._id);
     const row = await find(ctx, a.id);
-    if (row) await ctx.db.patch(row._id, { commentCount: Math.max(0, (row.commentCount ?? 1) - 1), updatedAt: await changedAt(ctx) });
+    if (row) await ctx.db.patch("tasks", row._id, { commentCount: Math.max(0, (row.commentCount ?? 1) - 1), updatedAt: await changedAt(ctx) });
     return null;
   },
 });
@@ -707,7 +707,7 @@ export const addImage = mutation({
     if (links.length >= MAX_LINKS) bad(`Use at most ${MAX_LINKS} links`);
     await checkImage(ctx, a.storageId);
     const link: Link = { id: `image-${String(a.storageId).replace(/[^\w-]/g, '').slice(0, 90)}`, kind: 'image', title: text((a.title ?? '').trim(), 300, 'Image name') || 'Image', storageId: a.storageId };
-    await ctx.db.patch(row._id, { links: [...links, link], updatedAt: await changedAt(ctx) });
+    await ctx.db.patch("tasks", row._id, { links: [...links, link], updatedAt: await changedAt(ctx) });
     return link;
   },
 });
@@ -722,7 +722,7 @@ export const claimReminder = mutation({
     const row = await find(ctx, a.id);
     if (!row || row.deleted || row.status === 'done' || !row.dueDate || !row.dueTime) return false;
     if (a.key !== `${row.dueDate}T${row.dueTime}` || row.remindedFor === a.key) return false;
-    await ctx.db.patch(row._id, { remindedFor: a.key });
+    await ctx.db.patch("tasks", row._id, { remindedFor: a.key });
     return true;
   },
 });

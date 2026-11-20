@@ -1,5 +1,12 @@
 # Files
 
+## November release verification
+
+- `prds/bring-in-2026-11-20-verification.md`: remaining merge repairs, verification and landing review.
+- `runner/test/deploy/deploy.test.ts`: isolated runner installation and deployment lifecycle tests.
+- `runner/test/unit/rpc.test.ts`: RPC behavior, including sign-in discovery and Usage refresh compatibility.
+- `desktop/core/src/highlights.rs`, `desktop/core/src/reply_links.rs`: file preview classification and click routing, including exact diff and patch regression cases.
+
 ## Reminder preferences
 
 - `prds/loose-end-pr-preferences.md`: owner-specific automatic PR reminder preferences and rollout verification.

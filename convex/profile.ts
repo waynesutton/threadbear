@@ -113,7 +113,7 @@ async function theRow(ctx: QueryCtx | MutationCtx): Promise<Doc<'profile'> | nul
 
 async function dropFile(ctx: MutationCtx, id: Id<'_storage'> | undefined, keep: (Id<'_storage'> | undefined)[]): Promise<void> {
   if (!id || keep.includes(id)) return;
-  if (await ctx.db.system.get(id)) await ctx.storage.delete(id);
+  if (await ctx.db.system.get("_storage", id)) await ctx.storage.delete(id);
 }
 
 /** Where the runner uploads the page's picture and background. Owner only. */
@@ -138,17 +138,17 @@ export const publish = mutation({
     const old = await theRow(ctx);
     if (!profile) {
       if (old) {
-        await ctx.db.delete(old._id);
+        await ctx.db.delete("profile", old._id);
         await dropFile(ctx, old.pictureId, []);
         await dropFile(ctx, old.backgroundId, []);
       }
       return null;
     }
     const row = { ...cleanProfile(profile), updatedAt: Date.now() };
-    for (const id of [row.pictureId, row.backgroundId]) if (id && !(await ctx.db.system.get(id))) throw bad('A picture it names was never uploaded.');
+    for (const id of [row.pictureId, row.backgroundId]) if (id && !(await ctx.db.system.get("_storage", id))) throw bad('A picture it names was never uploaded.');
     if (old) {
       const was = [old.pictureId, old.backgroundId];
-      await ctx.db.replace(old._id, row);
+      await ctx.db.replace("profile", old._id, row);
       for (const id of was) await dropFile(ctx, id, [row.pictureId, row.backgroundId]);
     } else {
       await ctx.db.insert('profile', row);

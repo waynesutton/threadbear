@@ -74,6 +74,28 @@ async function serve(extra: Partial<ConstructorParameters<typeof RpcServer>[0]> 
   return { h, server, url, port };
 }
 
+test('accounts.recheck supports sign-in discovery and a named usage refresh', async () => {
+  const { h, server, url } = await serve();
+  const c = await RunnerClient.connect(url, TOKEN);
+  const calls: (string | undefined)[] = [];
+  h.runner.recheckAccounts = async (id) => {
+    calls.push(id);
+    return { accounts: [] };
+  };
+  h.runner.recheckLogin = async (accountId) => ({ accountId, room: true, woke: 2 });
+  try {
+    assert.deepEqual(await c.call('accounts.recheck', {}), { accounts: [] });
+    assert.deepEqual(await c.call('accounts.recheck', { accountId: 'claude-3' }), {
+      accounts: [], accountId: 'claude-3', room: true, woke: 2,
+    });
+    h.runner.recheckLogin = async () => { throw new Error('Sign in first'); };
+    assert.deepEqual(await c.call('accounts.recheck', { accountId: 'claude-3' }), {
+      accounts: [], accountId: 'claude-3', recheckError: 'Sign in first',
+    });
+    assert.deepEqual(calls, [undefined, 'claude-3', 'claude-3']);
+  } finally { c.close(); await server.close(); }
+});
+
 test('local tools queue a panel only with a connected Mac app, including through a handover', async () => {
   const calls: string[] = [];
   const remote = { owns: (id: string) => id === 'away', call: async (_id: string, method: string) => { calls.push(method); return { available: true, shown: false }; }, summaries: () => [], search: async () => [] };

@@ -2114,7 +2114,7 @@ export const publishPrint = mutation({
     if (sameSlug.some((r) => r.runnerId !== runnerId || r.id !== print.id)) throw bad('that link is taken');
     const row = await ctx.db.query('prints').withIndex('by_runner_id', (q) => q.eq('runnerId', runnerId).eq('id', print.id)).unique();
     if (row) {
-      await ctx.db.replace(row._id, doc);
+      await ctx.db.replace("prints", row._id, doc);
       return null;
     }
     const have = await ctx.db.query('prints').withIndex('by_runner_id', (q) => q.eq('runnerId', runnerId)).take(PRINTS_PER_RUNNER + 1);
@@ -3320,13 +3320,13 @@ export const finishCommand = mutation({
     // the id is kept on its own row before pruneOld takes the command.
     if (made && c.kind === 'create') {
       const started = await ctx.db.query('agentThreads').withIndex('by_command', (q) => q.eq('commandId', commandId)).first();
-      if (started) await ctx.db.patch(started._id, { threadId: made });
+      if (started) await ctx.db.patch("agentThreads", started._id, { threadId: made });
     }
     const task = await ctx.db.query('tasks').withIndex('by_thread_command', q => q.eq('threadCommandId', commandId)).first();
     if (task) {
       const thread = made ? await ctx.db.query('threads').withIndex('by_threadId', q => q.eq('threadId', made!)).unique() : null;
       const latest = await ctx.db.query('tasks').withIndex('by_updated').order('desc').first();
-      await ctx.db.patch(task._id, {
+      await ctx.db.patch("tasks", task._id, {
         ...(thread ? { thread: { runnerId: thread.runnerId, id: thread.threadId } } : {}),
         ...(!thread && !task.thread ? { threadError: said ?? 'The runner did not return a thread. Open Threads to check before trying again.' } : { threadError: undefined }),
         updatedAt: Math.max(Date.now(), (latest?.updatedAt ?? 0) + 1),
@@ -4471,7 +4471,7 @@ export const purgeRunner = mutation({
     if (left > 0) {
       for (const table of ['runners', 'viewCounts'] as const) {
         const row = await ctx.db.query(table).withIndex('by_runnerId', (q) => q.eq('runnerId', runnerId)).unique();
-        if (row) await ctx.db.delete(row._id);
+        if (row) await ctx.db.delete(table, row._id);
       }
       return { done: true };
     }

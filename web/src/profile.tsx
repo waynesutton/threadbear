@@ -191,25 +191,26 @@ function Changelog({ repo, author }: { repo: string; author: string }) {
   const [changes, setChanges] = useState<Change[]>([]);
   const [state, setState] = useState<'idle' | 'loading' | 'done' | 'more'>('idle');
   const [problem, setProblem] = useState<string>();
-  const page = useRef(0);
+  // Pages of commits loaded so far.
+  const [page, setPage] = useState(0);
   const load = async () => {
     if (state === 'loading') return;
     setState('loading');
     setProblem(undefined);
     try {
-      const r = await fetch(commitsUrl(repo, author, page.current + 1), { headers: { Accept: 'application/vnd.github+json' } });
+      const r = await fetch(commitsUrl(repo, author, page + 1), { headers: { Accept: 'application/vnd.github+json' } });
       if (!r.ok) {
         setProblem(trouble(r.status, r.headers.get('x-ratelimit-remaining')));
-        setState(page.current === 0 ? 'idle' : 'more');
+        setState(page === 0 ? 'idle' : 'more');
         return;
       }
       const next = readCommits(await r.json());
-      page.current += 1;
+      setPage((n) => n + 1);
       setChanges((had) => [...had, ...next]);
       setState(hasNext(r.headers.get('link')) ? 'more' : 'done');
     } catch {
       setProblem(trouble(0, null));
-      setState(page.current === 0 ? 'idle' : 'more');
+      setState(page === 0 ? 'idle' : 'more');
     }
   };
   const days = useMemo(() => byDay(changes), [changes]);
@@ -218,7 +219,7 @@ function Changelog({ repo, author }: { repo: string; author: string }) {
     <details
       className="pf-card pf-changelog"
       onToggle={(e) => {
-        if ((e.currentTarget as HTMLDetailsElement).open && page.current === 0) void load();
+        if ((e.currentTarget as HTMLDetailsElement).open && page === 0) void load();
       }}
     >
       <summary>
@@ -251,8 +252,9 @@ function Changelog({ repo, author }: { repo: string; author: string }) {
         {problem && <p className="pf-note">{problem}</p>}
         <div className="pf-cl-foot">
           {(state === 'more' || (state === 'idle' && problem)) && (
+            // eslint-disable-next-line mikecann-lint/click-shows-progress -- load() sets 'loading' at once, which unmounts this button and shows "Loading from GitHub…"
             <button type="button" className="pf-cl-more" onClick={() => void load()}>
-              {page.current === 0 ? 'Try again' : 'Older changes'}
+              {page === 0 ? 'Try again' : 'Older changes'}
             </button>
           )}
           <a href={`${repoUrl}/commits?author=${encodeURIComponent(author)}`} target="_blank" rel="noopener noreferrer">

@@ -7,6 +7,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { makeHarness, tmpDir } from '../helpers/fakes.ts';
+import { patiently } from '../helpers/patience.ts';
 import { Projects } from '../../src/projects.ts';
 import { Librarian } from '../../src/librarian.ts';
 import { Bears } from '../../src/bears.ts';
@@ -115,6 +116,6 @@ test("a bear's thread put in a table seats the bear; a table gets the table icon
   const other = s.h.runner.create({ text: 'hi', cwd: tmpDir() }).thread;
   s.projects.changeMembership(other.id, { add: [t.id], by: 'mike' });
   assert.equal(s.projects.get(t.id).project.table?.bears.length, 2, 'not a bear: nobody new is seated');
-  await new Promise((r) => setTimeout(r, 50));
+  await patiently(() => s.projects.get(t.id).project.icon?.symbol === 'person.3');
   assert.equal(s.projects.get(t.id).project.icon?.symbol, 'person.3');
 });

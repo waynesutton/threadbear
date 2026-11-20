@@ -9,6 +9,7 @@ Status and gap list: prds/prints-status.md
 
 ## In Progress
 
+- [ ] 2026-11-20 18:33 UTC Land approved lint fixes and login-refresh regression coverage on top of the separately approved slot-22 release landing. Preserve its merge resolutions; restore the upstream suppression baseline. Verify .diff links stay in the pane after the app updates. prds/bring-in-2026-11-20-verification.md
 
 
 
@@ -24,6 +25,8 @@ Status and gap list: prds/prints-status.md
 - [ ] Land verified Settings review fixes when the Mac is quiet, then verify the installed update.
 
 ## Completed
+
+- [x] 2026-11-20 18:26 UTC Repair the deploy fixture and duplicate login-refresh RPC after the release merge. Deploy stage passes (34 cases), all 119 focused RPC/account/access tests pass, final runner typecheck/lint and diff checks pass. Earlier full run passed all other stages (5,218 runner tests passed, 53 skipped). Not landed or deployed. prds/bring-in-2026-11-20-verification.md
 
 - [x] 2026-11-19 00:01 UTC Respect owner-specific PR reminder preferences in the automatic Still open card. Product 6765143e landed after the 1600-second required check; automatic runner release 20261118T235248Z-6765143e started at 23:52:58 UTC and was marked good. The real thread card recomputed at 2026-11-18 23:59:03.280 UTC with only unpushed and scheduled entries, confirming the unwanted reminder is omitted while local-work warnings remain. Fourteen focused tests, typecheck, required check and deployment tests pass. prds/loose-end-pr-preferences.md
 

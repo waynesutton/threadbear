@@ -5,6 +5,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { mergeCompletion, completionOpen } from '../../src/completion.ts';
 import { makeHarness, tmpDir } from '../helpers/fakes.ts';
+import { patiently } from '../helpers/patience.ts';
 import { buildThreadbearTools } from '../../src/threadbear-mcp.ts';
 import { ThreadStore } from '../../src/store.ts';
 
@@ -78,7 +79,10 @@ test('task progress persists and an unfinished helper stays out of automatic arc
   const parent = h.runner.create({ text: 'Build the feature' }).thread.id;
   const id = h.runner.create({ text: 'Verify the feature', startedBy: { kind: 'thread', label: 'Agent', threadId: parent } }).thread.id;
   finish(h, id, { tasks: [task('verify', 'blocked')] });
-  await new Promise(resolve => setTimeout(resolve, 200));
+  // A finished helper's archive is decided as its turn ends (rec.finished,
+  // checked below); what runs after is its loose-ends check, so wait for that
+  // to settle rather than a fixed time.
+  await patiently(() => !h.runner.threads.get(id)!.rt.looseEndsBusy);
   assert.equal(h.runner.get(id).archivedAt, undefined);
   assert.equal(h.runner.childEnds(h.runner.threads.get(parent)!).some(end => end.threadId === id), true, 'unfinished helpers remain a loose end for their parent');
   assert.equal(h.runner.threads.get(id)?.rec.finished, undefined);

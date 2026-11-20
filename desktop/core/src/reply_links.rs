@@ -400,6 +400,7 @@ mod tests {
         assert_eq!(FileLinkAction::Automatic.resolved("/w/notes.md", false), FileLinkAction::Panel);
         assert_eq!(FileLinkAction::Automatic.resolved("/w/shot.PNG", false), FileLinkAction::Panel);
         assert_eq!(FileLinkAction::Automatic.resolved("/w/main.rs", false), FileLinkAction::Panel);
+        assert_eq!(FileLinkAction::Automatic.resolved("/w/exact check changes.diff", false), FileLinkAction::Panel);
         assert_eq!(FileLinkAction::Automatic.resolved("/w/put-1.json", false), FileLinkAction::Panel);
         assert_eq!(FileLinkAction::Automatic.resolved("/w/build.zip", false), FileLinkAction::App);
         assert_eq!(FileLinkAction::Automatic.resolved("/w/src", true), FileLinkAction::Panel, "a folder is browsed in the pane");

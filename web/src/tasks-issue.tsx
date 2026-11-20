@@ -1,7 +1,7 @@
 // The task editor's issue parts (backend API 87): priority and due date
 // pickers, sub-tasks, links and activity with comments, and the icons rows
 // and cards show. Drawn to match tasks.css; both themes come from its colors.
-import { useEffect, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
 import { useMutation, useQuery } from 'convex/react';
 import type { FunctionReturnType } from 'convex/server';
 import type { Id } from '../../convex/_generated/dataModel';
@@ -84,7 +84,7 @@ function Popover({ label, button, children, open, setOpen }: { label: string; bu
     document.addEventListener('mousedown', close);
     requestAnimationFrame(() => (ref.current?.querySelector<HTMLElement>('.issue-pop [aria-checked="true"]') ?? ref.current?.querySelector<HTMLElement>('.issue-pop button'))?.focus());
     return () => document.removeEventListener('mousedown', close);
-  }, [open]);
+  }, [open, setOpen]);
   return (
     <div
       className="issue-anchor"
@@ -148,9 +148,6 @@ export function PriorityPicker({ value, onChange, disabled }: { value: Priority 
 export function DuePicker({ value, onChange, disabled }: { value: string | null | undefined; onChange: (d: string | null) => void; disabled?: boolean }) {
   const [open, setOpen] = useState(false);
   const [month, setMonth] = useState(() => (value ?? dayOf(new Date())).slice(0, 7));
-  useEffect(() => {
-    if (open) setMonth((value ?? dayOf(new Date())).slice(0, 7));
-  }, [open]);
   const today = dayOf(new Date());
   const pick = (d: string | null) => {
     onChange(d);
@@ -163,7 +160,11 @@ export function DuePicker({ value, onChange, disabled }: { value: string | null 
       open={open}
       setOpen={setOpen}
       button={
-        <button type="button" className={`task-pill is-button ${value && overdue(value) ? 'is-late' : ''}`} title="Set the due date" aria-expanded={open} disabled={disabled} onClick={() => setOpen(!open)}>
+        <button type="button" className={`task-pill is-button ${value && overdue(value) ? 'is-late' : ''}`} title="Set the due date" aria-expanded={open} disabled={disabled} onClick={() => {
+          // Opens on the chosen day's month, or this one.
+          if (!open) setMonth((value ?? dayOf(new Date())).slice(0, 7));
+          setOpen(!open);
+        }}>
           <CalendarIcon />
           <span>{value ? dueLabel(value) : 'Due date'}</span>
         </button>
@@ -220,7 +221,7 @@ export function DuePicker({ value, onChange, disabled }: { value: string | null 
 }
 
 // Enter in these fields does their own thing, never submits the editor's form.
-const enterOnly = (run: () => void) => (e: KeyboardEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+const onEnter = (e: KeyboardEvent<HTMLInputElement | HTMLTextAreaElement>, run: () => void) => {
   if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
     e.preventDefault();
     e.stopPropagation();
@@ -239,7 +240,10 @@ export function IssueSections(props: {
   toggle: (t: Task) => void;
 }) {
   const { token, task, tasks, disabled, write } = props;
-  const auth = { token };
+  // One object for the component's life (per token): the React compiler takes a
+  // fresh one each render as something handlers that capture it could change,
+  // and then reads their Date.now() as running during render.
+  const auth = useMemo(() => ({ token }), [token]);
   const create = useMutation(api.tasks.create);
   const update = useMutation(api.tasks.update);
   const upload = useMutation(api.tasks.uploadPhoto);
@@ -323,7 +327,7 @@ export function IssueSections(props: {
               {c.dueDate && <DueChip day={c.dueDate} time={c.dueTime} done={c.status === 'done'} />}
             </div>
           ))}
-          <input className="issue-add" aria-label="New sub-task" placeholder="Add a sub-task, then Enter" maxLength={500} value={subDraft} disabled={disabled} onChange={(e) => setSubDraft(e.target.value)} onKeyDown={enterOnly(addSubTask)} />
+          <input className="issue-add" aria-label="New sub-task" placeholder="Add a sub-task, then Enter" maxLength={500} value={subDraft} disabled={disabled} onChange={(e) => setSubDraft(e.target.value)} onKeyDown={(e) => onEnter(e, addSubTask)} />
         </section>
       )}
       <section className="issue-section" aria-label="Links">
@@ -360,8 +364,8 @@ export function IssueSections(props: {
         ))}
         {linkDraft && (
           <div className="issue-linkform">
-            <input autoFocus aria-label="Link address" placeholder="https://" value={linkDraft.url} maxLength={2000} onChange={(e) => setLinkDraft({ ...linkDraft, url: e.target.value })} onKeyDown={enterOnly(addLink)} />
-            <input aria-label="Link title" placeholder="Title (optional)" value={linkDraft.title} maxLength={300} onChange={(e) => setLinkDraft({ ...linkDraft, title: e.target.value })} onKeyDown={enterOnly(addLink)} />
+            <input autoFocus aria-label="Link address" placeholder="https://" value={linkDraft.url} maxLength={2000} onChange={(e) => setLinkDraft({ ...linkDraft, url: e.target.value })} onKeyDown={(e) => onEnter(e, addLink)} />
+            <input aria-label="Link title" placeholder="Title (optional)" value={linkDraft.title} maxLength={300} onChange={(e) => setLinkDraft({ ...linkDraft, title: e.target.value })} onKeyDown={(e) => onEnter(e, addLink)} />
             <button type="button" title="Add this link" disabled={disabled || !cleanUrl(linkDraft.url)} onClick={addLink}>
               Add
             </button>

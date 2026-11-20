@@ -97,7 +97,7 @@ export const issueWebhook = mutation({
       createdAt: now,
       ...(days !== undefined ? { expiresAt: now + days * DAY } : {}),
     });
-    return { hook: infoOf((await ctx.db.get(id))!), secret };
+    return { hook: infoOf((await ctx.db.get("webhooks", id))!), secret };
   },
 });
 
@@ -117,14 +117,14 @@ export const listWebhooks = query({
 export async function revokeHooks(ctx: MutationCtx, id: Id<'webhooks'> | undefined, now = Date.now()): Promise<number> {
   const rows: Doc<'webhooks'>[] = [];
   if (id) {
-    const row = await ctx.db.get(id);
+    const row = await ctx.db.get("webhooks", id);
     if (row && row.revokedAt === undefined) rows.push(row);
   } else for await (const row of ctx.db.query('webhooks')) if (row.revokedAt === undefined) rows.push(row);
   const ids = new Set<string>(rows.map((r) => r._id));
   for (const r of rows) {
-    await ctx.db.patch(r._id, { revokedAt: now });
+    await ctx.db.patch("webhooks", r._id, { revokedAt: now });
     for (const c of await ctx.db.query('webhookCalls').withIndex('by_hook_state', (q) => q.eq('hookId', r._id).eq('state', 'waiting')).take(500)) {
-      await ctx.db.patch(c._id, { state: 'dropped', payload: undefined });
+      await ctx.db.patch("webhookCalls", c._id, { state: 'dropped', payload: undefined });
     }
   }
   if (ids.size) {
@@ -132,7 +132,7 @@ export async function revokeHooks(ctx: MutationCtx, id: Id<'webhooks'> | undefin
       const by = (c.args as { webhook?: { hookId?: string } } | undefined)?.webhook?.hookId;
       if (by && ids.has(by)) {
         // Through the command machine (commandMachine.ts), which writes its state.
-        if ((await commandMachine.send(ctx, c._id, { type: 'CANCEL' })).status === 'done') await ctx.db.patch(c._id, { args: {}, note: 'Its webhook was revoked.' });
+        if ((await commandMachine.send(ctx, c._id, { type: 'CANCEL' })).status === 'done') await ctx.db.patch("commands", c._id, { args: {}, note: 'Its webhook was revoked.' });
       }
     }
   }
@@ -197,11 +197,11 @@ export const deliver = internalMutation({
       contentType: contentType.slice(0, 100),
       ...(key ? { dedupe: key } : {}),
     });
-    await ctx.db.patch(row._id, { lastUsedAt: now });
+    await ctx.db.patch("webhooks", row._id, { lastUsedAt: now });
     // The first delivery of a window books the run; later ones join it.
     if (row.batchSeconds === 0) await flushHook(ctx, row, now);
     else if (row.flushAt === undefined || row.flushAt <= now) {
-      await ctx.db.patch(row._id, { flushAt: now + row.batchSeconds * 1000 });
+      await ctx.db.patch("webhooks", row._id, { flushAt: now + row.batchSeconds * 1000 });
       await ctx.scheduler.runAfter(row.batchSeconds * 1000, internal.webhooks.flush, { hookId: row._id });
     }
     return { ok: true as const, duplicate: false };
@@ -211,7 +211,7 @@ export const deliver = internalMutation({
 // The hook's waiting deliveries as one command to its runner.
 async function flushHook(ctx: MutationCtx, row: Doc<'webhooks'>, now: number): Promise<void> {
   const waiting = await ctx.db.query('webhookCalls').withIndex('by_hook_state', (q) => q.eq('hookId', row._id).eq('state', 'waiting')).take(HOOK_PER_DAY);
-  await ctx.db.patch(row._id, { flushAt: undefined });
+  await ctx.db.patch("webhooks", row._id, { flushAt: undefined });
   if (!waiting.length || row.revokedAt !== undefined) return;
   waiting.sort((a, b) => a.at - b.at);
   const payloads: { at: number; contentType: string; body: string }[] = [];
@@ -225,7 +225,7 @@ async function flushHook(ctx: MutationCtx, row: Doc<'webhooks'>, now: number): P
       bytes += body.length;
     }
     // The words aren't kept once they're on their way.
-    await ctx.db.patch(c._id, { state: 'sent', payload: undefined });
+    await ctx.db.patch("webhookCalls", c._id, { state: 'sent', payload: undefined });
   }
   const webhook = { hookId: row._id as string, name: row.name };
   const args = { webhook, payloads, ...(cut ? { cut } : {}) };
@@ -244,7 +244,7 @@ export const flush = internalMutation({
   args: { hookId: v.id('webhooks') },
   returns: v.null(),
   handler: async (ctx, { hookId }) => {
-    const row = await ctx.db.get(hookId);
+    const row = await ctx.db.get("webhooks", hookId);
     if (row) await flushHook(ctx, row, Date.now());
     return null;
   },
@@ -259,11 +259,11 @@ export const prune = internalMutation({
   returns: v.null(),
   handler: async (ctx) => {
     const now = Date.now();
-    for (const c of await ctx.db.query('webhookCalls').withIndex('by_at', (q) => q.lt('at', now - CALLS_KEPT_MS)).take(PRUNE_BATCH)) await ctx.db.delete(c._id);
-    for (const f of await ctx.db.query('webhookFails').withIndex('by_at', (q) => q.lt('at', now - DAY)).take(PRUNE_BATCH)) await ctx.db.delete(f._id);
+    for (const c of await ctx.db.query('webhookCalls').withIndex('by_at', (q) => q.lt('at', now - CALLS_KEPT_MS)).take(PRUNE_BATCH)) await ctx.db.delete("webhookCalls", c._id);
+    for (const f of await ctx.db.query('webhookFails').withIndex('by_at', (q) => q.lt('at', now - DAY)).take(PRUNE_BATCH)) await ctx.db.delete("webhookFails", f._id);
     for await (const h of ctx.db.query('webhooks')) {
       const ended = h.revokedAt ?? (h.expiresAt !== undefined && h.expiresAt <= now ? h.expiresAt : undefined);
-      if (ended !== undefined && ended <= now - CALLS_KEPT_MS) await ctx.db.delete(h._id);
+      if (ended !== undefined && ended <= now - CALLS_KEPT_MS) await ctx.db.delete("webhooks", h._id);
     }
     return null;
   },

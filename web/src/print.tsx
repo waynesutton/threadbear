@@ -16,10 +16,10 @@ const label = (kind: string) => (kind === 'page' ? 'Print' : kind.charAt(0).toUp
 export function PrintPage({ slug }: { slug: string }) {
   const data = useLiveQuery(api.prints.view, { slug });
   // Keeps the last version on screen while a new one loads.
-  const [shown, setShown] = useState<typeof data>(undefined);
-  useEffect(() => {
-    if (data) setShown(data);
-  }, [data]);
+  // Set while rendering, not in an effect, so a new version shows in the same
+  // render (react.dev, "Adjusting some state when a prop changes").
+  const [shown, setShown] = useState<typeof data>(data);
+  if (data && data !== shown) setShown(data);
   const title = shown?.state === 'ok' ? shown.title : undefined;
   useEffect(() => {
     document.title = title ? `${title} · Threadbear` : 'Threadbear';

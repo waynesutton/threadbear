@@ -89,7 +89,7 @@ export const begin = internalMutation({
     // Only tools it knows are counted under their name; anything else (an
     // initialize, a list of tools) under "other".
     await ctx.db.insert('agentCalls', { keyId: row._id, tool: (AGENT_TOOLS as readonly string[]).includes(tool) ? tool : 'other', at: now });
-    await ctx.db.patch(row._id, { lastUsedAt: now });
+    await ctx.db.patch("agentKeys", row._id, { lastUsedAt: now });
     return { ok: true as const, agent: { keyId: row._id, name: row.name, scope: row.scope, readAll: row.readAll } };
   },
 });
@@ -278,7 +278,7 @@ export async function makeAgentKey(ctx: MutationCtx, args: { name: string; scope
   const key = 'tba_' + Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('');
   const days = pageLimit(args.days, AGENT_DEFAULT_DAYS, AGENT_MAX_DAYS);
   const id = await ctx.db.insert('agentKeys', { hash: await sha256(key), name: args.name, scope: args.scope, readAll: args.readAll, createdAt: now, expiresAt: now + days * DAY });
-  const row = (await ctx.db.get(id))!;
+  const row = (await ctx.db.get("agentKeys", id))!;
   return { key: infoOf(row, now), secret: key };
 }
 
@@ -312,17 +312,17 @@ export const listAgentKeys = query({
 export async function revokeAgentKeys(ctx: MutationCtx, id: Id<'agentKeys'> | undefined, now = Date.now()): Promise<number> {
   const rows: Doc<'agentKeys'>[] = [];
   if (id) {
-    const row = await ctx.db.get(id);
+    const row = await ctx.db.get("agentKeys", id);
     if (row && row.revokedAt === undefined) rows.push(row);
   } else for await (const row of ctx.db.query('agentKeys')) if (row.revokedAt === undefined) rows.push(row);
   const ids = new Set<string>(rows.map((r) => r._id));
-  for (const r of rows) await ctx.db.patch(r._id, { revokedAt: now });
+  for (const r of rows) await ctx.db.patch("agentKeys", r._id, { revokedAt: now });
   if (ids.size) {
     for await (const c of ctx.db.query('commands').withIndex('by_state', (q) => q.eq('state', 'pending'))) {
       const by = (c.args as { agent?: { keyId?: string } } | undefined)?.agent?.keyId;
       if (by && ids.has(by)) {
         // Through the command machine (commandMachine.ts), which writes its state.
-        if ((await commandMachine.send(ctx, c._id, { type: 'CANCEL' })).status === 'done') await ctx.db.patch(c._id, { args: {}, note: 'Its key was revoked.' });
+        if ((await commandMachine.send(ctx, c._id, { type: 'CANCEL' })).status === 'done') await ctx.db.patch("commands", c._id, { args: {}, note: 'Its key was revoked.' });
       }
     }
   }
@@ -350,16 +350,16 @@ export const prune = internalMutation({
   handler: async (ctx) => {
     const now = Date.now();
     // Enough a run (hourly, crons.ts) to keep up with every key at its limits.
-    for (const c of await ctx.db.query('agentCalls').withIndex('by_at', (q) => q.lt('at', now - CALLS_KEPT_MS)).take(PRUNE_BATCH)) await ctx.db.delete(c._id);
-    for (const f of await ctx.db.query('agentAuthFails').withIndex('by_at', (q) => q.lt('at', now - DAY)).take(PRUNE_BATCH)) await ctx.db.delete(f._id);
+    for (const c of await ctx.db.query('agentCalls').withIndex('by_at', (q) => q.lt('at', now - CALLS_KEPT_MS)).take(PRUNE_BATCH)) await ctx.db.delete("agentCalls", c._id);
+    for (const f of await ctx.db.query('agentAuthFails').withIndex('by_at', (q) => q.lt('at', now - DAY)).take(PRUNE_BATCH)) await ctx.db.delete("agentAuthFails", f._id);
     for await (const k of ctx.db.query('agentKeys')) {
       const ended = k.revokedAt ?? (k.expiresAt <= now ? k.expiresAt : undefined);
       if (ended === undefined || ended > now - CALLS_KEPT_MS) continue;
       // Its thread rows first; the key goes only once none are left, so a
       // key with more than one batch is finished on a later run.
       const rows = await ctx.db.query('agentThreads').withIndex('by_key', (q) => q.eq('keyId', k._id)).take(500);
-      for (const t of rows) await ctx.db.delete(t._id);
-      if (rows.length < 500) await ctx.db.delete(k._id);
+      for (const t of rows) await ctx.db.delete("agentThreads", t._id);
+      if (rows.length < 500) await ctx.db.delete("agentKeys", k._id);
     }
     return null;
   },

@@ -8,6 +8,8 @@ How Prints work today, what's missing and what's next: [Prints status](https://g
 
 ### Fixed
 
+- Restore sign-in discovery alongside Usage refresh after the 20 November merge, and include new deployment helpers in the isolated deploy tests.
+
 - make-print's screenshot check captures the whole print, not just its first chart.
 
 - Clicking a file link that shows it in Finder no longer crashes the GPUI app.

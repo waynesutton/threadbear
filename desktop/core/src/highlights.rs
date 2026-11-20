@@ -1615,6 +1615,8 @@ mod tests {
             ("/tmp/a.swift", "swift"),
             ("/tmp/b.js", "javascript"),
             ("/tmp/q.sql", "sql"),
+            ("/tmp/exact check changes.diff", "diff"),
+            ("/tmp/review.PATCH", "diff"),
             ("/tmp/Makefile", "makefile"),
             ("/tmp/Dockerfile", "dockerfile"),
         ] {
