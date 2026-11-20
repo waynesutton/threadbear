@@ -2304,15 +2304,22 @@ has **Set up**.
    pages" to check. If it says "Sign-in expired" or similar, click
    **Reconnect**.
 
-**Slack** needs a Slack app of your own, about 10 minutes, and the thread
-that adds it walks you through it: make the app at api.slack.com/apps, add
-the exact redirect address the thread gives you, add only the user scopes
-you need (reading, and `chat:write` to post), and give the thread its
-Client ID and Secret in the secret box, never the chat. Your workspace's
-admin may have to approve the app. Posts then wait for your OK on the
-gateway's approval page. "does not support dynamic client registration"
-means the Client ID and Secret weren't saved, and "redirect_uri mismatch"
-means the redirect address differs from the one the thread gave.
+**Slack** needs a Slack app of your own, and the panel makes it about a
+minute. Its row (or its entry under Add a service) has **Create Slack app**:
+it opens Slack with the app already filled in (the redirect address, the
+user scopes, and Slack's MCP switch, which Slack's MCP server needs). Pick
+your workspace and press Create. Then copy the Client ID and Client Secret
+from Basic Information, App Credentials, into the two fields under the row
+and press **Save**. Threadbear saves them where the gateway reads them
+(never in Threadbear, never in a chat), turns Slack on, adds an "ask" rule
+for scheduled messages, and restarts the gateway, and the row shows
+**Connect**. Already made the app? **Paste keys** opens the fields without
+going to Slack. This works for a gateway on this Mac; for one on another
+Mac, Add starts a thread that does the same with you. Your workspace's
+admin may have to approve the app. Posts then wait for your OK.
+"does not support dynamic client registration" means the Client ID and
+Secret weren't saved, and "redirect_uri mismatch" means the redirect address
+in the Slack app differs from the gateway's.
 
 **Any other MCP server**: click **Other MCP server...**, paste its `https`
 address and give it a name. Only public `https` servers are taken. To take a

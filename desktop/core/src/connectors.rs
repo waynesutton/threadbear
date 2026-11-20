@@ -40,6 +40,25 @@ pub struct ConnectorService {
     pub connect_url: Option<String>,
     pub local: bool,
     pub state_note: Option<String>,
+    /// It needs an OAuth app of the user's own that the gateway hasn't got
+    /// yet (Slack): the Create button and paste form instead of Connect.
+    pub client_setup: Option<ClientSetup>,
+}
+
+/// `clientSetup` (runner static-clients.ts): the link that makes the app,
+/// filled in, the redirect it was filled in with, and a line of help.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct ClientSetup {
+    pub create_url: String,
+    pub redirect_url: String,
+    pub help: String,
+}
+
+impl ClientSetup {
+    fn decode(v: &Value) -> Option<ClientSetup> {
+        let create_url = v["createUrl"].as_str().filter(|u| u.starts_with("https://"))?.to_owned();
+        Some(ClientSetup { create_url, redirect_url: v["redirectUrl"].as_str().unwrap_or_default().to_owned(), help: v["help"].as_str().unwrap_or_default().to_owned() })
+    }
 }
 
 impl ConnectorsStatus {
@@ -70,6 +89,7 @@ impl ConnectorService {
             connect_url: v["connectUrl"].as_str().map(str::to_owned),
             local: v["local"].as_bool().unwrap_or(false),
             state_note: v["stateNote"].as_str().map(str::to_owned),
+            client_setup: ClientSetup::decode(&v["clientSetup"]),
             id,
         })
     }
@@ -84,6 +104,7 @@ pub struct ConnectorCatalogEntry {
     pub kind: String,
     pub command: Option<String>,
     pub asks: Vec<String>,
+    pub client_setup: Option<ClientSetup>,
 }
 
 impl ConnectorCatalogEntry {
@@ -96,6 +117,7 @@ impl ConnectorCatalogEntry {
             kind: v["kind"].as_str().unwrap_or("remote").to_owned(),
             command: v["command"].as_str().map(str::to_owned),
             asks: v["asks"].as_array().into_iter().flatten().filter_map(Value::as_str).map(str::to_owned).collect(),
+            client_setup: ClientSetup::decode(&v["clientSetup"]),
         })
     }
     pub fn is_local(&self) -> bool { self.kind == "local" }
@@ -480,7 +502,8 @@ pub fn state_line(service: &ConnectorService) -> String {
 
 /// The button beside a service, or None when there's nothing to press.
 pub fn button_title(service: &ConnectorService) -> Option<&'static str> {
-    if service.local { return None; }
+    // Connect would only fail without its app: Create comes first.
+    if service.local || service.client_setup.is_some() { return None; }
     service.connect_url.as_deref().filter(|u| !u.is_empty())?;
     match service.state.as_str() {
         "connected" | "disabled" => None,
@@ -599,4 +622,41 @@ mod tests {
         s.url = Some("https://mac-mini.tail.ts.net:8443".into());
         assert_eq!(host(Some(&s)).as_deref(), Some("mac-mini"));
     }
+}
+
+/// The Create button's words: "Create Slack app".
+pub fn create_app_title(title: &str) -> String {
+    format!("Create {title} app")
+}
+
+/// What the paste form says about what's in it: whether Save can go, and a
+/// warning when it doesn't look like what the service usually gives. The
+/// runner refuses only blank, spaced or absurd keys, so an odd one still
+/// saves, in case the service has changed its formats.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct PasteCheck {
+    pub can_save: bool,
+    pub warning: Option<String>,
+}
+
+pub fn paste_check(id: &str, client_id: &str, secret: &str) -> PasteCheck {
+    let (client_id, secret) = (client_id.trim(), secret.trim());
+    let spaced = |s: &str| s.chars().any(char::is_whitespace);
+    if client_id.is_empty() || secret.is_empty() {
+        return PasteCheck { can_save: false, warning: None };
+    }
+    if spaced(client_id) || spaced(secret) {
+        return PasteCheck { can_save: false, warning: Some("There's a space in it: copy it again.".into()) };
+    }
+    if id == "slack" {
+        let id_ok = client_id.split_once('.').is_some_and(|(a, b)| !a.is_empty() && !b.is_empty() && a.bytes().all(|c| c.is_ascii_digit()) && b.bytes().all(|c| c.is_ascii_digit()));
+        let secret_ok = secret.len() == 32 && secret.bytes().all(|c| c.is_ascii_hexdigit());
+        let warning = match (id_ok, secret_ok) {
+            (true, true) => None,
+            (false, _) => Some("That doesn't look like a Slack Client ID (numbers with a dot in the middle). Check you copied the Client ID.".into()),
+            (_, false) => Some("That doesn't look like a Slack Client Secret (32 letters and numbers). Check you copied the Secret, not the Signing Secret.".into()),
+        };
+        return PasteCheck { can_save: true, warning };
+    }
+    PasteCheck { can_save: true, warning: None }
 }

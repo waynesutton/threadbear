@@ -1,6 +1,6 @@
 # Slack one-click connect
 
-Created 2026-11-19. Draft for Wayne's fork. No PR to mikecann/threadbear unless Wayne asks.
+Created 2026-11-19. Built 2026-11-20 (`runner/src/static-clients.ts`, the GPUI Connectors panel). Wayne asked for a PR to mikecann/threadbear too: it works on Mike's plugbear as is.
 
 ## Purpose
 
@@ -87,3 +87,10 @@ Keep the add thread for anything the panel can't do (a remote gateway, a failed 
 - Slack app manifest reference: https://docs.slack.dev/reference/app-manifest (`settings.is_mcp_enabled`, `oauth_config.redirect_urls`, `oauth_config.scopes.user`)
 - Prefilled create link: https://docs.slack.dev/app-manifests/configuring-apps-with-app-manifests
 - plugbear static clients: plugbear README, `auth.client: "static"` and `secrets/clients/<upstream>.json`
+
+## As built, 2026-11-20
+
+- The form is on the Slack row whenever the gateway lacks `secrets/clients/slack.json`, whatever the row's state, and on Add a service's Slack entry. It isn't behind the Connectors setup experiment.
+- "This Mac's gateway" is plugbear's config folder existing here and its `settings.json` address matching the runner's gateway, so Tailscale mode on the same Mac gets it too.
+- The table of such services is `STATIC_CLIENTS` in `connectors-catalog.ts`: scopes, the create link, a line of help, extra ask rules, and the usual key formats. Another service joins by adding an entry, plus its format check in `paste_check` (core) if it wants a warning.
+- The add thread for Slack opens the same link and checks the MCP switch and the schedule rule.

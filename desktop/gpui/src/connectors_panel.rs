@@ -295,8 +295,14 @@ impl Threadbear {
                 .child(icons::symbol("arrow.up.forward").with_size(px(14.))),
             );
         }
+        if let Some(setup) = service.client_setup.clone() {
+            row = row.child(self.create_app_button(&service.id, &service.title, &setup.create_url, cx));
+        }
         row = row.child(self.connector_hide_button(format!("service:{}", service.id), format!("Hide {} from this panel. Agents can still use it; the + below brings it back.", service.title), group, cx));
-        row.into_any_element()
+        match service.client_setup.clone() {
+            Some(setup) => v_flex().gap(px(8.)).child(row).child(self.render_client_setup(&service.id, &service.title, &setup, cx)).into_any_element(),
+            None => row.into_any_element(),
+        }
     }
 
     // For scripts and the specs.
@@ -310,7 +316,7 @@ impl Threadbear {
             lines.extend(rules::empty_line(status));
         }
         for s in status.iter().flat_map(|s| s.services.iter()) {
-            lines.push(format!("{}: {}{}", s.title, rules::state_line(s), rules::button_title(s).map_or_else(String::new, |b| format!(" [{b}]"))));
+            lines.push(format!("{}: {}{}{}", s.title, rules::state_line(s), rules::button_title(s).map_or_else(String::new, |b| format!(" [{b}]")), if s.client_setup.is_some() { format!(" [{}]", rules::create_app_title(&s.title)) } else { String::new() }));
             if let Some(message) = s.state_note.as_ref().or(s.message.as_ref()).filter(|_| s.state != "connected") {
                 lines.push(format!("  {message}"));
             }

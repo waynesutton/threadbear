@@ -1,6 +1,6 @@
 // Setup and Outside agents use the existing runner RPCs. The panel only keeps
 // the new secret until Done or close; saved settings contain hidden row ids.
-use crate::activity_panels::{about_button_with_tip, icon_button, push_button, small_heading, text_line, MenuLabel};
+use crate::activity_panels::{about_button_with_tip, icon_button, push_button, small_heading, system_orange, text_line, MenuLabel};
 use crate::app::Threadbear;
 use crate::highlights::{tipped, tipped_as};
 use crate::style::px;
@@ -14,7 +14,7 @@ use gpui_kit::prelude::*;
 use gpui_kit::*;
 use serde_json::{json, Value};
 use std::collections::{BTreeSet, HashSet};
-use threadbear_core::connectors::{self as rules, AgentConnected, AgentsList, ConnectorCatalogEntry, ConnectorsStatus, LocalServer, OutsideAgentApp};
+use threadbear_core::connectors::{self as rules, AgentConnected, AgentsList, ClientSetup, ConnectorCatalogEntry, ConnectorsStatus, LocalServer, OutsideAgentApp};
 
 #[derive(Default)]
 pub(crate) struct SetupState {
@@ -27,6 +27,7 @@ pub(crate) struct SetupState {
     agent_form: bool,
     custom: Option<CustomServerForm>,
     trust: Option<LocalTrust>,
+    client: Option<ClientForm>,
     // Closing and reopening during an RPC must not resurrect a one-time key.
     epoch: u64,
     list_request: u64,
@@ -44,6 +45,16 @@ impl CustomServerForm {
     fn server(&self, cx: &App) -> LocalServer {
         LocalServer::new(if self.npx { "npx" } else { "uvx" }, &self.address.read(cx).value(), &self.version.read(cx).value(), &self.title.read(cx).value())
     }
+}
+
+/// The paste form for a service's own OAuth app (Slack's Client ID and
+/// Secret). The secret lives only in its masked field, until Save sends it
+/// in the one `connectors.saveClient` call, or Cancel or close drops it.
+struct ClientForm {
+    id: String,
+    client_id: Entity<InputState>,
+    secret: Entity<InputState>,
+    _subscriptions: Vec<Subscription>,
 }
 
 #[derive(Clone)]
@@ -75,6 +86,7 @@ impl Threadbear {
         state.agent_form = false;
         state.custom = None;
         state.trust = None;
+        state.client = None;
         state.epoch += 1;
     }
 
@@ -234,6 +246,11 @@ impl Threadbear {
         if !entry.blurb.is_empty() { words = words.child(text_line(entry.blurb.clone(), 11., style::secondary_text(cx))); }
         let mut row = h_flex().group(group.clone()).items_start().gap(px(8.)).child(words);
         if let Some(note) = &entry.setup_note { row = row.child(about_button_with_tip(SharedString::from(format!("catalog-note-{}", entry.id)), format!("What {} needs first", entry.title), vec![note.clone()], None, cx)); }
+        if let Some(setup) = entry.client_setup.clone() {
+            row = row.child(self.create_app_button(&entry.id, &entry.title, &setup.create_url, cx));
+            let row = row.child(self.connector_hide_button(format!("catalog:{}",entry.id),format!("Hide the {} suggestion. The + below brings it back.",entry.title),group,cx));
+            return v_flex().gap(px(8.)).child(row).child(self.render_client_setup(&entry.id, &entry.title, &setup, cx)).into_any_element();
+        }
         let e = entry.clone();
         let busy = self.connectors_panel.setup.busy.contains(&entry.id);
         row = row.child(push_button(SharedString::from(format!("catalog-add-{}", entry.id)), if entry.is_local() { "Add..." } else { "Add" },
@@ -246,6 +263,98 @@ impl Threadbear {
                 } else { t.start_connector_thread("connectors.add", json!({"id":e.id}), e.id.clone(), w, cx); }
             }));
         row.child(self.connector_hide_button(format!("catalog:{}",entry.id),format!("Hide the {} suggestion. The + below brings it back.",entry.title),group,cx)).into_any_element()
+    }
+
+    /// `Create Slack app`: opens the service's page that makes the app,
+    /// filled in, and the paste form for what it gives back.
+    pub(crate) fn create_app_button(&mut self, id: &str, title: &str, url: &str, cx: &mut Context<Self>) -> AnyElement {
+        let (id, url) = (id.to_owned(), url.to_owned());
+        push_button(SharedString::from(format!("connector-create-{id}")), rules::create_app_title(title), format!("Open {title} with the app filled in, then paste its keys here"), true, false, cx, move |t, w, cx| {
+            crate::open_gate::open_web(&url, cx);
+            t.open_client_form(&id, w, cx);
+        })
+    }
+
+    fn open_client_form(&mut self, id: &str, window: &mut Window, cx: &mut Context<Self>) {
+        if self.connectors_panel.setup.client.as_ref().is_some_and(|f| f.id == id) { return; }
+        let client_id = cx.new(|cx| InputState::new(window, cx).placeholder("Client ID"));
+        let secret = cx.new(|cx| {
+            let mut state = InputState::new(window, cx).placeholder("Client Secret");
+            state.set_masked(true, window, cx);
+            state
+        });
+        // A pasted secret not yet saved: an update's restart waits for it.
+        crate::unsent::watch(&secret, "an app's Client Secret field", cx);
+        let mut subscriptions: Vec<Subscription> = [&client_id, &secret].into_iter().map(|input| cx.subscribe(input, |_, _, _: &InputEvent, cx| cx.notify())).collect();
+        let who = id.to_owned();
+        subscriptions.push(cx.subscribe_in(&secret, window, move |t, _, event: &InputEvent, _, cx| {
+            if let InputEvent::PressEnter { .. } = event { t.save_client(&who, cx); }
+        }));
+        let focus = client_id.read(cx).focus_handle(cx);
+        self.connectors_panel.setup.client = Some(ClientForm { id: id.to_owned(), client_id, secret, _subscriptions: subscriptions });
+        window.focus(&focus, cx);
+        crate::web_panels::keyboard_to_app(window);
+        cx.notify();
+    }
+
+    /// `connectors.saveClient`: the runner writes the keys where the gateway
+    /// reads them, turns the service on and restarts the gateway, and
+    /// answers with the panel's new status once the gateway is back.
+    fn save_client(&mut self, id: &str, cx: &mut Context<Self>) {
+        let Some(form) = self.connectors_panel.setup.client.as_ref().filter(|f| f.id == id) else { return };
+        let (client_id, secret) = (form.client_id.read(cx).value().trim().to_owned(), form.secret.read(cx).value().trim().to_owned());
+        if !rules::paste_check(id, &client_id, &secret).can_save || !self.connectors_panel.setup.busy.insert("save-client".into()) { return; }
+        let epoch = self.connectors_panel.setup.epoch;
+        let params = json!({ "id": id, "clientId": client_id, "clientSecret": secret });
+        let client = self.client.clone();
+        let id = id.to_owned();
+        cx.notify();
+        cx.spawn(async move |this, cx| {
+            let result = call(client, "connectors.saveClient", params).await;
+            this.update(cx, |t, cx| {
+                t.connectors_panel.setup.busy.remove("save-client");
+                match result {
+                    Ok(v) => {
+                        t.connectors_panel.status = Some(ConnectorsStatus::decode(&v["connectors"]));
+                        if t.connectors_panel.setup.epoch == epoch && t.connectors_panel.setup.client.as_ref().is_some_and(|f| f.id == id) { t.connectors_panel.setup.client = None; }
+                        t.flash_done("Saved. Press Connect to sign in", cx);
+                    }
+                    Err(e) => t.show_error(e.message, cx),
+                }
+                cx.notify();
+            }).ok();
+        }).detach();
+    }
+
+    /// Under a service that needs its own app: a line on what Create does,
+    /// and once it's pressed (or Paste keys), the two fields and Save.
+    pub(crate) fn render_client_setup(&mut self, id: &str, title: &str, setup: &ClientSetup, cx: &mut Context<Self>) -> AnyElement {
+        let secondary = style::secondary_text(cx);
+        let mut rows = vec![];
+        if !setup.help.is_empty() { rows.push(text_line(setup.help.clone(), 11., secondary).into_any_element()); }
+        let open = self.connectors_panel.setup.client.as_ref().filter(|f| f.id == id);
+        let Some(form) = open else {
+            let who = id.to_owned();
+            rows.push(push_button(SharedString::from(format!("connector-paste-{id}")), "Paste keys", format!("Already made the {title} app? Paste its Client ID and Secret"), true, false, cx, move |t, w, cx| t.open_client_form(&who, w, cx)));
+            return v_flex().gap(px(6.)).children(rows).into_any_element();
+        };
+        let (client_id, secret) = (form.client_id.clone(), form.secret.clone());
+        let check = rules::paste_check(id, &client_id.read(cx).value(), &secret.read(cx).value());
+        rows.push(input_row("connector-client-id", "Client ID", &client_id, cx));
+        rows.push(input_row("connector-client-secret", "Client Secret", &secret, cx));
+        if let Some(warning) = check.warning.clone() { rows.push(text_line(warning, 11., system_orange(cx)).into_any_element()); }
+        let busy = self.connectors_panel.setup.busy.contains("save-client");
+        let mut buttons = h_flex().gap(px(6.));
+        if check.can_save {
+            let who = id.to_owned();
+            buttons = buttons.child(push_button("connector-client-save", "Save", format!("Save the keys to the gateway, turn {title} on and restart the gateway"), true, busy, cx, move |t, _, cx| t.save_client(&who, cx)));
+        } else {
+            buttons = buttons.child(tipped(div().id("connector-client-save-off").opacity(0.4).text_size(px(11.)), "Paste both the Client ID and the Client Secret").child("Save"));
+        }
+        buttons = buttons.child(push_button("connector-client-cancel", "Cancel", "Put the form away. Nothing is saved", true, false, cx, |t, _, cx| { t.connectors_panel.setup.client = None; cx.notify(); }));
+        rows.push(buttons.into_any_element());
+        if !setup.redirect_url.is_empty() { rows.push(text_line(format!("The app signs in back to {}.", setup.redirect_url), 11., style::tertiary_label(cx)).into_any_element()); }
+        v_flex().gap(px(6.)).children(rows).into_any_element()
     }
 
     fn open_custom_connector(&mut self, local: bool, window: &mut Window, cx: &mut Context<Self>) {
@@ -407,7 +516,7 @@ impl Threadbear {
             if s.can_set_up {lines.push("Set up".into());}
             if s.state=="ok" {
                 if self.connectors_panel.status.as_ref().is_some_and(|s| !s.catalog.is_empty() || s.can_add_local) { lines.push("Add a service".into()); }
-                for e in s.catalog {lines.push(if e.is_local(){format!("{}: On this Mac [Add...]",e.title)}else{format!("{} [Add]",e.title)});}
+                for e in s.catalog {lines.push(if e.is_local(){format!("{}: On this Mac [Add...]",e.title)}else if e.client_setup.is_some(){format!("{} [{}]",e.title,rules::create_app_title(&e.title))}else{format!("{} [Add]",e.title)});}
             }
         }
         let state=&self.connectors_panel.setup;
@@ -424,6 +533,7 @@ impl Threadbear {
             if let Some(made)=&state.made {lines.extend(OutsideAgentApp::for_key(&made.key.name).form(&made.url,&made.secret).into_iter().map(|f|format!("{}: {}{}",f.label,f.shown,if f.copies{" [Copy]"}else{""})));}
         }
         if let Some(trust)=&state.trust{lines.extend(trust.lines());}
+        if let Some(form)=&state.client{lines.push(format!("{} keys: Client ID, Client Secret [Save] [Cancel]",form.id));}
         let count=rules::hidden_items(&hidden,self.connectors_panel.status.as_ref(),state.agents.as_ref()).len();
         if count>0{lines.push(format!("+ {count} hidden"));}
         lines

@@ -18,6 +18,7 @@ import path from 'node:path';
 import os from 'node:os';
 import { execFile } from 'node:child_process';
 import { loginShell } from './system-tools.ts';
+import { clientSetup, redirectUrl, saveClient, type ClientSetup } from './static-clients.ts';
 import { addMessage, CATALOG, catalogFor, cleanTitle, customServerProblem, idFor, localAddMessage, localServerProblem, setupMessage, type Launcher, type PanelEntry } from './connectors-catalog.ts';
 
 // How often /health is asked when nobody's looking. A sign-in that lapses
@@ -545,20 +546,50 @@ export type ConnectorsSetupDeps = {
   findLauncher?: (launcher: Launcher) => Promise<string | undefined>;
 };
 
-export type ConnectorsPanelStatus = ConnectorsStatus & { canSetUp?: boolean; canAddLocal?: boolean; catalog?: PanelEntry[] };
+// A service that needs an OAuth app of the user's own (static-clients.ts),
+// for a gateway whose files are on this Mac: where those are, and how to
+// restart it. Without it, no Create button: the add thread does it.
+export type StaticClientDeps = {
+  // plugbear's data folder, when the gateway the runner uses is this Mac's.
+  dataDir: () => string | undefined;
+  restart: () => Promise<void>;
+  // How long saveClient waits for /health to list the service again.
+  waitMs?: number;
+  sleep?: (ms: number) => Promise<void>;
+};
+
+export type ConnectorsPanelStatus = Omit<ConnectorsStatus, 'services'> & { services: (ConnectorService & { clientSetup?: ClientSetup })[]; canSetUp?: boolean; canAddLocal?: boolean; catalog?: (PanelEntry & { clientSetup?: ClientSetup })[] };
 
 // connectors.status: what the panel shows. { refresh: true } asks /health
 // first (the panel opening, or Check now), unless it did within FRESH_MS.
 // With Connectors setup on, also whether Set up is offered and what Add a
 // service lists; connectors.setup and connectors.add start their threads,
 // one each at a time (a second click opens the first).
-export function connectorsMethods(m: Pick<ConnectorsMonitor, 'status' | 'refresh'>, setup?: ConnectorsSetupDeps): Record<string, (p: Record<string, unknown>) => unknown> {
+//
+// connectors.saveClient { id, clientId, clientSecret }: the Create button's
+// paste form (static-clients.ts). Not part of the experiment: a gateway
+// that has Slack in it needs this as much as one adding it.
+export function connectorsMethods(m: Pick<ConnectorsMonitor, 'status' | 'refresh'>, setup?: ConnectorsSetupDeps, clients?: StaticClientDeps): Record<string, (p: Record<string, unknown>) => unknown> {
   const running = new Map<string, string>();
-  const panel = (s: ConnectorsStatus): ConnectorsPanelStatus => {
-    if (!setup?.on()) return s;
-    const local = localOn();
-    return { ...s, canSetUp: s.state === 'off', ...(s.state === 'ok' ? { catalog: catalogFor(s.services.map((x) => x.id), local), ...(local ? { canAddLocal: true } : {}) } : {}) };
+  const dataDir = () => {
+    try {
+      return clients?.dataDir();
+    } catch {
+      return undefined;
+    }
   };
+  const withSetup = <T extends { id: string; kind?: string }>(x: T, dir: string | undefined): T & { clientSetup?: ClientSetup } => {
+    const c = dir && x.kind !== 'local' ? clientSetup(dir, x.id) : undefined;
+    return c ? { ...x, clientSetup: c } : x;
+  };
+  const panel = (s: ConnectorsStatus): ConnectorsPanelStatus => {
+    const dir = s.state === 'ok' ? dataDir() : undefined;
+    const services = dir ? s.services.map((x) => (x.local ? x : withSetup(x, dir))) : s.services;
+    if (!setup?.on()) return { ...s, services };
+    const local = localOn();
+    return { ...s, services, canSetUp: s.state === 'off', ...(s.state === 'ok' ? { catalog: catalogFor(s.services.map((x) => x.id), local).map((e) => withSetup(e, dir)), ...(local ? { canAddLocal: true } : {}) } : {}) };
+  };
+  let saving: Promise<unknown> | undefined;
   const localOn = () => Boolean(setup?.on() && setup.local?.());
   // A local add finds its launcher first; a second click meanwhile waits
   // for the same answer rather than starting a second thread.
@@ -586,6 +617,36 @@ export function connectorsMethods(m: Pick<ConnectorsMonitor, 'status' | 'refresh
     if (!setup?.on()) throw new RpcError(ErrorCode.other, 'Connectors setup is off: turn it on in Settings > General > Experiments.');
   };
   return {
+    'connectors.saveClient': async (p) => {
+      const dir = dataDir();
+      if (!clients || !dir) throw new RpcError(ErrorCode.other, "The gateway isn't on this Mac, so its files can't be written from here: use Add, and its thread does it.");
+      if (saving) throw new RpcError(ErrorCode.other, 'Already saving one: wait for it to finish.');
+      const run = (async () => {
+        try {
+          await saveClient({ dataDir: dir, restart: clients.restart }, p.id, p.clientId, p.clientSecret);
+        } catch (e) {
+          throw new RpcError(ErrorCode.other, `Couldn't save it: ${e instanceof Error ? e.message : String(e)}`.slice(0, 300));
+        }
+        // plugbear back, with the service in its /health.
+        const id = p.id as string;
+        const sleep = clients.sleep ?? ((ms: number) => new Promise<void>((r) => setTimeout(r, ms)));
+        const until = Date.now() + (clients.waitMs ?? 30_000);
+        let s = m.status();
+        for (;;) {
+          await sleep(1000);
+          s = await m.refresh(true);
+          if (s.state === 'ok' && s.services.some((x) => x.id === id && x.state !== 'disabled')) break;
+          if (Date.now() > until) throw new RpcError(ErrorCode.other, "Saved, but the gateway didn't come back with it within 30 seconds. Check again in a minute, or look at ~/Library/Logs/connectors.log.");
+        }
+        return { connectors: panel(s) };
+      })();
+      saving = run;
+      try {
+        return await run;
+      } finally {
+        saving = undefined;
+      }
+    },
     'connectors.status': (p) => (p.refresh === true ? m.refresh().then((connectors) => ({ connectors: panel(connectors) })) : { connectors: panel(m.status()) }),
     'connectors.setup': () => {
       mustBeOn();
@@ -598,7 +659,8 @@ export function connectorsMethods(m: Pick<ConnectorsMonitor, 'status' | 'refresh
         const entry = CATALOG.find((e) => e.id === p.id && (e.kind === 'remote' || localOn()));
         if (!entry) throw new RpcError(ErrorCode.badParams, `no service called ${p.id.slice(0, 40)}`);
         if (entry.kind === 'local') return onceLocal(`add:${entry.id}`, (found) => ({ text: localAddMessage(entry, false, found), title: `Add ${entry.title} to Connectors`, why: 'Add in the Connectors panel' }), entry.launcher);
-        return once(`add:${entry.id}`, () => ({ text: addMessage(entry, false), title: `Add ${entry.title} to Connectors`, why: `Add in the Connectors panel` }));
+        const dir = dataDir();
+        return once(`add:${entry.id}`, () => ({ text: addMessage(entry, false, dir ? redirectUrl(dir) : undefined), title: `Add ${entry.title} to Connectors`, why: `Add in the Connectors panel` }));
       }
       if (p.local !== undefined) {
         if (!localOn()) throw new RpcError(ErrorCode.other, 'Local connectors is off: turn it on in Settings > General > Experiments.');

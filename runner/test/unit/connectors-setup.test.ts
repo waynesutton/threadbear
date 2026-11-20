@@ -78,8 +78,8 @@ test('the setup thread pins plugbear to one commit and never handles secrets in 
 test("Slack's thread walks through its own app and checks the ask rules for posting", () => {
   const slack = CATALOG.find((e) => e.id === 'slack') as RemoteEntry;
   const text = addMessage(slack, false);
-  assert.match(text, /"auth":\{"type":"oauth","client":"static"\}/);
-  assert.match(text, /User Token Scopes/);
+  assert.match(text, /"auth":\{"type":"oauth","client":"static"\},"scopes":\["channels:history"/);
+  assert.match(text, /manifest_json=/);
   assert.match(text, /ask_secret/);
   assert.match(text, /"ask" rule/);
   assert.ok(slack.setupNote);

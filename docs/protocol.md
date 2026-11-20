@@ -1397,6 +1397,7 @@ the summary and then the reply.
 | `github.prAct` | `{ url, action, method?, body? }` | `{}` once GitHub has it, or gh's own error. `action` is `merge` (with `method` `rebase`, `squash` or `merge`), `close`, `reopen`, `comment` (`body`), `approve` (`body?`) or `requestChanges` (`body`) |
 | `connectors.status` | `{ refresh?: boolean }` | `{ connectors: ConnectorsStatus }` (see Connectors). `refresh` asks the gateway's `/health` first, unless it did in the last 10 seconds; the app passes it when the Connectors panel opens. A runner from before Connectors answers `-32601` and the app leaves the panel out |
 | `connectors.setup` | `{}` | `{ threadId, already: boolean }`. Connectors setup (an experiment): starts the thread that installs the gateway (see "Connectors setup"), or answers the one already open. Refused while the experiment is off |
+| `connectors.saveClient` | `{ id: string, clientId: string, clientSecret: string }` | `{ connectors: ConnectorsStatus }` once the gateway's `/health` lists the service again (up to 30 seconds). The Create Slack app paste form (see Connectors, "An app of your own"). Only for an `id` in `STATIC_CLIENTS` and a gateway whose files are on this Mac. Writes the client, turns the upstream on, adds its `ask` rules and restarts plugbear. Errors never carry the secret |
 | `connectors.add` | `{ id: string }`, `{ url: string, title?: string }` or (Local connectors) `{ local: { launcher, package, version, args?, title? } }` | `{ threadId, already: boolean }`. Starts the thread that adds a catalog service, or a public `https:` MCP server, to the gateway. Refused while the gateway isn't `ok`, for an id not in the catalog, and for any other address |
 | `agents.list` | `{}` | `{ on, reason?, url?, keys: AgentKey[] }`. Outside agents (an experiment, see "Outside agents"): `url` is the backend's `/mcp`; `reason` says why none can be made (sync off) |
 | `agents.connect` | `{ name?: string, scope?: "read" \| "write", readAll?: boolean }` | `{ key: AgentKey, secret, url }`. Makes a key, `read` and own threads only unless asked. `secret` is in this reply and nowhere else |
@@ -6221,6 +6222,37 @@ env }`, the args the exact pin, with `-y` before it for npx) and its
 `ask` rules, put first in `policy.json`, and allows exactly that command,
 args and env and nothing more. Every remote add's message still forbids
 `stdio`.
+
+**An app of your own.** A service plugbear signs in to with a static
+OAuth client (`auth: "oauth-static"`, today Slack) needs an app the user
+makes, as it has no dynamic client registration.
+`runner/src/static-clients.ts` and `STATIC_CLIENTS` in
+`runner/src/connectors-catalog.ts` turn that into a button and a paste
+form. When the gateway is this Mac's (plugbear's
+`~/Library/Application Support/Connectors/config` exists and its
+`settings.json` puts it at the runner's gateway address; Tailscale mode on
+this Mac counts) and `secrets/clients/<id>.json` doesn't exist (only its
+existence is checked), `connectors.status` puts `clientSetup: { createUrl,
+redirectUrl, help }` on that service, and on its `catalog` entry. This
+part isn't behind the experiment. `createUrl` for Slack is
+`https://api.slack.com/apps?new_app=1&manifest_json=<manifest>`: an
+internal app named Threadbear with `settings.is_mcp_enabled`, the redirect
+`<publicUrl>/oauth/callback`, and the user scopes from the gateway's own
+`upstreams.json` (else the catalog's), so the app and the sign-in agree. A
+service with `clientSetup` gets Create, not Connect. The app's form checks
+the usual formats (Slack: digits with a dot, 32 hex characters) only to
+warn. `connectors.saveClient` refuses only blank, spaced or absurd keys,
+writes the client by a temp file and a rename (`0600`, in a `0700`
+folder), sets `enabled: true` on the upstream in `upstreams.json` (copied
+from the example if missing, the upstream added from the catalog if it
+isn't there, every other field kept), puts the service's own `ask` rules
+first in `policy.json` (Slack: `slack__*schedule*`, which the catch-all
+rules miss), and runs `launchctl kickstart -k gui/<uid>/local.connectors`.
+The RPC's params aren't logged. A thread below Full access can't call it
+(rpc-gate.ts; one on Full access could write those files anyway), and the
+phone and website have no way to. A gateway on another Mac gets no
+`clientSetup`: the Add thread's Slack steps open the same link and take
+the keys through `ask_secret`.
 
 ### X search
 
