@@ -186,9 +186,6 @@ pub enum ShortcutCommand {
     Settings,
 }
 
-/// Open Anything's experiment id (runner/src/experiments/openAnything.md).
-pub const OPEN_ANYTHING_EXPERIMENT: &str = "openAnything";
-
 impl ShortcutCommand {
     pub const ALL: [ShortcutCommand; 30] = [
         Self::NewThread,
@@ -299,10 +296,9 @@ impl ShortcutCommand {
 
     /// The experiment a command belongs to (runner/src/experiments): while
     /// it's off the command has no key, no menu item and no line in
-    /// Settings. Open Anything's two keys are `openAnything`'s.
+    /// Settings.
     pub fn experiment(self) -> Option<&'static str> {
         match self {
-            Self::OpenAnything | Self::OpenAnythingAlso => Some(OPEN_ANYTHING_EXPERIMENT),
             Self::ShowSkills => Some(crate::skills::EXPERIMENT),
             Self::ShowTasks => Some("tasks"),
             _ => None,

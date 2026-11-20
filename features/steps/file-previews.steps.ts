@@ -191,3 +191,12 @@ When('I switch the pane to {string}', async function (this: ThreadbearWorld, tit
   await this.app.do({ cmd: 'panel', id });
   await this.until(`the pane on ${title}`, (d) => pane(d)?.section === id);
 });
+
+// A note in place of the file (one that only opens in its app, or one waiting
+// for the runner), as against the bar over a file (`the pane says`). On
+// Windows the app reads this Mac's own files itself, not through the runner
+// (desktop/gpui/src/main.rs `call`), so nothing waits there.
+Then('the pane\'s note reads {string} on a Mac or Linux', async function (this: ThreadbearWorld, words: string) {
+  if (process.platform === 'win32') return;
+  await this.until(`the pane's note to read "${words}"`, (d) => pane(d)?.previewKind === 'note' && pane(d)?.previewText === words);
+});

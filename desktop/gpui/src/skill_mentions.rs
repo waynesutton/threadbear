@@ -65,7 +65,7 @@ impl ThreadPane {
         cx.defer(move |cx| {
             pane.update(cx, |this, cx| {
                 let path = this.mention_commands(cx).into_iter().find(|c| c.is_skill() && c.name.eq_ignore_ascii_case(&name)).and_then(|c| c.path);
-                if let Some(path) = path { this.preview_in_pane(&path, cx); }
+                if let Some(path) = path { this.preview_in_pane(&path, None, cx); }
                 else { this.show_error("This runner hasn't listed a file for that skill.".to_owned(), cx); }
             }).ok();
         });

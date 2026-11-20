@@ -4,6 +4,12 @@
 // channel; requests run there too and their results come back as tasks.
 // Read-outs that exist only for the scripted control (`automation.rs`).
 #![cfg_attr(not(feature = "automation"), allow(dead_code, unused_imports))]
+// A Windows release is a windowed program, not a console one: without this
+// Windows opens a cmd window behind the app for its stderr (Mike's Dell, 17
+// Nov). Its log goes to a file instead (app_log.rs). Debug and scripted
+// builds keep the console, as the specs and anyone running one by hand read
+// what it prints.
+#![cfg_attr(all(windows, not(debug_assertions), not(feature = "automation")), windows_subsystem = "windows")]
 mod a11y;
 mod print_cards;
 mod print_select;
@@ -34,6 +40,7 @@ mod composer_media;
 #[cfg(target_os = "macos")]
 mod composer_url;
 mod composer;
+mod confetti;
 mod composer_card;
 mod composer_account;
 mod composer_answers;
@@ -53,10 +60,13 @@ mod explain_pane;
 mod far_rows;
 mod file_drag;
 mod file_edit;
+mod file_thumbs;
+mod fit_picture;
 mod file_find;
 mod folder_search_view;
 mod file_watch;
 mod files;
+mod fonts;
 mod files_store;
 mod folders;
 #[cfg(feature = "frame-stats")]
@@ -66,6 +76,7 @@ mod handover;
 mod input_probe;
 mod header;
 mod highlights;
+mod pr_view;
 mod highlights_board;
 mod highlights_project;
 mod highlights_store;
@@ -111,6 +122,7 @@ mod reply_buttons;
 mod reply_links;
 mod review_window;
 mod rich_boxes;
+mod live_pages;
 mod rich_window;
 mod row_motion;
 mod row_swipe;
@@ -143,10 +155,13 @@ mod text_services;
 mod native_text;
 mod thread_map;
 mod tips;
+mod token_card;
 mod thread_panels;
+mod thread_link_marks;
 mod tour;
 mod turn_modes;
 mod setup_panel;
+mod hello;
 mod unsent;
 mod updates_panel;
 mod usage;
@@ -277,6 +292,8 @@ fn main() {
     let links = deep_links::receive(&application);
     application.run(|cx| {
         gpui_kit::init(cx);
+        // Fonts the app carries (fonts.rs), before anything is measured in one.
+        fonts::register(cx);
         // An untouched caret should not redraw the window indefinitely.
         // It stays visible after ten seconds and resumes on editing or focus.
         gpui_kit::component::Theme::update(cx, |theme| {

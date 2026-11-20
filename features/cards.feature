@@ -22,8 +22,11 @@ Feature: Answering the agent
   Scenario: Denying it stops that action
     When I open the thread "Make uploads resume after a crash"
     And I press "Deny"
+    Then the transcript shows a reply starting "OK, I left it alone"
+    # The card belongs to its turn, so once that turn ends it folds into
+    # the turn's work line with the rest.
+    When I open the last folded work line
     Then the approval for "rm -rf .build DerivedData" says it was denied
-    And the transcript shows a reply starting "OK, I left it alone"
 
   # With two waiting, Return in an empty box allows the one that asked
   # first, then the next: it did nothing with two (Wayne, 10 Nov).

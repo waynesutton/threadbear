@@ -494,8 +494,7 @@ test('pages.updateDir makes a new version from a folder, with its summary', asyn
   assert.throws(() => methods['pages.updateDir']({ pageId: p.id, dir: 'relative/page' }), /absolute folder/);
   assert.throws(() => methods['pages.updateDir']({ pageId: 'pg_nope', dir }), /pg_nope|No print|not found/i);
 
-  const gate = (confined: boolean) => new CallerGate({ runner: { has: () => true, get: () => ({ permissionMode: 'ask', title: 'T' }), accessOf: () => 'ask', confinedOf: () => confined } });
-  assert.deepEqual(gate(false).check('t1', 'pages.updateDir', { pageId: p.id, dir }), { pageId: p.id, dir });
-  assert.throws(() => gate(true).check('t1', 'pages.updateDir', { pageId: p.id, dir }), /update_print/);
-  assert.throws(() => gate(false).check('t1', 'pages.delete', { pageId: p.id }), /needs the user's OK/, 'nothing else about prints opened up');
+  const gate = () => new CallerGate({ runner: { has: () => true, get: () => ({ permissionMode: 'ask', title: 'T' }), accessOf: () => 'ask' } });
+  assert.deepEqual(gate().check('t1', 'pages.updateDir', { pageId: p.id, dir }), { pageId: p.id, dir });
+  assert.throws(() => gate().check('t1', 'pages.delete', { pageId: p.id }), /needs the user's OK/, 'nothing else about prints opened up');
 });

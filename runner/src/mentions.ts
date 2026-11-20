@@ -166,8 +166,8 @@ export class Mentions {
     if (id) {
       const worker = this.host.get(id);
       if (worker.permissionMode !== mode || path.resolve(worker.cwd) !== bear.folder) throw new Error(`${bear.name}'s running job has different access or a different folder. Ask again once it finishes.`);
-      if (from && above(this.host.authorityOf(id), { mode: from.permissionMode ?? 'ask', confined: this.host.authorityOf(from.id).confined })) {
-        throw new Error(`${bear.name}'s running job has more access or is outside the caller's sandbox. Sending to it needs the user's OK.`);
+      if (from && above(this.host.authorityOf(id), { mode: from.permissionMode ?? 'ask' })) {
+        throw new Error(`${bear.name}'s running job has more access. Sending to it needs the user's OK.`);
       }
       const job = s.jobs[id] ??= { bearId: bear.id, bearName: bear.name, waiters: [] };
       const sent = this.host.send(id, body);

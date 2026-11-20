@@ -38,7 +38,7 @@ test('task tools are absent while disabled and use the shared task bridge when e
 
 test('task tools take priority and due dates, and update_task comments as the agent', async () => {
   const calls: [string, Record<string, unknown>][] = [];
-  const tasks = new Tasks(() => ({ key: 'owner', apiVersion: 87, post: async (_kind, fn, args) => { calls.push([fn, args]); return null; } }), () => true, () => {});
+  const tasks = new Tasks(() => ({ key: 'owner', apiVersion: 102, post: async (_kind, fn, args) => { calls.push([fn, args]); return null; } }), () => true, () => {});
   const named = new Proxy({}, { get: (_, p) => (p === 'get' ? () => ({ title: '  Fix  the login ' }) : () => undefined) }) as ThreadControl;
   const on = buildThreadbearTools(named, 'self', Date.now, undefined, undefined, undefined, { tasks: () => tasks });
   const invoke = async (name: string, args: Record<string, unknown>) => on.find((t) => t.name === name)!.handler(args as never, {});

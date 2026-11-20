@@ -109,6 +109,19 @@ Feature: Pictures from other Mac apps
     And I paste a HEIC picture into the focused answer box
     Then ask 1 on the card is answered with 1 picture
 
+  # Its cut used to be the box's own, the words with a bare marker for the
+  # picture, so pasting it back brought no picture (18 Nov).
+  @composer.picturechips @card.somethingelse @swift-pending @windows-pending @linux-pending
+  Scenario: A picture cut from a card's Something else box comes back when pasted
+    When I open the thread "Ship the beta to TestFlight"
+    And I write "Like this one " as my own answer to ask 1
+    And I paste a HEIC picture into the focused answer box
+    Then ask 1 on the card is answered with 1 picture
+    When I press "a" with "cmd"
+    And I press "x" with "cmd"
+    And I press "v" with "cmd"
+    Then ask 1 on the card is answered with 1 picture
+
   @composer.picturechips @swift-pending @windows-pending @linux-pending
   Scenario: A source withdrawing its promise leaves the app usable and keeps other pictures
     When I paste a withdrawn promise beside a normal picture

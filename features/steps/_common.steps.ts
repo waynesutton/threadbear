@@ -105,3 +105,7 @@ Then('the approval for {string} is still waiting', async function (this: Threadb
   assert.doesNotMatch(row.text, /\((allow|deny|allowAlways|answered)\)\s*$/, `the approval for "${command}" was answered`);
 });
 
+// The keyboard to the message box, typing nothing.
+When('I put the cursor in the composer', async function (this: ThreadbearWorld) {
+  await this.app.do({ cmd: 'type', text: '' });
+});

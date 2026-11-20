@@ -11,11 +11,11 @@ reminder: cb15fc10
 
 Tasks sits below Notes (Command-7). It opens on a quick-add list: type a task, press Return, tick it off. Switch to a board with Backlog, On Deck, Shaping, Building, Observing, Done, Paused and Canceled (rename or delete any but Building), drag cards, columns, sections and projects into the order you like, and choose which view opens by default. Tasks can belong to a project or stand alone. Their titles, notes, status and appearance are kept in your own Convex deployment, so the signed-in website works while your Mac is off. Agents can add and update tasks when you ask. Notes stay private to your Mac and Notion boards remain separate.
 
-Requires backend API 89 for the eight columns and deleting them, 86 for custom columns and Send to thread (83 for the original collection, 84 for Doing and saved orders). Editing needs a connection; an open page retains its last loaded tasks if it loses contact. The desktop and agent tools follow this switch. The authenticated website offers Tasks once its backend supports it.
+Requires backend API 104 for the eight columns and deleting them, 101 for custom columns and Send to thread (98 for the original collection, 99 for Doing and saved orders). Editing needs a connection; an open page retains its last loaded tasks if it loses contact. The desktop and agent tools follow this switch. The authenticated website offers Tasks once its backend supports it.
 
 ## Lives in
 
-`convex/tasks.ts`, `convex/taskFields.ts` and their schema tables; `runner/src/tasks.ts` and its RPC/tool wiring; `desktop/gpui/src/tasks_page.rs` and Command-7; `web/src/tasks.tsx` and `tasks.css`. Due times and reminders (API 88): `runner/src/task-reminders.ts`, `tasks:claimReminder`, the sliders popover's Notifications and `desktop/gpui/src/notify.rs`.
+`convex/tasks.ts`, `convex/taskFields.ts` and their schema tables; `runner/src/tasks.ts` and its RPC/tool wiring; `desktop/gpui/src/tasks_page.rs` and Command-7; `web/src/tasks.tsx` and `tasks.css`. Due times and reminders (API 103): `runner/src/task-reminders.ts`, `tasks:claimReminder`, the sliders popover's Notifications and `desktop/gpui/src/notify.rs`.
 
 ## Taking it out
 

@@ -118,8 +118,8 @@ pub(crate) fn install(cx: &mut gpui_kit::App) {
 }
 
 /// The attachment picker: pictures, which become chips, and Markdown files,
-/// which go in as their path like a dropped file. AppKit filters the sheet by
-/// type; elsewhere GPUI's unfiltered picker is checked before anything is added.
+/// which go in as their path as a dropped file does. AppKit filters the sheet
+/// by type; elsewhere GPUI's unfiltered picker is checked before anything is added.
 pub(crate) fn choose_images(window: &gpui_kit::Window, cx: &mut gpui_kit::App) -> impl std::future::Future<Output = Result<Option<Vec<PathBuf>>, String>> {
     #[cfg(target_os = "macos")]
     {

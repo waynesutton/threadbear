@@ -15,6 +15,7 @@ import { ConvexError, v } from 'convex/values';
 import { internalMutation, mutation, query, type MutationCtx } from './_generated/server';
 import { internal } from './_generated/api';
 import type { Doc, Id } from './_generated/dataModel';
+import { command as commandMachine } from './machines';
 import { runnerAuth, sha256 } from './lib';
 import { queue } from './phone';
 import { scrubDoc, HELD_BACK } from './redaction';
@@ -129,7 +130,10 @@ export async function revokeHooks(ctx: MutationCtx, id: Id<'webhooks'> | undefin
   if (ids.size) {
     for await (const c of ctx.db.query('commands').withIndex('by_state', (q) => q.eq('state', 'pending'))) {
       const by = (c.args as { webhook?: { hookId?: string } } | undefined)?.webhook?.hookId;
-      if (by && ids.has(by)) await ctx.db.patch(c._id, { state: 'failed', doneAt: now, args: {}, note: 'Its webhook was revoked.' });
+      if (by && ids.has(by)) {
+        // Through the command machine (commandMachine.ts), which writes its state.
+        if ((await commandMachine.send(ctx, c._id, { type: 'CANCEL' })).status === 'done') await ctx.db.patch(c._id, { args: {}, note: 'Its webhook was revoked.' });
+      }
     }
   }
   return rows.length;

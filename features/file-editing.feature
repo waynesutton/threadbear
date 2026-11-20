@@ -6,7 +6,10 @@ Feature: Working on a file in the side pane
   Background:
     Given the app is connected to a runner with the demo threads
 
-  @file.editor
+  # Code and plain text open with their own text up (unless Edit files like
+  # an editor is off); the Swift app is frozen and still opens them to read
+  # until the pencil.
+  @file.editor @swift-pending
   Scenario: A text file opens ready to type in, and what's typed is saved by itself
     When I open the thread "Rebuild the three landing pages"
     And I open "logs/docs-build.txt" in the thread's folder in the pane
@@ -19,7 +22,7 @@ Feature: Working on a file in the side pane
     Then the pane's file can be edited
     And the pane shows a "text" page with the words "Fixed in 4b7d0a8."
 
-  @file.editor
+  @file.editor @swift-pending
   Scenario: With Edit files like an editor off, a file opens to read and the pencil edits it
     When I open Settings
     And I press "Open text files ready to type in, with line numbers and a line and column bar" in Settings

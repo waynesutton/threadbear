@@ -115,7 +115,7 @@ test('refresh rules preserves personal text and custom routines, is repeatable, 
   assert.equal(schedules.rows[1].text, 'My custom tidy');
   const methods = bearsMethods({ bears, on: () => true, cwdOf: () => b.folder });
   await assert.rejects(async () => methods['bears.refreshRules']({ _caller: 'bear-thread' }), /can't refresh/);
-  const gate = new CallerGate({ runner: { has: () => true, get: () => ({ permissionMode: 'ask', title: 'T' }), accessOf: () => 'ask', confinedOf: () => false } });
+  const gate = new CallerGate({ runner: { has: () => true, get: () => ({ permissionMode: 'ask', title: 'T' }), accessOf: () => 'ask' } });
   assert.throws(() => gate.check('t', 'bears.refreshRules', {}), /needs the user's OK/);
 });
 
@@ -292,13 +292,13 @@ test('RPCs: off by default, Head Bear made on the first list, setHead refused fr
 
 test('the RPC gate: a thread below Full access reads bears and edits harmless fields, never access', () => {
   const gate = new CallerGate({
-    runner: { has: () => true, get: () => ({ permissionMode: 'ask', title: 'T' }), accessOf: () => 'ask', confinedOf: () => false },
+    runner: { has: () => true, get: () => ({ permissionMode: 'ask', title: 'T' }), accessOf: () => 'ask' },
   });
   assert.equal(gate.check('t1', 'bears.list', {})._caller, 't1');
   assert.equal(gate.check('t1', 'bears.update', { bear: 'x', does: 'y' })._caller, 't1');
   assert.throws(() => gate.check('t1', 'bears.setAccess', { bear: 'x', permissionMode: 'full' }), /needs the user's OK/);
   assert.throws(() => gate.check('t1', 'bears.delete', { bear: 'x' }), /needs the user's OK/);
-  const full = new CallerGate({ runner: { has: () => true, get: () => ({ permissionMode: 'full', title: 'T' }), accessOf: () => 'full', confinedOf: () => false } });
+  const full = new CallerGate({ runner: { has: () => true, get: () => ({ permissionMode: 'full', title: 'T' }), accessOf: () => 'full' } });
   assert.equal(full.check('t2', 'bears.setAccess', { bear: 'x', _caller: 'spoofed' })._caller, 't2', "the caller can't name someone else");
 });
 

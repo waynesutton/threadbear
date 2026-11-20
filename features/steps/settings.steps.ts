@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import type { ThreadbearWorld } from '../support/world.ts';
 
 /** The Settings window while it's open, from either app's dump. */
-type SettingsInfo = { tab: string; instructions?: string; instructionsStatus?: string; keepAwake?: boolean | null; fullSync?: boolean | null; printsWhenAsked?: boolean | null; privateFolders?: string[] | null; labReviewers?: string[] | null };
+type SettingsInfo = { tab: string; instructions?: string; instructionsStatus?: string; accent?: string; compact?: boolean; keepAwake?: boolean | null; fullSync?: boolean | null; printsWhenAsked?: boolean | null; spareWeek?: boolean | null; modelWeeks?: { switch: string; on: boolean } | null; privateFolders?: string[] | null; labReviewers?: string[] | null; labPanel?: string[] | null };
 const shown = (d: unknown) => (d as { settingsWindow?: SettingsInfo | null }).settingsWindow;
 
 Then('Settings is inside the main window', async function (this: ThreadbearWorld) {
@@ -42,8 +42,8 @@ When('I press {string} in Settings', async function (this: ThreadbearWorld, tip:
   // the window's 620 points as Quitting, Notifications and Instructions came in).
   // Wide enough for the sidebar and side pane too: Settings shares the main
   // window now, and at 880 its rows squeezed to a letter a line, with the
-  // reviewers' buttons cut off.
-  await this.app.do({ cmd: 'resize', settings: true, w: 1500, h: 1300 });
+  // reviewers' buttons cut off. Tall enough for every row Mike's release added.
+  await this.app.do({ cmd: 'resize', settings: true, w: 1500, h: 1600 });
   await this.app.do({ cmd: 'click', tipPrefix: tip, settings: true });
 });
 
@@ -115,4 +115,22 @@ Then('the Instructions edit is saved after retrying', async function (this: Thre
 Then('an automatic update waits for the Instructions edit', async function (this: ThreadbearWorld) {
   const state = JSON.parse(await this.app.do({ cmd: 'updates', restartCheck: true })) as { hasDrafts: boolean };
   assert.equal(state.hasDrafts, true);
+});
+
+// Appearance's accent and spacing, this app's own (GPUI only).
+Then('Settings says the accent is {string}', async function (this: ThreadbearWorld, accent: string) {
+  await this.until(`the accent ${accent}`, (d) => shown(d)?.accent === accent);
+});
+
+Then('Settings says the spacing is compact', async function (this: ThreadbearWorld) {
+  await this.until('Compact spacing', (d) => shown(d)?.compact === true);
+});
+
+// Settings > General > Usage (features/usage.feature).
+Then('Settings says spare week nudges are {word}', async function (this: ThreadbearWorld, state: string) {
+  await this.until(`spare week nudges ${state}`, (d) => shown(d)?.spareWeek === (state === 'on'));
+});
+
+Then("Settings' {string} switch is {word}", async function (this: ThreadbearWorld, words: string, state: string) {
+  await this.until(`"${words}" ${state}`, (d) => shown(d)?.modelWeeks?.switch === words && shown(d)?.modelWeeks?.on === (state === 'on'));
 });

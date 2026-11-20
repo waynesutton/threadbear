@@ -772,6 +772,7 @@ impl DockView {
             ));
         }
         let custom = if single { self.content.header(&selected, window, cx) } else { None };
+        let fills = custom.is_some() && self.content.header_fills(&selected, cx);
         // A custom header takes the tab's place, and its × with it: without
         // one at the bar's end, a thread's own panel could only be closed
         // from a right-click menu (Wayne, 19 Nov 2026).
@@ -783,6 +784,9 @@ impl DockView {
                     .id(ElementId::Name(format!("dock-header-{}", group.id).into()))
                     .pl(px(8.))
                     .min_w(px(0.))
+                    // Takes the bar's empty space from the strip after it,
+                    // which a press on the header still moves the window from.
+                    .when(fills, |d| d.flex_1())
                     .child(custom)
                     // Lowest priority: the header's own buttons and chips win.
                     .on_mouse_down(
@@ -823,7 +827,8 @@ impl DockView {
         bar = bar.child(
             div()
                 .id(ElementId::Name(format!("dock-bar-space-{}", group.id).into()))
-                .flex_1()
+                // Gives way to a header that fills, or they'd share the space.
+                .when(!fills, |d| d.flex_1())
                 .h_full()
                 .min_w(px(0.))
                 .child(measure(move |bounds, _, cx| {

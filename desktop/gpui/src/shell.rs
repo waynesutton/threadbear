@@ -197,6 +197,11 @@ impl DockContent for Panels {
         Some(app.update(cx, |t, cx| t.render_header_title(window, cx)))
     }
 
+    fn header_fills(&self, panel: &str, cx: &App) -> bool {
+        let Some(app) = self.app.upgrade() else { return false };
+        app.read(cx).header_is_renaming(panel)
+    }
+
     fn accessory(&self, panel: &str, window: &mut Window, cx: &mut App) -> Option<AnyElement> {
         let app = self.app.upgrade()?;
         // A thread in a panel of its own: its Share and ... menu (thread_panels.rs).
@@ -318,7 +323,9 @@ actions!(
         ToggleFrameRate,
         AboutApp,
         RestartToUpdate,
+        RestartApp,
         TakeTheTour,
+        SetUpThreadbear,
         FinishSettingUp,
         HibernateHour,
         HibernateEvening,
@@ -409,7 +416,10 @@ commands!(
     (ToggleFrameRate, ToggleFrameRate, None),
     (About, AboutApp, None),
     (RestartToUpdate, RestartToUpdate, None),
+    // No menu item: a web panel's Try again after Chromium failed to start.
+    (RestartApp, RestartApp, None),
     (TakeTheTour, TakeTheTour, None),
+    (SetUpThreadbear, SetUpThreadbear, None),
     (FinishSettingUp, FinishSettingUp, None),
     (HibernateHour, HibernateHour, None),
     (HibernateEvening, HibernateEvening, None),
@@ -764,13 +774,7 @@ impl Threadbear {
             // A project's page tabs; they do nothing anywhere else.
             Command::PreviousTab => self.step_project_tab(-1, cx),
             Command::NextTab => self.step_project_tab(1, cx),
-            // Only while the experiment's on: its keys and menu item go
-            // with it, but a stale binding mustn't open it either.
-            Command::OpenAnything | Command::OpenAnythingAlso => {
-                if self.open_anything_on() {
-                    self.toggle_open_anything(window, cx);
-                }
-            }
+            Command::OpenAnything | Command::OpenAnythingAlso => self.toggle_open_anything(window, cx),
             // Each brings the Threads panel back if ⌘/ folded it away.
             Command::ShowInbox | Command::ShowScheduled | Command::ShowProjects | Command::ShowLibrarian | Command::ShowHibernating | Command::ShowArchived => {
                 self.unfold_threads(cx);
@@ -799,8 +803,10 @@ impl Threadbear {
             Command::ToggleFrameRate => self.toggle_frame_rate(window, cx),
             Command::About => self.show_about(window, cx),
             Command::RestartToUpdate => self.restart_to_update(cx),
+            Command::RestartApp => self.restart_app(cx),
             // Help's replay of the tour can be skipped (tour.rs).
             Command::TakeTheTour => self.tour_start(true, window, cx),
+            Command::SetUpThreadbear => self.hello_start(window, cx),
             Command::FinishSettingUp => self.show_setup(cx),
             Command::HibernateHour => self.hibernate_open("hour", window, cx),
             Command::HibernateEvening => self.hibernate_open("evening", window, cx),
@@ -851,7 +857,11 @@ impl Threadbear {
         if let Some(t) = self.threads.get(id) {
             let section = if t.is_archived() {
                 Some("archived")
-            } else if t.snoozed(crate::now_ms()) && !t.is_starred() {
+            } else if t.is_starred() {
+                None
+            } else if t.snoozed(crate::now_ms()) && t.waiting_on_work() {
+                Some("running")
+            } else if t.snoozed(crate::now_ms()) {
                 Some("hibernating")
             } else {
                 None
@@ -1167,21 +1177,36 @@ impl Threadbear {
     }
 
     /// Whether ⌘Z is for an archive rather than text: nothing to undo in a
-    /// text box, so outside one, or in the open thread's empty message box
+    /// text box, so outside one, or in an empty message box
     /// (where the key lands after an archive opens the next thread). Words
     /// in a box keep the key for themselves.
+    ///
+    /// Empty isn't enough: a draft cleared by mistake (select all and
+    /// delete, or cut) leaves the box empty with the clearing still to undo,
+    /// and ⌘Z there has to bring the words back, not a thread. So the box
+    /// also has to have no edits to take back (`can_undo`). Sending a message
+    /// or opening a thread empties it with `set_value`, which clears that
+    /// history, so ⌘Z after either still reaches the archives.
     fn undo_key_is_archive(&self, window: &Window, cx: &App) -> bool {
         if self.archive_history.is_empty() {
             return false;
         }
-        let in_text = window.context_stack().iter().any(|c| c.contains("Input"));
+        let stack = window.context_stack();
+        // A terminal panel with the keyboard: its keys are the shell's, and
+        // an archive coming back from under it would be a surprise.
+        if stack.iter().any(|c| c.contains(crate::terminal::KEY_CONTEXT)) {
+            return false;
+        }
+        let in_text = stack.iter().any(|c| c.contains("Input"));
         if !in_text {
             return true;
         }
-        let composer = self.selected.as_ref().and_then(|id| self.composers.get(id));
-        composer.is_some_and(|c| {
+        // Whichever message box has the key: the open thread's, a pinned
+        // one beside it, or the new thread page's.
+        let focused = self.composers.values().chain(self.new_thread.composer.iter()).find(|c| c.read(cx).input.read(cx).focus_handle(cx).is_focused(window));
+        focused.is_some_and(|c| {
             let c = c.read(cx);
-            c.input.read(cx).focus_handle(cx).is_focused(window) && !c.holds_anything(cx)
+            !c.holds_anything(cx) && !c.input.read(cx).can_undo()
         })
     }
 
@@ -1402,10 +1427,9 @@ impl Threadbear {
                     Separator,
                     item("Show Previous Tab", Command::PreviousTab).enabled(self.can_step_project_tab(-1, cx)),
                     item("Show Next Tab", Command::NextTab).enabled(self.can_step_project_tab(1, cx)),
-                ]
-                .into_iter()
-                .chain(self.open_anything_on().then(|| [Separator, item("Open Anything…", Command::OpenAnything)]).into_iter().flatten())
-                .collect(),
+                    Separator,
+                    item("Open Anything…", Command::OpenAnything),
+                ],
             ),
             TopMenu::new(
                 "Thread",
@@ -1431,7 +1455,7 @@ impl Threadbear {
             // AppKit adds Fill, Center, Move & Resize and the list of open
             // windows (the main one and any panel in a window of its own).
             TopMenu::new("Window", vec![item("Minimize", Command::Minimize), item("Zoom", Command::Zoom), Separator, item("Bring All to Front", Command::BringAllToFront)]),
-            TopMenu::new("Help", vec![item("Take the Tour", Command::TakeTheTour), item("Finish Setting Up", Command::FinishSettingUp)]),
+            TopMenu::new("Help", vec![item("Set Up Threadbear", Command::SetUpThreadbear), item("Take the Tour", Command::TakeTheTour), item("Finish Setting Up", Command::FinishSettingUp)]),
         ]
     }
 
@@ -1544,6 +1568,8 @@ impl Threadbear {
 
     pub(crate) fn render_shell(&mut self, window: &mut Window, cx: &mut Context<Self>) -> Stateful<Div> {
         self.sync_window_title(window);
+        // The Updates icon's ring turns in that layer too (rails.rs).
+        crate::spinner::view_drawing(window);
         // The layer the sidebar's arcs turn in (spinner.rs), which looks at
         // the dock to see when the Threads panel isn't in front.
         let (dock, dock_view) = (self.dock.clone(), self.dock_view.clone());
@@ -1587,9 +1613,13 @@ impl Threadbear {
             // redraw the sidebar (spinner.rs).
             .child(div().absolute().top_0().left_0().size_full().child(arc_layer))
             .child(self.flight.overlay(cx))
+            // Confetti for the rare wins (confetti.rs).
+            .child(self.confetti.overlay(cx))
             .children(self.render_swipe_card(cx).map(|card| deferred(card).with_priority(1)))
             // The tour and the pages' intros, over everything (tour.rs).
             .children(self.render_tour(window, cx))
+            // The first launch's setup cards, over all of it (hello.rs).
+            .children(self.render_hello(window, cx))
             // A click or a key in the window means he's at it, for a window
             // the system never tells it's in front of (an X server with no
             // window manager): reading needs one (`looking_changed`).

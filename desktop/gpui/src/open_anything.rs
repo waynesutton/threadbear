@@ -389,13 +389,6 @@ impl Threadbear {
         self.anything_panels_shown = showing;
     }
 
-    /// The openAnything experiment is on for this Mac's runner: ⌘K, ⌘P and
-    /// Go > Open Anything… only then. Settings' switch first, as it changes
-    /// without a new hello, else the hello's list.
-    pub(crate) fn open_anything_on(&self) -> bool {
-        self.experiment_on(threadbear_core::shortcuts::OPEN_ANYTHING_EXPERIMENT)
-    }
-
     /// Whether an experiment is on for this Mac's runner. Settings' switch
     /// first, as it changes without a new hello, else the hello's list.
     pub(crate) fn experiment_on(&self, id: &str) -> bool {

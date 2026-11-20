@@ -17,12 +17,11 @@ Then('the pane\'s file can be edited', async function (this: ThreadbearWorld) {
   await this.until('the bar to offer the pencil', (d) => pane(d)?.previewMode === 'reading');
 });
 
-// A file opens ready to type in unless Edit files like an editor is off:
-// then the pencil.
+// Code and plain text open ready to type in, unless Edit files like an
+// editor is off; anything else, or with it off, takes the pencil.
 When('I start editing the pane\'s file', async function (this: ThreadbearWorld) {
-  // Like an editor (the default), it opened ready to type in already.
   const d = await this.until('the bar to offer the pencil, or the file being edited', (x) => (pane(x)?.previewMode === 'reading' || editing(x)) && x);
-  if (pane(d)?.previewMode === 'reading') await this.app.do({ cmd: 'preview', edit: true });
+  if (!editing(d)) await this.app.do({ cmd: 'preview', edit: true });
 });
 
 Then('the pane\'s file is being edited', async function (this: ThreadbearWorld) {

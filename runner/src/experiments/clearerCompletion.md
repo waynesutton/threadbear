@@ -13,8 +13,8 @@ Shows the agent's progress on the whole request above the message box: which tas
 
 ## Lives in
 
-`runner/src/completion.ts`, `runner.ts`, `store.ts` and `threadbear-mcp.ts`; completion fields in the protocol and API 85 mirror; the desktop reducer and composer card, website composer and phone card.
+`runner/src/completion.ts`, `runner.ts`, `store.ts` and `threadbear-mcp.ts`; completion fields in the protocol and API 100 mirror; the desktop reducer and composer card, website composer and phone card.
 
 ## Taking it out
 
-Remove the tool argument and merge calls, completion fields and UI sections, and this file. Keep existing loose-end behavior for the looseEnds experiment. Remove its runner.json key and remake experiment docs.
+Remove the tool argument and merge calls, completion fields and UI sections, and this file. Loose ends on the done card are standard and stay. Remove its runner.json key and remake experiment docs.

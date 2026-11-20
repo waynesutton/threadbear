@@ -102,7 +102,7 @@ pub(crate) fn thread_started(id: &str, cx: &mut App) {
 }
 
 /// The runner says the experiment is on: Settings' switch first, as it
-/// changes without a new hello, else the hello's list (open_anything_on).
+/// changes without a new hello, else the hello's list (experiment_on).
 pub(crate) fn experiment_on(app: &Threadbear) -> bool {
     let switch = app.runner_settings.as_ref().and_then(|s| s["experiments"].as_array()?.iter().find(|e| e["id"] == EXPERIMENT).map(|e| e["on"].as_bool() == Some(true)));
     switch.unwrap_or_else(|| app.remote.experiments.iter().any(|e| e == EXPERIMENT))
