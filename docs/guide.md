@@ -1625,8 +1625,10 @@ into them, and a line for each tool it used; the tool output, diffs and
 tools' pictures stay on that Mac for now, and a tool row says so. A pasted
 picture shows a moment after its message, once that Mac has sent it up
 (not at all with `"sync": { "pastedPictures": false }` there, or for one
-over 10 MB). Editing a message, its highlights and patches, and
-changing its login or model are done on that Mac. Agents see them the
+over 10 MB). Its login and model change from here. Editing a
+message, its highlights and patches, and changing its access or effort
+are done on that Mac: the access chip names the Mac instead of opening a
+menu, and the model picker leaves out the effort levels. Agents see them the
 same way: `list_threads` lists and searches them (each row says which Mac),
 `read_thread` reads them, `send_message` messages them, and they can stop,
 snooze or archive them. A Mac that's off shows

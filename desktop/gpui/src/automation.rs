@@ -844,7 +844,7 @@ fn step(app: &Entity<Threadbear>, cmd: &Value, window: &mut Window, cx: &mut App
                         composer.update(cx, |c, cx| c.set_permission(mode, cx));
                         return Ok(json!("ok"));
                     }
-                    Ok(json!(crate::composer_chips::permission_lines(&summary, &data.logins)))
+                    Ok(json!(crate::composer_chips::permission_lines(&data)))
                 }
                 "context" => match data.summary.as_ref().and_then(|t| threadbear_core::composer::ContextMeter::new(t.context_tokens, t.context_window).map(|m| (t.id.clone(), m))) {
                     // `show`: the ring clicked, as a person does, which opens

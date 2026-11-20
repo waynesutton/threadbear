@@ -43,6 +43,17 @@ pub(crate) struct AwayRunner {
 }
 
 impl ChipData {
+    /// Another Mac's thread (not a new one for it): the Mac to change its
+    /// access or effort on. Convex carries only a login or model change to
+    /// it (runner/src/relay.ts, threads.update), so the chips don't offer
+    /// the rest.
+    pub(crate) fn fixed_on(&self) -> Option<&str> {
+        if self.is_new {
+            return None;
+        }
+        self.away.as_ref().map(|a| a.name.as_str())
+    }
+
     fn settings(&self) -> Option<ChipSettings<'_>> {
         let thread = self.summary.as_ref()?;
         Some(ChipSettings {
@@ -121,6 +132,9 @@ impl Composer {
     }
 
     pub(crate) fn set_permission(&mut self, mode: &'static str, cx: &mut App) {
+        if self.chip_data(cx).fixed_on().is_some() {
+            return;
+        }
         // Going into Plan first, from Shift-Tab or this menu alike, notes the
         // access to put back when Shift-Tab steps on (turn_modes.rs).
         if let Some(from) = self.chip_data(cx).settings().map(|s| s.permission_mode.clone()) {
@@ -135,6 +149,9 @@ impl Composer {
     }
 
     fn set_effort(&self, level: String, cx: &mut App) {
+        if self.chip_data(cx).fixed_on().is_some() {
+            return;
+        }
         let local = level.clone();
         self.change_thread(move |t| t.effort = Some(local), json!({ "effort": level }), cx);
     }
@@ -432,18 +449,18 @@ impl Composer {
         let data = self.chip_data(cx);
         let provider = data.summary.as_ref().map(|t| t.provider.as_str()).unwrap_or_default();
         let has_auto = data.logins.has_auto_mode(provider);
-        // Another runner's thread: what it really has (its row's
-        // permissionMode), with no menu, as a mode can't be changed from
-        // here (relay.ts refuses it): a pick would only fail.
-        if let (false, Some(away)) = (data.is_new, data.away.as_ref()) {
-            let tip = format!("{help}. Its access can only be changed in the Threadbear app on {}", away.name);
-            return ChipTrigger { busy: false, badge: None, id: "composer-permission-chip".into(), kind: TriggerKind::Label, title: title.into(), icon: Some(if mode == "full" { crate::icons::symbol("lock.open") } else { Icon::from(icon) }), tip: tip.into(), selected: false }.into_any_element();
+        let icon = if mode == "full" { crate::icons::symbol("lock.open") } else { Icon::from(icon) };
+        // Another Mac's thread: the chip says how it runs and where to change
+        // it, with no menu of picks that can't reach it.
+        if let Some(name) = data.fixed_on() {
+            let tip = format!("{title}. Change it on {name}");
+            return ChipTrigger { busy: false, badge: None, id: "composer-permission-chip".into(), kind: TriggerKind::Label, title: title.into(), icon: Some(icon), tip: tip.into(), selected: false }.into_any_element();
         }
         style::menu::popover(Popover::new("composer-permission"), cx)
             // Its chip's title may shrink to fit a narrow box.
             .trigger_style(StyleRefinement::default().min_w_0())
             .anchor(Anchor::BottomLeft)
-            .trigger(ChipTrigger { busy: false, badge: None, id: "composer-permission-chip".into(), kind: TriggerKind::Chip, title: title.into(), icon: Some(if mode == "full" { crate::icons::symbol("lock.open") } else { Icon::from(icon) }), tip: help.into(), selected: false })
+            .trigger(ChipTrigger { busy: false, badge: None, id: "composer-permission-chip".into(), kind: TriggerKind::Chip, title: title.into(), icon: Some(icon), tip: help.into(), selected: false })
             .content(move |_, window, cx| {
                 let popover = cx.entity();
                 let modes: &[&str] = if has_auto || mode == "auto" { &["full", "auto", "ask", "plan"] } else { &["full", "ask", "plan"] };
@@ -997,7 +1014,7 @@ impl Render for ModelPickerView {
             list = list.child(div().px(px(10.)).pt(px(8.)).pb(px(2.)).text_size(px(11.)).font_weight(FontWeight::MEDIUM).text_color(style::faint_text(cx)).child("Older")).children(older.into_iter().map(|r| row_view(r, cx)));
         }
         let composer_for_effort = self.composer.clone();
-        let effort = (!levels.is_empty()).then(|| {
+        let effort = (!levels.is_empty() && data.fixed_on().is_none()).then(|| {
             h_flex().m(px(12.)).p(px(2.)).gap(px(2.)).rounded(px(7.)).bg(style::chip_fill(cx)).children(levels.into_iter().map(|level| {
                 let active = chosen.as_deref() == Some(level.as_str());
                 let title = effort_title(&level);
@@ -1376,9 +1393,12 @@ fn picker_lines_with(data: &ChipData, login: Option<(String, (String, Option<Str
             add_rows(settings.rows(&provider, ""), &mut lines);
         }
     }
-    lines.push("# Effort".to_owned());
     let chosen = settings.effective_effort();
-    for level in settings.effort_levels() {
+    let levels = if data.fixed_on().is_some() { Vec::new() } else { settings.effort_levels() };
+    if data.fixed_on().is_none() {
+        lines.push("# Effort".to_owned());
+    }
+    for level in levels {
         let mut line = format!("{}{}", if chosen.as_deref() == Some(level.as_str()) { "[x] " } else { "[ ] " }, effort_title(&level));
         if let Some(porridge) = effort_porridge(&level) {
             line.push_str(&format!(" - {porridge}"));
@@ -1436,9 +1456,14 @@ pub(crate) fn permission_modes(summary: &ThreadSummary, logins: &RunnerLogins) -
 
 /// The permission menu as text (Automation's describe(menu)).
 #[cfg(feature = "automation")]
-pub(crate) fn permission_lines(summary: &ThreadSummary, logins: &RunnerLogins) -> Vec<String> {
+pub(crate) fn permission_lines(data: &ChipData) -> Vec<String> {
+    let summary = data.summary.clone().unwrap_or_default();
     let current = if summary.permission_mode.is_empty() { "full" } else { summary.permission_mode.as_str() };
-    permission_modes(summary, logins).into_iter().map(|m| format!("{}{} - {}", if m == current { "[x] " } else { "[ ] " }, permission_title(m), permission_help(m))).collect()
+    // Another Mac's thread has no menu: its mode, and where to change it.
+    if let Some(name) = data.fixed_on() {
+        return vec![format!("[x] {} - {}", permission_title(current), permission_help(current)), format!("--- Change it on {name}")];
+    }
+    permission_modes(&summary, &data.logins).into_iter().map(|m| format!("{}{} - {}", if m == current { "[x] " } else { "[ ] " }, permission_title(m), permission_help(m))).collect()
 }
 
 /// Picks a model row or effort level by its title, as a click would

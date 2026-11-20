@@ -60,16 +60,19 @@ test('the card says which service and what it does', () => {
 });
 
 // A gateway with /api/approvals, in memory, behind the real client.
-function fakeGateway(opts: { noApi?: boolean } = {}) {
+// noRun: a gateway from before `run`, which approves only. runFails: the
+// call itself fails when sent.
+function fakeGateway(opts: { noApi?: boolean; noRun?: boolean; runFails?: string } = {}) {
   const dir = tmpDir();
   const keyFile = path.join(dir, 'approvals-key');
   fs.writeFileSync(keyFile, `${KEY}\n`, { mode: 0o600 });
   const approvals = new Map<string, GatewayApproval>();
-  const requests: { method: string; path: string; auth: string | null }[] = [];
+  const requests: { method: string; path: string; auth: string | null; body?: Record<string, unknown> }[] = [];
+  const sent: string[] = [];
   const fetchImpl = (async (input: URL | string, init: RequestInit = {}) => {
     const url = new URL(String(input));
     const auth = new Headers(init.headers).get('authorization');
-    requests.push({ method: init.method ?? 'GET', path: url.pathname, auth });
+    requests.push({ method: init.method ?? 'GET', path: url.pathname, auth, ...(init.body ? { body: JSON.parse(String(init.body)) as Record<string, unknown> } : {}) });
     const json = (status: number, body: unknown) => new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
     if (opts.noApi) return json(404, { error: 'not found' });
     if (auth !== `Bearer ${KEY}`) return json(401, { error: 'unauthorized' });
@@ -79,8 +82,13 @@ function fakeGateway(opts: { noApi?: boolean } = {}) {
     if (!a) return json(404, { error: 'not_found' });
     if (init.method === 'POST') {
       if (a.status !== 'pending') return json(409, { error: 'already_decided', approval: a });
-      const { decision } = JSON.parse(String(init.body)) as { decision: string };
+      const { decision, run } = JSON.parse(String(init.body)) as { decision: string; run?: boolean };
       a.status = decision === 'approve' ? 'approved' : 'declined';
+      if (decision === 'approve' && run && !opts.noRun) {
+        a.status = 'ran';
+        sent.push(id);
+        return json(200, { ...a, run: opts.runFails ? { ok: false, text: opts.runFails } : { ok: true, text: '{"message_link":"https://example.slack.com/archives/D1/p1"}' } });
+      }
     }
     return json(200, a);
   }) as typeof fetch;
@@ -89,7 +97,7 @@ function fakeGateway(opts: { noApi?: boolean } = {}) {
     const [upstream, upstreamTool] = tool.split('__') as [string, string];
     approvals.set(id, { id, status: 'pending', agent: 'claude-3', upstream, tool, upstreamTool, args, url: `${BASE}/approvals/${id}` });
   };
-  return { client, approvals, requests, hold, keyFile };
+  return { client, approvals, requests, hold, keyFile, sent };
 }
 
 function fakeHost() {
@@ -206,9 +214,9 @@ test('a gateway without the API is left alone for a while', async () => {
 });
 
 // The whole way through a runner: the agent's call, the card, Allow.
-function runnerWithGateway() {
+function runnerWithGateway(opts: Parameters<typeof fakeGateway>[0] = {}) {
   const h = makeHarness(tmpDir());
-  const g = fakeGateway();
+  const g = fakeGateway(opts);
   h.runner.gatewayApprovals = new GatewayApprovals({ client: () => g.client, host: h.runner, clock: h.clock, serviceTitle: () => 'Slack' });
   const { thread } = h.runner.create({ text: 'Post to Slack', accountId: 'claude-3' });
   const s = h.adapter.last;
@@ -233,9 +241,13 @@ test('in a runner: the card shows the call whole, and Allow approves it at the g
   // The phone can't allow it (it would come through the backend).
   assert.throws(() => h.runner.respondApproval({ threadId: id, approvalId: card.approvalId, decision: 'allow', remote: true }), /on the Mac/);
   await h.runner.respondApproval({ threadId: id, approvalId: card.approvalId, decision: 'allow' });
-  assert.equal(g.approvals.get('ap_runner000001')!.status, 'approved');
+  // Allow approves and sends it in one go, so a late Allow doesn't wait for the agent.
+  assert.equal(g.approvals.get('ap_runner000001')!.status, 'ran');
+  assert.deepEqual(g.sent, ['ap_runner000001']);
+  assert.deepEqual(g.requests.find((r) => r.method === 'POST')?.body, { decision: 'approve', run: true });
   const done = h.events(id).find((e) => e.type === 'approval.resolved' && e.approvalId === card.approvalId);
   assert.equal(done?.decision, 'allow');
+  assert.equal(done?.message, 'Approved and sent.');
   assert.notEqual(h.runner.get(id).status, 'waiting');
   h.runner.gatewayApprovals!.stop();
 });
@@ -251,6 +263,8 @@ test('in a runner: Deny declines it, and the card outlives the turn', async () =
   assert.equal(open.length, 0, 'still open after the turn');
   await h.runner.respondApproval({ threadId: id, approvalId: 'gw-ap_runner000002', decision: 'deny' });
   assert.equal(g.approvals.get('ap_runner000002')!.status, 'declined');
+  assert.deepEqual(g.requests.find((r) => r.method === 'POST')?.body, { decision: 'decline' }, 'a decline never asks to run');
+  assert.deepEqual(g.sent, []);
   const done = h.events(id).find((e) => e.type === 'approval.resolved');
   assert.equal(done?.decision, 'deny');
   h.runner.gatewayApprovals!.stop();
@@ -273,10 +287,15 @@ test('a Slack channel id is named from the gateway\'s own read, a DM without rea
   assert.equal(slackChannelFrom('Channel: #general (C03NM8C7Z)\n\nwaynesutton: sup', 'C03NM8C7Z'), 'general');
   assert.equal(slackChannelFrom('Channel: #general (C03NM8C7Z)', 'C999999999'), undefined, 'another channel\'s header');
   assert.equal(slackChannelFrom('someone wrote: Channel: #fake (C03NM8C7Z)', 'C03NM8C7Z'), undefined, 'only a line that starts with it');
+  // What Slack's MCP server really answers, through the gateway (20 Nov).
+  const live = JSON.stringify({ messages: 'Channel: #general (C03NM8C7Z)\n\nwaynesutton: test 4\n*Sent using* Threadbear [2026-11-20 08:33:47 PST]', pagination_info: 'There are more messages available.' });
+  assert.equal(slackChannelFrom(live, 'C03NM8C7Z'), 'general');
+  assert.equal(slackChannelFrom(JSON.stringify({ messages: 'x\nChannel: #general (C03NM8C7Z)' }), 'C03NM8C7Z'), 'general', 'a later line still starts with it');
+  assert.equal(slackChannelFrom(JSON.stringify({ other: 'Channel: #general (C03NM8C7Z)' }), 'C03NM8C7Z'), undefined);
   const calls: [string, Record<string, unknown>][] = [];
   const describe = slackDescribe(async (name, args) => {
     calls.push([name, args]);
-    return 'Channel: #launch (C0LAUNCH01)\n\nmsg';
+    return JSON.stringify({ messages: 'Channel: #launch (C0LAUNCH01)\n\nmsg' });
   });
   const held = (channel_id: unknown): GatewayApproval => ({ id: 'ap_x', status: 'pending', agent: 'a', upstream: 'slack', tool: 'slack__slack_send_message', upstreamTool: 'slack_send_message', args: { channel_id, message: 'm' } });
   assert.equal(await describe(held('C0LAUNCH01')), 'Goes to #launch (C0LAUNCH01).');
@@ -336,6 +355,23 @@ test('in a runner: the card\'s reason names where it goes', async () => {
   assert.equal(card.reason, 'Goes to #general (C03NM8C7Z). The Connectors gateway is holding this Slack call until you approve it.');
   assert.deepEqual(card.input, { channel_id: 'C03NM8C7Z', message: 'hi' }, 'the arguments stay whole');
   h.runner.gatewayApprovals!.stop();
+});
+
+test('in a runner: an older gateway approves only, and a failed send says why', async () => {
+  for (const [opts, message] of [
+    [{ noRun: true }, 'Approved. It sends when the agent picks it up.'],
+    [{ runFails: 'channel_not_found\nmore detail' }, 'Approved, but sending it failed: channel_not_found'],
+  ] as const) {
+    const { h, g, s, id } = runnerWithGateway(opts);
+    s.out({ kind: 'event', event: { type: 'tool.call', itemId: 'c1', name: SEND.name, kind: 'mcp', title: 'slack_send_message', input: SEND.input } });
+    g.hold('ap_runner000009', 'slack__slack_send_message', { channel_id: 'U1', message: 'hello' });
+    await h.runner.gatewayApprovals!.poll();
+    await h.runner.respondApproval({ threadId: id, approvalId: 'gw-ap_runner000009', decision: 'allow' });
+    const done = h.events(id).find((e) => e.type === 'approval.resolved');
+    assert.equal(done?.decision, 'allow');
+    assert.equal(done?.message, message);
+    h.runner.gatewayApprovals!.stop();
+  }
 });
 
 void POLL_MS;

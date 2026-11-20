@@ -40,3 +40,8 @@ The existing approval card renders `approval.requested`. Check how it looks for 
 - Runner: unit tests for matching a held call to a thread, the card's lifecycle (allow, deny, decided elsewhere, expired), and no card without the API or key.
 - A real run: ask a thread to DM Wayne on Slack, approve it from the card, see the post land.
 - Land with `tb land` only.
+
+## Follow-up, 2026-11-20
+
+- Slack's MCP server answers `slack_read_channel` as JSON (`{"messages": "Channel: #general (C…)…"}`), so the channel name is read from `messages`. The first live channel test showed no name until this was fixed.
+- Allow now sends: the gateway's `POST /api/approvals/<id>` takes `"run": true` and runs the approved call itself (plugbear fork `approvals-api`, 60b0a79). Before, an Allow after the 45-second hold ended waited for an agent to call `connectors__await_approval` within the hour, and overnight tests sat approved and unsent.
