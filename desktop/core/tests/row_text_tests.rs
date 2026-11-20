@@ -302,6 +302,23 @@ fn testApprovalTitlesAndTargets() {
     assert_eq!(ApprovalText::decision(ApprovalDecision::AllowAlways), "Always allowed");
 }
 
+/// A call the Connectors gateway holds shows up as an ordinary card; its
+/// heading names the service and what the call does, from the tool's name
+/// alone (prds/gateway-approvals-in-threadbear.md).
+#[test]
+fn gateway_cards_name_the_service() {
+    let send = ApprovalRequest::new("gw-ap_1", "mcp__connectors__slack__slack_send_message", "anything the title says", json!({"channel_id": "U1", "message": "hi"}));
+    assert_eq!(ApprovalText::title(&send), "Slack: send message?");
+    assert_eq!(ApprovalText::target(&send), "Slack: send message");
+    assert_eq!(ApprovalText::runner_reason(&send), None, "the title never reaches the card");
+    let gmail = approval_request("mcp__connectors__gmail__send_message", json!({}));
+    assert_eq!(ApprovalText::title(&gmail), "Gmail: send message?");
+    let own = approval_request("mcp__connectors__connectors__await_approval", json!({}));
+    assert_eq!(ApprovalText::title(&own), "Use connectors await approval?", "the gateway's own tools keep the generic heading");
+    let hidden = approval_request("mcp__connectors__slack__send\u{2028}it", json!({}));
+    assert!(!ApprovalText::title(&hidden).contains('\u{2028}'));
+}
+
 /// Finding 67: Threadbear's own gates say what they'd do in the runner's
 /// words, and the card shows them under its generic title; another
 /// server's tool doesn't get to put words there.

@@ -5490,6 +5490,39 @@ yet: this turn ran into`, names each service and its page, and asks for
 an ask with that page as a link if the work needs it. Called again, it's
 taken as it is. Nothing new reaches the app: the ask is an ordinary one.
 
+### Gateway approvals
+
+A call the gateway holds for approval (its policy says `ask`: a Slack
+post, an email) gets a card in the thread that made it, when the gateway is
+on this Mac (`gatewayIsLocal`) and has `/api/approvals` (plugbear's local
+mode; its `/health` says `"approvalsApi": 1`). The runner reads the key from
+the gateway's `secrets/approvals-key` itself, sends it only to that loopback
+address, and never gives it to an agent (gateway-approvals.ts). Without the
+API or the key, nothing changes: the gateway's own page is the only way.
+
+- Which thread: when a thread calls a gateway tool
+  (`mcp__connectors__<service>__<tool>`, not `connectors__*`), the runner
+  reads `GET /api/approvals` every 1.5 seconds for up to 60 (the gateway
+  holds a call 45 seconds before answering), and a waiting call with the
+  same tool and arguments (a string the `tool.call` cut at 16 KB matches by
+  its start) is that thread's. An approval id in a tool result, in a link on
+  the gateway's own address (the "Waiting for ..." text), is matched too.
+  Each gateway approval gets at most one card.
+- The card is an ordinary `approval.requested`: `approvalId` `gw-<id>`,
+  `name` the tool, `title` "Slack: send message", `input` the call's
+  arguments whole, `options: ["allow", "deny"]`, and a `reason` saying the
+  gateway is holding it. Clients head it from the tool's name ("Slack: send
+  message?"), never from `title`. It isn't the agent's own call (its CLI
+  isn't waiting on Threadbear), so a message from Mike leaves it open, and
+  it outlives the turn, as a subagent's card does.
+- `approvals.respond` with `allow` approves it at the gateway
+  (`POST /api/approvals/<id>`), `deny` declines it; the card stays until the
+  gateway answers, and an error (`-32000`) leaves it up to try again. Mac
+  only: `remote` is refused, even Deny, as the phone's answer would come
+  through the backend.
+- Decided on the gateway's page, or expired there, the card closes with
+  `allow`, `deny` or `expired` at the next read. A runner restart closes it
+  (`expired`) and leaves the call waiting at the gateway, for its page.
 
 ### Connectors setup
 

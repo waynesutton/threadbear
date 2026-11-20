@@ -114,6 +114,7 @@ import { archiveFromTool, bylineFromTool, END_TURN_TOOL, endTurnAccepted, endTur
 import type { Needs } from './needs.ts';
 import { asksForAppRestart } from './app-restarts.ts';
 import type { ConnectorsStatus } from './connectors.ts';
+import type { GatewayApproval, GatewayApprovals, GatewayDecision } from './gateway-approvals.ts';
 import { isPatchFile, PatchTrust, type ClaudeVerdict, type PatchTrustStore } from './patch-trust.ts';
 import { claudeOptions, claudeSettingsWithoutCommands } from './claude-trust.ts';
 import {
@@ -299,7 +300,11 @@ export type PendingApproval =
   | { approvalId: string; kind: 'secret'; main: boolean; resolve: (a: SecretAnswer) => void }
   // create_thread asking for a thread on another runner (cross-runner.ts).
   // check reads the backend's answer, which is the only one it believes.
-  | { approvalId: string; kind: 'request'; main: boolean; check: () => Promise<RequestAnswer>; resolve: (a: RequestAnswer) => void };
+  | { approvalId: string; kind: 'request'; main: boolean; check: () => Promise<RequestAnswer>; resolve: (a: RequestAnswer) => void }
+  // A call the Connectors gateway holds for approval (gateway-approvals.ts).
+  // Never main: the agent's CLI isn't waiting on Threadbear, so a message
+  // from Mike leaves it open. decide asks the gateway, which runs the call.
+  | { approvalId: string; kind: 'gateway'; main: false; title: string; decide: (d: GatewayDecision) => Promise<GatewayApproval | undefined> };
 
 export type Turn = {
   turnId: string;
@@ -710,6 +715,9 @@ export class Runner {
   // The schedules that send to a thread (main.ts sets it from the
   // Scheduler), for the done card's loose ends.
   schedulesFor?: (threadId: string) => Schedule[];
+  // Cards for calls the Connectors gateway holds for approval (main.ts sets
+  // it when the gateway is on this Mac; gateway-approvals.ts).
+  gatewayApprovals?: GatewayApprovals;
   // The schedule checks this runner runs by itself, and where (main.ts sets
   // it from the Scheduler), for writeRunsAsCode.
   scheduleChecks?: () => { command: string; cwd: string }[] & { unknown?: boolean };
@@ -2416,6 +2424,8 @@ export class Runner {
           }
         }
         this.emit(st, ev, rt.turn?.turnId);
+        // A Connectors gateway call held for approval gets its card here.
+        if (ev.type === 'tool.call' || ev.type === 'tool.result') this.gatewayApprovals?.observe(rec.id, ev);
         if (ev.type === 'tool.result' && rt.turn?.restateReply !== undefined && ev.itemId === rt.turn.endTurnCall) {
           const text = rt.turn.restateReply;
           rt.turn.restateReply = undefined;

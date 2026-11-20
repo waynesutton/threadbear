@@ -15,6 +15,8 @@ import { SECRET_TIMEOUT_DEFAULT_MIN, SECRET_TIMEOUT_MAX_MIN, type SecretFiles } 
 import { START_CARD, type RequestAnswer } from '../cross-runner.ts';
 import { REMOTE_ALLOW_REFUSED, remoteCardShowsAll } from '../tools.ts';
 import { reviewCard, reviewsCards, type CardForReview, type CardVerdict } from './card-review.ts';
+import { GATEWAY_TOOL_PREFIX } from '../connectors.ts';
+import type { GatewayApproval, GatewayDecision } from '../gateway-approvals.ts';
 
 export type SecretRequest = { label: string; reason: string; placeholder?: string; timeoutMinutes?: number; toolUseId?: string; signal?: AbortSignal };
 export type SecretAnswer = ({ status: 'saved' } & SecretFiles) | { status: 'declined' | 'expired'; message?: string };
@@ -27,6 +29,9 @@ export function settleDeclined(p: PendingApproval, decision: 'deny' | 'expired',
   if (p.kind === 'tool') p.resolve({ decision, message, ...(stopped ? { stopped } : {}) });
   else if (p.kind === 'question') p.resolve({ answers: null, message, ...(stopped ? { stopped } : {}) });
   else if (p.kind === 'request') p.resolve({ status: decision === 'deny' ? 'declined' : 'expired', ...(message ? { message } : {}) });
+  // Nothing waits on a gateway card here: closing it leaves the call held
+  // at the gateway, for its own page.
+  else if (p.kind === 'gateway') return;
   else p.resolve({ status: decision === 'deny' ? 'declined' : 'expired', message });
 }
 
@@ -65,6 +70,26 @@ export const approvalsPart = {
       // Allow/Deny: Deny declines, and Allow can't carry a value.
       if (params.decision === 'deny') return this.answerSecret({ threadId: params.threadId, approvalId: params.approvalId, decline: true });
       throw new RpcError(ErrorCode.badParams, 'A secret is answered with secrets.answer: update the Threadbear app, or answer it on the Mac.');
+    }
+    if (pending.kind === 'gateway') {
+      // Mac only for now: the phone's answer would come through the backend.
+      if (params.remote) throw new RpcError(ErrorCode.badParams, 'Approve or decline this one on the Mac, or on the gateway\'s own page.');
+      if (params.decision !== 'allow' && params.decision !== 'allowAlways' && params.decision !== 'deny') {
+        throw new RpcError(ErrorCode.badParams, 'A gateway approval takes "allow" or "deny".');
+      }
+      const decision = params.decision === 'deny' ? 'decline' : 'approve';
+      // The card stays until the gateway has answered: if it can't be
+      // reached, Mike can press again or use the page.
+      return pending.decide(decision).then(
+        (after) => {
+          if (st.rt.approvals.get(pending.approvalId) !== pending) return {};
+          this.closeGatewayCard(params.threadId, pending.approvalId, after);
+          return {};
+        },
+        (e: unknown) => {
+          throw new RpcError(ErrorCode.other, `Couldn't reach the Connectors gateway: ${(e as Error).message}`);
+        },
+      ) as unknown as Record<string, never>;
     }
     if (pending.kind === 'request') {
       if (params.decision === 'deny') {
@@ -289,6 +314,32 @@ export const approvalsPart = {
     });
   },
 
+  // A call the Connectors gateway holds for approval (gateway-approvals.ts):
+  // a card in the thread that made it, with the call's arguments whole.
+  // Not main and Mac only. Refused (false) for a thread this runner doesn't
+  // have, so the call stays for the gateway's page.
+  showGatewayCard(this: Runner, threadId: string, card: { cardId: string; approval: GatewayApproval; title: string; decide: (d: GatewayDecision) => Promise<GatewayApproval | undefined> }): boolean {
+    const st = this.threads.get(threadId);
+    if (!st || st.rt.approvals.has(card.cardId)) return false;
+    const a = card.approval;
+    const name = `${GATEWAY_TOOL_PREFIX}${a.tool}`;
+    const reason = `The Connectors gateway is holding this ${a.upstream} call until you approve it.`;
+    const body: EventBody = { type: 'approval.requested', approvalId: card.cardId, name, title: card.title, input: a.args, options: ['allow', 'deny'], reason };
+    this.addApproval(st, { approvalId: card.cardId, kind: 'gateway', main: false, title: card.title, decide: card.decide }, body, new AbortController().signal);
+    return true;
+  },
+
+  // Closes a gateway card: decided here or on the gateway's page, or
+  // expired there. `approval` is how the gateway left it (undefined: gone).
+  closeGatewayCard(this: Runner, threadId: string, cardId: string, approval: GatewayApproval | undefined): void {
+    const st = this.threads.get(threadId);
+    if (!st?.rt.approvals.has(cardId)) return;
+    const status = approval?.status;
+    if (status === 'approved' || status === 'ran') this.resolveApproval(st, cardId, 'allow', 'Approved. The gateway sends it.');
+    else if (status === 'declined') this.resolveApproval(st, cardId, 'deny', 'Declined. The gateway won\'t send it.');
+    else this.resolveApproval(st, cardId, 'expired', status === 'expired' ? 'The approval expired at the gateway.' : 'The gateway no longer has this call.');
+  },
+
   // create_thread asking another runner (cross-runner.ts): a card that waits
   // for the main Mac to start the thread, or for Mike to say no.
   requestCard(this: Runner, threadId: string, c: { approvalId: string; title: string; input: Record<string, unknown>; minutes: number; check: () => Promise<RequestAnswer> }): Promise<RequestAnswer> {
@@ -385,6 +436,7 @@ export const approvalsPart = {
   expireApproval(this: Runner, st: ThreadState, approvalId: string, message: string, stopped = false): void {
     const pending = st.rt.approvals.get(approvalId);
     if (!pending) return;
+    if (pending.kind === 'gateway') this.gatewayApprovals?.forget(approvalId);
     this.resolveApproval(st, approvalId, 'expired', message);
     settleDeclined(pending, 'expired', message, stopped);
   },

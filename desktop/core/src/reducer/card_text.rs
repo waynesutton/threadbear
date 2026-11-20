@@ -18,7 +18,7 @@ impl ApprovalText {
             "Write" => file.map(|f| format!("Write {f}?")).unwrap_or_else(|| "Write this file?".to_owned()),
             "WebFetch" => "Fetch this page?".to_owned(),
             "WebSearch" => "Search the web?".to_owned(),
-            _ => format!("Use {}?", Self::tool_name(&request.name)),
+            name => Self::gateway_title(name).unwrap_or_else(|| format!("Use {}?", Self::tool_name(name))),
         }
     }
 
@@ -215,6 +215,27 @@ impl ApprovalText {
     }
 
     /// "mcp__github__get_pull_request" is "github get_pull_request".
+    /// A Connectors gateway tool, "Slack: send message?" for
+    /// mcp__connectors__slack__slack_send_message: the service, then the
+    /// tool with the service's name taken off its front. From the tool's
+    /// name only, never the card's title (finding 67). None for anything
+    /// else, and for the gateway's own tools (connectors__*).
+    pub fn gateway_title(name: &str) -> Option<String> {
+        let rest = name.strip_prefix("mcp__connectors__")?;
+        let (service, tool) = rest.split_once("__")?;
+        if service.is_empty() || tool.is_empty() || service == "connectors" {
+            return None;
+        }
+        let tool = tool.strip_prefix(&format!("{service}_")).unwrap_or(tool);
+        let words: Vec<&str> = tool.split(|c| c == '_' || c == '-').filter(|w| !w.is_empty()).collect();
+        if words.is_empty() {
+            return None;
+        }
+        let mut chars = service.chars();
+        let service = chars.next().map(|c| c.to_uppercase().collect::<String>() + chars.as_str()).unwrap_or_default();
+        Some(Self::shown(&format!("{service}: {}?", words.join(" "))))
+    }
+
     pub fn tool_name(name: &str) -> String {
         let parts: Vec<&str> = name.split('_').filter(|p| !p.is_empty()).collect();
         if name.starts_with("mcp__") && parts.len() >= 3 {

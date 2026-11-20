@@ -42,7 +42,8 @@ import { MacScreen } from './mac-screen.ts';
 import { Tasks, relatedFor, taskMethods } from './tasks.ts';
 import { Projects, drainProjectMethods, projectMethods } from './projects.ts';
 import { Librarian, librarianMethods } from './librarian.ts';
-import { ConnectorsMonitor, connectorsMethods, findLauncher, gatewayIsLocal, readLocalIds } from './connectors.ts';
+import { ConnectorsMonitor, connectorsMethods, findLauncher, gatewayBase, gatewayIsLocal, readLocalIds } from './connectors.ts';
+import { GatewayApprovals, GatewayApprovalsClient } from './gateway-approvals.ts';
 import { TaskBoards, gatewayCaller, helperHeaders } from './notion-tasks.ts';
 import { createLogger } from './log.ts';
 import { hidIdleMs, isAtMac } from './presence.ts';
@@ -642,6 +643,19 @@ async function main(): Promise<void> {
     localIds: () => (experimentOn(cfg.home, 'localConnectors') && gatewayIsLocal(cfg.connectorsUrl) ? readLocalIds(path.join(os.homedir(), 'Library', 'Application Support', 'Connectors')) : undefined),
   });
   connectors.start();
+  // Gateway approvals on a card in the thread that made the call, when the
+  // gateway is on this Mac and has /api/approvals (gateway-approvals.ts).
+  const gatewayBaseUrl = cfg.connectorsUrl ? gatewayBase(cfg.connectorsUrl) : undefined;
+  if (gatewayBaseUrl && gatewayIsLocal(gatewayBaseUrl)) {
+    const client = new GatewayApprovalsClient(gatewayBaseUrl);
+    runner.gatewayApprovals = new GatewayApprovals({
+      client: () => client,
+      host: runner,
+      clock: realClock,
+      serviceTitle: (id) => connectors.status().services.find((s) => s.id === id)?.title,
+      log,
+    });
+  }
   // Projects' task boards in Notion, read through the same gateway
   // (notion-tasks.ts). With no gateway, a project with a Notion page
   // shows why its board is empty.
@@ -1552,6 +1566,7 @@ async function main(): Promise<void> {
     macScreen?.stop();
     keepAwake.stop();
     connectors.stop();
+    runner.gatewayApprovals?.stop();
     nativeTasks?.stop();
     taskReminders.stop();
     projects.stop();

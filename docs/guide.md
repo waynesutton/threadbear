@@ -1972,6 +1972,13 @@ usually sorts itself out, such as the gateway not answering for a moment.
 The arrow in the panel checks again, and the ⓘ says more. If the gateway
 can't be reached at all, the panel says so.
 
+When the gateway holds a call for your OK (a Slack post, an email), the
+card shows up in the thread that made it, with everything the call would
+send: Allow sends it, Deny doesn't. It needs the gateway on this Mac with
+its approvals API (plugbear's local mode); otherwise, or from the phone,
+approve it on the gateway's own page as before. The page still works, and
+a call decided there closes the card.
+
 With the X search experiment on, the panel also has X search, under Built
 into Threadbear, as it doesn't go through the gateway. It says whether
 your xAI key is saved; Forget key deletes it, and the next search asks
