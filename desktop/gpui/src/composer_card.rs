@@ -108,16 +108,21 @@ impl Composer {
     /// The open card the thread's transcript has (TranscriptModel.openCard),
     /// as long as it's open.
     pub(crate) fn open_card(&self, cx: &App) -> Option<AsksCard> {
+        let mut card = self.open_card_as_sent(cx)?;
+        if !self.app.upgrade().is_some_and(|app| app.read(cx).experiment_on("clearerCompletion")) {
+            card.completion = None;
+        }
+        Some(card)
+    }
+
+    /// The open card without the clearerCompletion check, for callers that
+    /// run inside the app's own update (the drafts save): reading the app
+    /// there is a double lease, and GPUI aborts on it (20 Nov crash).
+    fn open_card_as_sent(&self, cx: &App) -> Option<AsksCard> {
         let pane = self.pane.upgrade()?;
         let row = pane.read(cx).feed.model().open_card()?;
         let RowContent::Asks(card) = &row.content else { return None };
-        card.is_open.then(|| {
-            let mut card = card.clone();
-            if !self.app.upgrade().is_some_and(|app| app.read(cx).experiment_on("clearerCompletion")) {
-                card.completion = None;
-            }
-            card
-        })
+        card.is_open.then(|| card.clone())
     }
 
     /// What the thread is waiting on, when it's put away to wait on its own
@@ -204,7 +209,7 @@ impl Composer {
         if !pane.read(cx).is_loaded() {
             return Default::default();
         }
-        let card = match self.open_card(cx).filter(|c| !c.is_done()) {
+        let card = match self.open_card_as_sent(cx).filter(|c| !c.is_done()) {
             None => Some(Vec::new()),
             Some(card) if self.card.seq == Some(card.seq) => {
                 let mut boxes: Vec<(String, crate::drafts::Draft)> = self
