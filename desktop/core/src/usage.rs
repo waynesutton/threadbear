@@ -110,6 +110,12 @@ pub const RECHECK_TIP: &str = "Check this login again, after buying more usage. 
 /// again on extra usage, 2 threads carrying on", "Still out, back 3:40 pm".
 /// `true` with it when the login has room.
 pub fn recheck_words<Tz: TimeZone>(v: &Value, now: i64, zone: &Tz) -> (String, bool) {
+    // The runner answers with recheckError, not room, when the login
+    // couldn't be asked (Cursor and OpenCode report no usage), so no room
+    // here says nothing about whether it's out.
+    if let Some(err) = v["recheckError"].as_str().filter(|s| !s.is_empty()) {
+        return (err.to_owned(), false);
+    }
     let woke = v["woke"].as_i64().unwrap_or(0);
     if v["room"].as_bool() == Some(true) {
         let mut text = if v["extra"].as_bool() == Some(true) { "Has room again on extra usage".to_owned() } else { "Has room again".to_owned() };
@@ -2423,6 +2429,8 @@ mod tests {
         assert_eq!(recheck_words(&json!({ "room": true, "woke": 1 }), now, &z).0, "Has room again, 1 thread carrying on");
         assert_eq!(recheck_words(&json!({ "room": false, "backAt": back, "woke": 0 }), now, &z), ("Still out, back 3:40 pm".into(), false));
         assert_eq!(recheck_words(&json!({ "room": false, "woke": 0 }), now, &z), ("Still out".into(), false));
+        let unasked = json!({ "accounts": [], "accountId": "opencode-main", "recheckError": "OpenCode doesn't report its usage, so there's nothing to check" });
+        assert_eq!(recheck_words(&unasked, now, &z), ("OpenCode doesn't report its usage, so there's nothing to check".into(), false));
     }
 
     #[test]

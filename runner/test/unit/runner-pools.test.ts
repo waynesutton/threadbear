@@ -1052,7 +1052,7 @@ test('recheck: two clicks share one check; an error changes nothing; a provider 
   checking(h, () => null);
   await assert.rejects(h.runner.recheckLogin('claude-3'), /didn't say how much room/);
   assert.equal(h.records.length, records);
-  await assert.rejects(h.runner.recheckLogin('codex-main'), /can't be checked from here/);
+  await assert.rejects(h.runner.recheckLogin('codex-main'), /doesn't report its usage/);
   await assert.rejects(h.runner.recheckLogin('nope'), /No login called nope/);
 });
 

@@ -83,7 +83,7 @@ export const poolsPart = {
     const account = this.safeAccounts().find((a) => a.id === accountId);
     if (!account) throw new RpcError(ErrorCode.badParams, `No login called ${accountId} on this Mac.`);
     const adapter = this.adapters[account.provider];
-    if (!adapter?.checkLimits) throw new RpcError(ErrorCode.badParams, `${account.title} can't be checked from here.`);
+    if (!adapter?.checkLimits) throw new RpcError(ErrorCode.badParams, `${account.title} doesn't report its usage, so there's nothing to check`);
     let timer: ReturnType<typeof setTimeout> | undefined;
     let check: Awaited<ReturnType<NonNullable<typeof adapter.checkLimits>>>;
     try {
