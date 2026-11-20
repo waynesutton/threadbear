@@ -21,6 +21,12 @@ import type { GatewayApproval, GatewayDecision } from '../gateway-approvals.ts';
 export type SecretRequest = { label: string; reason: string; placeholder?: string; timeoutMinutes?: number; toolUseId?: string; signal?: AbortSignal };
 export type SecretAnswer = ({ status: 'saved' } & SecretFiles) | { status: 'declined' | 'expired'; message?: string };
 
+// A result's first line, short, for a closed card's note.
+function oneLineOf(text: string): string {
+  const line = text.split('\n').map((l) => l.trim()).find(Boolean) ?? 'no reason given';
+  return line.length > 200 ? `${line.slice(0, 199)}…` : line;
+}
+
 // Closes a pending card of any kind without an answer: Mike wrote instead,
 // the turn ended, the thread went.
 // `stopped`: because someone pressed Stop, the one case the agent may be
@@ -336,7 +342,11 @@ export const approvalsPart = {
     const st = this.threads.get(threadId);
     if (!st?.rt.approvals.has(cardId)) return;
     const status = approval?.status;
-    if (status === 'approved' || status === 'ran') this.resolveApproval(st, cardId, 'allow', 'Approved. The gateway sends it.');
+    const run = approval?.run;
+    if (run && !run.ok) this.resolveApproval(st, cardId, 'allow', `Approved, but sending it failed: ${oneLineOf(run.text)}`);
+    else if (run) this.resolveApproval(st, cardId, 'allow', 'Approved and sent.');
+    else if (status === 'ran') this.resolveApproval(st, cardId, 'allow', 'Approved and sent.');
+    else if (status === 'approved') this.resolveApproval(st, cardId, 'allow', 'Approved. It sends when the agent picks it up.');
     else if (status === 'declined') this.resolveApproval(st, cardId, 'deny', 'Declined. The gateway won\'t send it.');
     else this.resolveApproval(st, cardId, 'expired', status === 'expired' ? 'The approval expired at the gateway.' : 'The gateway no longer has this call.');
   },

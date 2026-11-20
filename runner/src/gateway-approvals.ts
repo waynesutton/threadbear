@@ -35,6 +35,8 @@ export const WATCH_MS = 60_000;
 // card is open.
 export const POLL_MS = 1_500;
 const TIMEOUT_MS = 5_000;
+// An approve with run waits for the call itself (a Slack post, an email).
+const RUN_TIMEOUT_MS = 60_000;
 // tool.call cuts strings at 16 KB (docs/protocol.md); past this, only the
 // start is compared.
 const CUT_AT = 16 * 1024 - 64;
@@ -48,6 +50,8 @@ export type GatewayApproval = {
   upstreamTool: string;
   args: Record<string, unknown>;
   url?: string;
+  // From an approve with run (a gateway that has it): what sending it gave.
+  run?: { ok: boolean; text: string };
 };
 
 // The gateway tool a thread's call is, or undefined: mcp__connectors__slack__slack_send_message
@@ -119,9 +123,18 @@ export type Describe = (a: GatewayApproval) => Promise<string | undefined>;
 export const DESCRIBE_MS = 3_000;
 
 // "#general", from slack_read_channel's first line, "Channel: #general
-// (C03NM8C7Z)", only when the id there is the one asked about.
+// (C03NM8C7Z)", only when the id there is the one asked about. Slack's MCP
+// server answers JSON with that text in `messages` (seen live, 20 Nov);
+// plain text is read as it is.
 export function slackChannelFrom(text: string, id: string): string | undefined {
-  const m = /^Channel: #([A-Za-z0-9._-]{1,80}) \(([A-Z0-9]{6,})\)/m.exec(text.slice(0, 2000));
+  let body = text;
+  try {
+    const parsed = JSON.parse(text) as { messages?: unknown };
+    if (typeof parsed?.messages === 'string') body = parsed.messages;
+  } catch {
+    // not JSON: the text itself
+  }
+  const m = /^Channel: #([A-Za-z0-9._-]{1,80}) \(([A-Z0-9]{6,})\)/m.exec(body.slice(0, 2000));
   return m && m[2] === id ? m[1] : undefined;
 }
 
@@ -181,13 +194,13 @@ export class GatewayApprovalsClient {
     return gatewayIsLocal(this.base) && Boolean(this.key());
   }
 
-  private async call(pathname: string, init: RequestInit = {}): Promise<{ status: number; body: unknown }> {
+  private async call(pathname: string, init: RequestInit = {}, timeoutMs = TIMEOUT_MS): Promise<{ status: number; body: unknown }> {
     const key = this.key();
     if (!key || !gatewayIsLocal(this.base)) throw new Error('No approvals key for a gateway on this Mac.');
     const res = await this.fetchImpl(new URL(pathname, this.base), {
       ...init,
       headers: { authorization: `Bearer ${key}`, 'content-type': 'application/json' },
-      signal: AbortSignal.timeout(TIMEOUT_MS),
+      signal: AbortSignal.timeout(timeoutMs),
       redirect: 'error',
     });
     const body = await res.json().catch(() => undefined);
@@ -210,9 +223,13 @@ export class GatewayApprovalsClient {
   }
 
   // The approval as it stands after the decision: decided now, or already
-  // decided (on the page, or it expired) when the answer is 409.
+  // decided (on the page, or it expired) when the answer is 409. An
+  // approve asks the gateway to send it too (run), so an Allow after the
+  // agent stopped waiting still sends; a gateway from before run approves
+  // only, and its answer has no `run`.
   async decide(id: string, decision: GatewayDecision): Promise<GatewayApproval | undefined> {
-    const { status, body } = await this.call(`/api/approvals/${encodeURIComponent(id)}`, { method: 'POST', body: JSON.stringify({ decision }) });
+    const approve = decision === 'approve';
+    const { status, body } = await this.call(`/api/approvals/${encodeURIComponent(id)}`, { method: 'POST', body: JSON.stringify({ decision, ...(approve ? { run: true } : {}) }) }, approve ? RUN_TIMEOUT_MS : TIMEOUT_MS);
     if (status === 200 && isApproval(body)) return body;
     if (status === 409) {
       const current = (body as { approval?: unknown })?.approval;

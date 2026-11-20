@@ -5521,9 +5521,15 @@ API or the key, nothing changes: the gateway's own page is the only way.
   message?"), never from `title`. It isn't the agent's own call (its CLI
   isn't waiting on Threadbear), so a message from Mike leaves it open, and
   it outlives the turn, as a subagent's card does.
-- `approvals.respond` with `allow` approves it at the gateway
-  (`POST /api/approvals/<id>`), `deny` declines it; the card stays until the
-  gateway answers, and an error (`-32000`) leaves it up to try again. Mac
+- `approvals.respond` with `allow` approves it at the gateway and sends it
+  there and then (`POST /api/approvals/<id>` with `"run": true`: the gateway
+  runs it as the agent that made it, once, so an Allow after the agent
+  stopped waiting still sends, and an agent that checks later gets the same
+  result); `deny` declines it. The card stays until the gateway answers (up
+  to a minute for a send), and an error (`-32000`) leaves it up to try
+  again. It closes with `allow` and "Approved and sent.", or "Approved, but
+  sending it failed: <the result's first line>", or, from a gateway without
+  `run`, "Approved. It sends when the agent picks it up." Mac
   only: `remote` is refused, even Deny, as the phone's answer would come
   through the backend.
 - Decided on the gateway's page, or expired there, the card closes with
