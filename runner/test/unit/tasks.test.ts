@@ -154,6 +154,10 @@ test('new task controls give an update message against an older backend', async 
   }
 });
 
+test('deleting a column gives an update message against a backend before 89', async () => {
+  const tasks = new Tasks(() => ({ key: 'owner', apiVersion: 88, post: async () => { throw Error('must not reach backend'); } }), () => true, () => {});
+  await assert.rejects(tasks.call('deleteColumn', { id: 'paused' }), /delete task columns/);
+});
 
 test('native picker can upload bytes without granting the runner access to its source path', async () => {
   const base64 = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aD1sAAAAASUVORK5CYII=';

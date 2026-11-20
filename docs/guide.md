@@ -3215,14 +3215,32 @@ headings are skipped. Text that starts with a plain line stays one task with the
 list as its note. On the Mac, a board column's add box takes a list too.
 Tick a task's box to mark it done: it leaves the list, and Undo brings it back.
 Show Done Tasks in Display (or the "done" link at the bottom) shows them again.
-The list runs Doing, Todo, Backlog, each a section you can fold.
+The list runs Building, Shaping, Observing, On Deck, Backlog and Paused, each a
+section you can fold, with Done and Canceled after them.
 
-Switch to Board for columns: Backlog, Todo, Doing and Done. Cards show the
+Switch to Board for columns. A new board has eight:
+
+| Column | What goes there |
+|---|---|
+| Backlog | Things you're considering but not pursuing yet |
+| On Deck | Decided to do it, not started |
+| Shaping | Working out the problem, the scope and the approach. Active work |
+| Building | Being built. New tasks land here |
+| Observing | Shipped, still checking results or refining. Optional: a task can go straight from Building to Done |
+| Done | The goal is met, or the work is called complete. Track follow-ups as new tasks |
+| Paused | Stopped for now |
+| Canceled | Not doing it. Counts as closed, like Done |
+
+Cards show the
 title, the priority, the due date (red once it's passed, amber on the day), a
 sub-task count like 1/3, a note mark and the project; drag a card to move it, or use + on a column
 to add one there. Add a task at the foot of a column does the same. Click a
 column name to rename it, or Add column to make another. Renaming keeps its
-tasks and completion behavior. Drag column headings, list sections and project
+tasks and completion behavior. Delete a column from its ⋯ menu on the Mac, or
+from its rename box on the web. Its tasks move to another column that means the
+same thing (Canceled's go to Done), or to Building if none is left, and the
+confirm says where. Every column can be renamed or deleted except Building,
+because new tasks land there. Drag column headings, list sections and project
 groups to reorder them; the board and list keep their own orders. Narrow
 windows and phones scroll columns sideways within the board. In the Mac app,
 Display > Wrap Columns puts the columns on as many rows as they need instead, so

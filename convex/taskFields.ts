@@ -10,6 +10,33 @@ export function fullColumnOrder(order: readonly TaskStatus[] | undefined, fallba
   for (const s of taskStatuses) if (!out.includes(s)) out.splice(s === 'doing' ? Math.max(0, out.indexOf('todo') + 1) : out.length, 0, s);
   return out;
 }
+export type TaskColumn = { id: string; name: string; status: TaskStatus };
+// API 89: the board a deployment starts with, until its owner saves columns.
+// status is what a column means for completion and the agent tools; the four
+// built-in ids keep their status. Todo (named Building) is where new tasks
+// land, so it is the one column that can't be deleted. Doing is named Shaping:
+// active work on the problem before building starts.
+export const BUILDING = 'todo';
+export const defaultColumns: TaskColumn[] = [
+  { id: 'backlog', name: 'Backlog', status: 'backlog' },
+  { id: 'on-deck', name: 'On Deck', status: 'todo' },
+  { id: 'doing', name: 'Shaping', status: 'doing' },
+  { id: 'todo', name: 'Building', status: 'todo' },
+  { id: 'observing', name: 'Observing', status: 'doing' },
+  { id: 'done', name: 'Done', status: 'done' },
+  { id: 'paused', name: 'Paused', status: 'backlog' },
+  { id: 'canceled', name: 'Canceled', status: 'done' },
+];
+// The list puts active work first, as it did before columns.
+export const defaultSectionOrder = ['todo', 'doing', 'observing', 'on-deck', 'backlog', 'paused', 'done', 'canceled'];
+// A saved order with unknown ids dropped, repeats removed and missing columns
+// added in the fallback's order, so every client gets each column once.
+export function columnIds(order: readonly string[] | undefined, columns: readonly TaskColumn[], fallback: readonly string[]): string[] {
+  const known = new Set(columns.map((c) => c.id));
+  const out = (order ?? []).filter((id, i, all) => known.has(id) && all.indexOf(id) === i);
+  for (const id of [...fallback, ...columns.map((c) => c.id)]) if (known.has(id) && !out.includes(id)) out.push(id);
+  return out;
+}
 export const taskView = v.union(v.literal('board'), v.literal('list'));
 export const taskProject = v.object({ runnerId: v.string(), id: v.string() });
 // API 87: Linear-style issue fields. All optional, so rows and clients from before keep working.

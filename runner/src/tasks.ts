@@ -50,7 +50,7 @@ export type TaskRelated = {
 };
 export type TaskLocal = { runnerId: string; related: (projectId: string) => TaskRelated };
 const queries = new Set(['list', 'preferences', 'photo', 'projects', 'count', 'activity', 'get']);
-const operations = new Set([...queries, 'create', 'update', 'remove', 'restore', 'setPreferences', 'uploadPhoto', 'projectCount', 'photoFile', 'photoData', 'startThread', 'comment', 'removeComment', 'addImage', 'imageData', 'imageFile', 'related', 'claimReminder']);
+const operations = new Set([...queries, 'create', 'update', 'remove', 'restore', 'setPreferences', 'uploadPhoto', 'projectCount', 'photoFile', 'photoData', 'startThread', 'comment', 'removeComment', 'addImage', 'imageData', 'imageFile', 'related', 'claimReminder', 'deleteColumn']);
 // What needs backend API 87: these operations, and these fields anywhere.
 const API87_OPERATIONS = new Set(['activity', 'get', 'comment', 'removeComment', 'addImage', 'imageData', 'imageFile']);
 const API87_FIELDS = ['priority', 'dueDate', 'parentId', 'links'];
@@ -130,6 +130,8 @@ export class Tasks {
       throw new Error('Update the Threadbear backend to use task priority, due dates, sub-tasks, links and comments.');
     if (source.apiVersion !== undefined && source.apiVersion < 88 && (operation === 'claimReminder' || API88_FIELDS.some((field) => field in args)))
       throw new Error('Update the Threadbear backend to use due times and reminders.');
+    if (source.apiVersion !== undefined && source.apiVersion < 89 && operation === 'deleteColumn')
+      throw new Error('Update the Threadbear backend to delete task columns.');
     if (operation === 'related') {
       const local = this.local();
       const empty: TaskRelated = { threads: [], prints: [] };

@@ -7974,7 +7974,24 @@ Tasks retain canonical `status` for old clients and completion. Optional
 carry `columns: { id, name, status }[]`. Built-in ids retain their canonical
 status, and custom columns default to Todo semantics. A status-only write from
 an older client moves the task back to that canonical column. Title/notes-only
-writes preserve column membership. Names never serve as ids.
+writes preserve column membership. Names never serve as ids in storage.
+
+From API 89, a board with no saved columns starts on eight: `backlog`
+Backlog, `on-deck` On Deck (todo), `doing` Shaping, `todo` Building,
+`observing` Observing (doing), `done` Done, `paused` Paused (backlog) and
+`canceled` Canceled (done). `tasks:preferences` always returns `columns`,
+`boardColumnOrder` and `sectionOrder` in full (each column once), so clients
+draw them as given and never add built-ins back. `tasks:deleteColumn {id}`
+removes any column but `todo` and moves its tasks, deleted ones too, to the
+status's own built-in column if it's left, else the first column on the board
+with that status, else `todo`; it returns `{movedTo}`, or null if the column
+was already gone. Over 200 tasks move in scheduled batches; until then
+`list` and `get` show them where they're going. `setPreferences` refuses a
+`columns` list that drops a column (use deleteColumn) and leaves deleted
+built-in ids out of orders an older client sends. A write naming a deleted
+built-in column, or only a status, goes to that status's column; a status-only
+write keeps a task in its column when that column already has the status.
+`columnId` also matches a column's name, case-insensitively, for agents.
 
 Preferences also carry `boardColumnOrder` and `sectionOrder` as stable column ids;
 legacy enum orders remain accepted. `tasks.startThread {id}` queues a create

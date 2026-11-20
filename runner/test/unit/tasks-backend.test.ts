@@ -166,8 +166,10 @@ test('every public task operation rejects an invalid account credential', async 
     removeComment: { id: 'never', commentId: 'never' },
     addImage: { id: 'never', storageId: 'stored1' },
     claimReminder: { id: 'never', key: '2026-11-20T09:30' },
+    deleteColumn: { id: 'paused' },
   };
-  assert.deepEqual(Object.keys(tasks).sort(), Object.keys(cases).sort(), 'new operations need an auth case');
+  // moveColumnTasks is internal: only deleteColumn schedules it.
+  assert.deepEqual(Object.keys(tasks).filter((k) => k !== 'moveColumnTasks').sort(), Object.keys(cases).sort(), 'new operations need an auth case');
   for (const [operation, args] of Object.entries(cases)) {
     for (const auth of [{ token: 'invalid' }, { key: 'invalid' }]) {
       assert.equal(await outcome(b.run(operation, { ...args, auth })), 'auth', operation);
@@ -177,13 +179,7 @@ test('every public task operation rejects an invalid account credential', async 
 
 test('column names and custom membership survive edits without changing completion semantics', async () => {
   const b = await setup();
-  const columns = [
-    { id: 'backlog', name: 'Later', status: 'backlog' },
-    { id: 'todo', name: 'Next', status: 'todo' },
-    { id: 'doing', name: 'In progress', status: 'doing' },
-    { id: 'done', name: 'Finished', status: 'done' },
-    { id: 'review', name: 'Review', status: 'todo' },
-  ];
+  const columns = [...(await b.run('preferences')).columns, { id: 'review', name: 'Review', status: 'todo' }];
   await b.run('setPreferences', { columns });
   await b.run('create', { id: 'custom-column-task', title: 'Review draft', columnId: 'review' });
   let task = (await b.run('list')).items[0];
@@ -199,10 +195,11 @@ test('column names and custom membership survive edits without changing completi
   assert.notEqual(task.columnId, 'review');
 });
 
-test('columns reject missing built-ins, duplicate ids and invalid membership', async () => {
+test('columns reject dropped columns, duplicate ids and invalid membership', async () => {
   const b = await setup();
-  const columns = ['backlog', 'todo', 'doing', 'done'].map(status => ({ id: status, name: status, status }));
+  const columns = (await b.run('preferences')).columns;
   assert.equal(await outcome(b.run('setPreferences', { columns: columns.slice(1) })), 'badArgs');
+  assert.equal(await outcome(b.run('setPreferences', { columns: columns.filter((c: { id: string }) => c.id !== 'todo') })), 'badArgs');
   assert.equal(await outcome(b.run('setPreferences', { columns: [...columns, columns[0]] })), 'badArgs');
   assert.equal(await outcome(b.run('create', { id: 'bad-column', title: 'Invalid', columnId: 'missing' })), 'badArgs');
   assert.equal(await outcome(b.run('create', { id: 'bad-status', title: 'Invalid', columnId: 'done', status: 'todo' })), 'badArgs');
@@ -330,7 +327,7 @@ test('the backend writes events for status, priority, due date, project and pare
   await b.run('update', { id: 'child', title: 'Write the notes', priority: 'high', author: user });
   assert.deepEqual(await bodies(b, 'child'), [
     'Fix the login created the task',
-    'Wayne moved to Doing',
+    'Wayne moved to Shaping',
     'Wayne set priority to High',
     'Wayne set the due date to Nov 20, 2026',
     'Wayne moved to project Launch',
@@ -443,4 +440,67 @@ test('get finds one task, and a deleted one too', async () => {
   const row = await b.run('get', { id: 'g' });
   assert.equal(row.priority, 'low');
   assert.equal(row.deleted, true);
+});
+
+test('a new board starts on the eight product columns, Building first in the list', async () => {
+  const b = await setup();
+  const prefs = await b.run('preferences');
+  assert.deepEqual(prefs.columns.map((c: { name: string }) => c.name), ['Backlog', 'On Deck', 'Shaping', 'Building', 'Observing', 'Done', 'Paused', 'Canceled']);
+  assert.deepEqual(prefs.boardColumnOrder, ['backlog', 'on-deck', 'doing', 'todo', 'observing', 'done', 'paused', 'canceled']);
+  assert.equal(prefs.sectionOrder[0], 'todo');
+  await b.run('create', { id: 'new', title: 'Quick add' });
+  await b.run('create', { id: 'stop', title: 'Not now', columnId: 'canceled' });
+  await b.run('create', { id: 'named', title: 'By name', columnId: 'observing' });
+  await b.run('update', { id: 'named', columnId: 'on deck' });
+  const byId = Object.fromEntries((await b.run('list')).items.map((t: { id: string }) => [t.id, t]));
+  assert.equal(byId.new.columnId, 'todo');
+  assert.equal(byId.stop.status, 'done');
+  assert.equal(byId.named.columnId, 'on-deck');
+  // A status alone keeps a task in its column when the status already matches.
+  await b.run('update', { id: 'named', status: 'todo' });
+  assert.equal((await b.run('get', { id: 'named' })).columnId, 'on-deck');
+});
+test('deleting a column moves its tasks to one with the same status, and Building stays', async () => {
+  const b = await setup();
+  await b.ctx.db.insert('tasks', { id: 'old', title: 'From before columns', notes: '', status: 'doing', project: null, position: 1, createdAt: 1, updatedAt: 1, deleted: false });
+  await b.run('create', { id: 'c', title: 'Dropped idea', columnId: 'canceled' });
+  await b.run('create', { id: 'gone', title: 'In the bin', columnId: 'canceled' });
+  await b.run('remove', { id: 'gone' });
+  assert.deepEqual(await b.run('deleteColumn', { id: 'canceled' }), { movedTo: 'done' });
+  assert.equal(await b.run('deleteColumn', { id: 'canceled' }), null);
+  await b.run('restore', { id: 'gone' });
+  // Shaping goes to Observing, the other doing column; then Observing to Building.
+  assert.deepEqual(await b.run('deleteColumn', { id: 'doing' }), { movedTo: 'observing' });
+  assert.deepEqual(await b.run('deleteColumn', { id: 'observing' }), { movedTo: 'todo' });
+  const byId = Object.fromEntries((await b.run('list')).items.map((t: { id: string }) => [t.id, t]));
+  assert.equal(byId.c.columnId, 'done');
+  assert.equal(byId.gone.columnId, 'done');
+  assert.equal(byId.old.columnId, 'todo');
+  assert.equal(byId.old.status, 'todo');
+  const prefs = await b.run('preferences');
+  assert.ok(!prefs.columns.some((c: { id: string }) => ['canceled', 'doing', 'observing'].includes(c.id)));
+  assert.ok(!prefs.boardColumnOrder.includes('doing'));
+  assert.equal(await outcome(b.run('deleteColumn', { id: 'todo' })), 'badArgs');
+  // Older clients still name deleted built-in columns and doing.
+  await b.run('update', { id: 'c', columnId: 'doing' });
+  assert.equal((await b.run('get', { id: 'c' })).columnId, 'todo');
+  await b.run('setPreferences', { boardColumnOrder: ['doing', 'todo', 'backlog'] });
+  assert.deepEqual((await b.run('preferences')).boardColumnOrder.slice(0, 2), ['todo', 'backlog']);
+});
+test('a deleted column with many tasks keeps moving them in batches', async () => {
+  const b = await setup();
+  for (let i = 0; i < 205; i++) await b.ctx.db.insert('tasks', { id: `p${i}`, title: 'Wait', notes: '', status: 'backlog', columnId: 'paused', project: null, position: i, createdAt: 1, updatedAt: 1, deleted: false });
+  await b.run('deleteColumn', { id: 'paused' });
+  assert.equal(b.scheduled.length, 1);
+  const { moveColumnTasks } = tasks;
+  await call(b.ctx, moveColumnTasks, (b.scheduled[0] as { args: Record<string, unknown> }).args);
+  const items = [];
+  for (let after: string | null = ''; after !== null; ) {
+    const page = await b.run('list', { after, limit: 250 });
+    items.push(...page.items);
+    after = page.next;
+  }
+  assert.ok(items.every((t: { columnId: string }) => t.columnId === 'backlog'));
+  const raw = await b.ctx.db.query('tasks').withIndex('by_column_status', (q: any) => q.eq('columnId', 'paused')).take(10);
+  assert.equal(raw.length, 0);
 });

@@ -1,10 +1,11 @@
 // One private task collection per Threadbear deployment. Paired browsers write
 // directly so changing a task never waits for a sleeping Mac.
 import { ConvexError, v } from 'convex/values';
-import { mutation, query, type QueryCtx, type MutationCtx } from './_generated/server';
+import { internalMutation, mutation, query, type QueryCtx, type MutationCtx } from './_generated/server';
+import { internal } from './_generated/api';
 import { checkPhoneToken, runnerAuth } from './lib';
 import { mainRunner, queue } from './phone';
-import { fullColumnOrder, taskStatuses, listStatuses, taskActivityKind, taskAuthor, taskFields, taskLink, taskLinkOut, taskPreferenceFields, taskPriority, taskProject, taskStatus } from './taskFields';
+import { BUILDING, columnIds, defaultColumns, defaultSectionOrder, fullColumnOrder, taskStatuses, listStatuses, type TaskColumn, type TaskStatus, taskActivityKind, taskAuthor, taskFields, taskLink, taskLinkOut, taskPreferenceFields, taskPriority, taskProject, taskStatus } from './taskFields';
 import type { Infer } from 'convex/values';
 import type { Id } from './_generated/dataModel';
 
@@ -163,7 +164,7 @@ async function dropImages(ctx: MutationCtx, before: Link[] | undefined, after: L
   for (const l of before ?? []) if (l.storageId && !kept.has(l.storageId)) await ctx.storage.delete(l.storageId);
 }
 async function columnName(ctx: Ctx, columnId: string) {
-  return (await prefRow(ctx))?.columns?.find((c) => c.id === columnId)?.name ?? STATUS_NAMES[columnId] ?? columnId;
+  return columnsOf(await prefRow(ctx)).find((c) => c.id === columnId)?.name ?? STATUS_NAMES[columnId] ?? columnId;
 }
 async function projectTitle(ctx: Ctx, project: Infer<typeof taskProject>) {
   const row = await ctx.db
@@ -191,8 +192,10 @@ export const list = query({
       .query('tasks')
       .withIndex('by_deleted_id', (q) => q.eq('deleted', false).gt('id', a.after ?? ''))
       .take(limit + 1);
+    const board = await boardOf(ctx);
     const items = await Promise.all(
       rows.slice(0, limit).map(async ({ _id, _creationTime, ...row }) => {
+        place(board, row);
         // A removed project does not take its tasks with it.
         if (
           row.project &&
@@ -299,7 +302,7 @@ export const update = mutation({
     const parentChanged = patch.parentId !== undefined && (patch.parentId ?? null) !== (row.parentId ?? null);
     const parent = parentChanged ? await checkParent(ctx, row.id, patch.parentId) : null;
     if (patch.links) patch.links = await cleanLinks(ctx, patch.links, row.links);
-    const column = patch.columnId !== undefined || patch.status !== undefined ? await columnFields(ctx, patch.columnId, patch.status) : undefined;
+    const column = patch.columnId !== undefined || patch.status !== undefined ? await columnFields(ctx, patch.columnId, patch.status, row) : undefined;
     const was = { ...row };
     await ctx.db.patch(row._id, { ...patch, ...column, updatedAt: await changedAt(ctx) });
     if (patch.links) await dropImages(ctx, was.links, patch.links);
@@ -364,17 +367,56 @@ const prefRow = (ctx: Ctx) =>
     .query('taskPreferences')
     .withIndex('by_name', (q) => q.eq('name', 'tasks'))
     .unique();
-async function columnFields(ctx: Ctx, columnId: string | undefined, status: Infer<typeof taskStatus> | undefined) {
+type Prefs = Awaited<ReturnType<typeof prefRow>>;
+type Board = { columns: TaskColumn[]; order: string[] };
+const columnsOf = (row: Prefs): TaskColumn[] => row?.columns ?? defaultColumns;
+// Before API 89 a saved board had only the four statuses' order to go on.
+function boardOrder(row: Prefs, columns = columnsOf(row)) {
+  return columnIds(row?.boardColumnOrder, columns, row?.columns ? fullColumnOrder(row.columnOrder) : defaultColumns.map((c) => c.id));
+}
+function sectionOrder(row: Prefs, columns = columnsOf(row)) {
+  return columnIds(row?.sectionOrder, columns, row?.columns ? fullColumnOrder(row.listOrder, listStatuses) : defaultSectionOrder);
+}
+async function boardOf(ctx: Ctx): Promise<Board> {
+  const row = await prefRow(ctx);
+  const columns = columnsOf(row);
+  return { columns, order: boardOrder(row, columns) };
+}
+const building = (columns: TaskColumn[]): TaskColumn => columns.find((c) => c.id === BUILDING) ?? defaultColumns.find((c) => c.id === BUILDING)!;
+// Where a status goes when no column is named: its built-in column if it's
+// still there, else the first on the board with that status, else Building.
+function columnForStatus({ columns, order }: Board, status: TaskStatus): TaskColumn {
+  return columns.find((c) => c.id === status) ?? order.map((id) => columns.find((c) => c.id === id)).find((c) => c?.status === status) ?? building(columns);
+}
+// A task whose column was deleted shows where its tasks are being moved, so
+// no client ever draws one in a column it can't find.
+function place(board: Board, row: { columnId?: string; status: TaskStatus }) {
+  if (board.columns.some((c) => c.id === (row.columnId ?? row.status))) return;
+  const c = columnForStatus(board, row.status);
+  row.columnId = c.id;
+  row.status = c.status;
+}
+// columnId may be an id or, for agents, a column's name. With only a status,
+// a task already in a column with that status stays there.
+async function columnFields(ctx: Ctx, columnId: string | undefined, status: TaskStatus | undefined, current?: { columnId?: string; status: TaskStatus }) {
   if (columnId === '') bad('Choose a known column');
-  if (columnId === undefined || taskStatuses.includes(columnId as Infer<typeof taskStatus>)) {
-    const canonical = (columnId ?? status ?? 'todo') as Infer<typeof taskStatus>;
-    if (columnId && status && status !== canonical) bad('Column and status disagree');
-    return { status: canonical, columnId: canonical };
+  const board = await boardOf(ctx);
+  const named = columnId?.trim().toLowerCase();
+  const column = columnId === undefined ? undefined : (board.columns.find((c) => c.id === columnId) ?? board.columns.find((c) => c.name.toLowerCase() === named));
+  if (column) {
+    if (status && status !== column.status) bad('Column and status disagree');
+    return { status: column.status, columnId: column.id };
   }
-  const column = (await prefRow(ctx))?.columns?.find(c => c.id === columnId);
-  if (!column) bad('That column is no longer available');
-  if (status && status !== column.status) bad('Column and status disagree');
-  return { status: column.status, columnId: column.id };
+  if (columnId !== undefined) {
+    // A deleted built-in column, from an older client: its status still says where to go.
+    if (!taskStatuses.includes(columnId as TaskStatus)) bad('That column is no longer available');
+    if (status && status !== columnId) bad('Column and status disagree');
+    status = columnId as TaskStatus;
+  }
+  const want = status ?? 'todo';
+  const here = current && board.columns.find((c) => c.id === (current.columnId ?? current.status));
+  const next = here && here.status === want ? here : columnForStatus(board, want);
+  return { status: next.status, columnId: next.id };
 }
 export const preferences = query({
   args: { auth: authField },
@@ -393,6 +435,10 @@ export const preferences = query({
       ...prefs,
       columnOrder: fullColumnOrder(row?.columnOrder),
       listOrder: fullColumnOrder(row?.listOrder, listStatuses),
+      // API 89: always the full set, each column once, so clients draw these as given.
+      columns: columnsOf(row),
+      boardColumnOrder: boardOrder(row),
+      sectionOrder: sectionOrder(row),
     };
   },
 });
@@ -401,26 +447,31 @@ export const setPreferences = mutation({
   returns: v.null(),
   handler: async (ctx, { auth, ...patch }) => {
     await authenticate(ctx, auth);
+    const existing = columnsOf(await prefRow(ctx));
     if (patch.columns) {
-      if (patch.columns.length < 4 || patch.columns.length > 32) bad('Use between 4 and 32 columns');
+      if (patch.columns.length < 1 || patch.columns.length > 32) bad('Use between 1 and 32 columns');
       const ids = new Set<string>();
       for (const c of patch.columns) {
         if (!/^[a-zA-Z0-9_-]{1,80}$/.test(c.id) || ids.has(c.id)) bad('Use a unique column id');
         ids.add(c.id);
         c.name = c.name.trim();
         if (!c.name || c.name.length > 80) bad('Use a column name under 81 characters');
-        if (taskStatuses.includes(c.id as Infer<typeof taskStatus>) && c.status !== c.id) bad('Keep built-in completion behavior');
+        if (taskStatuses.includes(c.id as TaskStatus) && c.status !== c.id) bad('Keep built-in completion behavior');
       }
-      if (taskStatuses.some(id => !ids.has(id))) bad('Keep the four built-in columns');
-      const existing = await prefRow(ctx);
-      if (existing?.columns?.some(c => !ids.has(c.id))) bad('Removing columns is not supported');
-      if (existing?.columns?.some(c => patch.columns!.find(next => next.id === c.id)?.status !== c.status)) bad('Keep the column completion behavior');
+      if (!ids.has(BUILDING)) bad(`Keep the ${building(existing).name} column: new tasks go there`);
+      // Deleting goes through deleteColumn, which moves the column's tasks first.
+      if (existing.some((c) => !ids.has(c.id))) bad('Delete a column with Delete column, so its tasks move');
+      if (existing.some((c) => patch.columns!.find((next) => next.id === c.id)?.status !== c.status)) bad('Keep the column completion behavior');
     }
-    for (const order of [patch.boardColumnOrder, patch.sectionOrder]) {
+    const definitions = patch.columns ?? existing;
+    for (const field of ['boardColumnOrder', 'sectionOrder'] as const) {
+      const order = patch[field];
       if (!order) continue;
-      const definitions = patch.columns ?? (await prefRow(ctx))?.columns;
-      const ids = new Set<string>(definitions?.map(c => c.id) ?? taskStatuses);
-      if (order.length > 32 || new Set(order).size !== order.length || order.some(id => !ids.has(id))) bad('Use each known column once');
+      if (order.length > 32 || new Set(order).size !== order.length) bad('Use each known column once');
+      // An older client may still list a deleted built-in column; leave it out.
+      const ids = new Set(definitions.map((c) => c.id));
+      if (order.some((id) => !ids.has(id) && !taskStatuses.includes(id as TaskStatus))) bad('Use each known column once');
+      patch[field] = order.filter((id) => ids.has(id));
     }
     if (patch.columnOrder) {
       if (new Set(patch.columnOrder).size !== patch.columnOrder.length) bad('Use each status once');
@@ -450,6 +501,52 @@ export const setPreferences = mutation({
 });
 
 // Upload URLs and photo links are issued only to authenticated account clients.
+// API 89. Any column but Building can go. Its tasks move to the first column
+// left with the same status (so done stays done), else to Building.
+export const deleteColumn = mutation({
+  args: { auth: authField, id: v.string() },
+  // null when it was already gone.
+  returns: v.union(v.object({ movedTo: v.string() }), v.null()),
+  handler: async (ctx, { auth, id }) => {
+    await authenticate(ctx, auth);
+    const row = await prefRow(ctx);
+    const columns = columnsOf(row);
+    if (id === BUILDING) bad(`${building(columns).name} can be renamed but not deleted: new tasks go there`);
+    const gone = columns.find((c) => c.id === id);
+    const rest = columns.filter((c) => c.id !== id);
+    const board = { columns: rest, order: boardOrder(row, rest) };
+    if (!gone) return null;
+    const target = columnForStatus(board, gone.status);
+    const prefs = { columns: rest, boardColumnOrder: board.order, sectionOrder: sectionOrder(row, rest) };
+    if (row) await ctx.db.patch(row._id, prefs);
+    else await ctx.db.insert('taskPreferences', { name: 'tasks', ...prefs });
+    await moveTasks(ctx, id, target);
+    return { movedTo: target.id };
+  },
+});
+const MOVE_BATCH = 200;
+// Deleted tasks move too, so restoring one never brings back a missing column.
+async function moveTasks(ctx: MutationCtx, from: string, to: TaskColumn) {
+  const rows = await ctx.db.query('tasks').withIndex('by_column_status', (q) => q.eq('columnId', from)).take(MOVE_BATCH);
+  // Rows from before columns name only their status.
+  const legacy = taskStatuses.includes(from as TaskStatus) && rows.length < MOVE_BATCH
+    ? await ctx.db.query('tasks').withIndex('by_column_status', (q) => q.eq('columnId', undefined).eq('status', from as TaskStatus)).take(MOVE_BATCH - rows.length)
+    : [];
+  let updatedAt = await changedAt(ctx);
+  for (const t of [...rows, ...legacy]) await ctx.db.patch(t._id, { columnId: to.id, status: to.status, updatedAt: updatedAt++ });
+  if (rows.length + legacy.length === MOVE_BATCH) await ctx.scheduler.runAfter(0, internal.tasks.moveColumnTasks, { from, to: to.id });
+}
+export const moveColumnTasks = internalMutation({
+  args: { from: v.string(), to: v.string() },
+  returns: v.null(),
+  handler: async (ctx, { from, to }) => {
+    const columns = columnsOf(await prefRow(ctx));
+    // Added back since, so the move is over.
+    if (columns.some((c) => c.id === from)) return null;
+    await moveTasks(ctx, from, columns.find((c) => c.id === to) ?? building(columns));
+    return null;
+  },
+});
 export const uploadPhoto = mutation({
   args: { auth: authField },
   returns: v.string(),
@@ -548,6 +645,7 @@ export const get = query({
     const row = await find(ctx, a.id);
     if (!row) return null;
     const { _id, _creationTime, ...task } = row;
+    place(await boardOf(ctx), task);
     return expose(ctx, task);
   },
 });

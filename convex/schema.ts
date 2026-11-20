@@ -220,7 +220,7 @@ export const moveStates = ['asking', 'ready', 'packing', 'unpacking', 'claimed',
 
 export default defineSchema({
   // Cloud-owned tasks, not part of the runner's replaceable project mirror.
-  tasks: defineTable(taskFields).index('by_thread_command', ['threadCommandId']).index('by_task_id', ['id']).index('by_deleted_id', ['deleted', 'id']).index('by_updated', ['updatedAt']).index('by_project_deleted', ['project.runnerId', 'project.id', 'deleted']).index('by_parent', ['parentId', 'deleted']),
+  tasks: defineTable(taskFields).index('by_thread_command', ['threadCommandId']).index('by_task_id', ['id']).index('by_deleted_id', ['deleted', 'id']).index('by_updated', ['updatedAt']).index('by_project_deleted', ['project.runnerId', 'project.id', 'deleted']).index('by_parent', ['parentId', 'deleted']).index('by_column_status', ['columnId', 'status']),
   // A task's comments and the events the backend writes on changes (API 87).
   taskActivity: defineTable(taskActivityFields).index('by_task', ['taskId', 'createdAt']),
   taskPreferences: defineTable({ name: v.string(), ...taskPreferenceFields }).index('by_name', ['name']),

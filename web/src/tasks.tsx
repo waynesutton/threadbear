@@ -4,7 +4,7 @@ import type { FunctionReturnType } from 'convex/server';
 import type { Id } from '../../convex/_generated/dataModel';
 import { api } from '../../convex/_generated/api';
 import './tasks.css';
-import { columnDefinitions, orderedColumns, taskColumn } from './tasks-columns';
+import { columnDefinitions, deleteTarget, orderedColumns, taskColumn } from './tasks-columns';
 import { go } from './route';
 import { applyTheme, readTheme } from './theme';
 import { taskDraftChanges } from './tasks-draft';
@@ -83,6 +83,7 @@ function TasksContent({ token, projectFilter = '', issues = false }: { token: st
   const restore = useMutation(api.tasks.restore);
   const startThread = useMutation(api.tasks.startThread);
   const setPrefs = useMutation(api.tasks.setPreferences);
+  const deleteColumn = useMutation(api.tasks.deleteColumn);
   const upload = useMutation(api.tasks.uploadPhoto);
   const [tasks, setTasks] = useState<Task[]>([]);
   const [loaded, setLoaded] = useState(false);
@@ -121,7 +122,7 @@ function TasksContent({ token, projectFilter = '', issues = false }: { token: st
   const membership = (t: Task) => taskColumn(t, definitions);
   const columns = orderedColumns(definitions, prefs?.boardColumnOrder ?? fullOrder(prefs?.columnOrder));
   const listOrder = orderedColumns(definitions, prefs?.sectionOrder ?? fullOrder(prefs?.listOrder, LIST_STATUSES));
-  const [columnEditor, setColumnEditor] = useState<{ id: string; name: string; fresh: boolean } | null>(null);
+  const [columnEditor, setColumnEditor] = useState<{ id: string; name: string; fresh: boolean; deleting?: boolean } | null>(null);
   const columnReturnFocus = useRef<HTMLElement | null>(null);
   function closeColumnEditor() { setColumnEditor(null); requestAnimationFrame(() => columnReturnFocus.current?.focus()); }
 
@@ -1013,7 +1014,17 @@ function TasksContent({ token, projectFilter = '', issues = false }: { token: st
         const column = { id: columnEditor.id, name: columnEditor.name.trim(), status: canonical(columnEditor.id) };
         const next = columnEditor.fresh ? [...definitions, column] : definitions.map(c => c.id === column.id ? column : c);
         void write(() => setPrefs({ auth, columns: next })).then(ok => { if (ok) closeColumnEditor(); });
-      }}><h2>{columnEditor.fresh ? 'Add column' : 'Rename column'}</h2>{error && <p role="alert">{error}</p>}<input autoFocus aria-label="Column name" maxLength={80} value={columnEditor.name} onChange={e => setColumnEditor({ ...columnEditor, name: e.target.value })} /><footer><button type="button" onClick={() => closeColumnEditor()}>Cancel</button><button disabled={disabled || !columnEditor.name.trim()}>Save</button></footer></form></div>}
+      }}><h2>{columnEditor.fresh ? 'Add column' : 'Rename column'}</h2>{error && <p role="alert">{error}</p>}<input autoFocus aria-label="Column name" maxLength={80} value={columnEditor.name} onChange={e => setColumnEditor({ ...columnEditor, name: e.target.value, deleting: false })} />
+        {columnEditor.deleting && <p role="status">{(() => { const n = tasks.filter(t => membership(t) === columnEditor.id).length; const to = names[deleteTarget(columnEditor.id, definitions, columns)]; return n === 0 ? 'It has no tasks.' : n === 1 ? `Its task moves to ${to}.` : `Its ${n} tasks move to ${to}.`; })()}</p>}
+        {!columnEditor.fresh && columnEditor.id === 'todo' && <p className="task-column-note">New tasks land here, so you can rename it but not delete it.</p>}
+        <footer>
+          {!columnEditor.fresh && columnEditor.id !== 'todo' && <button type="button" className="is-danger" disabled={disabled} title="Delete this column. Its tasks move to another column." onClick={() => {
+            if (!columnEditor.deleting) return setColumnEditor({ ...columnEditor, deleting: true });
+            void write(() => deleteColumn({ auth, id: columnEditor.id })).then(ok => { if (ok) closeColumnEditor(); });
+          }}>{columnEditor.deleting ? 'Delete it' : 'Delete column'}</button>}
+          <span className="spacer" />
+          <button type="button" onClick={() => closeColumnEditor()}>Cancel</button><button disabled={disabled || !columnEditor.name.trim()}>Save</button>
+        </footer></form></div>}
       {pendingDelete && (
         <div className="task-editor-backdrop tasks-delete-backdrop">
           <div ref={deleteRef} className="task-editor" role="alertdialog" aria-modal="true" aria-labelledby="task-delete-heading" aria-describedby="task-delete-description" onKeyDown={e => {

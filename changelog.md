@@ -27,6 +27,7 @@ How Prints work today, what's missing and what's next: [Prints status](https://g
 
 ### Added
 
+- Tasks boards start on eight columns: Backlog, On Deck, Shaping, Building, Observing, Done, Paused and Canceled. Rename or delete any but Building, where new tasks land; a deleted column's tasks move to one that means the same.
 - A bear's photo shows on its threads' tiles in the sidebar too (GPUI app).
 - Bears & Tables makes bears and tables itself: **New** in each section, with a photo, the bears at a table and the project it's part of. Right-click adds Change in a Thread…, Tables & Projects… or Bears & Project…, and Set Photo… (GPUI app).
 

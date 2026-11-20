@@ -493,11 +493,46 @@ impl TasksPage {
         self.view.as_deref().or(self.prefs["defaultView"].as_str()).unwrap_or("list").to_string()
     }
     fn definitions(&self) -> Vec<Value> {
-        let mut out = self.prefs["columns"].as_array().cloned().unwrap_or_default();
-        for id in task_order::BOARD {
-            if !out.iter().any(|c| c["id"] == id) { out.push(json!({"id":id,"name":status_name(id),"status":id})); }
+        // From API 89 the backend sends every column, so a deleted one stays
+        // gone. Before it, a saved list always held the four built-ins.
+        match self.prefs["columns"].as_array() {
+            Some(columns) if !columns.is_empty() => columns.clone(),
+            _ => task_order::BOARD.iter().map(|id| json!({"id":id,"name":status_name(id),"status":id})).collect(),
         }
-        out
+    }
+    /// Canceled counts as done but isn't a win, so it gets a cross, not a tick.
+    fn column_icon(&self, id: &str, cx: &App) -> Icon {
+        if id == "canceled" { return icons::symbol("xmark.circle").with_size(px(14.)).text_color(style::tertiary_label(cx)); }
+        status_icon(&self.canonical(id), cx)
+    }
+    /// Where a deleted column's tasks go, as tasks:deleteColumn picks it: the
+    /// status's own built-in column, else the first with that status, else Building.
+    fn delete_target(&self, id: &str) -> String {
+        let status = self.canonical(id);
+        let left: Vec<String> = self.board_order().into_iter().filter(|c| c != id).collect();
+        if status != id && left.contains(&status) { return status; }
+        left.into_iter().find(|c| self.canonical(c) == status).unwrap_or_else(|| "todo".into())
+    }
+    fn ask_delete_column(&mut self, id: String, window: &mut Window, cx: &mut Context<Self>) {
+        if self.busy || id == "todo" { return; }
+        let (name, target) = (self.column_name(&id), self.column_name(&self.delete_target(&id)));
+        let count = self.rows.iter().filter(|r| column_id(r) == id).count();
+        let description = match count {
+            0 => "It has no tasks.".to_string(),
+            1 => format!("Its task moves to {target}."),
+            n => format!("Its {n} tasks move to {target}."),
+        };
+        let page = cx.entity().downgrade();
+        window.open_alert_dialog(cx, move |alert, _, _| {
+            let (page, id) = (page.clone(), id.clone());
+            alert.title(format!("Delete {name}?"))
+                .description(description.clone())
+                .button_props(DialogButtonProps::default().ok_text("Delete column").cancel_text("Keep column").show_cancel(true))
+                .on_ok(move |_, _, cx| {
+                    page.update(cx, |this, cx| this.change("tasks.deleteColumn", json!({"id": id}), cx)).ok();
+                    true
+                })
+        });
     }
     fn column_name(&self, id: &str) -> String {
         self.definitions().iter().find(|c| c["id"] == id).and_then(|c| c["name"].as_str()).unwrap_or("Todo").to_string()
@@ -1488,7 +1523,7 @@ impl TasksPage {
         let key = format!("status:{group}:{status}");
         let (accent, soft) = (style::accent(cx), style::accent(cx).opacity(0.08));
         let (s1, g1, s2) = (status.to_string(), group.to_string(), status.to_string());
-        let label = h_flex().gap(px(8.)).child(status_icon(&self.canonical(status), cx)).child(self.column_name(status)).into_any_element();
+        let label = h_flex().gap(px(8.)).child(self.column_icon(status, cx)).child(self.column_name(status)).into_any_element();
         let drag_name = self.column_name(status);
         let header = h_flex()
             .id(SharedString::from(format!("section-{key}")))
@@ -1600,6 +1635,28 @@ impl TasksPage {
         }
         out.into_any_element()
     }
+    fn column_menu(&self, group: &str, id: &str, cx: &mut Context<Self>) -> AnyElement {
+        let (page, id, name) = (cx.entity().downgrade(), id.to_string(), self.column_name(id));
+        Button::new(SharedString::from(format!("column-more-{group}-{id}")))
+            .icon(icons::symbol("ellipsis"))
+            .ghost()
+            .xsmall()
+            .tooltip(format!("More for {name}"))
+            .disabled(self.busy)
+            .dropdown_menu(move |menu: PopupMenu, _, _| {
+                let (p, rename) = (page.clone(), id.clone());
+                let menu = menu.item(PopupMenuItem::new("Rename Column…").icon(icons::symbol("pencil")).on_click(move |_, window, cx| {
+                    p.update(cx, |p, cx| p.edit_column(Some(rename.clone()), window, cx)).ok();
+                }));
+                let (p, delete) = (page.clone(), id.clone());
+                let menu = menu.item(PopupMenuItem::new("Delete Column…").icon(icons::symbol("trash")).disabled(id == "todo").on_click(move |_, window, cx| {
+                    p.update(cx, |p, cx| p.ask_delete_column(delete.clone(), window, cx)).ok();
+                }));
+                // Building is where new tasks land, so it can be renamed but stays.
+                if id == "todo" { menu.item(PopupMenuItem::new("New tasks land here, so it stays").disabled(true)) } else { menu }
+            })
+            .into_any_element()
+    }
     fn board_columns(&self, group: &str, rows: &[TaskRow], cx: &mut Context<Self>) -> AnyElement {
         // Wrapped, every column shows on rows of their own and the page scrolls
         // down; otherwise one row that scrolls sideways.
@@ -1625,10 +1682,11 @@ impl TasksPage {
                 .on_drag(StatusDrag(status.clone()), move |_, _, _, cx| cx.new(|_| Ghost(drag_name.clone())))
                 .drag_over::<StatusDrag>(move |s, _, _, _| s.border_l_2().border_color(accent))
                 .on_drop(cx.listener(move |this, drag: &StatusDrag, _, cx| this.drop_status(drag, &s2, false, cx)))
-                .child(status_icon(&self.canonical(&status), cx))
+                .child(self.column_icon(&status, cx))
                 .child(Button::new(SharedString::from(format!("rename-{group}-{status}"))).label(self.column_name(&status)).ghost().small().tooltip("Rename column").on_click({ let id = status.clone(); cx.listener(move |this, _, window, cx| this.edit_column(Some(id.clone()), window, cx)) }))
                 .child(div().text_color(style::tertiary_label(cx)).child(items.len().to_string()))
                 .child(div().flex_1())
+                .child(self.column_menu(group, &status, cx))
                 .child(
                     Button::new(SharedString::from(format!("add-{group}-{status}")))
                         .icon(icons::symbol("plus"))

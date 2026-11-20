@@ -404,4 +404,10 @@
 //    dueDate, preferences take reminders { mac, channel, to, lead }, and
 //    tasks:claimReminder hands each due time's reminder to one Mac. A runner
 //    sends dueTime and reminders, and claims, only from 88.
-export const API_VERSION = 88;
+// 89: (this copy's) Tasks start on eight columns (Backlog, On Deck, Shaping,
+//    Building, Observing, Done, Paused, Canceled) until columns are saved, and
+//    preferences always return columns, boardColumnOrder and sectionOrder in
+//    full. tasks:deleteColumn removes any column but Building (id todo) and
+//    moves its tasks. columnId also takes a column's name. A runner sends
+//    deleteColumn only from 89.
+export const API_VERSION = 89;
