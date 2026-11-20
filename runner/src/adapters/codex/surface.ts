@@ -97,10 +97,14 @@ export const SERVER_REQUESTS = [
   'item/tool/requestUserInput',
   'item/tool/call',
   'mcpServer/elicitation/request',
-  'currentTime/read',
   'applyPatchApproval',
   'execCommandApproval',
 ];
+
+// Requests the runner still answers when an older Codex sends them, but
+// doesn't need: 0.171.0 dropped currentTime/read, and that alone held it
+// back. Gone isn't missing, and present isn't added.
+export const OPTIONAL_SERVER_REQUESTS = ['currentTime/read'];
 
 // Requests Codex can send that the runner refuses with -32601 on purpose.
 export const REFUSED_SERVER_REQUESTS = ['account/chatgptAuthTokens/refresh', 'attestation/generate'];
@@ -197,7 +201,7 @@ export function checkSurface(generatedDir: string): SurfaceCheck {
 
   const known = new Set([...USED_NOTIFICATIONS, ...IGNORED_NOTIFICATIONS]);
   for (const m of notifications) if (!known.has(m)) added.push(`notification ${m}`);
-  const knownRequests = new Set([...SERVER_REQUESTS, ...REFUSED_SERVER_REQUESTS]);
+  const knownRequests = new Set([...SERVER_REQUESTS, ...OPTIONAL_SERVER_REQUESTS, ...REFUSED_SERVER_REQUESTS]);
   for (const m of serverRequests) if (!knownRequests.has(m)) added.push(`server request ${m}`);
 
   const items = read('ThreadItem');

@@ -436,7 +436,7 @@ function generated(o: { drop?: string[]; addNotification?: string; addItem?: str
   fs.writeFileSync(path.join(dir, 'ServerNotification.ts'), `export type ServerNotification = ${notes.filter((n) => !drop.has(n)).map((n) => `{ "method": "${n}", "params": P }`).join(' | ')};`);
   fs.writeFileSync(path.join(dir, 'ClientRequest.ts'), `export type ClientRequest = ${union(surface.CLIENT_REQUESTS)};`);
   fs.writeFileSync(path.join(dir, 'ClientNotification.ts'), `export type ClientNotification = ${union(surface.CLIENT_NOTIFICATIONS)};`);
-  fs.writeFileSync(path.join(dir, 'ServerRequest.ts'), `export type ServerRequest = ${union([...surface.SERVER_REQUESTS, ...surface.REFUSED_SERVER_REQUESTS])};`);
+  fs.writeFileSync(path.join(dir, 'ServerRequest.ts'), `export type ServerRequest = ${union([...surface.SERVER_REQUESTS, ...surface.OPTIONAL_SERVER_REQUESTS, ...surface.REFUSED_SERVER_REQUESTS])};`);
   const items = { ...surface.ITEM_FIELDS, ...Object.fromEntries(surface.IGNORED_ITEMS.map((t) => [t, []])), ...(o.addItem ? { [o.addItem]: [] } : {}) };
   // webSearch's fields live in a file of their own, as in the real output.
   const members = Object.entries(items)
@@ -456,6 +456,10 @@ function generated(o: { drop?: string[]; addNotification?: string; addItem?: str
 test('checkSurface: a complete schema passes', () => {
   assert.deepEqual(surface.checkSurface(generated()), { missing: [], added: [] });
   assert.equal(surface.testedVersion, '0.164.0');
+});
+
+test('checkSurface: a version without currentTime/read still passes', () => {
+  assert.deepEqual(surface.checkSurface(generated({ drop: ['currentTime/read'] })), { missing: [], added: [] });
 });
 
 test('checkSurface names what a new version lost, and what it added', () => {
