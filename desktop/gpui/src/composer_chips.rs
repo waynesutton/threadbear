@@ -723,7 +723,7 @@ impl RenderOnce for ChipTrigger {
         // its own tip, as the Swift PlusButton does.
         let tip: SharedString = if busy && matches!(self.kind, TriggerKind::Chip) { "Moving this thread".into() } else { tip };
         let menu = !matches!(self.kind, TriggerKind::Label);
-        let base = div().id(self.id).flex().items_center().when(!busy && menu, |d| d.cursor_pointer()).test_support().role(Role::Button).aria_label(label).tip(tip.clone());
+        let base = div().id(self.id).flex().items_center().when(!busy && menu, |d| d.cursor_pointer()).test_support().role(if menu { Role::Button } else { Role::Label }).aria_label(label).tip(tip.clone());
         let spinner = |side: f32| crate::spinner::Spinner::new().color(style::secondary_text(cx)).with_size(px(side));
         match self.kind {
             TriggerKind::Plus => base

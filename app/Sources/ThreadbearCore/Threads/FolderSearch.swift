@@ -101,7 +101,7 @@ public enum FolderSearch {
         // The walk gives paths through symlinks resolved (/private/var for
         // /var); hits are named under the root as it was given.
         // (realpath: URL's own resolving takes /private off again.)
-        let resolved = realpath(root, nil).map { defer { free($0) }; return String(cString: $0) } ?? root
+        let resolved = realpath(root, nil).map { pointer in defer { free(pointer) }; return String(cString: pointer) } ?? root
         func asGiven(_ path: String) -> String {
             guard resolved != root, path.hasPrefix(resolved + "/") else { return path }
             return (root.hasSuffix("/") ? String(root.dropLast()) : root) + path.dropFirst(resolved.count)
