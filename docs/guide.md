@@ -3261,10 +3261,11 @@ Tasks opens in is under Display.)
 A task with a due time reminds you when it comes. Notifications sets how:
 **Notify me on this Mac** shows an amber alert with a bell in Threadbear's
 window, with your Mac's alert sound (click it to open the task; it stays until
-you close it) and a macOS notification. A build signed only on this Mac
-(ad-hoc) isn't allowed macOS notifications of its own, so that one comes
-through macOS's script runner and is labelled Script Editor; clicking it
-doesn't open the task. With Focus on, macOS holds banners back.
+you close it) and a Threadbear notification that opens the task too. A build
+signed only on this Mac (ad-hoc) isn't allowed macOS notifications: add a free
+Apple Development certificate (Xcode > Settings > Accounts), turn Threadbear
+on in System Settings > Notifications, and reopen it. With Focus on, macOS
+holds banners back; the in-window alert still shows.
 **Remind** picks when (when it's due, or 5 minutes to a day before), and
 **Also send** can add an email or a Slack message to the address or channel
 in **To**. Email and Slack go through your connectors (Gmail or Slack on

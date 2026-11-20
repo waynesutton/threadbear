@@ -3,7 +3,6 @@
 // apps, and, when the owner chose email or Slack, asks an agent to send it
 // through their connectors. Connectors only work inside an agent turn, so
 // that's a short turn in one reused "Task reminders" thread.
-import { execFile } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import type { NativeTask } from './tasks.ts';
@@ -145,21 +144,6 @@ export class TaskReminders {
     this.readAt = now;
     this.dirty = false;
   }
-}
-
-/**
- * The backup notice, through macOS's own script runner: an ad-hoc signed
- * Threadbear is refused notification permission, so its own banner never
- * shows. It shows as Script Editor's, and a click doesn't open the task (the
- * app's in-window alert does). The title and body go in as arguments, never
- * as script text.
- */
-export function bannerArgs(title: string, body: string): string[] {
-  return ['-e', 'on run argv', '-e', 'display notification (item 2 of argv) with title (item 1 of argv)', '-e', 'end run', title.slice(0, 200), body.slice(0, 200)];
-}
-export function macBanner(title: string, body: string): void {
-  if (process.platform !== 'darwin') return;
-  execFile('/usr/bin/osascript', bannerArgs(title, body), { timeout: 10_000 }, () => {});
 }
 
 /** The one thread reminders go to, kept across restarts. */
