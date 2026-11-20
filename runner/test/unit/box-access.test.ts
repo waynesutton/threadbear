@@ -12,6 +12,10 @@ const sync = load('sync');
 const relay = load('relay');
 const moves = load('moves');
 const boxes = load('boxes');
+// This copy's: outside agents' keys, webhooks and Tasks (tasks:* share one gate).
+const mcp = load('mcp');
+const webhooks = load('webhooks');
+const tasks = load('tasks');
 const machinesModule = load('machines');
 const { ACCESS, BOX_CALLS } = load('runnerAccess') as { ACCESS: Record<string, string>; BOX_CALLS: Set<string> };
 const { sha256 } = load('lib') as { sha256: (s: string) => Promise<string> };
@@ -86,14 +90,16 @@ test("a box hears and takes its own thread's commands, never another thread's or
 
 test('every function a box key has no business with is refused, owner-only ones and all', async () => {
   const s = await setup();
-  const modules = [sync, relay, moves, boxes];
+  const modules = [sync, relay, moves, boxes, mcp, webhooks];
+  // A gate named for a group of functions, and the one tried for it.
+  const GROUPS: Record<string, [Record<string, { handler: (ctx: unknown, args: unknown) => Promise<unknown> }>, string, unknown]> = { nativeTasks: [tasks, 'list', { auth: { key: s.boxKey } }] };
   const refused: string[] = [];
   for (const fn of Object.keys(ACCESS).filter((f) => !BOX_CALLS.has(f))) {
-    const mod = modules.find((m) => m[fn]);
+    const [mod, name, args] = GROUPS[fn] ?? [modules.find((m) => m[fn]), fn, { key: s.boxKey }];
     assert.ok(mod, `found ${fn}`);
     // Actions ask the gate through a query; the rest at their first line.
     const ctx = fn === 'setCloudToken' || fn === 'mintBootToken' || fn === 'startThread' ? s.a : s.ctx;
-    const err = await mod[fn].handler(ctx, { key: s.boxKey }).then(
+    const err = await mod[name].handler(ctx, args).then(
       () => null,
       (e: { data?: { kind?: string; message?: string } }) => e,
     );

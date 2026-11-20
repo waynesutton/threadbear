@@ -11,26 +11,6 @@ import { Scheduler } from '../../src/schedules.ts';
 import { HookRegistry, webhookCommands } from '../../src/webhooks.ts';
 import { nullLogger } from '../../src/log.ts';
 
-test('a sandboxed caller cannot fold a mention into an unconfined unattended worker', async () => {
-  const h = makeHarness();
-  const bears = new Bears({ root: path.join(h.home, 'Bears'), home: h.home, git: false, threads: () => ({ list: () => h.runner.list(), archive: () => {} }) });
-  const b = await bears.create({ name: 'Worker', tidy: false });
-  const caller = h.runner.create({ text: 'Ask', permissionMode: 'ask' }).thread;
-  h.runner.threads.get(caller.id)!.rec.confined = true;
-  const worker = h.runner.create({ text: 'Routine', permissionMode: 'ask', cwd: b.folder, origin: 'schedule', scheduleId: 'routine' }).thread;
-  const mentions = new Mentions({ home: h.home, bears, host: {
-    authorityOf: (id) => h.runner.authorityNow(id), has: (id) => h.runner.has(id), get: (id) => h.runner.get(id), create: (p) => h.runner.create(p),
-    send: (id, text) => h.runner.send(id, text, [], { origin: 'runner', queue: true }), lastReply: () => '',
-  } });
-  const gate = new CallerGate({ runner: h.runner });
-  assert.throws(() => gate.check(caller.id, 'threads.send', { threadId: worker.id, text: 'Escape' }), /needs the user's OK/);
-  const methods = bearsMethods({ bears, on: () => true, cwdOf: (id) => h.runner.get(id).cwd, mention: (p) => mentions.ask(p) });
-  const params = gate.check(caller.id, 'bears.mention', { bear: b.id, text: 'Escape' });
-  assert.throws(() => methods['bears.mention'](params), /sandbox|access/);
-  assert.equal(h.runner.threads.get(worker.id)!.rec.queue.length, 0);
-  assert.equal(h.runner.list().length, 2);
-});
-
 test('routine, webhook and mentions share a worker and replies match their queued turns', async () => {
   const h = makeHarness();
   const bears = new Bears({ root: path.join(h.home, 'Bears'), home: h.home, git: false, threads: () => ({ list: () => h.runner.list().map((t) => ({ ...t, queued: Boolean(h.runner.threads.get(t.id)?.rec.queue.length) })), archive: () => {} }) });

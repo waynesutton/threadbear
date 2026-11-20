@@ -45,6 +45,8 @@ async function setup() {
   // What the runner does once it has made the thread an agent asked for.
   const land = async (commandId: string, threadId: string) => {
     await thread(threadId);
+    // Taken first: Mike's command machine finishes only a taken command.
+    await call(b.ctx, sync.takeCommand, { key: OWNER, commandId });
     await call(b.ctx, sync.finishCommand, { key: OWNER, commandId, ok: true, resultThreadId: threadId });
   };
   return { ...b, issue, post, tool, thread, land, publish };

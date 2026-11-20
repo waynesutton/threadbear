@@ -30,6 +30,8 @@ on:
     branches: [main]
     paths:
       - desktop/**
+      - runner/src/page-doc.ts
+      - runner/src/page-list.ts
       - runner/src/protocol.ts
       - runner/src/rpc-auth.ts
       - runner/src/reviews.ts
@@ -47,6 +49,8 @@ on:
   pull_request:
     paths:
       - desktop/**
+      - runner/src/page-doc.ts
+      - runner/src/page-list.ts
       - runner/src/protocol.ts
       - runner/src/rpc-auth.ts
       - runner/src/reviews.ts

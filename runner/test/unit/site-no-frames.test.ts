@@ -42,8 +42,9 @@ const HTML = '<!doctype html><html><head><title>Threadbear</title></head><body><
 
 // What the handlers read: the page from storage, no shared thread's card.
 const ctx = {
-  runQuery: async (_fn: unknown, args: { path?: string; slug?: string }) => {
-    if (args.slug !== undefined) return null;
+  runQuery: async (_fn: unknown, args: { path?: string; slug?: string; home?: boolean }) => {
+    // No shared thread's card, and (this copy's /profile and /) no profile card.
+    if (args.slug !== undefined || args.home !== undefined) return null;
     const isJs = args.path?.endsWith('.js');
     return { appStorageId: 'file', contentType: isJs ? 'text/javascript' : 'text/html; charset=utf-8', etag: '"e"' };
   },
@@ -52,7 +53,7 @@ const ctx = {
 
 test("every page of the site says no other site may frame it, the shared page's too", { skip: !esbuild && "the repo's packages aren't installed" }, async () => {
   const http = await router();
-  for (const p of ['/', '/t/abc', '/projects/r/p', '/assets/index.js', '/s/some-slug']) {
+  for (const p of ['/', '/profile', '/t/abc', '/projects/r/p', '/assets/index.js', '/s/some-slug']) {
     const hit = http.lookup(p, 'GET');
     assert.ok(hit, `no route for ${p}`);
     const res = await hit[0]._handler(ctx, new Request(`https://site.example${p}`));

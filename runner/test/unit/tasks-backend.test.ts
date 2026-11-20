@@ -231,6 +231,8 @@ test('sending a task carries its pictures without handing their files to the com
   assert.equal(command.args.images, undefined);
   assert.match(command.args.text, /See the screenshot\n\nPictures attached to this task:\n\[Picture 1\]$/);
   // Finishing the thread leaves the task's picture alone.
+  // Taken first: Mike's command machine finishes only a taken command.
+  await call(b.ctx, load('sync').takeCommand, { key: 'task-owner', commandId });
   await call(b.ctx, load('sync').finishCommand, { key: 'task-owner', commandId, ok: false, note: 'x' });
   assert.deepEqual(b.deleted, []);
 });
@@ -246,6 +248,8 @@ test('task launch carries project context and records the created thread across 
   assert.deepEqual(command.args.projectIds, ['project']);
   assert.equal(command.args.cwd, '/work/project');
   await call(b.ctx, sync.upsertThreads, { key: 'task-owner', threads: [{ ...THREAD_BASICS, threadId: 'made', runnerId: 'mac', title: 'Build', view: 'inbox', needsYou: false }] });
+  // Taken first: Mike's command machine finishes only a taken command.
+  await call(b.ctx, sync.takeCommand, { key: 'task-owner', commandId });
   await call(b.ctx, sync.finishCommand, { key: 'task-owner', commandId, ok: true, resultThreadId: 'made' });
   const row = (await b.run('list', { auth: { token: 'phone' } })).items[0];
   assert.deepEqual(row.thread, { runnerId: 'mac', id: 'made' });
@@ -256,6 +260,8 @@ test('task launch exposes failure and refuses deleted tasks', async () => {
   const b = await setup();
   await b.run('create', { id: 'launch', title: 'Build' });
   const commandId = await b.run('startThread', { id: 'launch' });
+  // Taken first: Mike's command machine finishes only a taken command.
+  await call(b.ctx, load('sync').takeCommand, { key: 'task-owner', commandId });
   await call(b.ctx, load('sync').finishCommand, { key: 'task-owner', commandId, ok: false, note: 'No available account' });
   assert.equal((await b.run('list')).items[0].threadError, 'No available account');
   await b.run('remove', { id: 'launch' });
