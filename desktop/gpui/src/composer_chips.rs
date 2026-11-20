@@ -442,6 +442,7 @@ impl Composer {
             // A label, not a button: no chevron, hover or pointer, as it opens nothing.
             return h_flex()
                 .id("composer-permission-chip")
+                .role(Role::Label)
                 .min_w_0()
                 .h(px(26.))
                 .px(px(7.))
