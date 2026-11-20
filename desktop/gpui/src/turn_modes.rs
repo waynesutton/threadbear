@@ -44,6 +44,11 @@ impl Composer {
         if !self.app.upgrade().is_none_or(|app| app.read(cx).settings.turn_modes_enabled()) {
             return false;
         }
+        // Another Mac's thread keeps its access as it is from here
+        // (ChipData::fixed_on), so the key does what it did.
+        if self.chip_data(cx).fixed_on().is_some() {
+            return false;
+        }
         let key = self.mode_key();
         let Some(permission) = self.chip_data(cx).summary.map(|t| if t.permission_mode.is_empty() { "full".to_owned() } else { t.permission_mode }) else { return false };
         let put_back = PUT_BACK.with(|p| p.borrow().get(&key).cloned());

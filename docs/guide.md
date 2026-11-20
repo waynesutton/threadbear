@@ -1483,8 +1483,10 @@ the two Macs to set up. Pictures you paste into a message, or into a new
 thread there, go with it (up to 6, 10 MB each), held in Convex only until
 that Mac has fetched them. You see its messages and a line for each tool it
 used; the tool output, diffs and pictures stay on that Mac for now, and a
-tool row says so. Editing a message, its highlights and patches, and
-changing its login or model are done on that Mac. Agents see them the
+tool row says so. Its login and model change from here. Editing a
+message, its highlights and patches, and changing its access or effort
+are done on that Mac: the access chip names the Mac instead of opening a
+menu, and the model picker leaves out the effort levels. Agents see them the
 same way: `list_threads` lists and searches them (each row says which Mac),
 `read_thread` reads them, `send_message` messages them, and they can stop,
 snooze or archive them. A Mac that's off shows

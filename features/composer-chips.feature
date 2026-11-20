@@ -110,6 +110,16 @@ Feature: The chips under the message box
     And the "account" menu has a row "[ ] alex@example.com - week 64%, resets"
     And the "account" menu has a row "--- Usage from Token Stats at"
 
+  # Convex carries a login or model change to another Mac's thread, but not
+  # its access or effort (relay.ts threads.update), so the chip says where
+  # to change them rather than offering a pick that fails (Wayne, 20 Nov).
+  @composer.permission @remote-threads @swift-pending
+  Scenario: Another Mac's thread says where to change its access and effort
+    When I open the thread "Check the photo library backup"
+    Then the "permission" menu has a row "--- Change it on mac-mini"
+    And the "permission" menu has no row "[ ] "
+    And the "model" menu has no row "# Effort"
+
   @composer.schedulefromsend
   Scenario: Right-clicking Send offers to send the message later
     When I type "Check the backups tonight" in the composer
