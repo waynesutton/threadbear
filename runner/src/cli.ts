@@ -25,6 +25,9 @@ import { pickRunner } from './moves.ts';
 
 const OPTIONS = {
   cwd: { type: 'string' },
+  // tb print-update <printId> --dir DIR [--about TEXT]
+  dir: { type: 'string' },
+  about: { type: 'string' },
   // tb bears (cli-bears.ts)
   does: { type: 'string' },
   personality: { type: 'string' },
@@ -135,6 +138,11 @@ const HELP = `tb: talk to the Threadbear runner
   tb highlights <threadId> [--json]  what the thread made, shared and pinned, and the librarian's brief
   tb panel <threadId> <panelId> [--json]  draws an image panel or fills a list panel now
   tb show-panel <threadId> <panel> [--reload] [--json]  opens a panel when the user looks at that thread (--reload: its page afresh)
+  tb print-update <printId> --dir DIR [--about TEXT]
+                                  a new version of a print from a folder with its index.html
+                                  (--about: the print's one-line summary),
+                                  as the update_print tool does (the make-print skill's
+                                  progress prints call it after every step)
   tb run <threadId> <actionId>    run one: a command's output is printed and goes into the thread
   tb schedule "text" (--at WHEN | --cron "0 9 * * 1-5") [--tz ZONE] [--title T]
               [--thread ID | --cwd DIR [--account ID | --pool ID] [--model M] [--effort L] [--ask | --auto | --full]]
@@ -234,6 +242,7 @@ const COMMAND_FLAGS: Record<string, string[]> = {
   show: ['last', 'tools'],
   logs: ['lines', 'follow', 'thread'],
   activity: ['since', 'thread', 'summary', 'json'],
+  'print-update': ['dir', 'about', 'json'],
   export: ['out'],
   rpc: [],
   land: ['dry-run', 'despite-red'],
@@ -570,6 +579,16 @@ async function run(client: RunnerClient, cmd: string, args: string[], f: Flags):
         console.log(`  ${x.how.padEnd(10)} ${x.kind.padEnd(7)} ${x.title}${where && where !== x.title ? `  ${where}` : ''}${x.note ? `\n             ${x.note}` : ''}`);
       }
       if (h.edited.length) console.log(`\n${h.edited.length} ${h.edited.length === 1 ? 'file' : 'files'} edited`);
+      return 0;
+    }
+    case 'print-update': {
+      const printId = args[0];
+      if (!printId || typeof f.dir !== 'string') throw new Error('tb print-update <printId> --dir DIR [--about TEXT]');
+      const dir = path.resolve(f.dir);
+      const about = typeof f.about === 'string' ? f.about : undefined;
+      const r = await client.call<{ page: { id: string; version: number } }>('pages.updateDir', { pageId: printId, dir, ...(about !== undefined ? { summary: about } : {}) });
+      if (f.json) console.log(JSON.stringify(r));
+      else console.log(`Updated ${r.page.id} to version ${r.page.version}.`);
       return 0;
     }
     case 'show-panel': {

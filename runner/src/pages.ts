@@ -637,6 +637,15 @@ export function pageMethods(pages: () => Pages | undefined, ask?: PageAsk, pub?:
       if (mermaid === undefined) throw new RpcError(ErrorCode.badParams, 'mermaid is required');
       return found(() => ({ page: must().update(id(p), { mermaid, by: 'user' }) }));
     },
+    // A new version from a folder with its index.html, as the update_print
+    // tool makes one: for tb print-update, which the make-print skill's
+    // progress prints run after every step.
+    'pages.updateDir': (p) => {
+      const dir = str(p, 'dir');
+      if (!dir || !path.isAbsolute(dir)) throw new RpcError(ErrorCode.badParams, 'dir must be an absolute folder');
+      const summary = str(p, 'summary');
+      return found(() => ({ page: must().update(id(p), { dir, ...(summary !== undefined ? { summary } : {}) }) }));
+    },
     'pages.restoreVersion': (p) => {
       if (typeof p.version !== 'number') throw new RpcError(ErrorCode.badParams, 'version is required');
       return found(() => ({ page: must().restoreVersion(id(p), p.version as number) }));

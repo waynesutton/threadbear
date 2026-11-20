@@ -1194,6 +1194,7 @@ the summary and then the reply.
 | `pages.saveDiagram` | `{ pageId, mermaid: string }` | `{ page: Page }`: renders Mermaid as a static diagram and saves the user's edit as a new version. Malformed or oversized source leaves the current version unchanged. `pages.get` returns diagram source as `mermaid?: string` |
 | `pages.toggleItem` | `{ pageId, version: number, item: number }` | `{ page: Page }`: ticks or unticks a todo list's item (counted from 0 in source order) and saves a new version. `version` must be the newest, or it's refused as changed |
 | `pages.moveCard` | `{ pageId, version: number, card: number, to: number }` | `{ page: Page }`: moves a board's card (counted from 0 across the board) to the end of column `to` and saves a new version. `version` must be the newest |
+| `pages.updateDir` | `{ pageId, dir: string, summary?: string }` | `{ page: Page }`: a new version from `dir` (absolute, with its `index.html`), as the `update_print` tool makes one. `tb print-update` calls it; the make-print skill's progress prints run that after every step. From a thread's key, any mode but a sandbox |
 | `pages.restoreVersion` | `{ pageId, version: number }` | `{ page: Page }`: that version's files become a new, newest version. `-32602` for one no longer kept |
 | `pages.delete` | `{ pageId }` | `{ page: Page }` with `deletedAt`. Left out of lists and `pages.updated`; removed with its files 7 days later |
 | `pages.restore` | `{ pageId }` | `{ page: Page }`: a deleted page back. Nothing for one that isn't deleted |
@@ -5511,7 +5512,12 @@ API or the key, nothing changes: the gateway's own page is the only way.
 - The card is an ordinary `approval.requested`: `approvalId` `gw-<id>`,
   `name` the tool, `title` "Slack: send message", `input` the call's
   arguments whole, `options: ["allow", "deny"]`, and a `reason` saying the
-  gateway is holding it. Clients head it from the tool's name ("Slack: send
+  gateway is holding it, after where it goes when the service can say
+  ("Goes to #general (C03NM8C7Z)."). For Slack, a channel id is named from
+  the gateway's own `slack_read_channel` (one message, only its
+  `Channel: #name (id)` line is used) as the runner, and a user or DM id is
+  called a direct message without reading anything; a lookup that fails or
+  takes over 3 seconds leaves it out. Clients head it from the tool's name ("Slack: send
   message?"), never from `title`. It isn't the agent's own call (its CLI
   isn't waiting on Threadbear), so a message from Mike leaves it open, and
   it outlives the turn, as a subagent's card does.

@@ -856,6 +856,10 @@ pub struct ApprovalRequest {
     pub title: String,
     pub input: Value,
     pub options: Vec<ApprovalOption>,
+    /// Why it's asking, in the runner's words (docs/protocol.md,
+    /// `approval.requested`'s `reason`): Auto's check, a rule or a hook, or
+    /// the Connectors gateway holding a call.
+    pub reason: Option<String>,
 }
 
 impl ApprovalRequest {
@@ -867,6 +871,7 @@ impl ApprovalRequest {
             title: title.to_owned(),
             input,
             options: vec![ApprovalOption::Allow, ApprovalOption::AllowAlways, ApprovalOption::Deny],
+            reason: None,
         }
     }
 
@@ -891,6 +896,7 @@ impl ApprovalRequest {
             name,
             input: any(c, "input").unwrap_or_else(|| json!({})),
             options: if known.is_empty() { vec![ApprovalOption::Allow, ApprovalOption::Deny] } else { known },
+            reason: string(c, "reason").map(|r| r.trim().to_owned()).filter(|r| !r.is_empty()),
         }
     }
 }
@@ -1043,6 +1049,7 @@ impl ApprovalQueue {
                 name: name.unwrap_or_else(|| "Tool".to_owned()),
                 input: any(call, "input").unwrap_or_else(|| json!({})),
                 options: vec![ApprovalOption::Allow, ApprovalOption::Deny],
+                reason: None,
             })
         });
         ApprovalQueue { approval_id: string(c, "approvalId").unwrap_or_default(), calls }

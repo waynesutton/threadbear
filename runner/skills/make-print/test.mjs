@@ -279,3 +279,36 @@ test("tables can show pills and change pills", () => {
   assert.match(html, /<span class="pill up">↑ 4%<\/span>/);
   assert.match(html, /<span class="pill down">↓ 2%<\/span>/);
 });
+
+// A progress print linked with `print <id>` updates itself after every
+// step through tb print-update, so the card in the thread never goes stale
+// when an agent forgets update_print (20 Nov 2026).
+test("a linked progress print updates itself after every step, and says so when it can't", async () => {
+  const { mkdtempSync, writeFileSync, readFileSync, chmodSync } = await import("node:fs");
+  const { tmpdir } = await import("node:os");
+  const { execFileSync } = await import("node:child_process");
+  const { summaryOf } = await import("./progress.mjs");
+  const root = mkdtempSync(join(tmpdir(), "progress push "));
+  const calls = join(root, "calls.txt");
+  const fakeTb = join(root, "tb");
+  writeFileSync(fakeTb, `#!/bin/sh\nprintf '%s\\n' "$*" >> "${calls}"\n`);
+  chmodSync(fakeTb, 0o755);
+  const failingTb = join(root, "tb-fails");
+  writeFileSync(failingTb, `#!/bin/sh\necho "No print pg_x" >&2\nexit 1\n`);
+  chmodSync(failingTb, 0o755);
+  const state = join(root, "state.json");
+  const run = (tb, ...args) => execFileSync(process.execPath, [join(HERE, "progress.mjs"), state, ...args], { env: { ...process.env, TB_BIN: tb, MAKE_PRINT_STYLE: join(root, "style.json") } }).toString();
+
+  run(fakeTb, "init", "T", "t");
+  assert.match(run(fakeTb, "step", "One", "todo"), /No print linked yet/);
+  assert.throws(() => run(fakeTb, "print", "bad id!"), /print needs the print id/);
+  assert.match(run(fakeTb, "print", "pg_demo"), /Print pg_demo updated/);
+  run(fakeTb, "step", "One", "done");
+  run(fakeTb, "ask", "Ship it?", "Yes");
+  const lines = readFileSync(calls, "utf8").trim().split("\n");
+  assert.equal(lines.length, 3);
+  assert.equal(lines[1], `print-update pg_demo --dir ${join(root, "page")} --about 1 of 1 done`);
+  assert.equal(lines[2], `print-update pg_demo --dir ${join(root, "page")} --about 1 of 1 done, 1 waiting on you`);
+  assert.match(run(failingTb, "note", "x"), /Couldn't update print pg_demo \(No print pg_x\)\. Call update_print/);
+  assert.equal(summaryOf({ steps: [], questions: [], stuck: [{ what: "a" }] }), "0 of 0 done, 1 stuck");
+});

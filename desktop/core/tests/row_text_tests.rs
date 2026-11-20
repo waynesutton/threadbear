@@ -319,6 +319,24 @@ fn gateway_cards_name_the_service() {
     assert!(!ApprovalText::title(&hidden).contains('\u{2028}'));
 }
 
+/// The runner's reason line shows under the title (it was decoded by
+/// nobody in the desktop app), once: not again when it repeats the
+/// threadbear tool's title or the input's own reason.
+#[test]
+fn approval_cards_show_the_runners_reason_once() {
+    let decode = |v: Value| threadbear_core::reducer::ApprovalRequest::decode(&v).unwrap();
+    let gateway = decode(json!({"approvalId": "gw-ap_1", "name": "mcp__connectors__slack__slack_send_message", "title": "Slack: send message", "input": {"channel_id": "C1"}, "options": ["allow", "deny"], "reason": " Posts to #general (C1). "}));
+    assert_eq!(ApprovalText::card_reason(&gateway).as_deref(), Some("Posts to #general (C1)."));
+    let none = decode(json!({"approvalId": "a", "name": "Bash", "title": "ls", "input": {"command": "ls"}}));
+    assert_eq!(ApprovalText::card_reason(&none), None);
+    let raise = decode(json!({"approvalId": "b", "name": "mcp__threadbear__update_thread", "title": "Switch this thread to Full access", "input": {}, "reason": "Switch this thread to Full access"}));
+    assert_eq!(ApprovalText::card_reason(&raise), None, "already the runner_reason line");
+    let codex = decode(json!({"approvalId": "c", "name": "Bash", "title": "x", "input": {"command": "x", "reason": "needs network"}, "reason": "needs network"}));
+    assert_eq!(ApprovalText::card_reason(&codex), None, "already the input's reason line");
+    let hidden = decode(json!({"approvalId": "d", "name": "Bash", "title": "x", "input": {}, "reason": "a\u{2028}b"}));
+    assert!(!ApprovalText::card_reason(&hidden).unwrap().contains('\u{2028}'));
+}
+
 /// Finding 67: Threadbear's own gates say what they'd do in the runner's
 /// words, and the card shows them under its generic title; another
 /// server's tool doesn't get to put words there.

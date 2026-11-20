@@ -9,14 +9,19 @@
 //   node progress.mjs <state.json> stuck "<what>" "<why>"      (unstuck "<what>" clears it)
 //   node progress.mjs <state.json> deliver "<what>" "<path or link>"
 //   node progress.mjs <state.json> note "<one line on where it stands>"
+//   node progress.mjs <state.json> print <print id>
 //   node progress.mjs <state.json> build <out dir>
 //
 // Every change also rebuilds <out dir> when the state has one (`init`
-// remembers the folder next to the state as page/). Times are the real
+// remembers the folder next to the state as page/). Once `print` has linked
+// the state to its print (create_print's id), every change also makes a new
+// version of that print through `tb print-update`, so the card in the thread
+// follows each step without an update_print call. Times are the real
 // clock's, in ISO, so the page can say how long ago each thing happened.
 import { pathToFileURL } from "node:url";
 import { existsSync, mkdirSync, readFileSync, writeFileSync, realpathSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
+import { execFileSync } from "node:child_process";
 import { buildPage } from "./build.mjs";
 
 const now = () => new Date().toISOString();
@@ -72,6 +77,12 @@ export function apply(state, cmd, args, at = now()) {
       s.deliverables.unshift({ what, where: where ?? "", at });
       break;
     }
+    case "print": {
+      const [id] = args;
+      if (!id || !/^[A-Za-z0-9_-]+$/.test(id)) throw new Error('print needs the print id create_print gave: print "<id>"');
+      s.printId = id;
+      break;
+    }
     case "note": {
       s.notes.unshift({ text: args[0], at });
       s.notes = s.notes.slice(0, 5);
@@ -84,6 +95,29 @@ export function apply(state, cmd, args, at = now()) {
   return s;
 }
 
+// The one-line summary a progress print shows in lists.
+export function summaryOf(state) {
+  const done = state.steps.filter((x) => x.status === "done").length;
+  const open = state.questions.filter((q) => q.answer === undefined).length;
+  const parts = [`${done} of ${state.steps.length} done`];
+  if (open) parts.push(`${open} waiting on you`);
+  if (state.stuck.length) parts.push(`${state.stuck.length} stuck`);
+  return parts.join(", ");
+}
+
+// A new version of the linked print from the page just built. tb finds the
+// runner from inside a thread by itself; TB_BIN points a test at a fake.
+export function pushPrint(state, out, run = execFileSync) {
+  if (!state.printId) return { pushed: false };
+  try {
+    run(process.env.TB_BIN || "tb", ["print-update", state.printId, "--dir", out, "--about", summaryOf(state)], { stdio: "pipe", timeout: 15_000 });
+    return { pushed: true };
+  } catch (e) {
+    const why = String(e.stderr || e.message || e).trim().split("\n").at(-1);
+    return { pushed: false, error: why };
+  }
+}
+
 // Run directly, not imported. import.meta.url is the real, URL-encoded
 // path, so argv[1] is compared the same way: installed, this folder is
 // under "Application Support" and reached through a link, and a plain
@@ -91,7 +125,7 @@ export function apply(state, cmd, args, at = now()) {
 if (process.argv[1] && import.meta.url === pathToFileURL(realpathSync(process.argv[1])).href) {
   const [file, cmd, ...args] = process.argv.slice(2);
   if (!file || !cmd) {
-    console.error("usage: node progress.mjs <state.json> init|step|ask|answer|stuck|unstuck|deliver|note|build ...");
+    console.error("usage: node progress.mjs <state.json> init|step|ask|answer|stuck|unstuck|deliver|note|print|build ...");
     process.exit(2);
   }
   try {
@@ -113,6 +147,12 @@ if (process.argv[1] && import.meta.url === pathToFileURL(realpathSync(process.ar
       const done = state.steps.filter((x) => x.status === "done").length;
       const open = state.questions.filter((q) => q.answer === undefined).length;
       console.log(`${out}  ${done}/${state.steps.length} done, ${open} waiting on you, ${state.stuck.length} stuck`);
+      if (cmd !== "init") {
+        const r = pushPrint(state, out);
+        if (r.pushed) console.log(`Print ${state.printId} updated.`);
+        else if (state.printId) console.log(`Couldn't update print ${state.printId} (${r.error}). Call update_print({ id: "${state.printId}", dir: "${out}" }) yourself.`);
+        else if (cmd !== "build") console.log(`No print linked yet: after create_print, run \`print <id>\` once and every step updates it.`);
+      }
     }
   } catch (e) {
     console.error(e.message);

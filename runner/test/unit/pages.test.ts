@@ -475,3 +475,27 @@ test('todo lists and boards: made from markdown, ticked and moved by click as ne
   assert.equal(r.page.version, store.find(todo.id).version);
   await assert.rejects(async () => rpc['pages.moveCard']!({ pageId: board.id, card: 0 }), /version, card and to are required/);
 });
+
+// tb print-update (the make-print skill's progress prints run it after
+// every step): a new version from a folder, as update_print makes one; any
+// thread may, as with the tool, except from a sandbox.
+test('pages.updateDir makes a new version from a folder, with its summary', async () => {
+  const { pageMethods } = await import('../../src/pages.ts');
+  const { CallerGate } = await import('../../src/rpc-gate.ts');
+  const store = new Pages(home());
+  const p = store.create({ title: 'Progress', summary: '0 of 2 done', ownerThread: 'th1', html: page('start') });
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'tb-pages-dir-'));
+  fs.writeFileSync(path.join(dir, 'index.html'), page('one step done'));
+  const methods = pageMethods(() => store);
+  const r = methods['pages.updateDir']({ pageId: p.id, dir, summary: '1 of 2 done' }) as { page: { version: number; summary: string } };
+  assert.equal(r.page.version, 2);
+  assert.equal(r.page.summary, '1 of 2 done');
+  assert.match(fs.readFileSync(store.file(p.id), 'utf8'), /one step done/);
+  assert.throws(() => methods['pages.updateDir']({ pageId: p.id, dir: 'relative/page' }), /absolute folder/);
+  assert.throws(() => methods['pages.updateDir']({ pageId: 'pg_nope', dir }), /pg_nope|No print|not found/i);
+
+  const gate = (confined: boolean) => new CallerGate({ runner: { has: () => true, get: () => ({ permissionMode: 'ask', title: 'T' }), accessOf: () => 'ask', confinedOf: () => confined } });
+  assert.deepEqual(gate(false).check('t1', 'pages.updateDir', { pageId: p.id, dir }), { pageId: p.id, dir });
+  assert.throws(() => gate(true).check('t1', 'pages.updateDir', { pageId: p.id, dir }), /update_print/);
+  assert.throws(() => gate(false).check('t1', 'pages.delete', { pageId: p.id }), /needs the user's OK/, 'nothing else about prints opened up');
+});

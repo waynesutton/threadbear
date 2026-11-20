@@ -65,6 +65,21 @@ impl ApprovalText {
         (!title.is_empty()).then(|| Self::shown(title))
     }
 
+    /// The runner's `reason` line for under the title, unless it repeats a
+    /// line the card already shows (runner_reason, or the input's own
+    /// `reason`), as a threadbear tool's card puts its title in both.
+    pub fn card_reason(request: &ApprovalRequest) -> Option<String> {
+        let reason = request.reason.as_deref().map(str::trim).filter(|r| !r.is_empty())?;
+        let shown = Self::shown(reason);
+        if Self::runner_reason(request).as_deref() == Some(shown.as_str()) {
+            return None;
+        }
+        if request.input.get("reason").and_then(Value::as_str).map(str::trim) == Some(reason) {
+            return None;
+        }
+        Some(shown)
+    }
+
     /// The decision in a word or two.
     pub fn decision(decision: ApprovalDecision) -> &'static str {
         match decision {

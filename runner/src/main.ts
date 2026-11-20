@@ -43,7 +43,7 @@ import { Tasks, relatedFor, taskMethods } from './tasks.ts';
 import { Projects, drainProjectMethods, projectMethods } from './projects.ts';
 import { Librarian, librarianMethods } from './librarian.ts';
 import { ConnectorsMonitor, connectorsMethods, findLauncher, gatewayBase, gatewayIsLocal, readLocalIds } from './connectors.ts';
-import { GatewayApprovals, GatewayApprovalsClient } from './gateway-approvals.ts';
+import { GatewayApprovals, GatewayApprovalsClient, slackDescribe } from './gateway-approvals.ts';
 import { TaskBoards, gatewayCaller, helperHeaders } from './notion-tasks.ts';
 import { createLogger } from './log.ts';
 import { hidIdleMs, isAtMac } from './presence.ts';
@@ -643,6 +643,9 @@ async function main(): Promise<void> {
     localIds: () => (experimentOn(cfg.home, 'localConnectors') && gatewayIsLocal(cfg.connectorsUrl) ? readLocalIds(path.join(os.homedir(), 'Library', 'Application Support', 'Connectors')) : undefined),
   });
   connectors.start();
+  // Calls to the gateway's tools as the runner itself (Notion task boards,
+  // naming where a held Slack call goes).
+  const gatewayCall = cfg.connectorsClient ? gatewayCaller({ mcpUrl: cfg.connectorsClient.mcpUrl, headers: helperHeaders(cfg.connectorsClient.headersHelper) }) : undefined;
   // Gateway approvals on a card in the thread that made the call, when the
   // gateway is on this Mac and has /api/approvals (gateway-approvals.ts).
   const gatewayBaseUrl = cfg.connectorsUrl ? gatewayBase(cfg.connectorsUrl) : undefined;
@@ -653,6 +656,7 @@ async function main(): Promise<void> {
       host: runner,
       clock: realClock,
       serviceTitle: (id) => connectors.status().services.find((s) => s.id === id)?.title,
+      ...(gatewayCall ? { describe: { slack: slackDescribe(gatewayCall) } } : {}),
       log,
     });
   }
@@ -662,7 +666,7 @@ async function main(): Promise<void> {
   projects.useTaskBoards(
     new TaskBoards({
       home: cfg.home,
-      ...(cfg.connectorsClient ? { call: gatewayCaller({ mcpUrl: cfg.connectorsClient.mcpUrl, headers: helperHeaders(cfg.connectorsClient.headersHelper) }) } : {}),
+      ...(gatewayCall ? { call: gatewayCall } : {}),
       log,
       onChange: () => projects.boardChanged(),
     }),

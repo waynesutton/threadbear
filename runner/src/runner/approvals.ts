@@ -318,12 +318,13 @@ export const approvalsPart = {
   // a card in the thread that made it, with the call's arguments whole.
   // Not main and Mac only. Refused (false) for a thread this runner doesn't
   // have, so the call stays for the gateway's page.
-  showGatewayCard(this: Runner, threadId: string, card: { cardId: string; approval: GatewayApproval; title: string; decide: (d: GatewayDecision) => Promise<GatewayApproval | undefined> }): boolean {
+  showGatewayCard(this: Runner, threadId: string, card: { cardId: string; approval: GatewayApproval; title: string; where?: string; decide: (d: GatewayDecision) => Promise<GatewayApproval | undefined> }): boolean {
     const st = this.threads.get(threadId);
     if (!st || st.rt.approvals.has(card.cardId)) return false;
     const a = card.approval;
     const name = `${GATEWAY_TOOL_PREFIX}${a.tool}`;
-    const reason = `The Connectors gateway is holding this ${a.upstream} call until you approve it.`;
+    const service = card.title.split(':')[0]?.trim() || a.upstream;
+    const reason = `${card.where ? `${card.where} ` : ''}The Connectors gateway is holding this ${service} call until you approve it.`;
     const body: EventBody = { type: 'approval.requested', approvalId: card.cardId, name, title: card.title, input: a.args, options: ['allow', 'deny'], reason };
     this.addApproval(st, { approvalId: card.cardId, kind: 'gateway', main: false, title: card.title, decide: card.decide }, body, new AbortController().signal);
     return true;

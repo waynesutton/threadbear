@@ -111,6 +111,37 @@ export function cardTitle(a: Pick<GatewayApproval, 'upstream' | 'upstreamTool'>,
   return `${service}: ${tool || a.upstreamTool}`;
 }
 
+// Where a held call goes, in words, for the card's reason line. The
+// card's input still shows the call's arguments whole: this only names
+// them. Slack only for now: its calls name a channel by id.
+export type Describe = (a: GatewayApproval) => Promise<string | undefined>;
+// How long a card waits for its "where" before it goes up without one.
+export const DESCRIBE_MS = 3_000;
+
+// "#general", from slack_read_channel's first line, "Channel: #general
+// (C03NM8C7Z)", only when the id there is the one asked about.
+export function slackChannelFrom(text: string, id: string): string | undefined {
+  const m = /^Channel: #([A-Za-z0-9._-]{1,80}) \(([A-Z0-9]{6,})\)/m.exec(text.slice(0, 2000));
+  return m && m[2] === id ? m[1] : undefined;
+}
+
+// Slack's "where" through the gateway's own read tool, with the held
+// call's prefix. A channel (C, G) is looked up; a person or a DM (U, W, D)
+// is named as one without reading anything (reading a DM needs im:history,
+// and there's no user lookup). Anything it can't place says nothing.
+export function slackDescribe(call: (name: string, args: Record<string, unknown>) => Promise<string>): Describe {
+  return async (a) => {
+    const id = typeof a.args.channel_id === 'string' ? a.args.channel_id : undefined;
+    if (!id) return undefined;
+    if (/^[UWD][A-Z0-9]{6,}$/.test(id)) return `Goes to a direct message (${id}).`;
+    if (!/^[CG][A-Z0-9]{6,}$/.test(id)) return undefined;
+    const prefix = a.tool.split('__')[0];
+    const text = await call(`${prefix}__slack_read_channel`, { channel_id: id, limit: 1, response_format: 'concise' });
+    const name = slackChannelFrom(text, id);
+    return name ? `Goes to #${name} (${id}).` : undefined;
+  };
+}
+
 export type GatewayDecision = 'approve' | 'decline';
 
 // A gateway from before /api/approvals: its page is the only way.
@@ -200,7 +231,7 @@ function isApproval(x: unknown): x is GatewayApproval {
 // What the runner does with a matched call: put a card up, take one down.
 export type GatewayCardHost = {
   // Puts the card in the thread. `decide` is what Allow and Deny do.
-  showGatewayCard(threadId: string, card: { cardId: string; approval: GatewayApproval; title: string; decide: (d: GatewayDecision) => Promise<GatewayApproval | undefined> }): boolean;
+  showGatewayCard(threadId: string, card: { cardId: string; approval: GatewayApproval; title: string; where?: string; decide: (d: GatewayDecision) => Promise<GatewayApproval | undefined> }): boolean;
   // Closes a card the gateway decided some other way.
   closeGatewayCard(threadId: string, cardId: string, approval: GatewayApproval | undefined): void;
 };
@@ -210,6 +241,8 @@ export type GatewayApprovalsOptions = {
   host: GatewayCardHost;
   clock: Clock;
   serviceTitle?: (upstream: string) => string | undefined;
+  // Where a held call goes, by service (slackDescribe for "slack").
+  describe?: Record<string, Describe>;
   log?: { warn(msg: string): void };
 };
 
@@ -247,7 +280,7 @@ export class GatewayApprovals {
         if (this.seen.has(id)) continue;
         void client.get(id).then(
           (a) => {
-            if (a && a.status === 'pending' && !this.seen.has(a.id)) this.card(threadId, a);
+            if (a && a.status === 'pending' && !this.seen.has(a.id)) void this.card(threadId, a);
           },
           (e) => this.opts.log?.warn(`gateway approval ${id}: ${(e as Error).message}`),
         );
@@ -291,7 +324,7 @@ export class GatewayApprovals {
         const i = this.watches.findIndex((w) => w.tool === a.tool && sameArgs(w.input, a.args));
         if (i < 0) continue;
         const [w] = this.watches.splice(i, 1);
-        this.card(w.threadId, a);
+        await this.card(w.threadId, a);
       }
       for (const [id, c] of [...this.cards]) {
         if (ids.has(id)) continue;
@@ -316,15 +349,33 @@ export class GatewayApprovals {
     }
   }
 
-  private card(threadId: string, a: GatewayApproval): void {
+  // Where it goes, if this service can say, within DESCRIBE_MS; nothing
+  // if it can't, so a slow or failing lookup never holds the card back.
+  private async where(a: GatewayApproval): Promise<string | undefined> {
+    const describe = this.opts.describe?.[a.upstream];
+    if (!describe) return undefined;
+    let timer: TimerHandle | undefined;
+    const late = new Promise<undefined>((resolve) => {
+      timer = this.opts.clock.setTimeout(() => resolve(undefined), DESCRIBE_MS);
+    });
+    try {
+      return await Promise.race([describe(a).catch(() => undefined), late]);
+    } finally {
+      timer?.cancel();
+    }
+  }
+
+  private async card(threadId: string, a: GatewayApproval): Promise<void> {
     this.seen.add(a.id);
     const client = this.opts.client();
     if (!client) return;
     const cardId = `gw-${a.id}`;
+    const where = await this.where(a);
     const shown = this.opts.host.showGatewayCard(threadId, {
       cardId,
       approval: a,
       title: cardTitle(a, this.opts.serviceTitle?.(a.upstream)),
+      ...(where ? { where } : {}),
       decide: async (d) => {
         const after = await client.decide(a.id, d);
         this.cards.delete(a.id);

@@ -144,13 +144,14 @@ node $P $S answer "<question>" "<their answer>"
 node $P $S stuck "<what>" "<why>"   /   unstuck "<what>"
 node $P $S deliver "<what>" "<path or link>"
 node $P $S note "<one line on where it stands>"
+node $P $S print <print id>                            # once, after create_print: links them
 ```
 
-1. **Start:** after `init` and the plan's steps, call `create_print({ title, summary, dir: <state dir>/page, kind: "dashboard", source: "progress: <slug>", recipe: "node <this skill's folder>/progress.mjs <state.json> build", show: true })`. Put its ```` ```print <id> ```` block in your reply.
-2. **After every step:** run the command, then `update_print({ id, dir: <state dir>/page, summary: "<n> of <m> done, <k> waiting on you" })`. The card in the thread follows the new version by itself. Never start a new print for the same task.
+1. **Start:** after `init` and the plan's steps, call `create_print({ title, summary, dir: <state dir>/page, kind: "dashboard", source: "progress: <slug>", recipe: "node <this skill's folder>/progress.mjs <state.json> build", show: true })`, then link it: `node $P $S print <its id>`. Put its ```` ```print <id> ```` block in your reply.
+2. **After every step:** run the command. Once linked, each command makes a new version of the print by itself (it runs `tb print-update`, and prints "Print <id> updated."), and the card in the thread follows. If it says it couldn't, call `update_print({ id, dir: <state dir>/page, summary })` yourself. Never start a new print for the same task.
 3. **Questions:** when you need a decision, `ask` it with the default you'll take, then keep going with that default. Say so in your reply too.
 4. **Anything that can't be undone** (deleting, publishing, sending, paying) waits for the user's answer. Mark it `stuck` until then.
-5. **Finished:** the last step is `done`, then `deliver` what was made, then one last `update_print`.
+5. **Finished:** the last step is `done`, then `deliver` what was made. A linked print takes that last version by itself; otherwise one last `update_print`.
 
 ## Style (asked once)
 

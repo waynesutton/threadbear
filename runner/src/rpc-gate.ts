@@ -194,6 +194,11 @@ export class CallerGate {
         return this.scheduleRun(caller, p, needs);
       case 'schedules.delete':
         return p;
+      // A print from a folder, as the update_print tool any thread has does;
+      // not from a sandbox, whose shell can't name what the runner reads.
+      case 'pages.updateDir':
+        if (caller.confined) throw needs('updating a print from a folder', 'update_print');
+        return p;
       default:
         if (BEAR_WRITES.has(method)) return p;
         throw needs(`calling ${method}`);

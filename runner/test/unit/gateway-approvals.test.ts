@@ -10,6 +10,9 @@ import { makeHarness, tick, tmpDir } from '../helpers/fakes.ts';
 import { FakeClock } from '../../src/clock.ts';
 import {
   approvalIdsIn,
+  DESCRIBE_MS,
+  slackChannelFrom,
+  slackDescribe,
   cardTitle,
   GatewayApprovals,
   GatewayApprovalsClient,
@@ -263,6 +266,75 @@ test('in a runner: decided on the page first, Allow just closes the card as it w
   assert.equal(g.approvals.get('ap_runner000003')!.status, 'declined');
   const done = h.events(id).find((e) => e.type === 'approval.resolved');
   assert.equal(done?.decision, 'deny');
+  h.runner.gatewayApprovals!.stop();
+});
+
+test('a Slack channel id is named from the gateway\'s own read, a DM without reading anything', async () => {
+  assert.equal(slackChannelFrom('Channel: #general (C03NM8C7Z)\n\nwaynesutton: sup', 'C03NM8C7Z'), 'general');
+  assert.equal(slackChannelFrom('Channel: #general (C03NM8C7Z)', 'C999999999'), undefined, 'another channel\'s header');
+  assert.equal(slackChannelFrom('someone wrote: Channel: #fake (C03NM8C7Z)', 'C03NM8C7Z'), undefined, 'only a line that starts with it');
+  const calls: [string, Record<string, unknown>][] = [];
+  const describe = slackDescribe(async (name, args) => {
+    calls.push([name, args]);
+    return 'Channel: #launch (C0LAUNCH01)\n\nmsg';
+  });
+  const held = (channel_id: unknown): GatewayApproval => ({ id: 'ap_x', status: 'pending', agent: 'a', upstream: 'slack', tool: 'slack__slack_send_message', upstreamTool: 'slack_send_message', args: { channel_id, message: 'm' } });
+  assert.equal(await describe(held('C0LAUNCH01')), 'Goes to #launch (C0LAUNCH01).');
+  assert.deepEqual(calls, [['slack__slack_read_channel', { channel_id: 'C0LAUNCH01', limit: 1, response_format: 'concise' }]]);
+  assert.equal(await describe(held('U03NM8C6V')), 'Goes to a direct message (U03NM8C6V).');
+  assert.equal(await describe(held('D285VHP3L')), 'Goes to a direct message (D285VHP3L).');
+  assert.equal(await describe(held('not an id')), undefined);
+  assert.equal(await describe(held(42)), undefined);
+  assert.equal(calls.length, 1, 'only the channel was read');
+  const failing = slackDescribe(async () => {
+    throw new Error('missing_scope');
+  });
+  await assert.rejects(failing(held('C0LAUNCH01')));
+});
+
+test('the card says where it goes, and a slow or failing lookup never holds it back', async () => {
+  const clock = new FakeClock();
+  const g = fakeGateway();
+  const h = fakeHost();
+  let slow: (v: string) => void = () => {};
+  const w = new GatewayApprovals({
+    client: () => g.client,
+    host: h.host,
+    clock,
+    describe: {
+      slack: async (a) => (a.args.message === 'slow' ? new Promise<string>((r) => (slow = r)) : a.args.message === 'fails' ? Promise.reject(new Error('nope')) : 'Goes to #general (C1).'),
+    },
+  });
+  for (const message of ['fast', 'fails', 'slow']) w.observe('t1', { ...SEND, input: { channel_id: 'C1', message } });
+  g.hold('ap_fast0000001', 'slack__slack_send_message', { channel_id: 'C1', message: 'fast' });
+  g.hold('ap_fails000001', 'slack__slack_send_message', { channel_id: 'C1', message: 'fails' });
+  g.hold('ap_slow0000001', 'slack__slack_send_message', { channel_id: 'C1', message: 'slow' });
+  const polled = w.poll();
+  await tick();
+  await tick();
+  clock.advance(DESCRIBE_MS);
+  await polled;
+  const by = (id: string) => h.shown.find((c) => c.approval.id === id)!;
+  assert.equal((by('ap_fast0000001') as { where?: string }).where, 'Goes to #general (C1).');
+  assert.equal((by('ap_fails000001') as { where?: string }).where, undefined);
+  assert.equal((by('ap_slow0000001') as { where?: string }).where, undefined, 'went up without it');
+  slow('too late');
+  w.stop();
+});
+
+test('in a runner: the card\'s reason names where it goes', async () => {
+  const h = makeHarness(tmpDir());
+  const g = fakeGateway();
+  h.runner.gatewayApprovals = new GatewayApprovals({ client: () => g.client, host: h.runner, clock: h.clock, serviceTitle: () => 'Slack', describe: { slack: async () => 'Goes to #general (C03NM8C7Z).' } });
+  const { thread } = h.runner.create({ text: 'Post to Slack', accountId: 'claude-3' });
+  const s = h.adapter.last;
+  s.init();
+  s.out({ kind: 'event', event: { type: 'tool.call', itemId: 'c1', name: SEND.name, kind: 'mcp', title: 'slack_send_message', input: { channel_id: 'C03NM8C7Z', message: 'hi' } } });
+  g.hold('ap_where000001', 'slack__slack_send_message', { channel_id: 'C03NM8C7Z', message: 'hi' });
+  await h.runner.gatewayApprovals!.poll();
+  const card = h.events(thread.id).find((e) => e.type === 'approval.requested');
+  assert.equal(card.reason, 'Goes to #general (C03NM8C7Z). The Connectors gateway is holding this Slack call until you approve it.');
+  assert.deepEqual(card.input, { channel_id: 'C03NM8C7Z', message: 'hi' }, 'the arguments stay whole');
   h.runner.gatewayApprovals!.stop();
 });
 

@@ -88,9 +88,11 @@ fn approval_title(item: &ApprovalItem, cx: &App) -> Div {
     let folder = ApprovalText::file_path(&item.request).map(|path| PathDisplay::folder_relative(&path, item.root.as_deref())).filter(|f| !f.is_empty());
     let reason = item.request.input.get("reason").and_then(Value::as_str).map(str::trim).filter(|r| !r.is_empty());
     let runner_reason = ApprovalText::runner_reason(&item.request);
+    let card_reason = ApprovalText::card_reason(&item.request);
     v_flex()
         .child(title.child(h_flex().flex_wrap().items_baseline().child(ApprovalText::title(&item.request)).when_some(folder, |d, folder| d.child(div().ml(px(8.)).text_size(px(size::DETAIL)).font_weight(FontWeight::NORMAL).text_color(faint).child(ApprovalText::shown(&folder))))))
         .when_some(runner_reason, |d, why| d.child(div().text_size(px(size::DETAIL)).line_height(px(19.)).text_color(label).child(why)))
+        .when_some(card_reason, |d, why| d.child(div().text_size(px(size::DETAIL)).line_height(px(19.)).text_color(label).child(why)))
         .when_some(reason, |d, reason| d.child(div().text_size(px(size::DETAIL)).line_height(px(19.)).text_color(quiet).child(ApprovalText::shown(reason))))
 }
 
