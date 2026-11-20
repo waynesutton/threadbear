@@ -104,7 +104,7 @@ test('every function a box key has no business with is refused, owner-only ones 
       (e: { data?: { kind?: string; message?: string } }) => e,
     );
     assert.equal(err?.data?.kind, 'forbidden', fn);
-    assert.match(err.data.message, /a box's key runs its one thread/, fn);
+    assert.match(err.data.message ?? '', /a box's key runs its one thread/, fn);
     refused.push(fn);
   }
   for (const fn of ['issueToken', 'addRunnerKey', 'runnersList', 'queueCommand', 'startMove', 'saveSchedule', 'savePocketCard', 'setAccounts', 'sharedUsage', 'pools', 'memorySince', 'setPresence', 'prune', 'setCloudToken', 'mintBootToken', 'archiveBox', 'startThread', 'setRunnerService', 'runnerServices']) assert.ok(refused.includes(fn), fn);
