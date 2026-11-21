@@ -52,7 +52,7 @@ pub fn group(command: ShortcutCommand) -> Group {
     match command {
         NewThread | Archive | Hibernate | Stop | CopyTranscript | ChooseModel => Group::Threads,
         Back | Forward | NextInboxThread | OpenAnything | OpenAnythingAlso | ShowInbox | ShowScheduled | ShowProjects | ShowLibrarian | ShowHibernating | ShowArchived | ShowSkills | ShowNotes | ShowTasks | PreviousTab | NextTab | Settings => Group::Go,
-        ZoomIn | ZoomOut | ActualSize | ToggleThreads | TogglePanels | ToggleTerminal | ResetPanelLayout | CollapseThreads => Group::View,
+        ZoomIn | ZoomOut | ActualSize | ToggleThreads | TogglePanels | ToggleTerminal | ResetPanelLayout | CollapseThreads | CollapseSidebar => Group::View,
     }
 }
 
@@ -397,7 +397,7 @@ mod tests {
         assert_eq!(titles(Group::Go)[..3], ["Back", "Forward", "Next Inbox Thread"]);
         assert_eq!(titles(Group::Go).last(), Some(&"Settings…"));
         assert_eq!(titles(Group::View).first(), Some(&"Zoom In"));
-        assert_eq!(titles(Group::View).last(), Some(&"Collapse Threads"));
+        assert_eq!(titles(Group::View).last(), Some(&"Collapse Sidebar"));
         let all: usize = Group::ALL.iter().map(|g| g.commands().len()).sum();
         assert_eq!(all, ShortcutCommand::ALL.len(), "every command is under a heading");
         assert!(Group::View.about().starts_with("The keys for what's in the View menu."));

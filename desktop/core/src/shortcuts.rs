@@ -186,11 +186,15 @@ pub enum ShortcutCommand {
     ResetPanelLayout,
     /// ⌘B folds the Threads panel away and back, keeping its place and width.
     CollapseThreads,
+    /// ⌥⇧⌘B folds the whole left sidebar away and back: the Threads panel
+    /// and Runners, Connectors, Updates, Usage and Setup under it (Wayne, 21
+    /// Nov). The GPUI app's own.
+    CollapseSidebar,
     Settings,
 }
 
 impl ShortcutCommand {
-    pub const ALL: [ShortcutCommand; 31] = [
+    pub const ALL: [ShortcutCommand; 32] = [
         Self::NewThread,
         Self::Archive,
         Self::Hibernate,
@@ -221,6 +225,7 @@ impl ShortcutCommand {
         Self::ToggleTerminal,
         Self::ResetPanelLayout,
         Self::CollapseThreads,
+        Self::CollapseSidebar,
         Self::Settings,
     ];
 
@@ -256,6 +261,7 @@ impl ShortcutCommand {
             Self::ToggleTerminal => "toggleTerminal",
             Self::ResetPanelLayout => "resetPanelLayout",
             Self::CollapseThreads => "collapseThreads",
+            Self::CollapseSidebar => "collapseSidebar",
             Self::Settings => "settings",
         }
     }
@@ -296,6 +302,7 @@ impl ShortcutCommand {
             Self::ToggleTerminal => "Show Terminal",
             Self::ResetPanelLayout => "Reset Panel Layout",
             Self::CollapseThreads => "Collapse Threads",
+            Self::CollapseSidebar => "Collapse Sidebar",
             Self::Settings => "Settings…",
         }
     }
@@ -343,6 +350,7 @@ impl ShortcutCommand {
             // VS Code's and T3 Code's key for their terminal.
             Self::ToggleTerminal => Some(ShortcutKey::new("j")),
             Self::CollapseThreads => Some(ShortcutKey::new("b")),
+            Self::CollapseSidebar => Some(ShortcutKey::with("b", true, false, true)),
             Self::Hibernate | Self::ShowHibernating | Self::ShowArchived | Self::ResetPanelLayout => None,
         }
     }
@@ -495,7 +503,7 @@ mod tests {
         let keys: Vec<ShortcutKey> = ShortcutCommand::ALL.iter().filter_map(|c| c.default_key()).collect();
         let unique: std::collections::HashSet<&ShortcutKey> = keys.iter().collect();
         assert_eq!(keys.len(), unique.len(), "two commands can't start on one key");
-        assert_eq!(ShortcutCommand::ALL.len(), 31);
+        assert_eq!(ShortcutCommand::ALL.len(), 32);
         // The Swift app's names and keys, as both apps read shortcuts.json.
         assert_eq!(ShortcutCommand::from_name("previousTab"), Some(ShortcutCommand::PreviousTab));
         assert_eq!(ShortcutCommand::PreviousTab.default_key(), Some(key("cmd+shift+[")));
@@ -507,6 +515,8 @@ mod tests {
         assert_eq!(ShortcutCommand::from_name("chooseModel"), Some(ShortcutCommand::ChooseModel));
         assert_eq!(ShortcutCommand::OpenAnythingAlso.default_key(), Some(key("cmd+p")));
         assert_eq!(ShortcutCommand::CollapseThreads.default_key(), Some(key("cmd+b")));
+        assert_eq!(ShortcutCommand::CollapseSidebar.default_key(), Some(key("cmd+opt+shift+b")));
+        assert_eq!(ShortcutCommand::CollapseSidebar.default_key().unwrap().display(), "⌥⇧⌘B");
         assert_eq!(ShortcutCommand::TogglePanels.default_key(), Some(key("cmd+opt+b")));
         assert_eq!(ShortcutCommand::from_name("showNotes"), Some(ShortcutCommand::ShowNotes));
         assert_eq!(ShortcutCommand::ShowNotes.default_key(), Some(key("cmd+6")));
