@@ -925,6 +925,7 @@ impl Render for ModelPickerView {
                 s.set_value(String::new(), window, cx);
                 s.focus(window, cx);
             });
+            crate::web_panels::keyboard_to_app(window);
         }
         let Some(composer) = self.composer.upgrade() else { return div().into_any_element() };
         let data = composer.read(cx).chip_data(cx);
