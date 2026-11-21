@@ -4,6 +4,20 @@
 
 How Prints work today, what's missing and what's next: [Prints status](https://github.com/waynesutton/threadbear/blob/main/prds/prints-status.md).
 
+## Tasks
+
+How the Tasks section works today (an experiment: turn it on in Settings > Experiments, then Command-7). The full how-tos are [How tasks work](https://github.com/waynesutton/threadbear/blob/main/docs/guide.md#how-tasks-work) and [How tasks work with Linear](https://github.com/waynesutton/threadbear/blob/main/docs/guide.md#how-tasks-work-with-linear).
+
+- **Adding tasks:** type in the box at the top and press Return. Paste a Markdown list to add many at once; indented items become sub-tasks.
+- **List and Board:** the list groups tasks by column; the board has eight columns (Backlog, On Deck, Shaping, Building, Observing, Done, Paused, Canceled) that you can rename, reorder, add to or delete, except Building, where new tasks land. Group by project, sort, wrap columns and set a background photo.
+- **A task's page:** status, priority, due date and time, project, sub-tasks, links, pictures, attached Prints, comments and activity, plus the project's recent threads and Prints. J and K step through tasks.
+- **Reminders:** a task due at a time sends a Mac notification, and optionally an email or Slack message. Due tasks also show in Scheduled.
+- **Send to Thread:** starts a thread from the task's title and note in its project's folder, with a link back. Agents can read and change tasks with their task tools.
+- **Favorites:** Option-F, the star on a task's page or the ⋯ menu. A favorite shows at the top of the list and as the board's first column, and stays in its own column too.
+- **Keys:** on the list and board, C adds a task; S, P and Shift-D open the status, priority and due date pickers; Command-Shift-D removes the due date, Command-Delete deletes, Shift-R renames, Control-Shift-I edits the description. The app's own shortcuts always win.
+- **Linear (optional):** with Linear connected in Connectors, Send to Linear makes an issue in the team and project you pick, Add from Linear brings issues in as tasks, and Link to Linear issue ties a task to an existing one. Synced tasks copy status, priority, due date, title and comments from Linear every 1, 6, 12 or 24 hours, with no tokens spent. Without Linear, none of it shows.
+- **Web:** your private `/tasks` page shows and edits the same tasks, with Linear chips and favorite stars.
+
 ## [Unreleased]
 
 ### Added
