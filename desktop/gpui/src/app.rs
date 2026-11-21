@@ -1452,6 +1452,9 @@ impl Threadbear {
     /// these after them.
     pub(crate) fn start_thread_about(&mut self, words: String, window: &mut Window, cx: &mut Context<Self>) {
         window.activate_window();
+        // Settings is a page over the thread, so the new composer would sit
+        // hidden behind it.
+        self.close_settings(cx);
         self.set_mode(crate::shell::SidebarMode::Inbox, cx);
         self.new_thread(cx);
         let composer = self.ensure_new_composer(window, cx);
@@ -2164,10 +2167,21 @@ pub(crate) enum Connection<'a> {
 /// `settings.update` changes only what it names.
 fn merge_json(into: &mut Value, change: &Value) {
     match (into, change) {
+        // `experiments` is a list of { id, on } but a change names them by
+        // id ({ "experiments": { id: on } }). Replacing the list with that
+        // emptied Experiments until the runner answered, so the page got
+        // shorter and the pane lost its place (21 Nov).
+        (Value::Array(list), Value::Object(change)) if list.iter().all(|item| item.get("id").is_some_and(Value::is_string)) => {
+            for item in list.iter_mut() {
+                if let Some(on) = item["id"].as_str().and_then(|id| change.get(id)) {
+                    item["on"] = on.clone();
+                }
+            }
+        }
         (Value::Object(into), Value::Object(change)) => {
             for (key, value) in change {
                 match into.get_mut(key) {
-                    Some(existing) if existing.is_object() && value.is_object() => merge_json(existing, value),
+                    Some(existing) if (existing.is_object() || existing.is_array()) && value.is_object() => merge_json(existing, value),
                     _ => {
                         into.insert(key.clone(), value.clone());
                     }
@@ -2234,4 +2248,20 @@ struct SectionsCache {
     /// Worked out with nested threads, and which nest under which.
     nested: bool,
     nesting: Option<Rc<threadbear_core::nested::Nesting>>,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::merge_json;
+    use serde_json::json;
+
+    #[test]
+    fn an_experiment_switch_keeps_the_list() {
+        let mut settings = json!({ "experiments": [{ "id": "pages", "on": false, "name": "Prints" }, { "id": "voiceMode", "on": true }], "labReview": false });
+        merge_json(&mut settings, &json!({ "experiments": { "pages": true } }));
+        assert_eq!(settings["experiments"], json!([{ "id": "pages", "on": true, "name": "Prints" }, { "id": "voiceMode", "on": true }]));
+        merge_json(&mut settings, &json!({ "labReview": true, "models": { "pool": "p1" } }));
+        assert_eq!(settings["labReview"], json!(true));
+        assert_eq!(settings["models"]["pool"], json!("p1"));
+    }
 }

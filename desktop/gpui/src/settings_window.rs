@@ -252,12 +252,14 @@ struct SettingsApp(WeakEntity<Threadbear>);
 impl Global for SettingsApp {}
 
 /// Starts a thread about a section, in the main window (`start_thread_about`).
-fn start_thread_about(title: &str, cx: &mut App) {
+/// Settings is a page in that window, so the click hands us its window:
+/// `main_window.update` from here fails, as the window is already being
+/// updated for the click, and the button did nothing (21 Nov).
+fn start_thread_about(title: &str, window: &mut Window, cx: &mut App) {
     let Some(app) = cx.try_global::<SettingsApp>().and_then(|a| a.0.upgrade()) else { return };
-    let main = app.read(cx).main_window;
     let words = format!("About Threadbear's {title} settings: ");
     cx.activate(true);
-    main.update(cx, |_, window, cx| app.update(cx, |app, cx| app.start_thread_about(words, window, cx))).ok();
+    app.update(cx, |app, cx| app.start_thread_about(words, window, cx));
 }
 
 /// A section's bear button, at the end of its heading: start a thread about
@@ -277,7 +279,7 @@ fn thread_button(id: &str, title: &str, cx: &App) -> AnyElement {
         .rounded(px(4.))
         .text_color(faint)
         .hover(move |s| s.text_color(fg))
-        .on_click(move |_, _, cx| start_thread_about(&title, cx))
+        .on_click(move |_, window, cx| start_thread_about(&title, window, cx))
         .child(icons::symbol("bear.plus").with_size(px(17.)))
         .into_any_element()
 }
@@ -308,7 +310,7 @@ fn section_info(id: &str, title: &str, about: &str, cx: &App) -> AnyElement {
                             .small()
                             .secondary()
                             .tooltip("Opens a new thread to ask your agent about these settings")
-                            .on_click(move |_, _, cx| start_thread_about(&title, cx)),
+                            .on_click(move |_, window, cx| start_thread_about(&title, window, cx)),
                     ),
                 )
         })
