@@ -108,9 +108,7 @@ impl Threadbear {
 
     /// Whether one of these panels is on show, for its button in the bar.
     pub(crate) fn activity_panel_showing(&self, panel: &str, cx: &App) -> bool {
-        // Folded away with ⌘B it's off screen, so its icon isn't lit.
-        let folded = self.threads_collapsed() && crate::shell::UNDER_THREADS.contains(&panel);
-        !folded && self.dock.read(cx).controller.is_showing(panel)
+        self.dock.read(cx).controller.is_showing(panel)
     }
 }
 

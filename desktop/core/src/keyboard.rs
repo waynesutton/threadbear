@@ -397,7 +397,7 @@ mod tests {
         assert_eq!(titles(Group::Go)[..3], ["Back", "Forward", "Next Inbox Thread"]);
         assert_eq!(titles(Group::Go).last(), Some(&"Settings…"));
         assert_eq!(titles(Group::View).first(), Some(&"Zoom In"));
-        assert_eq!(titles(Group::View).last(), Some(&"Collapse Sidebar"));
+        assert_eq!(titles(Group::View).last(), Some(&"Collapse Threads"));
         let all: usize = Group::ALL.iter().map(|g| g.commands().len()).sum();
         assert_eq!(all, ShortcutCommand::ALL.len(), "every command is under a heading");
         assert!(Group::View.about().starts_with("The keys for what's in the View menu."));
