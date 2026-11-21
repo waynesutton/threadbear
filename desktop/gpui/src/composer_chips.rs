@@ -919,8 +919,12 @@ impl ModelPickerView {
 
 impl Render for ModelPickerView {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        // Fresh each time ⌘/ opens it, as Cursor's is, not last time's words.
         if std::mem::take(&mut self.focus_search) {
-            self.search.update(cx, |s, cx| s.focus(window, cx));
+            self.search.update(cx, |s, cx| {
+                s.set_value(String::new(), window, cx);
+                s.focus(window, cx);
+            });
         }
         let Some(composer) = self.composer.upgrade() else { return div().into_any_element() };
         let data = composer.read(cx).chip_data(cx);
