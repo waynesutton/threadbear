@@ -235,3 +235,14 @@ When('I open the filtered Print row menu', async function (this: ThreadbearWorld
   const [x, y] = String(raw).replace(/^ok /, '').trim().split(/\s+/).map(Number);
   await this.app.do({cmd: 'click-at', x, y, right: true});
 });
+
+/** Settings' "Progress prints for long tasks", or null while it isn't shown. */
+const progress = (d: unknown) => (d as { settingsWindow?: { progressPrints?: boolean | null } | null }).settingsWindow?.progressPrints;
+
+Then('Settings says long tasks get progress Prints', async function (this: ThreadbearWorld) {
+  await this.until('Progress prints for long tasks on', (d) => progress(d) === true);
+});
+
+Then('Settings says long tasks start without a progress Print', async function (this: ThreadbearWorld) {
+  await this.until('Progress prints for long tasks off', (d) => progress(d) === false);
+});

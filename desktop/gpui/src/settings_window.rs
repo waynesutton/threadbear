@@ -716,15 +716,23 @@ impl SettingsWindow {
                 cx,
             ));
         }
-        // Only while Prints is on (RunnerSettings::prints_switch).
+        // Only while Prints is on (RunnerSettings::prints_switch, progress_switch).
+        let mut print_rows = Vec::new();
         if let Some(on) = settings.prints_switch() {
             let switch = self.switch("settings-prints-when-asked", on, "Have threads ask before making a Print you didn't ask for", cx, |this, on, cx| this.update(json!({ "printsWhenAsked": on }), cx));
+            print_rows.push(row("Only make Prints when I ask", switch, cx));
+        }
+        if let Some(on) = settings.progress_switch() {
+            let switch = self.switch("settings-progress-prints", on, "Let threads keep a progress Print on long tasks. Off, they start the work without one", cx, |this, on, cx| this.update(json!({ "progressPrints": on }), cx));
+            print_rows.push(row("Progress prints for long tasks", switch, cx));
+        }
+        if !print_rows.is_empty() {
             sections.push(section(
                 "settings-prints",
                 "Prints",
-                "Threads can still make Prints, but only when you ask for one. If a thread goes to make one your message didn't ask for, like a progress Print on a long task, it asks you first, and No means none is made. Saying print, chart, graph, dashboard or diagram counts as asking.",
-                "make a Print for something, or turn this on or off.",
-                vec![row("Only make Prints when I ask", switch, cx)],
+                "Only make Prints when I ask: if a thread goes to make a Print your message didn't ask for, it asks you first, and No means none is made. Saying print, chart, graph, dashboard or diagram counts as asking. Progress prints for long tasks: on, a long task keeps a Print of where it's up to. Off, threads skip it and start straight away, with no question about it. The task list in Highlights still tracks the work when Clearer thread completion is on.",
+                "make a Print for something, or turn these on or off.",
+                print_rows,
                 cx,
             ));
         }
@@ -1710,6 +1718,7 @@ impl SettingsWindow {
             "fullSync": settings.as_ref().and_then(|s| s.full_sync),
             // Null while the switch isn't shown (Prints off, or an older runner).
             "printsWhenAsked": settings.as_ref().and_then(|s| s.prints_switch()),
+            "progressPrints": settings.as_ref().and_then(|s| s.progress_switch()),
             "spareWeek": settings.as_ref().and_then(|s| s.spare_week),
             // Usage's switch for a model's own week, while a login has one.
             "modelWeeks": self.app.upgrade().and_then(|a| {

@@ -33,6 +33,8 @@ export type Settings = {
   labReview: boolean;
   // Only make Prints when I ask (threadbear-mcp.ts, create_print).
   printsWhenAsked: boolean;
+  // Progress prints for long tasks (threadbear-mcp.ts, create_print).
+  progressPrints: boolean;
   // Who reviews, in order (lab-reviewers.ts): runner.json's list, or the
   // default when it has none.
   labReviewers: LabReviewer[];
@@ -69,6 +71,7 @@ export type SettingsUpdate = {
   oneReply?: boolean;
   labReview?: boolean;
   printsWhenAsked?: boolean;
+  progressPrints?: boolean;
   labReviewers?: LabReviewer[];
   labPanel?: LabReviewer[];
   keepAwake?: boolean;
@@ -112,6 +115,7 @@ export class SettingsService {
       oneReply: this.cfg.oneReply,
       labReview: this.cfg.labReview,
       printsWhenAsked: this.cfg.printsWhenAsked,
+      progressPrints: this.cfg.progressPrints,
       labReviewers: (this.cfg.labReviewers ?? DEFAULT_LAB_REVIEWERS).map((r) => ({ ...r })),
       labPanel: (this.cfg.labPanel ?? []).map((r) => ({ ...r })),
       labPanelLines: this.cfg.labPanelLines,
@@ -168,6 +172,7 @@ export class SettingsService {
     if (u.oneReply !== undefined) json.oneReply = this.cfg.oneReply = u.oneReply;
     if (u.labReview !== undefined) json.labReview = this.cfg.labReview = u.labReview;
     if (u.printsWhenAsked !== undefined) json.printsWhenAsked = this.cfg.printsWhenAsked = u.printsWhenAsked;
+    if (u.progressPrints !== undefined) json.progressPrints = this.cfg.progressPrints = u.progressPrints;
     if (u.labReviewers !== undefined) {
       this.cfg.labReviewers = u.labReviewers.map((r) => ({ ...r }));
       json.labReviewers = u.labReviewers;
@@ -235,6 +240,10 @@ export function settingsMethods(s: SettingsService): Record<string, (p: Record<s
       if (p.printsWhenAsked !== undefined) {
         if (typeof p.printsWhenAsked !== 'boolean') throw bad('printsWhenAsked must be a boolean');
         u.printsWhenAsked = p.printsWhenAsked;
+      }
+      if (p.progressPrints !== undefined) {
+        if (typeof p.progressPrints !== 'boolean') throw bad('progressPrints must be a boolean');
+        u.progressPrints = p.progressPrints;
       }
       if (p.labReviewers !== undefined) {
         if (!Array.isArray(p.labReviewers)) throw bad('labReviewers must be a list');

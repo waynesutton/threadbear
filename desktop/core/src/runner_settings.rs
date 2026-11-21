@@ -178,6 +178,9 @@ pub struct RunnerSettings {
     /// Prints only when asked (docs/protocol.md, "Prints", "Only when
     /// asked"). None from a runner from before it, and Settings then hides it.
     pub prints_when_asked: Option<bool>,
+    /// Progress prints for long tasks (docs/protocol.md, "Prints", "Progress
+    /// prints"). None from a runner from before it, and Settings then hides it.
+    pub progress_prints: Option<bool>,
     /// A thread suggesting work when a login's week is about to go unused
     /// (runner.json `spareWeek`). None from a runner from before it, and
     /// Settings then hides the switch.
@@ -218,6 +221,7 @@ impl RunnerSettings {
             keep_awake: v["keepAwake"].as_bool(),
             full_sync: v["fullSync"].as_bool(),
             prints_when_asked: v["printsWhenAsked"].as_bool(),
+            progress_prints: v["progressPrints"].as_bool(),
             spare_week: v["spareWeek"].as_bool(),
             bring_in_supported: bring_in.is_some(),
             bring_in: bring_in.unwrap_or(BringIn::STANDARD),
@@ -246,6 +250,12 @@ impl RunnerSettings {
     /// (the Swift SettingsView's Prints section, Wayne, 11 Nov).
     pub fn prints_switch(&self) -> Option<bool> {
         self.prints_when_asked.filter(|_| self.experiment_on(PAGES_EXPERIMENT))
+    }
+
+    /// The "Progress prints for long tasks" switch's state, while it's shown:
+    /// like the one above, only with Prints on.
+    pub fn progress_switch(&self) -> Option<bool> {
+        self.progress_prints.filter(|_| self.experiment_on(PAGES_EXPERIMENT))
     }
 }
 
@@ -323,6 +333,10 @@ mod tests {
     fn the_prints_switch_shows_only_with_prints_on() {
         let on = RunnerSettings::decode(&json!({ "printsWhenAsked": false, "experiments": [{ "id": "pages", "on": true }] }));
         assert_eq!(on.prints_switch(), Some(false));
+        let progress = RunnerSettings::decode(&json!({ "progressPrints": false, "experiments": [{ "id": "pages", "on": true }] }));
+        assert_eq!(progress.progress_switch(), Some(false));
+        assert_eq!(RunnerSettings::decode(&json!({ "progressPrints": true, "experiments": [{ "id": "pages", "on": false }] })).progress_switch(), None, "hidden with Prints off");
+        assert_eq!(RunnerSettings::decode(&json!({ "experiments": [{ "id": "pages", "on": true }] })).progress_switch(), None, "an older runner hides it");
         let off = RunnerSettings::decode(&json!({ "printsWhenAsked": true, "experiments": [{ "id": "pages", "on": false }] }));
         assert_eq!(off.prints_switch(), None, "with Prints off there are none to hold back");
         let old = RunnerSettings::decode(&json!({ "experiments": [{ "id": "pages", "on": true }] }));

@@ -113,3 +113,29 @@ Feature: Highlights, what a thread has made and shared
     When I open the thread "Rebuild the three landing pages"
     And I choose "Remove" from the menu of the highlight "copy-review.md"
     Then Highlights doesn't list "copy-review.md"
+
+  # The agent's task ledger (Clearer completion) stays in Highlights after the
+  # done card goes. GPUI-only: the Swift app is frozen.
+  @highlights.tasks @clearer-completion @swift-pending
+  Scenario: The task list stays in Highlights, what's left first
+    When I open the thread "Tidy the imports in the uploader"
+    And the agent reports an incomplete request with two tasks
+    Then the Task list says "1 of 2 tasks completed"
+    And the Task list lists "Try the installed app | 1 completed"
+    When I open the completed tasks in Highlights
+    Then the Task list lists "Try the installed app | 1 completed | Build the completion card"
+
+  @highlights.tasks @clearer-completion @swift-pending
+  Scenario: A finished request folds every task under one row
+    When I open the thread "Tidy the imports in the uploader"
+    And the agent reports a completed request with two tasks
+    Then the Task list says "All 2 tasks completed"
+    And the Task list lists "2 completed"
+    And the "Task list" heading in Highlights counts 0 when folded
+
+  @highlights.tasks @swift-pending
+  Scenario: No task list while Clearer completion is off
+    When I open the thread "Tidy the imports in the uploader"
+    And the agent reports a completed request with two tasks
+    Then Highlights has no heading "Task list"
+

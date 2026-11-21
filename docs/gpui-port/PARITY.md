@@ -37,7 +37,7 @@ earlier four-platform run.
 
 <!-- parity:start -->
 
-291 of 390 features have a spec so far, across 841 scenarios.
+306 of 405 features have a spec so far, across 931 scenarios.
 
 Scenarios passing: Swift: not run, Mac: not run, Windows: not run, Linux: not run.
 
@@ -174,6 +174,7 @@ Scenarios passing: Swift: not run, Mac: not run, Windows: not run, Linux: not ru
 | `prints.publish` Publish a Print | pending | pending | pending | pending |
 | `prints.diagram` Diagram Prints | pending | pending | pending | pending |
 | `prints.whenasked` Prints only when asked | pending | pending | pending | pending |
+| `prints.progress` Progress prints for long tasks | pending | pending | pending | pending |
 | `prints.card` Print card in a reply | pending | pending | pending | pending |
 | `prints.pane` Prints in the side pane | pending | pending | pending | pending |
 | `prints.list` Prints in Highlights and on the rail | pending | pending | pending | pending |
@@ -183,9 +184,11 @@ Scenarios passing: Swift: not run, Mac: not run, Windows: not run, Linux: not ru
 | `rich.fullsize` Full-size rich window | pending | pending | pending | pending |
 | `rich.draft` Draft blocks | pending | pending | pending | pending |
 | `rich.draft.copy` Draft copy | pending | pending | pending | pending |
+| `rich.draft.edit` Draft edited | pending | pending | pending | pending |
 | `rich.draft.select` Draft words selected | pending | pending | pending | pending |
 | `rich.replybuttons` Reply buttons | pending | pending | pending | pending |
 | `rich.threadchips` Thread chips | pending | pending | pending | pending |
+| `rich.threadlinkmarks` Thread link marks | pending | pending | pending | pending |
 | `rich.cardchips` Card chips | pending | pending | pending | pending |
 | `rich.picturechips` Picture chips | pending | pending | pending | pending |
 | `rich.worklinks` Work links | pending | pending | pending | pending |
@@ -250,6 +253,7 @@ Scenarios passing: Swift: not run, Mac: not run, Windows: not run, Linux: not ru
 | `highlights.panel` Panel and folds | pending | pending | pending | pending |
 | `highlights.librarian` Librarian line | pending | pending | pending | pending |
 | `highlights.needsyou` Needs you list | pending | pending | pending | pending |
+| `highlights.tasks` Task list | pending | pending | pending | pending |
 | `highlights.projects` Project blocks | pending | pending | pending | pending |
 | `highlights.board` Notion board | pending | pending | pending | pending |
 | `highlights.scheduled` Scheduled list | pending | pending | pending | pending |
@@ -282,6 +286,7 @@ Scenarios passing: Swift: not run, Mac: not run, Windows: not run, Linux: not ru
 | `browser.pages` Page list | pending | pending | pending | pending |
 | `browser.show` Show window | pending | pending | pending | pending |
 | `browser.handoff` Your turn and Done | pending | pending | pending | pending |
+| `pane.prs` Pull requests in the pane | pending | pending | pending | pending |
 
 ### 12. File previews and folders
 
@@ -344,6 +349,7 @@ Scenarios passing: Swift: not run, Mac: not run, Windows: not run, Linux: not ru
 | `schedule.editor` Schedule editor | pending | pending | pending | pending |
 | `usage.spend` Usage spend | pending | pending | pending | pending |
 | `usage.pools` Usage pools | pending | pending | pending | pending |
+| `usage.sign-in` Usage sign-ins | pending | pending | pending | pending |
 | `runners.panel` Runners panel | pending | pending | pending | pending |
 | `connectors.panel` Connectors panel | pending | pending | pending | pending |
 | `updates.panel` Updates panel | pending | pending | pending | pending |
@@ -420,18 +426,27 @@ Scenarios passing: Swift: not run, Mac: not run, Windows: not run, Linux: not ru
 | Feature | Swift | Mac | Windows | Linux |
 |---|---|---|---|---|
 | `tour.firstrun` First-run tour | pending | pending | pending | pending |
+| `tour.hello` Setup cards | pending | pending | pending | pending |
 | `tour.intros` One-card intros | pending | pending | pending | pending |
 | `tour.setup` Finish setting up | pending | pending | pending | pending |
 | `tour.about` About (the Den) | pending | pending | pending | pending |
 | `juice.archiveflight` Archive flight | pending | pending | pending | pending |
 | `juice.hibernateflight` Hibernate flight | pending | pending | pending | pending |
 | `juice.opening` Threads coming in | pending | pending | pending | pending |
+| `juice.confetti` Confetti for rare wins | pending | pending | pending | pending |
+| `juice.pickfill` A picked answer fills | pending | pending | pending | pending |
+| `juice.picturedrop` A pasted picture drops in | pending | pending | pending | pending |
+| `juice.replyfade` Replies fade in | pending | pending | pending | pending |
 
 ### Planned features
 
 | Feature | Swift | Mac | Windows | Linux |
 |---|---|---|---|---|
+| `virtual.runs-on` Virtual runners in Runs on | pending | pending | pending | pending |
+| `virtual.rows` A box thread's row | pending | pending | pending | pending |
+| `virtual.token-card` The token card | pending | pending | pending | pending |
 | `planned.exp.looseends` Loose ends (`looseEnds`) | pending | pending | pending | pending |
+| `planned.exp.inboxguess` Inbox guess (`inboxGuess`) | pending | pending | pending | pending |
 | `bears.tile` Bear tiles (`bears`) | pending | pending | pending | pending |
 | `bears.colour` Bear Colour (`bears`) | pending | pending | pending | pending |
 | `bears.mention` @ bear picker (`bears`) | pending | pending | pending | pending |

@@ -353,6 +353,8 @@ const settings = {
   // Prints' "Only make Prints when I ask" (Settings > General > Prints),
   // shown while the pages experiment below is on.
   printsWhenAsked: false,
+  // "Progress prints for long tasks", beside it.
+  progressPrints: true,
   models: {
     pool: 'claude',
     privateFolders: ['~/dev/clients/acme'],
@@ -1728,7 +1730,9 @@ async function dispatch(client, method, p) {
         t.highlightsFailed = (t.highlightsFailed ?? 0) + 1;
         throw rpcError(-32000, 'Highlights are temporarily unavailable');
       }
-      return highlights.get(t.summary.id) ?? t.fixtureHighlights ?? { highlights: [], edited: [] };
+      const found = highlights.get(t.summary.id) ?? t.fixtureHighlights ?? { highlights: [], edited: [] };
+      const ledgerOn = settings.experiments.find((x) => x.id === 'clearerCompletion')?.on;
+      return t.completion && ledgerOn ? { ...found, completion: t.completion } : found;
     }
     case 'threads.removeHighlight':
     case 'mock.unpin': {
@@ -2297,6 +2301,7 @@ async function dispatch(client, method, p) {
       if (p.keepAwake !== undefined) settings.keepAwake = Boolean(p.keepAwake);
       if (p.fullSync !== undefined) settings.fullSync = Boolean(p.fullSync);
       if (p.printsWhenAsked !== undefined) settings.printsWhenAsked = Boolean(p.printsWhenAsked);
+      if (p.progressPrints !== undefined) settings.progressPrints = Boolean(p.progressPrints);
       for (const [id, on] of Object.entries(p.experiments ?? {})) {
         const e = settings.experiments.find((x) => x.id === id);
         if (!e) throw rpcError(-32602, `No experiment called ${id}`);
@@ -3297,6 +3302,15 @@ function startStream(threadId, p) {
       // `completed`: more of what the turn ended with, as end_turn says it
       // (needs, next, asks, another lab's `review` ledger).
       persist(threadId, { type: 'turn.completed', turnId, outcome: 'completed', durationMs: Date.now() - started, ...(p.completed ?? {}) }, turnId);
+      // The runner keeps the ledger for Highlights' Task list, merged by id.
+      if (p.completed?.completion?.tasks) {
+        const t = threads.get(threadId);
+        if (t) {
+          const kept = new Map((t.completion?.tasks ?? []).map((x) => [x.id, x]));
+          for (const x of p.completed.completion.tasks) kept.set(x.id, x);
+          t.completion = { tasks: [...kept.values()] };
+        }
+      }
       setStatus(threadId, 'idle');
     }
   }, 1000 / hz);

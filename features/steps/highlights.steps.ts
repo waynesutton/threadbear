@@ -142,3 +142,20 @@ When('I click the Scheduled highlight {string}', async function (this: Threadbea
   await this.until(`a Scheduled highlight called "${title}"`, (d) => sections(d).some((s) => s.rows.some((r) => r.title === title)));
   await this.app.do({ cmd: 'highlight', schedule: title });
 });
+
+When('I open the completed tasks in Highlights', async function (this: ThreadbearWorld) {
+  await this.until('the Task list to be drawn', (d) => section(d, 'Task list'));
+  await this.app.do({ cmd: 'highlight', tasksDone: true });
+});
+
+Then('the Task list says {string}', async function (this: ThreadbearWorld, words: string) {
+  await this.until(`the Task list saying "${words}"`, (d) => (pane(d) as { tasksHeading?: string | null } | undefined)?.tasksHeading === words);
+});
+
+Then('the Task list lists {string}', async function (this: ThreadbearWorld, list: string) {
+  const expected = wanted(list);
+  await this.until(`the Task list listing ${list}`, (d) => {
+    const titles = section(d, 'Task list')?.rows.map((r) => r.title) ?? [];
+    return expected.length === titles.length && expected.every((t, i) => titles[i] === t);
+  });
+});

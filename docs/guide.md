@@ -242,7 +242,9 @@ With the **Clearer thread completion** experiment on (Settings > General >
 Experiments), the agent can report progress on every task in your request.
 The card shows how many are completed and which are pending or blocked,
 including work carried across turns. "Reported by the agent" labels that
-list. Threadbear checks loose ends separately; only a successful empty
+list. The card goes once you reply, but the list stays in the thread's
+[Highlights](#highlights) under **Task list**, so you can look at it again
+without asking. Threadbear checks loose ends separately; only a successful empty
 check says "No loose ends found". An unavailable check makes no such claim.
 To omit automatic PR reminders for particular GitHub repository owners,
 set `looseEndsIgnoredPrOwners` in runner.json to their owner names. This
@@ -1168,6 +1170,14 @@ From the top, and only when there's something to show:
 - A line or two from the librarian on where the thread is up to.
 - **Needs you**: what the agent's last reply asked you to do, each with a
   box to tick off as you go. Ticking one here ticks it in the thread too.
+- **Task list**: with the Clearer thread completion experiment on, the
+  tasks the agent reported for your request, with how many are completed.
+  What's still pending or blocked comes first; the completed ones fold
+  under a row like "21 completed" that opens them. It stays after you
+  reply and after the thread is archived, and grows as you add requests.
+  The agent keeps it, so you can't tick these yourself. It changes when a
+  turn ends, so during a long turn it shows the list from the turn before.
+  A list over 30 tasks drops its oldest completed ones to make room.
 - The thread's projects, each under its icon and name with its links,
   such as a live site or an admin page, and its task board if it has one.
   When an agent deploys a Convex-hosted site (`https://<name>.convex.app`)
@@ -1325,6 +1335,8 @@ Ask in plain words, in any thread:
 **Where a print goes.** A thread pinned to exactly one project puts its new prints there automatically, under **Prints** on the project's page. Say "keep it out of projects" for none, or "put it in Poddle" for another. A print can be in several projects without duplicating its files. All Prints are stored in `~/Library/Application Support/Threadbear/pages/<print-id>/v<version>/`, separate from your code folders. With no project, reopen its card in the thread or ask "show my prints with no project". Download saves a separate copy wherever you choose. Nothing about a print goes to your Convex backend unless you publish it (below).
 
 **Only when you ask.** Threads also make Prints on their own, like a progress Print on a long task. To keep Prints but have them made only when you ask, turn on **Only make Prints when I ask** in Settings > General > Prints. A thread that goes to make one your message didn't ask for then asks you first, on a card, and No means none is made. A message that says print, chart, graph, dashboard or diagram counts as asking, so it goes ahead without a card. Changing a Print that already exists never asks.
+
+**Progress prints for long tasks.** On by default: a thread on a task with more than five steps, or one that should take over half an hour, keeps a progress Print of where it's up to. Turn it off in Settings > General > Prints and threads skip it, without asking you about it, and start the work straight away. Other Prints, like a chart you ask for, are still made. With the Clearer thread completion experiment on, the thread's [Task list](#highlights) in Highlights keeps track of the work instead.
 
 **In a reply**, a thread shows a print as a card: a picture of the top of it, then its title, kind, version and age, with Open, Refresh and a ⋯ menu. Click the picture or Open to open it in the side pane beside the thread. While it's open there, a new version replaces it in the pane as soon as it's saved. If you opened an older version on purpose, it stays put. A thread on another Mac opens it in a window of its own instead. On the website, the same reply shows a card too. A published print's card has its title and an Open button that goes to its page. One that isn't published says it's kept on your Mac, since its files never leave it. The iPhone app shows the block as text for now. The card always shows the print as it is now, so when a print gets a new version, the card in an earlier reply moves to it too, marked "New version", rather than a second card appearing. While a refresh is under way, the card says so.
 

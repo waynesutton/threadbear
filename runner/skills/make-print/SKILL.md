@@ -16,7 +16,7 @@ Every kind ends the same way. The page is static HTML, CSS and SVG, saved with `
 | The user says | Kind | How |
 |---|---|---|
 | "chart / graph / pie of X" | `chart` | A spec with one chart, then `build.mjs` (below) |
-| a long task (more than 5 steps, or over 30 minutes) | `progress` | `progress.mjs`, below. Make it before starting, and update it after every step |
+| a long task (more than 5 steps, or over 30 minutes) | `progress` | `progress.mjs`, below. Make it alongside the first steps, and update it after every step. Skip it if progress prints are off |
 | "dashboard for this data" | `dashboard` | A spec with tiles, 2 to 4 charts and a table |
 | "report on X", "how is the project going" | `report` | A spec with `sections`: markdown text plus charts |
 | "write up / doc / plan / notes as a print" | `doc` | `create_print` with `markdown`. No build step. The user can edit it in the app |
@@ -125,7 +125,11 @@ Output with no `functions` list (not logged in, no deployment) stops with an err
 
 ## Progress prints for long tasks
 
-For a task with more than 5 steps, or one that should take over 30 minutes, make a progress print **before you start**, and update it after every step. It shows:
+For a task with more than 5 steps, or one that should take over 30 minutes, make a progress print **alongside the first steps**, and update it after every step. Never hold the work up for it, and never ask whether to make one.
+
+**Off in Settings?** If `create_print`'s description says the user turned off progress prints, or it answers "Not made" to one, skip this section entirely: no print, no question, just start the work. Report the task list with `end_turn`'s `completion` when you have it; Highlights keeps it. Other prints (charts, reports, todo lists) are unaffected.
+
+It shows:
 - what's done and what's under way
 - questions waiting on the user, each with what you'll do if there's no answer
 - anything stuck

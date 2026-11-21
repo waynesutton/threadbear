@@ -150,6 +150,11 @@ export type Config = {
   // the user's latest message asked for one. Off unless runner.json says
   // `printsWhenAsked: true`.
   printsWhenAsked: boolean;
+  // Settings' Progress prints for long tasks: off, create_print refuses a
+  // progress print (source "progress: ...") and says to skip it, so a long
+  // task starts straight away. On unless runner.json says
+  // `progressPrints: false`.
+  progressPrints: boolean;
   // Who reviews, in Mike's order (runner.json `labReviewers`, Settings >
   // General > Code review): the first of another lab with a login that has room does it,
   // on its model and effort if it names them. Unset is Codex then Claude,
@@ -254,6 +259,7 @@ export type RunnerJson = {
   oneReply?: boolean;
   labReview?: boolean;
   printsWhenAsked?: boolean;
+  progressPrints?: boolean;
   labReviewers?: unknown;
   labPanel?: unknown;
   labPanelLines?: unknown;
@@ -509,6 +515,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env, opts: { readOnl
     oneReply: json.oneReply !== false,
     labReview: json.labReview !== false,
     printsWhenAsked: json.printsWhenAsked === true,
+    progressPrints: json.progressPrints !== false,
     ...reviewerLists(json.labReviewers, json.labPanel),
     labPanelLines: typeof json.labPanelLines === 'number' && Number.isFinite(json.labPanelLines) && json.labPanelLines >= 0 ? Math.floor(json.labPanelLines) : LAB_PANEL_LINES,
     // On for everyone since 10 Nov 2026, after a few days as an experiment

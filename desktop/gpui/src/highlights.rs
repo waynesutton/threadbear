@@ -2286,6 +2286,9 @@ impl SidePane {
         if s.brief.is_some() {
             parts.push("a brief".into());
         }
+        if let Some(tasks) = &s.tasks {
+            parts.push(format!("{} tasks", tasks.tasks.len()));
+        }
         for (name, n) in [("pinned", s.pinned.len()), ("files", s.files.len()), ("links", s.links.len()), ("commits", s.commits.len()), ("edited", s.edited.len())] {
             if n > 0 {
                 parts.push(format!("{n} {name}"));
@@ -2538,6 +2541,14 @@ fn highlight_command(side: &Entity<SidePane>, thread: &ThreadSummary, cmd: &Valu
     if let Some(open) = cmd["edited"].as_bool() {
         side.update(cx, |pane, cx| {
             pane.flags.entry(thread.id.clone()).or_default().edited_open = open;
+            cx.notify();
+        });
+        return Ok(json!("ok"));
+    }
+    // The Task list's "N completed" row, open or shut.
+    if let Some(open) = cmd["tasksDone"].as_bool() {
+        side.update(cx, |pane, cx| {
+            pane.flags.entry(thread.id.clone()).or_default().tasks_done_open = open;
             cx.notify();
         });
         return Ok(json!("ok"));

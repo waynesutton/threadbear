@@ -444,6 +444,45 @@ test('only when asked: off unless runner.json turns it on, and settings.update s
   assert.throws(() => rpc['settings.update']!({ printsWhenAsked: 'yes' }), /printsWhenAsked must be a boolean/);
 });
 
+test('progress prints off: a progress print is refused without a card, other prints are made, and it is saved', async () => {
+  const { buildThreadbearTools, isProgressPrint } = await import('../../src/threadbear-mcp.ts');
+  const thread = { id: 'th1', title: 'Work', cwd: home(), projects: [] };
+  const cards: string[] = [];
+  const control = {
+    list: async () => [thread],
+    get: async () => ({ ...thread, permissionMode: 'full' }),
+    events: async () => ({ firstSeq: 1, events: [{ seq: 1, type: 'user.message', text: 'Build the whole feature', images: [] }] }),
+    requestAgentApproval: async (_id: string, req: { title: string }) => { cards.push(req.title); return { decision: 'deny' }; },
+  } as never;
+  const store = new Pages(home());
+  let on = false;
+  const tools = buildThreadbearTools(control, 'th1', Date.now, undefined, undefined, undefined, { pages: () => store, progressPrints: () => on }) as unknown as Tool[];
+  assert.match(tools.find((t) => t.name === 'create_print')!.description, /turned off progress prints/);
+  const refused = await call(tools, 'create_print', { title: 'Build it', summary: '', html: page('a'), source: 'progress: build-it' });
+  assert.equal(refused.err, false, 'a plain answer, not an error, so the agent carries on');
+  assert.match(refused.text, /Not made: the user turned off progress prints/);
+  assert.equal(store.list().length, 0);
+  assert.equal(cards.length, 0, 'never asks first');
+  assert.equal((await call(tools, 'create_print', { title: 'Sales', summary: '', html: page('b'), source: 'sales.csv' })).err, false, 'other prints still work');
+  on = true;
+  assert.equal((await call(tools, 'create_print', { title: 'Build it', summary: '', html: page('c'), source: 'progress: build-it' })).err, false, 'on: made as before');
+  const plain = buildThreadbearTools(control, 'th1', Date.now, undefined, undefined, undefined, { pages: () => store }) as unknown as Tool[];
+  assert.doesNotMatch(plain.find((t) => t.name === 'create_print')!.description, /progress prints/, 'nothing added while on');
+  assert.equal(isProgressPrint(' Progress: x'), true);
+  assert.equal(isProgressPrint('bundle-analyzer summary'), false);
+
+  const { loadConfig } = await import('../../src/config.ts');
+  const { SettingsService, settingsMethods } = await import('../../src/settings.ts');
+  const h = home();
+  const cfg = loadConfig({ THREADBEAR_HOME: h });
+  assert.equal(cfg.progressPrints, true, 'on with nothing in runner.json');
+  const rpc = settingsMethods(new SettingsService({ config: cfg, publish: () => {} }));
+  assert.equal((rpc['settings.update']!({ progressPrints: false }) as { settings: { progressPrints: boolean } }).settings.progressPrints, false);
+  assert.equal(JSON.parse(fs.readFileSync(path.join(h, 'runner.json'), 'utf8')).progressPrints, false, 'saved');
+  assert.equal(loadConfig({ THREADBEAR_HOME: h }).progressPrints, false, 'read back');
+  assert.throws(() => rpc['settings.update']!({ progressPrints: 'no' }), /progressPrints must be a boolean/);
+});
+
 test('todo lists and boards: made from markdown, ticked and moved by click as new versions, a stale click refused', async () => {
   const store = new Pages(home());
   const todo = store.create({ title: 'Launch', summary: '', ownerThread: 't', markdown: '- [ ] Write it\n- [ ] Ship it\n', kind: 'todo' });

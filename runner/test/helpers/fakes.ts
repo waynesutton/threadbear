@@ -216,6 +216,7 @@ export function testConfig(home: string, extra: Partial<Config> = {}): Config {
     // doesn't start a review it isn't about. lab-review.test.ts turns it on.
     labReview: false,
     printsWhenAsked: false,
+    progressPrints: true,
     labPanelLines: 150,
     keepAwake: true,
     models: { pool: 'claude', privateFolders: [] },

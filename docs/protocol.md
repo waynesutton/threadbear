@@ -856,6 +856,10 @@ type Settings = {
                         // to bring in Mike's releases, in days (1 to 365;
                         // 5 by default), only for important ones, or never
                         // (runner.json releases.bringIn; "Mike's releases")
+  progressPrints?: boolean // Progress prints for long tasks (Prints,
+                        // "Progress prints"): false, create_print refuses
+                        // one and says to carry on. On by default; absent
+                        // from an older runner, so a client hides the switch
   printsWhenAsked?: boolean // Prints only when the user asks: create_print
                         // after a message that doesn't ask for one puts an
                         // approval card up first (Prints, "Only when asked").
@@ -1410,7 +1414,7 @@ the summary and then the reply.
 | `accounts.recheck` | `{ accountId? }` | `{ accounts: Account[], accountId?, room?: boolean, extra?: true, backAt?: string, woke?: number, account?: Account, recheckError?: string }`. Refreshes sign-in discovery for one login or all logins. With `accountId`, also asks that login for its current limits and wakes its waiting threads when room returns. If the limits check fails, sign-in discovery still returns, with `recheckError`. Codex reads limits without tokens; Claude uses one short Haiku reply. The app's, never a thread's (the thread-key gate refuses it) |
 | `pools.save` | `{ pools: Pool[] }` | `{ pools: Pool[] }`. Replaces the whole list in `runner.json` (`builtIn` is dropped; an empty list goes back to the built-in ones). `-32602` for a duplicate id, a blank id or title, an empty `accountIds`, or an account id the runner doesn't know. A blank or non-string `icon` is dropped. Every client gets `pools.updated` |
 | `settings.get` | `{}` | `{ settings: Settings }` |
-| `settings.update` | `{ defaultCwd?, idleMinutes?, maxLiveCLIs?, followMain?, bulletReplies?, oneReply?, labReview?, labReviewers?, labPanel?, keepAwake?, bringIn?, printsWhenAsked?, spareWeek?, fullSync?, models?: { pool?: string \| null, privateFolders? }, experiments?: { [id]: boolean } }` | `{ settings: Settings }`. Saves what's given to `runner.json` and applies it straight away, except `followMain` and `fullSync` (next restart). `experiments` sets those switches under runner.json's `experiments`, keeping the rest; `Settings.experiments` lists every one as `{ id, name, does, on }`, oldest first. `defaultCwd` must be an existing folder, `idleMinutes` at least 1, `maxLiveCLIs` 1 to 20, `pool` a pool id or `null`, each `experiments` key an experiment's id, `labReviewers` and `labPanel` each a list of `{ provider, model?, effort? }` with known providers and efforts (the same provider on the same model listed twice in one list counts once; an older app's `panel: true` entries in `labReviewers`, sent without `labPanel`, become the panel and stay in the list); otherwise `-32602` saying which. Every client gets `settings.updated` |
+| `settings.update` | `{ defaultCwd?, idleMinutes?, maxLiveCLIs?, followMain?, bulletReplies?, oneReply?, labReview?, labReviewers?, labPanel?, keepAwake?, bringIn?, printsWhenAsked?, progressPrints?, spareWeek?, fullSync?, models?: { pool?: string \| null, privateFolders? }, experiments?: { [id]: boolean } }` | `{ settings: Settings }`. Saves what's given to `runner.json` and applies it straight away, except `followMain` and `fullSync` (next restart). `experiments` sets those switches under runner.json's `experiments`, keeping the rest; `Settings.experiments` lists every one as `{ id, name, does, on }`, oldest first. `defaultCwd` must be an existing folder, `idleMinutes` at least 1, `maxLiveCLIs` 1 to 20, `pool` a pool id or `null`, each `experiments` key an experiment's id, `labReviewers` and `labPanel` each a list of `{ provider, model?, effort? }` with known providers and efforts (the same provider on the same model listed twice in one list counts once; an older app's `panel: true` entries in `labReviewers`, sent without `labPanel`, become the panel and stay in the list); otherwise `-32602` saying which. Every client gets `settings.updated` |
 | `instructions.get` | `{}` | `{ instructions: StandingInstructions }` (see Standing instructions). `-32601` with the experiment off, and from an older runner: the app then shows no box |
 | `instructions.set` | `{ text: string }` | `{ instructions: StandingInstructions }`. Saves and signs the text, trimmed; an empty one clears them and removes both files. `-32602` for a `text` that isn't a string or is over 20,000 characters, `-32601` as for `instructions.get`. Every client gets `instructions.updated` |
 | `devices.list` | `{}` | `{ devices: Device[], site?: string, reason?: string }` (see Devices). `site` is the website's root while sync is on; `reason` says why nothing can pair when it's off |
@@ -4270,7 +4274,10 @@ The tool takes task updates, merging by ID in first-seen order. Omitted
 tasks retain their state; omitting completion preserves the whole ledger.
 `completion.removeIds` explicitly removes tasks no longer in scope (tool
 input only). The runner emits the merged snapshot, never removeIds. Empty
-ledgers are omitted. Failed or interrupted turns cannot update the ledger.
+ledgers are omitted. A merge that would hold more than 30 tasks drops the
+oldest completed ones (tasks this update didn't name first) until it fits;
+only when the open tasks alone are over 30 is the update refused and the
+ledger left as it was. Failed or interrupted turns cannot update the ledger.
 With the experiment off the tool field and summary are absent; old callers
 remain valid. Stored progress survives restart. Incomplete tasks prevent a
 thread from being treated as finished by automatic helper archiving.
@@ -4280,6 +4287,14 @@ you cards without replacing asks. Neutral action buttons have an amber left
 edge. Existing fonts and manual Archive remain. A missing loose-end check
 never means no loose ends; only a successful empty check makes that claim.
 API 100 mirrors the optional snapshot for other Macs, website and phone.
+
+`threads.highlights` carries the ledger too, as `completion` (see
+Highlights), whenever the experiment is on and the thread has one: unlike
+the summary's copy it isn't limited to while the card is open, and it stays
+after archiving. The GPUI app draws it as Highlights' **Task list** under
+Needs you: blocked then pending first, completed folded under an "N
+completed" row, read only. It's refetched as `lastSeq` moves, so it follows
+each turn's end; mid-turn it's still the last turn's list.
 
 ## A quiet inbox
 
@@ -6775,6 +6790,7 @@ type Page = {
 - **Deleted** pages are kept 7 days (`pages.restore`), then removed with their files when the store next loads.
 - **Agent tools:** `create_print` (`kind`, `markdown`, `mermaid`, `recipe`), `update_print` (`markdown`, `mermaid`, `recipe`, `restoreVersion`), `list_prints` (`deleted`), `read_print` (`version`; shows the recipe, kept versions and Markdown or Mermaid source), `delete_print`, `restore_print`, `export_print`, `publish_print` (always asks the user), `unpublish_print`, `add_print_to_project`, `remove_print_from_project`, only while the experiment is on. `list_prints` and `read_print` never ask. The older arguments still work, and so does each tool's name from before the rename (`create_page` and the rest), for sessions that loaded them.
 - **Only when asked.** With `Settings.printsWhenAsked` on, `create_print`'s description says to make a Print only when the user asks for one, and the runner checks: when the thread's latest `user.message` doesn't name a print, chart, graph, dashboard or diagram (whole words, either number), the call puts an approval card up first ("Make the print "<title>"? You asked to approve Prints you didn't ask for."). Deny makes nothing and tells the agent so. Other Print tools act on one that exists and don't ask.
+- **Progress prints.** With `Settings.progressPrints` false (runner.json `progressPrints: false`; true when absent), `create_print`'s description says progress prints are off and to start work without asking, and a call whose `source` starts with `progress:` (the make-print skill's progress print) makes nothing and answers, not as an error, that it wasn't made and to carry on. No card, so a long task never waits on it. Other Prints are made as usual.
 - **Updates ask once.** In Ask before edits, a Claude session that was allowed one `update_print` (or `update_page`) on a Print id lets later updates to that id through without a card (`printGrants` in `adapters/claude/adapter.ts`), for as long as the session lives. Only an Allow counts; a Deny asks again next time. Other Prints, and other Print tools, still ask. Codex threads ask every time.
 - **Skills.** `make-print` builds charts, dashboards and reports from CSV, TSV, JSON or XLSX through a spec, and exports PDFs; `bundle-report` is its recipe for Convex bundle size. Both live in the user's skills folder, not the repo.
 - **In a reply**, an agent shows a print with a ```` ```print <id> ```` block (```` ```page ````, its name before the rename, still works; the id in the info string, or alone on the fence's one line; `PageFence`). The Mac app draws it as a card (`PageCardCell`, "Preview on top", Wayne picked it on 10 Nov 2026): the top of the newest version's `index.html` from `pages.get`, drawn off screen under the html block's lockdown at 1080 by 470 and scaled down, over a footer with the kind, title, version and age and Open, Refresh and a ⋯ menu. It follows `pages.updated`, so every card naming a page shows its newest version; a version newer than the first made in the last 15 minutes is marked "New version". With the experiment off, or in an app that doesn't know pages, the block shows as code.

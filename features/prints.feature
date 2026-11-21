@@ -51,6 +51,23 @@ Feature: Prints
     When I open Settings on "general"
     Then Settings has no Prints switch
 
+  # Off, a long task starts straight away with no progress Print and no question.
+  @prints.progress @swift-pending
+  Scenario: Settings can turn progress Prints for long tasks off
+    Given the app is connected to a runner with the demo threads
+    When I open Settings on "general"
+    Then Settings says long tasks get progress Prints
+    When I press "Let threads keep a progress Print on long tasks. Off, they start the work without one" in Settings
+    Then Settings says long tasks start without a progress Print
+
+  @prints.progress @manual
+  Scenario: With progress Prints off, a long task starts without one
+    Given Prints is on and "Progress prints for long tasks" is off in Settings
+    When I ask a thread for a task with more than five steps
+    Then it starts the work without making a progress Print
+    And no card asks me about one
+    And other Prints, like a chart I ask for, are still made
+
   @prints.whenasked @manual
   Scenario: Only make Prints when I ask holds back a Print nobody asked for
     Given Prints is on and "Only make Prints when I ask" is on in Settings

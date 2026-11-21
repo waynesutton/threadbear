@@ -129,6 +129,11 @@ export const SERVER_NAME = 'threadbear';
 // Whether a message asks for a Print, for Only make Prints when I ask.
 // "page", "doc" and "report" are left out: ordinary coding requests use
 // them, and they'd wave every Print through.
+// The make-print skill's progress print names its source "progress: <slug>".
+export function isProgressPrint(source: string | undefined): boolean {
+  return /^\s*progress\s*:/i.test(source ?? '');
+}
+
 export function asksForPrint(text: string): boolean {
   return /\b(prints?|charts?|graphs?|dashboards?|diagrams?)\b/i.test(text);
 }
@@ -296,6 +301,9 @@ export function buildThreadbearTools(
     // asks first unless the user's latest message asked for one.
     tasks?: () => import('./tasks.ts').Tasks | undefined;
     printsWhenAsked?: () => boolean;
+    // Settings' Progress prints for long tasks (progressPrints): off,
+    // create_print refuses one and says to carry on without it.
+    progressPrints?: () => boolean;
     // The once-a-turn note asking for a card in plain words (needs.ts,
     // plainCardNudge). Off only in tests about the rest of end_turn, which
     // would otherwise each have to answer it first.
@@ -982,6 +990,9 @@ export function buildThreadbearTools(
   // out while it's on.
   const pageStore = opts.pages?.();
   const whenAsked = opts.printsWhenAsked?.() === true;
+  // Said only while it's off, so the standing context doesn't grow for
+  // everyone with it on (context-budget.json).
+  const noProgress = opts.progressPrints?.() === false;
   const pageLine = (p: PageRecord): string =>
     `${p.id}  ${!p.kind || p.kind === 'page' ? 'print' : p.kind}  v${p.version}  "${p.title}"${p.live ? '  live' : ''}${p.deletedAt ? `  deleted ${p.deletedAt}` : ''}  ${p.projects.length ? `in ${p.projects.map((x) => x.id).join(', ')}` : 'no project'}  thread ${p.ownerThread.slice(0, 8)}  ${p.updatedAt}${p.editedBy === 'user' ? '  edited by the user' : ''}${p.published ? `  published${printLink(opts.printPublisher?.()?.site(), p.published.slug) ? ` at ${printLink(opts.printPublisher?.()?.site(), p.published.slug)}` : ''}` : ''}${p.summary ? `\n  ${p.summary}` : ''}`;
   const showPage = async (p: PageRecord, show: boolean | undefined): Promise<string> => {
@@ -1003,7 +1014,7 @@ export function buildThreadbearTools(
     ? [
         tool(
           'create_print',
-          `Makes a Print: a named, versioned page Threadbear keeps (a chart, dashboard, report, doc, diagram, todo list or kanban board). Update it with update_print. Use make-print for charts and dashboards; give mermaid for diagrams. Static HTML, CSS and SVG unless live is true. Show it with a \`\`\`print <id>\`\`\` block. If one from the same source exists (list_prints), update it instead.${whenAsked ? ' Only when the user asks for one: they turned on asking first for any other.' : ''}`,
+          `Makes a Print: a named, versioned page Threadbear keeps (a chart, dashboard, report, doc, diagram, todo list or kanban board). Update it with update_print. Use make-print for charts and dashboards; give mermaid for diagrams. Static HTML, CSS and SVG unless live is true. Show it with a \`\`\`print <id>\`\`\` block. If one from the same source exists (list_prints), update it instead.${whenAsked ? ' Only when the user asks for one: they turned on asking first for any other.' : ''}${noProgress ? ' The user turned off progress prints for long tasks: make none, and start the work without asking.' : ''}`,
           {
             title: z.string().min(1).max(MAX_TITLE).describe('Short, what it shows: "Bundle size".'),
             summary: z.string().max(MAX_SUMMARY).describe('One or two lines of what it says now, for lists and other apps.'),
@@ -1016,6 +1027,11 @@ export function buildThreadbearTools(
             show: z.boolean().optional().describe('Open it in the side pane now.'),
           },
           handle(async (input, extra) => {
+            // A progress print while they're off: refused without a card, so a
+            // long task never waits on a question about it (Wayne, 21 Nov).
+            if (opts.progressPrints?.() === false && isProgressPrint(input.source)) {
+              return 'Not made: the user turned off progress prints for long tasks in Settings. Carry on with the work without one; the thread\'s task list keeps track.';
+            }
             const me = (await all()).find((t) => t.id === selfId);
             const unasked = opts.printsWhenAsked?.() === true && !asksForPrint(await latestUserText()) ? [`Make the print "${input.title}"? You asked to approve Prints you didn't ask for`] : [];
             await confirm('create_print', unasked, { title: input.title, ...(input.dir ? { dir: input.dir } : {}) }, extra?.signal);
@@ -2760,13 +2776,13 @@ async function taskAgent(control: ThreadControl, selfId: string): Promise<{ kind
     return { kind: 'agent', name: 'Agent' };
   }
 }
-export function threadbearMcpServer(control: ThreadControl, selfId: string, schedules?: ScheduleControl, projects?: ProjectControl, appRestarts?: AppRestartControl, bulletReplies: () => boolean = () => true, pocket?: () => PocketControl | undefined, oneReply: () => boolean = () => false, gateway?: () => string | undefined, gatewayHealth?: () => Promise<ConnectorService[] | undefined>, remote?: () => RemoteControl | undefined, xSearch?: () => { secretsDir: string } | undefined, pages?: () => Pages | undefined, printPublisher?: () => PagePublisher | undefined, printsWhenAsked?: () => boolean, tasks?: () => import('./tasks.ts').Tasks | undefined, clearerCompletion?: () => boolean): McpSdkServerConfigWithInstance {
+export function threadbearMcpServer(control: ThreadControl, selfId: string, schedules?: ScheduleControl, projects?: ProjectControl, appRestarts?: AppRestartControl, bulletReplies: () => boolean = () => true, pocket?: () => PocketControl | undefined, oneReply: () => boolean = () => false, gateway?: () => string | undefined, gatewayHealth?: () => Promise<ConnectorService[] | undefined>, remote?: () => RemoteControl | undefined, xSearch?: () => { secretsDir: string } | undefined, pages?: () => Pages | undefined, printPublisher?: () => PagePublisher | undefined, printsWhenAsked?: () => boolean, tasks?: () => import('./tasks.ts').Tasks | undefined, clearerCompletion?: () => boolean, progressPrints?: () => boolean): McpSdkServerConfigWithInstance {
   const one = oneReply();
   const server = createSdkMcpServer({
     name: SERVER_NAME,
     version: RUNNER_VERSION,
     instructions: serverInstructions(selfId, { one, bulletReplies: bulletReplies(), pocket: Boolean(pocket?.()), projects: Boolean(projects) }),
-    tools: buildThreadbearTools(control, selfId, Date.now, schedules, projects, appRestarts, { bulletReplies, pocket, oneReply: () => one, gateway, gatewayHealth, remote, xSearch, pages, printPublisher, printsWhenAsked, tasks, clearerCompletion }),
+    tools: buildThreadbearTools(control, selfId, Date.now, schedules, projects, appRestarts, { bulletReplies, pocket, oneReply: () => one, gateway, gatewayHealth, remote, xSearch, pages, printPublisher, printsWhenAsked, tasks, clearerCompletion, progressPrints }),
   });
   server.tools = [...ALWAYS_ASK_TOOLS].map((name) => ({ name: name.split('__').at(-1)!, permission_policy: 'always_ask' as const }));
   return server;
