@@ -56,6 +56,9 @@ export type AcpAdapterDeps = {
   // The runner's data dir, where an agent keeps what Threadbear gives it
   // (Grok's hook: grok-guard.ts).
   dataDir?: string;
+  // More MCP servers for every session, read at each start: the Connectors
+  // gateway for an agent whose own config can't carry it (main.ts).
+  extraMcpServers?: () => Promise<unknown[]>;
 };
 
 // "Always allow" for a file edit: the thread's edits, while they aren't to
@@ -291,6 +294,11 @@ export class AcpSession implements AgentSession {
       const url = await this.mcp.listen();
       mcpServers = [{ type: 'http', name: 'threadbear', url, headers: [{ name: 'Authorization', value: `Bearer ${this.mcp.token}` }] }];
       this.ownTools = new Set(defs.map((d) => `threadbear__${d.name}`));
+    }
+    if (this.init.agentCapabilities?.mcpCapabilities?.http && deps.extraMcpServers) {
+      // Without them the thread still starts; the dep logs why.
+      mcpServers = [...mcpServers, ...(await deps.extraMcpServers().catch(() => []))];
+      if (this.state !== 'starting') return;
     }
 
     let res: SessionResult;

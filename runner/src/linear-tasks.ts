@@ -11,7 +11,7 @@
 // change does to the task (convex/tasksLinear.ts). No model is involved.
 import { randomUUID } from 'node:crypto';
 import type { Logger } from './log.ts';
-import { helperHeaders, parseRpc } from './notion-tasks.ts';
+import { helperForAgent, helperHeaders, parseRpc } from './notion-tasks.ts';
 import { credentialUrlProblem } from './secure-url.ts';
 import type { NativeTask, TaskLink, TaskPriority } from './tasks.ts';
 
@@ -644,7 +644,6 @@ export function linearMethods(l: LinearTasks): Record<string, (p: Record<string,
 // threadbear agent's token instead (runner.json connectors.linearHeadersHelper wins).
 export function linearHelper(mainHelper: string, override?: string): string | undefined {
   if (override?.trim()) return override.trim();
-  const m = /^(.*headers\.sh['"]?)\s+\S+\s*$/.exec(mainHelper.trim());
-  return m ? `${m[1]} threadbear` : undefined;
+  return helperForAgent(mainHelper, 'threadbear');
 }
 export { helperHeaders };

@@ -2264,6 +2264,15 @@ The gateway is optional: it's a small server of your own
 service once for all your logins and Macs. Without one, agents use
 claude.ai's connectors alone, and Notion boards on projects aren't read.
 
+Claude and Codex threads find the gateway in their own config, which
+plugbear's `install-clients.sh` writes. Cursor and OpenCode threads get it
+from Threadbear instead, added to each session, as plugbear can't write
+their config and Threadbear keeps OpenCode's from loading. That needs the
+agent in the gateway with a token in your Keychain: add `cursor` or
+`opencode` to plugbear's `agents.json`, run `connectors agent add cursor`
+and save the token under the Keychain service `connectors` with the agent
+id as the account. Without one, the thread starts without Connectors.
+
 Once there's a gateway, the Connectors icon (the plug) near the bottom of
 the left-hand rail opens a panel listing the gateway's services and whether each is signed in. A blue
 dot on the icon means one is signed out: click Connect beside it, and its

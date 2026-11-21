@@ -1,5 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { helperForAgent } from '../../src/notion-tasks.ts';
 import { LinearTasks, LinearError, describe as describeIssue, issueKey, issueRow, linearCaller, linearHelper, marker, picturesOf, priorityNumber, waitingFor, webLinks, type CallResult } from '../../src/linear-tasks.ts';
 import type { NativeTask } from '../../src/tasks.ts';
 
@@ -143,6 +144,13 @@ test('the Threadbear login is the main helper asked for the threadbear agent', (
   assert.equal(linearHelper('/Users/x/.config/connectors/headers.sh claude'), '/Users/x/.config/connectors/headers.sh threadbear');
   assert.equal(linearHelper('/Users/x/.config/connectors/headers.sh claude', '/opt/mine.sh'), '/opt/mine.sh');
   assert.equal(linearHelper('/opt/other-helper'), undefined);
+});
+
+test("another agent's helper swaps only the agent id, and refuses an id that is not one", () => {
+  assert.equal(helperForAgent("'/Users/x/.config/connectors/headers.sh' claude", 'cursor'), "'/Users/x/.config/connectors/headers.sh' cursor");
+  assert.equal(helperForAgent('/Users/x/.config/connectors/headers.sh codex', 'opencode'), '/Users/x/.config/connectors/headers.sh opencode');
+  assert.equal(helperForAgent('/Users/x/.config/connectors/headers.sh claude', 'x; rm -rf ~'), undefined);
+  assert.equal(helperForAgent('/opt/other-helper', 'cursor'), undefined);
 });
 
 test('Linear is offered only when it is connected and the backend is new enough', async () => {

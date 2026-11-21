@@ -105,6 +105,15 @@ export function helperHeaders(command: string): () => Promise<Record<string, str
     });
 }
 
+// The headers helper for another of the gateway's agents. install-clients.sh
+// writes one headers.sh that takes the agent id as its last word, so the
+// main login's command with that word swapped reads that agent's token.
+export function helperForAgent(mainHelper: string, agentId: string): string | undefined {
+  if (!/^[a-z0-9-]+$/.test(agentId)) return undefined;
+  const m = /^(.*headers\.sh['"]?)\s+\S+\s*$/.exec(mainHelper.trim());
+  return m ? `${m[1]} ${agentId}` : undefined;
+}
+
 // The gateway's MCP URL and headers helper from the main login's
 // ~/.claude.json, as connectors.ts finds its base. runner.json's
 // connectors.headersHelper wins for the helper.

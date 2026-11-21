@@ -44,7 +44,7 @@ afterEach(async () => {
   for (const d of made.splice(0)) fs.rmSync(d, { recursive: true, force: true });
 });
 
-function rig(o: { mode?: PermissionMode; agent?: AcpAgent; env?: Record<string, string>; opts?: Partial<StartSessionOptions>; deny?: boolean; answer?: (r: ToolApprovalRequest) => ToolApprovalAnswer | Promise<ToolApprovalAnswer>; question?: (r: QuestionRequest) => QuestionAnswer | Promise<QuestionAnswer> } = {}) {
+function rig(o: { mode?: PermissionMode; agent?: AcpAgent; env?: Record<string, string>; opts?: Partial<StartSessionOptions>; deny?: boolean; answer?: (r: ToolApprovalRequest) => ToolApprovalAnswer | Promise<ToolApprovalAnswer>; question?: (r: QuestionRequest) => QuestionAnswer | Promise<QuestionAnswer>; extraMcpServers?: () => Promise<unknown[]> } = {}) {
   const root = tmp();
   made.push(root);
   const cwd = path.join(root, 'work');
@@ -83,6 +83,7 @@ function rig(o: { mode?: PermissionMode; agent?: AcpAgent; env?: Record<string, 
     log: nullLogger,
     env: { PATH: process.env.PATH, FAKE_ACP_LOG: logFile, ...o.env },
     timings: { closeWaitMs: 300 },
+    ...(o.extraMcpServers ? { extraMcpServers: o.extraMcpServers } : {}),
   });
   const start = (): AcpSession => {
     const s = adapter.start(
@@ -372,6 +373,19 @@ test('resume goes through session/resume, with no first-message preamble', async
   await turn(r, s, 'hello');
   assert.ok(r.log().some((l) => l.resumed === 'ses-old'));
   assert.ok(!r.log().some((l) => String(l.prompt ?? '').includes('SECRET BRIEF')));
+});
+
+test('the Connectors gateway rides along in session/new; a helper that fails leaves it out', async () => {
+  const gateway = { type: 'http', name: 'connectors', url: 'http://127.0.0.1:8795/mcp', headers: [{ name: 'Authorization', value: 'Bearer cn_opencode_x' }] };
+  const r = rig({ extraMcpServers: async () => [gateway] });
+  await turn(r, r.start(), 'hello');
+  const servers = r.log().find((l) => l.newSession)?.newSession.mcpServers as { name: string }[];
+  assert.deepEqual(servers.find((m) => m.name === 'connectors'), gateway);
+
+  const broken = rig({ extraMcpServers: () => Promise.reject(new Error('no token')) });
+  await turn(broken, broken.start(), 'hello');
+  const left = broken.log().find((l) => l.newSession)?.newSession.mcpServers as { name: string }[];
+  assert.ok(!left.some((m) => m.name === 'connectors'));
 });
 
 // ---- Turns

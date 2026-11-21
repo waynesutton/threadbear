@@ -57,7 +57,7 @@ import { Librarian, librarianMethods } from './librarian.ts';
 import { ConnectorsMonitor, connectorsMethods, findLauncher, gatewayBase, gatewayIsLocal, readLocalIds, type StaticClientDeps } from './connectors.ts';
 import { ownsGateway } from './static-clients.ts';
 import { GatewayApprovals, GatewayApprovalsClient, slackDescribe } from './gateway-approvals.ts';
-import { TaskBoards, gatewayCaller, helperHeaders } from './notion-tasks.ts';
+import { TaskBoards, gatewayCaller, helperForAgent, helperHeaders } from './notion-tasks.ts';
 import { createLogger } from './log.ts';
 import { hidIdleMs, isAtMac, screenLocked } from './presence.ts';
 import { ThreadStore } from './store.ts';
@@ -479,6 +479,24 @@ async function main(): Promise<void> {
     onNotice: (text) => runner.notice('warning', text),
     extraGuidance: () => RICH_BLOCKS_LINE,
   });
+  // Cursor and OpenCode get Connectors as an MCP server in each session:
+  // install-clients.sh can't write their config, and Threadbear keeps
+  // OpenCode from loading its own (acp/agents.ts). Grok isn't here, as
+  // plugbear wires it in ~/.grok. Only for an agent with a gateway token:
+  // headers.sh fails without one and the thread starts without Connectors.
+  const ACP_GATEWAY_AGENTS: ReadonlySet<AcpProvider> = new Set(['cursor', 'opencode']);
+  const acpGatewayServers = (p: AcpProvider) => async (): Promise<unknown[]> => {
+    const client = cfg.connectorsClient;
+    const helper = client && ACP_GATEWAY_AGENTS.has(p) ? helperForAgent(client.headersHelper, p) : undefined;
+    if (!client || !helper) return [];
+    try {
+      const headers = await helperHeaders(helper)();
+      return [{ type: 'http', name: 'connectors', url: client.mcpUrl, headers: Object.entries(headers).map(([name, value]) => ({ name, value })) }];
+    } catch (e) {
+      log.info('Starting without Connectors', { provider: p, reason: (e as Error).message });
+      return [];
+    }
+  };
   // One process per live thread on an agent that speaks ACP, off unless the
   // experiment is on (they find no account, and refuse to start without it).
   const acpAdapters = Object.fromEntries(
@@ -492,6 +510,7 @@ async function main(): Promise<void> {
         toolsFor: codexStyleTools,
         extraGuidance: () => RICH_BLOCKS_LINE,
         dataDir: cfg.home,
+        extraMcpServers: acpGatewayServers(p),
       }),
     ]),
   );
