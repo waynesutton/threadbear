@@ -379,12 +379,12 @@ test('the Connectors gateway rides along in session/new; a helper that fails lea
   const gateway = { type: 'http', name: 'connectors', url: 'http://127.0.0.1:8795/mcp', headers: [{ name: 'Authorization', value: 'Bearer cn_opencode_x' }] };
   const r = rig({ extraMcpServers: async () => [gateway] });
   await turn(r, r.start(), 'hello');
-  const servers = r.log().find((l) => l.newSession)?.newSession.mcpServers as { name: string }[];
+  const servers = (r.log().find((l) => l.newSession)?.newSession as { mcpServers: { name: string }[] }).mcpServers;
   assert.deepEqual(servers.find((m) => m.name === 'connectors'), gateway);
 
   const broken = rig({ extraMcpServers: () => Promise.reject(new Error('no token')) });
   await turn(broken, broken.start(), 'hello');
-  const left = broken.log().find((l) => l.newSession)?.newSession.mcpServers as { name: string }[];
+  const left = (broken.log().find((l) => l.newSession)?.newSession as { mcpServers: { name: string }[] }).mcpServers;
   assert.ok(!left.some((m) => m.name === 'connectors'));
 });
 
