@@ -161,9 +161,9 @@ export type SyncConfig = {
 // lower one means its backend hasn't been deployed since this runner was:
 // said in runner.status, tb status and the log rather than stopping, since
 // the runner only adds to what it sends while the number stays the same.
-// 104 in this copy's backend: Mike's 81 to 95, then this copy's own 96 to
-// 104 (Prints, webhooks, Tasks, completion; convex/version.ts).
-export const BACKEND_API_VERSION = 104;
+// 105 in this copy's backend: Mike's 81 to 95, then this copy's own 96 to
+// 105 (Prints, webhooks, Tasks, completion, Tasks and Linear; convex/version.ts).
+export const BACKEND_API_VERSION = 105;
 // Optional agent-reported task summaries on thread cards (this copy's: 85,
 // moved to 100 when Mike's release took 81 to 95, 20 Nov 2026).
 export const COMPLETION_API_VERSION = 100;
