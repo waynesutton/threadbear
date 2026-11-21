@@ -5,7 +5,7 @@ import crypto from 'node:crypto';
 import path from 'node:path';
 import type { ImageRef, PlanEntry, ToolKind } from '../../protocol.ts';
 import { diffLines } from '../../diff.ts';
-import { displayPath, truncateInput } from '../../tools.ts';
+import { displayPath, mcpWebTitle, toolKind as sharedToolKind, truncateInput } from '../../tools.ts';
 import { firstLineSafely } from '../../safe-cut.ts';
 import { truncateResultText, type NormalizerContext } from '../context.ts';
 import type { AdapterOutput } from '../types.ts';
@@ -293,8 +293,9 @@ export class AcpNormalizer {
     if (t.emitted) return;
     t.emitted = true;
     const name = canonicalToolName(t.name || t.title || t.acpKind || 'tool');
-    const kind = name.startsWith('mcp__') ? 'mcp' : toolKind(t.acpKind);
-    out.push({ kind: 'event', event: { type: 'tool.call', itemId: t.id, name, kind, title: this.title(t), input: truncateInput(t.input) } });
+    const kind = name.startsWith('mcp__') ? sharedToolKind(name) : toolKind(t.acpKind);
+    const title = (name.startsWith('mcp__') && mcpWebTitle(name, t.input)) || this.title(t);
+    out.push({ kind: 'event', event: { type: 'tool.call', itemId: t.id, name, kind, title, input: truncateInput(t.input) } });
   }
 
   private emitDiffs(t: Tool, out: AdapterOutput[]): void {

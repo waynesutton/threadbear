@@ -13,7 +13,7 @@ import type { EventBody, Hunk, ImageRef, PlanEntry, ToolKind, UsageResets, Usage
 import { isEffortLevel } from '../../protocol.ts';
 import type { AdapterOutput, BackgroundTask, TurnResult } from '../types.ts';
 import { truncateResultText, type NormalizerContext } from '../context.ts';
-import { displayPath, toolTitle, truncateInput } from '../../tools.ts';
+import { displayPath, toolKind, toolTitle, truncateInput } from '../../tools.ts';
 import type { Logger } from '../../log.ts';
 import { isSpace } from '../../linear-text.ts';
 import { cutSafely, firstLineSafely } from '../../safe-cut.ts';
@@ -528,13 +528,13 @@ export class CodexNormalizer {
       case 'mcpToolCall': {
         const name = `mcp__${item.server}__${item.tool}`;
         const input = objectInput(item.arguments);
-        call(name, 'mcp', toolTitle(name, input, this.ctx.cwd), input);
+        call(name, toolKind(name), toolTitle(name, input, this.ctx.cwd), input);
         break;
       }
       case 'dynamicToolCall': {
         const name = item.namespace ? `mcp__${item.namespace}__${item.tool}` : String(item.tool ?? 'tool');
         const input = objectInput(item.arguments);
-        call(name, item.namespace ? 'mcp' : 'other', toolTitle(name, input, this.ctx.cwd), input);
+        call(name, item.namespace ? toolKind(name) : 'other', toolTitle(name, input, this.ctx.cwd), input);
         break;
       }
       case 'webSearch': {

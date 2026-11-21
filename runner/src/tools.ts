@@ -36,8 +36,61 @@ const KINDS: Record<string, ToolKind> = {
 };
 
 export function toolKind(name: string): ToolKind {
+  if (mcpWebTool(name)) return 'web';
   if (name.startsWith('mcp__')) return 'mcp';
   return KINDS[name] ?? 'other';
+}
+
+// Web search and page reads that come through an MCP server (Firecrawl, Exa,
+// directly or through the Connectors gateway) read as web lines, the same as
+// WebSearch and WebFetch. Matched on the last part of the name, so any
+// server prefix works.
+const MCP_WEB_TOOLS: Record<string, 'search' | 'read' | 'map'> = {
+  firecrawl_search: 'search',
+  web_search_exa: 'search',
+  web_search_advanced_exa: 'search',
+  firecrawl_scrape: 'read',
+  web_fetch_exa: 'read',
+  firecrawl_map: 'map',
+};
+
+function mcpWebTool(name: string): 'search' | 'read' | 'map' | undefined {
+  if (!name.startsWith('mcp__') || name.startsWith('mcp__threadbear__')) return undefined;
+  const last = name.slice(name.lastIndexOf('__') + 2);
+  return Object.hasOwn(MCP_WEB_TOOLS, last) ? MCP_WEB_TOOLS[last] : undefined;
+}
+
+// A treg call's endpoint names what it is: `web.<provider>.search` or
+// `<provider>.web.answer`. Its kind stays mcp, since its query sits inside
+// params, which the app's web lines don't look in.
+function tregWebTitle(input: Record<string, unknown>): string | undefined {
+  const endpoint = str(input.endpoint_id).toLowerCase();
+  if (!endpoint.startsWith('web.') && !/(^|\.)web\.(search|answer|extract)/.test(endpoint)) return undefined;
+  const slots = [input.params, input.query, input.body, input].filter(
+    (v): v is Record<string, unknown> => Boolean(v) && typeof v === 'object' && !Array.isArray(v),
+  );
+  const pick = (...keys: string[]) => {
+    for (const o of slots) for (const k of keys) if (str(o[k])) return str(o[k]);
+    for (const o of slots) for (const k of keys) if (Array.isArray(o[k]) && str((o[k] as unknown[])[0])) return str((o[k] as unknown[])[0]);
+    return '';
+  };
+  const q = pick('q', 'query');
+  if (q && !/extract/.test(endpoint)) return `Search the web for ${firstLine(q, 80)}`;
+  const url = pick('url', 'urls');
+  if (url) return `Read ${firstLine(url)}`;
+  return q ? `Search the web for ${firstLine(q, 80)}` : undefined;
+}
+
+export function mcpWebTitle(name: string, input: Record<string, unknown>): string | undefined {
+  const web = mcpWebTool(name);
+  if (web === 'search') return `Search the web for ${firstLine(str(input.query), 80)}`;
+  if (web === 'read') {
+    const urls = Array.isArray(input.urls) ? input.urls : [];
+    return `Read ${firstLine(str(input.url) || str(urls[0]))}`.trim();
+  }
+  if (web === 'map') return `Map ${firstLine(str(input.url))}`.trim();
+  if (/^mcp__(?:.+__)?treg__call$/.test(name)) return tregWebTitle(input);
+  return undefined;
 }
 
 export const EDIT_TOOLS = new Set(['Edit', 'MultiEdit', 'Write']);
@@ -154,6 +207,8 @@ export function toolTitle(name: string, input: Record<string, unknown>, cwd: str
     default:
       if (name.startsWith('mcp__threadbear__')) return threadbearTitle(name.slice('mcp__threadbear__'.length), input);
       if (name.startsWith('mcp__')) {
+        const web = mcpWebTitle(name, input);
+        if (web) return web;
         const [, server, ...rest] = name.split('__');
         return `${server}: ${rest.join('__')}`;
       }
