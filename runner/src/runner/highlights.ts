@@ -8,6 +8,7 @@ import type { PanelPlace, PanelRequest, ThreadSummary } from '../protocol.ts';
 import { ErrorCode, RpcError } from '../protocol.ts';
 import { cutOut } from '../store.ts';
 import { emptyHighlights, MAX_URL, observe as observeHighlights, pinItem, remove as removeHighlight, unpin as unpinHighlight, upsert as upsertHighlight, view as highlightsView, absolute, type ThreadHighlights } from '../highlights.ts';
+import { experimentOn } from '../experiments.ts';
 import { PANEL_ACK_WAIT_MS, PANEL_PLACES, resolvePanel } from '../panel-requests.ts';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -20,7 +21,11 @@ export const highlightsPart = {
   highlights(this: Runner, threadId: string): ThreadHighlights {
     const st = this.mustGet(threadId);
     this.catchUpHighlights(st);
-    return highlightsView(st.rec.highlights!, st.rec.brief);
+    // The task ledger rides along so Highlights keeps the list the done card
+    // drops once Mike replies. Unlike the summary's copy it isn't gated on the
+    // card being open, or on the thread being live: this is its record.
+    const completion = experimentOn(this.cfg.home, 'clearerCompletion') ? st.rec.completion : undefined;
+    return highlightsView(st.rec.highlights!, st.rec.brief, completion);
   },
 
   removeHighlight(this: Runner, threadId: string, highlightId: string): { thread: ThreadSummary } {

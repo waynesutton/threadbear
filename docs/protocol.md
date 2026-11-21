@@ -5690,6 +5690,10 @@ type ThreadHighlights = {
                         // at most 200
   brief?: { text: string; at: string } // the librarian's line on where
                         // the thread is up to (see Projects)
+  completion?: ThreadCompletion // the agent's task ledger (Clearer
+                        // completion), while that experiment is on: the
+                        // same list the done card shows, kept after Mike
+                        // replies and after archiving, for the Tasks section
 }
 ```
 

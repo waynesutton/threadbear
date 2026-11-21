@@ -23,7 +23,21 @@ export function mergeCompletion(previous: ThreadCompletion | undefined, input: u
   const tasks = new Map((previous?.tasks ?? []).map(t => [t.id, { ...t }]));
   for (const id of removed) tasks.delete(id);
   for (const t of updates) tasks.set(t.id, t);
-  if (tasks.size > MAX_COMPLETION_TASKS) return previous;
+  // A long thread keeps adding requests, and dropping the whole update at 30
+  // left its list quietly stuck. Finished work is the least useful to keep, so
+  // the oldest completed tasks go first; only open work past the cap is refused.
+  if (tasks.size > MAX_COMPLETION_TASKS) {
+    const fresh = new Set(updates.map(t => t.id));
+    for (const [id, t] of tasks) {
+      if (tasks.size <= MAX_COMPLETION_TASKS) break;
+      if (t.status === 'completed' && !fresh.has(id)) tasks.delete(id);
+    }
+    for (const [id, t] of tasks) {
+      if (tasks.size <= MAX_COMPLETION_TASKS) break;
+      if (t.status === 'completed') tasks.delete(id);
+    }
+    if (tasks.size > MAX_COMPLETION_TASKS) return previous;
+  }
   return tasks.size ? { tasks: [...tasks.values()] } : undefined;
 }
 

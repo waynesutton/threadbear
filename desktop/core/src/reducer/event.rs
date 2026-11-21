@@ -1206,7 +1206,7 @@ impl CompletionStatus {
 }
 
 impl CompletionSummary {
-    fn decode(value: &Value) -> Option<Self> {
+    pub fn decode(value: &Value) -> Option<Self> {
         let tasks: Option<Vec<_>> = value.get("tasks")?.as_array()?.iter().map(|task| {
             let id = task.get("id")?.as_str()?.trim();
             let title = task.get("title")?.as_str()?.trim();
@@ -1231,6 +1231,19 @@ impl CompletionSummary {
         if completed == total && total == 1 { "1 task completed".to_owned() }
         else if completed == total { format!("All {total} {noun} completed") }
         else { format!("{completed} of {total} {noun} completed") }
+    }
+
+    /// Blocked first, then pending, each in the agent's order: what's left,
+    /// for Highlights' Tasks section, which folds the completed ones away.
+    pub fn open_tasks(&self) -> Vec<&CompletionTask> {
+        let mut open: Vec<&CompletionTask> = self.tasks.iter().filter(|t| t.status == CompletionStatus::Blocked).collect();
+        open.extend(self.tasks.iter().filter(|t| t.status == CompletionStatus::Pending));
+        open
+    }
+
+    /// Completed tasks, newest first: the agent adds new work at the end.
+    pub fn completed_tasks(&self) -> Vec<&CompletionTask> {
+        self.tasks.iter().rev().filter(|t| t.status == CompletionStatus::Completed).collect()
     }
 }
 

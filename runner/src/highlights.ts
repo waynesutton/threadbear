@@ -10,7 +10,7 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import type { PersistedEvent } from './protocol.ts';
+import type { PersistedEvent, ThreadCompletion } from './protocol.ts';
 import { replaceLinks, trimEndOf } from './linear-text.ts';
 import { isLocalPath } from './platform.ts';
 
@@ -39,6 +39,8 @@ export type ThreadHighlights = {
   highlights: Highlight[];
   edited: string[];
   brief?: { text: string; at: string };
+  // The agent's task ledger, for Highlights' Tasks section (Clearer completion).
+  completion?: ThreadCompletion;
 };
 
 // Kept on the thread record.
@@ -182,11 +184,12 @@ export function upsert(state: HighlightState, h: Highlight): boolean {
 }
 
 // Pins first, newest pin first; the rest by their latest mention.
-export function view(state: HighlightState, brief?: { text: string; at: string }): ThreadHighlights {
+export function view(state: HighlightState, brief?: { text: string; at: string }, completion?: ThreadCompletion): ThreadHighlights {
   const pins = state.items.filter((h) => h.how === 'pinned').sort((a, b) => b.seq - a.seq);
   const rest = state.items.filter((h) => h.how !== 'pinned').sort((a, b) => b.lastSeq - a.lastSeq);
   const out: ThreadHighlights = { highlights: [...pins, ...rest].map(({ ...h }) => h), edited: [...state.edited] };
   if (brief) out.brief = brief;
+  if (completion?.tasks.length) out.completion = structuredClone(completion);
   return out;
 }
 

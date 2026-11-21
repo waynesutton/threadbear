@@ -30,6 +30,23 @@ test('invalid, duplicate and over-limit updates cannot erase or complete earlier
   assert.equal(mergeCompletion(first, { tasks: [], removeIds: ['a'] }), undefined);
 });
 
+test('a merge past 30 drops the oldest completed tasks first, and keeps every open one', () => {
+  const full = mergeCompletion(undefined, { tasks: Array.from({ length: 30 }, (_, i) => task(`t${i}`, i < 20 ? 'completed' : 'pending')) })!;
+  const next = mergeCompletion(full, { tasks: [task('n1'), task('n2', 'completed'), task('n3', 'blocked')] })!;
+  assert.equal(next.tasks.length, 30);
+  assert.deepEqual(next.tasks.slice(0, 2).map(t => t.id), ['t3', 't4']);
+  assert.ok(next.tasks.filter(t => t.status !== 'completed').length === 12);
+  assert.deepEqual(next.tasks.slice(-3).map(t => t.id), ['n1', 'n2', 'n3']);
+});
+
+test('a merge is refused only when the open tasks alone are over 30', () => {
+  const open = mergeCompletion(undefined, { tasks: Array.from({ length: 30 }, (_, i) => task(`o${i}`)) })!;
+  assert.equal(mergeCompletion(open, { tasks: [task('extra')] }), open);
+  const finishing = mergeCompletion(open, { tasks: [task('o0', 'completed'), task('extra')] })!;
+  assert.equal(finishing.tasks.length, 30);
+  assert.ok(!finishing.tasks.some(t => t.id === 'o0'));
+});
+
 function setup(on: boolean) {
   const home = tmpDir();
   fs.writeFileSync(path.join(home, 'runner.json'), JSON.stringify({ experiments: { clearerCompletion: on, quietInbox: true } }));
@@ -93,4 +110,20 @@ test('task progress persists and an unfinished helper stays out of automatic arc
   assert.equal(h.runner.get(id).completion?.tasks[0].status, 'blocked', 'read_thread can recover the ledger during its next active turn');
   finish(h, id);
   assert.equal(h.runner.get(id).completion?.tasks[0].status, 'blocked', 'omitting progress does not finish old tasks');
+});
+
+test('Highlights carry the task ledger with the experiment on, after a reply and after archiving', () => {
+  for (const on of [false, true]) {
+    const h = setup(on);
+    const id = h.runner.create({ text: 'Do two things' }).thread.id;
+    finish(h, id, { tasks: [task('a', 'completed'), task('b')] });
+    assert.equal(Boolean(h.runner.highlights(id).completion), on);
+    if (!on) continue;
+    h.runner.send(id, 'Something else');
+    assert.equal(h.runner.get(id).completion?.tasks.length, 2);
+    finish(h, id);
+    h.runner.update({ threadId: id, archived: true });
+    assert.equal(h.runner.get(id).completion, undefined, 'the summary drops the card once archived');
+    assert.deepEqual(h.runner.highlights(id).completion?.tasks, [task('a', 'completed'), task('b')], 'Highlights keep it as the record');
+  }
 });

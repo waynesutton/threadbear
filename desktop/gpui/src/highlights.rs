@@ -25,6 +25,7 @@ use std::time::Duration;
 use threadbear_client::runner::Client;
 use threadbear_core::highlights::{self as core, fold, Highlight, HighlightKind, HighlightSections, Panel, ProjectInfo, ProjectRow, Schedule, ThreadHighlights};
 use threadbear_core::inbox::ThreadSummary;
+use threadbear_core::reducer::{CompletionStatus, CompletionSummary};
 use threadbear_core::sidebar as side;
 use crate::tips::Tip as _;
 
@@ -143,6 +144,8 @@ fn restored_preview(open: &crate::pane_store::Open, from: &str) -> PanePreview {
 #[derive(Clone, Copy, Debug, Default)]
 pub(crate) struct RowFlags {
     pub edited_open: bool,
+    /// Tasks' completed ones, folded until Mike opens them.
+    pub tasks_done_open: bool,
     pub all_links: bool,
     pub all_commits: bool,
     pub all_subagents: bool,
@@ -1720,6 +1723,11 @@ impl SidePane {
                 }
             }
         }
+        // The agent's task list (Clearer completion), kept after the done card
+        // goes: what's left first, the finished ones folded under a row.
+        if let Some(tasks) = &sections.tasks {
+            list = list.child(self.tasks_block(tasks, flags.tasks_done_open, thread.id.clone(), p, cx));
+        }
         // The thread's projects, each under its own icon with why it's there
         // behind an ⓘ, then the places Mike keeps going back to for it.
         for row in &projects {
@@ -1944,6 +1952,61 @@ impl SidePane {
             })
             .render(p, cx)
             .into_any_element()
+    }
+
+    fn tasks_block(&mut self, tasks: &CompletionSummary, done_open: bool, thread_id: String, p: Palette, cx: &mut Context<Self>) -> AnyElement {
+        let open = tasks.open_tasks();
+        let done = tasks.completed_tasks();
+        let folded = self.is_folded(fold::TASKS);
+        let mut list = v_flex();
+        list = list.child(self.heading(Heading { key: fold::TASKS.to_owned(), title: "Task list".into(), icon: Some(icon("checklist", 11., p.secondary).into_any_element()), count: Some(open.len()), folded, foldable: true, accessory: None }, p, cx));
+        if folded {
+            return list.into_any_element();
+        }
+        // Says whose list it is, so it isn't taken for one Threadbear checked.
+        list = list.child(
+            div().px(px(LEADING)).pt(px(2.)).pb(px(4.)).text_size(px(style::size::DETAIL)).text_color(p.secondary)
+                .child(format!("{}. Reported by the agent.", tasks.heading())),
+        );
+        for task in &open {
+            let blocked = task.status == CompletionStatus::Blocked;
+            list = list.child(
+                PaneRow::new(SharedString::from(format!("hl-task-{}", task.id)), task.title.clone())
+                    .icon(if blocked { "exclamationmark.circle" } else { "circle" })
+                    .tinted(blocked.then(|| style::needs_you_text(cx)))
+                    .trailing(Some(task.status.label().to_owned()))
+                    .tip(if blocked { "Blocked, as the agent last reported it" } else { "Still to do, as the agent last reported it" })
+                    .render(p, cx),
+            );
+        }
+        if !done.is_empty() {
+            let id = thread_id.clone();
+            list = list.child(
+                PaneRow::new("hl-tasks-done", format!("{} completed", done.len()))
+                    .icon(if done_open { "chevron.down" } else { "chevron.right" })
+                    .quiet()
+                    .tip(if done_open { "Hide the completed tasks" } else { "Show the completed tasks" })
+                    .on_click(move |this, _window, cx| {
+                        let flags = this.flags.entry(id.clone()).or_default();
+                        flags.tasks_done_open = !flags.tasks_done_open;
+                        cx.notify();
+                    })
+                    .render(p, cx),
+            );
+            if done_open {
+                for task in done {
+                    list = list.child(
+                        PaneRow::new(SharedString::from(format!("hl-task-{}", task.id)), task.title.clone())
+                            .icon("checkmark")
+                            .tinted(Some(style::tick_green(cx)))
+                            .indent()
+                            .tip("Completed, as the agent reported it")
+                            .render(p, cx),
+                    );
+                }
+            }
+        }
+        list.into_any_element()
     }
 
     fn edited_rows(&mut self, paths: &[String], open: bool, thread: &ThreadSummary, p: Palette, cx: &mut Context<Self>) -> AnyElement {
@@ -2308,6 +2371,18 @@ impl SidePane {
         if !asks.is_empty() {
             let rows = asks.iter().map(|a| json!({ "title": crate::files::plain_markdown(&a.action), "detail": a.where_text(), "symbol": if a.ticked == Some(true) { "checkmark.square.fill" } else { "square" }, "ticked": a.ticked == Some(true) })).collect();
             add(fold::NEEDS_YOU, "Needs you", asks.iter().filter(|a| a.ticked != Some(true)).count(), rows, &mut out);
+        }
+        if let Some(tasks) = &sections.tasks {
+            let mut rows: Vec<Value> = tasks.open_tasks().iter().map(|t| json!({ "title": t.title, "trailing": t.status.label(), "symbol": if t.status == CompletionStatus::Blocked { "exclamationmark.circle" } else { "circle" } })).collect();
+            let done = tasks.completed_tasks();
+            if !done.is_empty() {
+                rows.push(json!({ "title": format!("{} completed", done.len()), "symbol": if flags.tasks_done_open { "chevron.down" } else { "chevron.right" } }));
+                if flags.tasks_done_open {
+                    rows.extend(done.iter().map(|t| json!({ "title": t.title, "symbol": "checkmark" })));
+                }
+            }
+            pane.insert("tasksHeading".into(), json!(tasks.heading()));
+            add(fold::TASKS, "Task list", tasks.open_tasks().len(), rows, &mut out);
         }
         for row in &projects {
             let rows = row.project.links.iter().map(|l| {

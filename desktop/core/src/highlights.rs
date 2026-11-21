@@ -6,6 +6,7 @@
 // draws from these, and the tests are the Swift ones (HighlightsTests,
 // StartedThreadRowsTests).
 use crate::inbox::{parse_ms, Project, ThreadSummary};
+use crate::reducer::CompletionSummary;
 use crate::sidebar;
 use chrono::{DateTime, TimeZone};
 use serde::Deserialize;
@@ -129,6 +130,8 @@ pub struct ThreadHighlights {
     pub highlights: Vec<Highlight>,
     pub edited: Vec<String>,
     pub brief: Option<String>,
+    /// The agent's task ledger (Clearer completion), from a runner that sends it.
+    pub completion: Option<CompletionSummary>,
 }
 
 impl ThreadHighlights {
@@ -139,6 +142,7 @@ impl ThreadHighlights {
             highlights: value.get("highlights").and_then(Value::as_array).into_iter().flatten().filter_map(Highlight::decode).collect(),
             edited: value.get("edited").and_then(Value::as_array).into_iter().flatten().filter_map(|v| v.as_str().map(str::to_owned)).collect(),
             brief: value.get("brief").and_then(|b| b.get("text")).and_then(Value::as_str).map(str::to_owned),
+            completion: value.get("completion").and_then(CompletionSummary::decode),
         }
     }
 }
@@ -209,6 +213,7 @@ pub const SUBAGENT_LIMIT: usize = 5;
 /// away (asked 3 Nov); a project's is its own, as only its threads show it.
 pub mod fold {
     pub const NEEDS_YOU: &str = "needsYou";
+    pub const TASKS: &str = "taskList";
     pub const SCHEDULED: &str = "scheduled";
     pub const SUBAGENTS: &str = "subagents";
     pub const STARTED_THREADS: &str = "startedThreads";
@@ -226,6 +231,8 @@ pub mod fold {
 #[derive(Clone, Debug, PartialEq, Default)]
 pub struct HighlightSections {
     pub brief: Option<String>,
+    /// The agent's task list ("Task list"), shown under Needs you.
+    pub tasks: Option<CompletionSummary>,
     pub pinned: Vec<Highlight>,
     pub files: Vec<Highlight>,
     /// Links and pull requests.
@@ -240,6 +247,7 @@ impl HighlightSections {
         let mut out = HighlightSections::default();
         let brief = highlights.brief.as_deref().unwrap_or("").trim();
         out.brief = (!brief.is_empty()).then(|| brief.to_owned());
+        out.tasks = highlights.completion.clone().filter(|c| !c.tasks.is_empty());
         for item in &highlights.highlights {
             if item.is_pinned() {
                 out.pinned.push(item.clone());
@@ -267,7 +275,7 @@ impl HighlightSections {
     }
 
     pub fn is_empty(&self) -> bool {
-        self.brief.is_none() && self.pinned.is_empty() && self.files.is_empty() && self.links.is_empty() && self.commits.is_empty() && self.edited.is_empty()
+        self.brief.is_none() && self.tasks.is_none() && self.pinned.is_empty() && self.files.is_empty() && self.links.is_empty() && self.commits.is_empty() && self.edited.is_empty()
     }
 
     /// The first `limit` of a group (they come newest first) and how many more
@@ -1538,6 +1546,30 @@ mod tests {
         assert!(!sections.is_empty());
         assert!(HighlightSections::build(&ThreadHighlights::default()).is_empty());
         assert!(HighlightSections::build(&ThreadHighlights { brief: Some("  ".into()), ..Default::default() }).is_empty());
+    }
+
+    #[test]
+    fn tasks_come_from_the_ledger_open_first_completed_newest_first() {
+        let decoded = ThreadHighlights::decode(&serde_json::json!({
+            "highlights": [], "edited": [],
+            "completion": { "tasks": [
+                { "id": "a", "title": "Plan", "status": "completed" },
+                { "id": "b", "title": "Build", "status": "pending" },
+                { "id": "c", "title": "Ship", "status": "blocked" },
+                { "id": "d", "title": "Docs", "status": "completed" },
+            ] }
+        }));
+        let sections = HighlightSections::build(&decoded);
+        let tasks = sections.tasks.as_ref().expect("a ledger makes a Tasks section");
+        assert_eq!(tasks.heading(), "2 of 4 tasks completed");
+        assert_eq!(tasks.open_tasks().iter().map(|t| t.title.as_str()).collect::<Vec<_>>(), ["Ship", "Build"]);
+        assert_eq!(tasks.completed_tasks().iter().map(|t| t.title.as_str()).collect::<Vec<_>>(), ["Docs", "Plan"]);
+        assert!(!sections.is_empty(), "a task list alone is something to show");
+        // An older runner, or the experiment off: no completion, no section.
+        assert!(HighlightSections::build(&ThreadHighlights::decode(&serde_json::json!({ "highlights": [], "edited": [] }))).tasks.is_none());
+        // A row this app can't read leaves the whole list out rather than miscounting.
+        let odd = ThreadHighlights::decode(&serde_json::json!({ "highlights": [], "edited": [], "completion": { "tasks": [{ "id": "a", "title": "x", "status": "done" }] } }));
+        assert!(odd.completion.is_none());
     }
 
     #[test]
