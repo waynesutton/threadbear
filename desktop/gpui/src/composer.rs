@@ -144,7 +144,17 @@ pub struct Composer {
     /// words go out with Set and are never kept.
     pub(crate) token_field: Option<(String, Entity<gpui_kit::component::input::InputState>)>,
     pub(crate) token_sub: Option<Subscription>,
+    /// Fast lane armed for the next turn (icon-only bolt beside Send).
+    pub(crate) fast_armed: bool,
+    /// Fast lane turn currently in flight on this box, for the pulsing bolt cue.
+    fast_in_flight: Option<FastFlight>,
     _subs: Vec<Subscription>,
+}
+
+#[derive(Clone, Copy)]
+enum FastFlight {
+    Dispatching(Instant),
+    Running,
 }
 
 /// An edit under way: the message's seq, what was in the box before, and
@@ -245,8 +255,9 @@ impl Composer {
                 // Kept across a quit (drafts.rs).
                 if let Some(app) = this.app.upgrade() {
                     // Not for the box emptying after a send: that would start
-                    // one for a thread nobody is writing.
-                    let new_thread = this.thread_id.is_none() && !this.input.read(cx).value().trim().is_empty();
+                    // one for a thread nobody is writing. Also skip warming a
+                    // coding CLI while Fast lane is armed.
+                    let new_thread = this.thread_id.is_none() && !this.fast_armed && !this.input.read(cx).value().trim().is_empty();
                     app.update(cx, |app, cx| {
                         app.drafts_changed(cx);
                         // A new thread's CLI, started again if the box's
@@ -306,6 +317,8 @@ impl Composer {
             pending_mentions: vec![],
             token_field: None,
             token_sub: None,
+            fast_armed: false,
+            fast_in_flight: None,
             palette: PaletteState::default(),
             bear_gate: Default::default(),
             bear_selected: 0,
@@ -652,10 +665,31 @@ impl Composer {
         composer::can_send(&text, images.len()) || !self.card.picks.is_empty() || !self.card.next_picks.is_empty() || !self.card.explain.is_empty()
     }
 
+    /// Whether the Fast lane toggle and shortcuts are available on this box.
+    pub(crate) fn fast_lane_available(&self, cx: &App) -> bool {
+        self.editing.is_none() && self.app.upgrade().is_some_and(|a| a.read(cx).experiment_on(crate::fast_lane::EXPERIMENT))
+    }
+
+    /// Flip Fast lane arming for the next turn.
+    pub(crate) fn toggle_fast_armed(&mut self, cx: &mut Context<Self>) {
+        if !self.fast_lane_available(cx) {
+            self.fast_armed = false;
+            return;
+        }
+        self.fast_armed = !self.fast_armed;
+        cx.notify();
+    }
+
     /// AppModel.send: the box empties at once and the message shows dimmed
     /// at the end of the transcript until the runner has it; it comes back
     /// if the runner doesn't take it.
     pub(crate) fn send(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        self.send_with_fast(None, window, cx);
+    }
+
+    /// Send using either the current Fast lane toggle (`None`) or an explicit
+    /// one-shot override (`Some(true)` for Option + Enter).
+    fn send_with_fast(&mut self, fast_override: Option<bool>, window: &mut Window, cx: &mut Context<Self>) {
         if self.loading_pictures(cx) || self.refuse_dead_chip(cx) { return; }
         // The arrow hops as Return lands, when there's something to send
         // (Mike picked it, 13 Nov). None under Reduce Motion.
@@ -666,8 +700,9 @@ impl Composer {
         if self.moving_line(cx).is_some() {
             return;
         }
+        let fast = fast_override.unwrap_or(self.fast_armed) && self.fast_lane_available(cx);
         if self.thread_id.is_none() {
-            return self.send_new_thread(window, cx);
+            return self.send_new_thread_with_fast(fast, window, cx);
         }
         if self.editing.is_some() {
             return self.send_edit(cx);
@@ -705,9 +740,14 @@ impl Composer {
         self.input.update(cx, |s, cx| s.set_value("", window, cx));
         self.forget_chips();
         self.clear_picks(cx);
+        // Fast lane always resets right after dispatch so the next turn defaults to normal.
+        self.fast_armed = false;
+        if fast {
+            self.fast_in_flight = Some(FastFlight::Dispatching(Instant::now()));
+        }
         let composer = cx.entity().downgrade();
         let restore = RestoreDraft { text: draft_text, images, card: picks, as_sent: None };
-        pane.update(cx, |p, cx| p.send_message(text, images_to_send, answers, Some(restore), composer, cx));
+        pane.update(cx, |p, cx| p.send_message_with_fast(text, images_to_send, answers, Some(restore), composer, fast, cx));
         if !edits.is_empty() {
             crate::draft_boxes::note_edits_sent(&thread, cx);
         }
@@ -716,15 +756,19 @@ impl Composer {
 
     /// `AppModel.send(threadId: nil)`: the new-thread page's box. The words
     /// stay (greyed, locked) until the thread exists; a failure leaves them.
-    fn send_new_thread(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+    fn send_new_thread_with_fast(&mut self, fast: bool, window: &mut Window, cx: &mut Context<Self>) {
         let (draft_text, images) = self.draft(cx);
         let text = composer::sent_text(&draft_text, 1).trim().to_string();
         if text.is_empty() && images.is_empty() {
             return;
         }
+        self.fast_armed = false;
+        if fast {
+            self.fast_in_flight = Some(FastFlight::Dispatching(Instant::now()));
+        }
         let stored = self.input.read(cx).value().to_string();
         if let Some(app) = self.app.upgrade() {
-            app.update(cx, |app, cx| app.send_new_thread(text, images, stored, window, cx));
+            app.update(cx, |app, cx| app.send_new_thread_with_fast(text, images, stored, fast, window, cx));
         }
     }
 
@@ -1608,8 +1652,20 @@ impl Composer {
                 .children(crate::key_hints::hint(self.app.upgrade().and_then(|a| a.read(cx).shortcut_display(threadbear_core::shortcuts::ShortcutCommand::Stop)), crate::key_hints::Placement::Before))
                 .into_any_element();
         }
-        let tip = if running { "Send (into this turn)" } else { "Send (Return)" };
-        let (fg, bg) = if can_send { (cx.theme().background, cx.theme().foreground) } else { (style::faint_text(cx), style::send_faint_fill(cx)) };
+        let tip = if self.fast_armed {
+            "Fast web search (Return)"
+        } else if running {
+            "Send (into this turn)"
+        } else {
+            "Send (Return)"
+        };
+        let (fg, bg) = if can_send && self.fast_armed {
+            (gpui_kit::white().into(), style::accent(cx))
+        } else if can_send {
+            (cx.theme().background, cx.theme().foreground)
+        } else {
+            (style::faint_text(cx), style::send_faint_fill(cx))
+        };
         circle()
             .id("composer-send")
             .test_support()
@@ -1656,8 +1712,28 @@ impl Composer {
             // Greyed and locked while a new thread is being made from it, or
             // while its thread moves to another machine.
             .when(creating, |s| s.opacity(0.5))
-            .capture_key_down(cx.listener(|this, event: &KeyDownEvent, _, cx| {
+            .capture_key_down(cx.listener(|this, event: &KeyDownEvent, window, cx| {
                 let m = event.keystroke.modifiers;
+                let key = event.keystroke.key.as_str();
+                // Option + Command + F (Alt + Ctrl + F off macOS) toggles Fast lane.
+                let toggle_fast = if cfg!(target_os = "macos") {
+                    m.alt && m.platform && !m.shift && !m.control && key.eq_ignore_ascii_case("f")
+                } else {
+                    m.alt && m.control && !m.shift && !m.platform && key.eq_ignore_ascii_case("f")
+                };
+                if toggle_fast && this.fast_lane_available(cx) {
+                    this.toggle_fast_armed(cx);
+                    cx.stop_propagation();
+                    window.prevent_default();
+                    return;
+                }
+                // Option + Enter (Alt + Enter) fires a one-shot Fast lane search.
+                if m.alt && !m.shift && !m.control && !m.platform && key == "enter" && this.fast_lane_available(cx) {
+                    this.send_with_fast(Some(true), window, cx);
+                    cx.stop_propagation();
+                    window.prevent_default();
+                    return;
+                }
                 if m.shift || m.control || m.alt || m.platform {
                     let input = this.input.read(cx);
                     this.bear_gate.dismissed_at = threadbear_core::bears::token(&input.value().to_string(), input.selected_range().end).map(|r| r.start);
@@ -1725,6 +1801,11 @@ impl Composer {
                 } else if this.editing.as_ref().is_some_and(|e| !e.sending) {
                     // Esc while editing a message leaves the edit.
                     this.cancel_editing(window, cx);
+                    cx.stop_propagation();
+                } else if this.fast_armed {
+                    // Esc disarms Fast lane so the box returns to normal coding mode.
+                    this.fast_armed = false;
+                    cx.notify();
                     cx.stop_propagation();
                 }
             }))
@@ -1842,10 +1923,16 @@ impl Render for Composer {
         self.renumber_chips(cx);
         // With answers picked the box is for anything else; under asks with
         // none picked it's the way to answer in other words.
+        let fast_available = self.fast_lane_available(cx);
+        if !fast_available {
+            self.fast_armed = false;
+            self.fast_in_flight = None;
+        }
         let moving = self.moving_line(cx);
         let placeholder: SharedString = match &moving {
             Some(line) => line.clone().into(),
             None if self.editing.is_some() => "Your message…".into(),
+            None if self.fast_armed => crate::fast_lane::PLACEHOLDER.into(),
             None => self.card_placeholder(cx).into(),
         };
         if self.shown_placeholder != placeholder {
@@ -1858,11 +1945,47 @@ impl Render for Composer {
         }
         let strip = self.render_strip(window, cx);
         let creating = self.creating(cx);
+        // Track in-flight Fast lane state for the pulsing bolt indicator.
+        match self.fast_in_flight {
+            Some(FastFlight::Dispatching(_)) if running || creating => {
+                self.fast_in_flight = Some(FastFlight::Running);
+            }
+            Some(FastFlight::Dispatching(at)) if at.elapsed() > std::time::Duration::from_secs(4) => {
+                self.fast_in_flight = None;
+            }
+            Some(FastFlight::Running) if !running && !creating => {
+                self.fast_in_flight = None;
+            }
+            _ => {}
+        }
         // Typing, answering and sending wait while the thread moves.
         let locked = creating || moving.is_some();
         let send_button = self.render_send_button(running, creating, cx);
         // Right-click it to send the message later (composer_send.rs).
         let send_button = self.with_send_menu(send_button, cx);
+        // Fast lane icon-only bolt directly to the left of Send (fast_lane.rs).
+        let send_button = if fast_available {
+            let state = if self.fast_in_flight.is_some() {
+                crate::fast_lane::ButtonState::Sending
+            } else if self.fast_armed {
+                crate::fast_lane::ButtonState::Armed
+            } else {
+                crate::fast_lane::ButtonState::Off
+            };
+            let composer = cx.entity().downgrade();
+            crate::fast_lane::beside_send(
+                send_button,
+                state,
+                move |_, _, cx| {
+                    if let Some(c) = composer.upgrade() {
+                        c.update(cx, |c, cx| c.toggle_fast_armed(cx));
+                    }
+                },
+                cx,
+            )
+        } else {
+            send_button
+        };
         // Voice's microphone to its left, while Voice is on (voice/button.rs).
         let send_button = crate::voice::button::beside_send(send_button, self.thread_id.as_deref(), &self.app, cx);
         let controls = self.render_controls(send_button, window, cx);
@@ -1936,7 +2059,7 @@ impl Render for Composer {
                     // sits its 14 in from the box's own edge, and the needs-you
                     // edge (1 pt in the accent, otherwise a 0.5 hairline)
                     // moves nothing. First, so the rest draws over it.
-                    .child(div().absolute().inset_0().rounded(px(style::COMPOSER_RADIUS)).border(px(if needs_you { 1. } else { 0.5 })).border_color(if needs_you { style::accent(cx) } else { style::hairline(cx) }))
+                    .child(div().absolute().inset_0().rounded(px(style::COMPOSER_RADIUS)).border(px(if self.fast_armed { 1.5 } else if needs_you { 1. } else { 0.5 })).border_color(if self.fast_armed || needs_you { style::accent(cx) } else { style::hairline(cx) }))
                     // Clicking anywhere in the box off the words (its padding,
                     // the gap over the controls, beside them) puts the cursor
                     // in the text. Claimed, or the page or pane behind it,

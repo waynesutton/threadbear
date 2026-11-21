@@ -52,6 +52,7 @@ import { Reinstaller } from './reinstall.ts';
 import { MacScreen } from './mac-screen.ts';
 import { Tasks, relatedFor, taskMethods } from './tasks.ts';
 import { LinearTasks, linearCaller, linearHelper, linearMethods } from './linear-tasks.ts';
+import { fastLaneFromConfig } from './fast-lane.ts';
 import { Projects, drainProjectMethods, projectMethods } from './projects.ts';
 import { Librarian, librarianMethods } from './librarian.ts';
 import { ConnectorsMonitor, connectorsMethods, findLauncher, gatewayBase, gatewayIsLocal, readLocalIds, type StaticClientDeps } from './connectors.ts';
@@ -574,6 +575,7 @@ async function main(): Promise<void> {
       if (!appRestarts.isWatching(threadId)) appRestarts.watch(threadId);
     },
     awaitingAppRestart: (threadId) => appRestarts.isWatching(threadId),
+    fastLane: fastLaneFromConfig(cfg.connectorsClient, cfg.fastLane, log),
   });
   publishSkills = (n) => runner.publish(n);
   // Live CLIs pick a skills change up before their next message.

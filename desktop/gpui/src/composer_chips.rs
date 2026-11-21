@@ -351,17 +351,24 @@ impl Composer {
                 }
             }
         }
+        let dim_for_fast = self.fast_armed;
         if let Some(settings) = data.settings() {
+            let mut coding = h_flex().items_center().gap(px(4.)).min_w_0();
             // With pools the runner picks the login, so there's no account chip.
             if !settings.uses_pools() {
-                row = row.child(self.render_account_chip(&data, cx)).child(chip_divider(cx));
+                coding = coding.child(self.render_account_chip(&data, cx)).child(chip_divider(cx));
             }
-            row = row.child(self.render_model_chip(&data, window, cx)).child(chip_divider(cx));
-            row = row.child(self.render_permission_chip(settings.permission_mode.clone(), &composer, cx));
+            coding = coding.child(self.render_model_chip(&data, window, cx)).child(chip_divider(cx));
+            coding = coding.child(self.render_permission_chip(settings.permission_mode.clone(), &composer, cx));
+            // Dim coding chips while Fast lane is armed so it is unmistakable the turn bypasses them.
+            if dim_for_fast {
+                coding = coding.opacity(0.35);
+            }
+            row = row.child(coding);
         }
         row = row.child(div().flex_1());
         if let Some(meter) = data.summary.as_ref().and_then(|t| ContextMeter::new(t.context_tokens, t.context_window)) {
-            row = row.child(div().flex_none().child(self.render_context_ring(meter, &data)));
+            row = row.child(div().flex_none().when(dim_for_fast, |d| d.opacity(0.35)).child(self.render_context_ring(meter, &data)));
         }
         // In a narrow panel the chips' titles give way ("Claude · Fab…"),
         // never the send button, which stays inside the box (the Swift

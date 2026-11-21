@@ -1239,6 +1239,11 @@ impl ThreadPane {
     /// restarts, it waits in the transcript for the new one ("Runner
     /// restarting. Sends when it's back."). `draft` is what to give back.
     pub(crate) fn send_message(&mut self, text: String, images: Vec<ImageRef>, answers: Value, draft: Option<crate::composer::RestoreDraft>, composer: WeakEntity<Composer>, cx: &mut Context<Self>) {
+        self.send_message_with_fast(text, images, answers, draft, composer, false, cx);
+    }
+
+    /// Sends a message, optionally routing the turn through the read-only Fast lane (`fast: true`).
+    pub(crate) fn send_message_with_fast(&mut self, text: String, images: Vec<ImageRef>, answers: Value, draft: Option<crate::composer::RestoreDraft>, composer: WeakEntity<Composer>, fast: bool, cx: &mut Context<Self>) {
         // Sending moves on from whatever went wrong before; a send that
         // fails says so again.
         self.error = None;
@@ -1297,6 +1302,9 @@ impl ThreadPane {
         }
         if !answers.is_null() {
             params["answers"] = answers;
+        }
+        if fast {
+            params["fast"] = json!(true);
         }
         let (tx, mut rx) = futures::channel::mpsc::unbounded::<SendStep>();
         let told = tx.clone();

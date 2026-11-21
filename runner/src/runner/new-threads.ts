@@ -20,6 +20,8 @@ import type { ThreadState } from '../runner.ts';
 import { checkImages, effortTitle, isClaudeModel, modelRow, modelTitle, newRuntime, oneLine, titleFrom, userMessage } from '../runner.ts';
 import { providerInfo, providerName } from '../providers.ts';
 import { cutSafely } from '../safe-cut.ts';
+import { experimentOn } from '../experiments.ts';
+import { parseFastQuery } from '../fast-lane.ts';
 
 export const newThreadsPart = {
   create(this: Runner, params: {
@@ -49,9 +51,21 @@ export const newThreadsPart = {
     // The CLI the app had started ahead of it (threads.warm,
     // runner/warm-start.ts): the thread is made under its id.
     warmId?: string;
+    // Route the first turn through the read-only Fast lane web lookup
+    // (experiment `fastLane`, runner/src/fast-lane.ts).
+    fast?: boolean;
   }): { thread: ThreadSummary; turnId: string } {
     if (!params.text && !params.images?.length) throw new RpcError(ErrorCode.badParams, 'text or images required');
     checkImages(params.images ?? []);
+    const fastLaneOn = experimentOn(this.cfg.home, 'fastLane');
+    if (params.fast === true && !fastLaneOn) {
+      throw new RpcError(ErrorCode.badParams, 'Fast lane is off. Turn on Fast lane in Settings > General > Experiments.');
+    }
+    const parsedFast = parseFastQuery(params.text ?? '', params.fast === true);
+    const fastRequested = fastLaneOn && parsedFast.fast;
+    if (fastRequested && !parsedFast.query) {
+      throw new RpcError(ErrorCode.badParams, 'Fast web search needs a text question.');
+    }
     const projectIds = [...(params.projectIds ?? [])];
     if (projectIds.length) {
       const projects = this.projects;
@@ -83,7 +97,7 @@ export const newThreadsPart = {
         /* a project that's gone since is skipped */
       }
     }
-    const spare = params.id === undefined && !projectIds.length && !bear ? this.claimSpare(params.warmId) : undefined;
+    const spare = params.id === undefined && !projectIds.length && !bear && !fastRequested ? this.claimSpare(params.warmId) : undefined;
     let made;
     try {
       made = this.makeThread(withBear, spare ? { id: spare.id, sessionId: spare.sessionId } : undefined);
@@ -94,7 +108,7 @@ export const newThreadsPart = {
     const { st, notes, loginNote } = made;
     if (spare) st.rt.spare = spare;
     if (projectIds.length) this.projects!.changeMembership(st.rec.id, { add: projectIds, by: 'mike' });
-    const turnId = this.sendTo(st, params.text ?? '', params.images ?? [], { origin: params.origin, scheduleId: params.scheduleId });
+    const turnId = this.sendTo(st, params.text ?? '', params.images ?? [], { origin: params.origin, scheduleId: params.scheduleId, ...(params.fast === true ? { fast: true } : {}) });
     // Under the first turn, so they read as part of starting it.
     for (const text of notes) this.emit(st, { type: 'system.note', text }, st.rt.turn?.turnId ?? turnId);
     // Kept on show by its shape, as moveLogin's is (is_login_note).
