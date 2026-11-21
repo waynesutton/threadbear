@@ -15,7 +15,7 @@ Requires backend API 105 for Linear, 104 for the eight columns and deleting them
 
 ## Lives in
 
-`convex/tasks.ts`, `convex/taskFields.ts` and their schema tables; `runner/src/tasks.ts` and its RPC/tool wiring; `desktop/gpui/src/tasks_page.rs` and Command-7; `web/src/tasks.tsx` and `tasks.css`. Due times and reminders (API 103): `runner/src/task-reminders.ts`, `tasks:claimReminder`, the sliders popover's Notifications and `desktop/gpui/src/notify.rs`. Linear (API 105): `convex/tasksLinear.ts`, `runner/src/linear-tasks.ts` (`linear.*` RPCs and the sync sweep), `desktop/gpui/src/linear_send.rs` and `linear_import.rs`, the Linear chip in `web/src/tasks.tsx`, and the gateway's `threadbear` agent and its rules in Connectors' `policy.json`.
+`convex/tasks.ts`, `convex/taskFields.ts` and their schema tables; `runner/src/tasks.ts` and its RPC/tool wiring; `desktop/gpui/src/tasks_page.rs` and Command-7; `web/src/tasks.tsx` and `tasks.css`. Due times and reminders (API 103): `runner/src/task-reminders.ts`, `tasks:claimReminder`, the sliders popover's Notifications and `desktop/gpui/src/notify.rs`. Linear (API 105): `convex/tasksLinear.ts`, `runner/src/linear-tasks.ts` (`linear.*` RPCs and the sync sweep), `desktop/gpui/src/linear_send.rs` and `linear_import.rs`, the Linear chip in `web/src/tasks.tsx`, and the gateway's `threadbear` agent and its rules in Connectors' `policy.json`. Favorites and keys (API 106): `favorite` on tasks, `desktop/gpui/src/task_keys.rs`, and the star in `web/src/tasks.tsx`.
 
 ## Taking it out
 

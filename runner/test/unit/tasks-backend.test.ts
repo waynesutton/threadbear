@@ -34,6 +34,19 @@ test('create retries do not duplicate or overwrite and updates patch only given 
   assert.equal(items[0].status, 'done');
   assert.ok(items[0].position > 0);
 });
+test('favorite is set and cleared by update and leaves the task where it is', async () => {
+  const b = await setup();
+  await b.run('create', { id: 'f', title: 'Star me' });
+  await b.run('update', { id: 'f', status: 'doing' });
+  await b.run('update', { id: 'f', favorite: true });
+  let { items } = await b.run('list');
+  assert.equal(items[0].favorite, true);
+  assert.equal(items[0].status, 'doing');
+  await b.run('update', { id: 'f', favorite: false });
+  ({ items } = await b.run('list'));
+  assert.equal(items[0].favorite, false);
+  assert.equal(items[0].status, 'doing');
+});
 test('delete and restore are idempotent and preserve the task', async () => {
   const b = await setup();
   await b.run('create', { id: 'a', title: 'Recover me' });

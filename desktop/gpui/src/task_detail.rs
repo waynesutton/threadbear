@@ -728,6 +728,12 @@ impl TasksPage {
             .children(index.map(|i| div().text_size(px(12.)).text_color(tertiary).child(format!("{} of {}", i + 1, order.len()))))
             .child(Button::new("task-prev").icon(icons::symbol("chevron.up")).small().ghost().tooltip("Previous task (K)").disabled(!index.is_some_and(|i| i > 0)).on_click(cx.listener(|this, _, window, cx| this.step_task(-1, window, cx))))
             .child(Button::new("task-next").icon(icons::symbol("chevron.down")).small().ghost().tooltip("Next task (J)").disabled(!index.is_some_and(|i| i + 1 < order.len())).on_click(cx.listener(|this, _, window, cx| this.step_task(1, window, cx))))
+            .child({
+                let fav = row.clone();
+                Button::new("task-favorite").icon(keys::favorite_icon(row.favorite, 14., cx)).small().ghost()
+                    .tooltip(if row.favorite { "Remove from Favorites (⌥F)" } else { "Add to Favorites (⌥F)" })
+                    .on_click(cx.listener(move |this, _, _, cx| this.toggle_favorite(&fav, cx)))
+            })
             .child({ let id = row.id.clone(); Button::new("task-delete").label("Delete").small().ghost().tooltip("Delete the task. You can undo it.").on_click(cx.listener(move |this, _, window, cx| this.ask_delete(id.clone(), window, cx))) })
             .child(self.more_menu(row, cx));
 

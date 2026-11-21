@@ -518,6 +518,7 @@ function TasksContent({ token, projectFilter = '', issues = false }: { token: st
         {issues && t.priority && <PriorityIcon priority={t.priority} />}
         <button className="task-title" title="Open task" onClick={() => openEditor(t)}>
           <span>{t.title}</span>
+          {t.favorite && <span className="task-favorite" title="In Favorites in the Mac app" aria-label="Favorite">★</span>}
           {t.notes && <NoteIcon />}
         </button>
         {issueMeta(t)}

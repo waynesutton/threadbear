@@ -23,6 +23,9 @@ actions!(tasks_page, [CloseTasks]);
 
 #[path = "task_detail.rs"]
 mod detail;
+#[path = "task_keys.rs"]
+mod keys;
+use keys::{favorite_icon, FAVORITES};
 use detail::{due_chip, priority_icon, subtask_chip};
 pub(crate) use detail::fetch_picture;
 
@@ -63,6 +66,9 @@ struct TaskRow {
     // API 105: the Linear issue it went to or came from (linear-tasks.ts).
     #[serde(default)]
     linear: Option<LinearLink>,
+    // API 106: also under Favorites (task_keys.rs).
+    #[serde(default)]
+    favorite: bool,
 }
 /// A task's Linear issue, as the runner's NativeTask.linear has it.
 #[derive(Clone, Default, PartialEq, serde::Deserialize, serde::Serialize)]
@@ -375,6 +381,10 @@ pub(crate) struct TasksPage {
     linear_ready: bool,
     linear_asking: bool,
     linear_again: bool,
+    // The task under the pointer, which Linear-style keys act on first (task_keys.rs).
+    hovered_task: Option<String>,
+    // S, P and Shift-D's picker over the list or board.
+    quick_pick: Option<keys::QuickPick>,
     _subscriptions: Vec<Subscription>,
 }
 
@@ -526,6 +536,8 @@ impl TasksPage {
             linear_ready: false,
             linear_asking: false,
             linear_again: false,
+            hovered_task: None,
+            quick_pick: None,
             _subscriptions: subs,
         }
     }
@@ -807,6 +819,9 @@ impl TasksPage {
             if let Some(links) = patch["links"].as_array() {
                 row.links = links.clone();
             }
+            if let Some(favorite) = patch["favorite"].as_bool() {
+                row.favorite = favorite;
+            }
         }
         self.error = None;
         cx.notify();
@@ -952,7 +967,7 @@ impl TasksPage {
         let project = if group != "all" { self.group_project(group) } else if self.filter.is_object() { self.filter.clone() } else { Value::Null };
         let position = self.rows.iter().filter(|r| column_id(r) == status).map(|r| r.position).min_by(f64::total_cmp).map_or(crate::now_ms() as f64, |p| p - 1000.);
         let id = threadbear_core::notes::new_id();
-        self.rows.push(TaskRow { id: id.clone(), title: title.clone(), notes: notes.clone(), status: self.canonical(status), column_id: Some(status.into()), thread: None, thread_command_id: None, thread_error: None, project: (!project.is_null()).then(|| project.clone()), position, created_at: crate::now_ms() as f64, priority: None, due_date: None, due_time: None, parent_id: None, links: vec![], comment_count: None, created_by: None, linear: None });
+        self.rows.push(TaskRow { id: id.clone(), title: title.clone(), notes: notes.clone(), status: self.canonical(status), column_id: Some(status.into()), thread: None, thread_command_id: None, thread_error: None, project: (!project.is_null()).then(|| project.clone()), position, created_at: crate::now_ms() as f64, priority: None, due_date: None, due_time: None, parent_id: None, links: vec![], comment_count: None, created_by: None, linear: None, favorite: false });
         self.busy = true;
         self.error = None;
         cx.notify();
@@ -996,7 +1011,7 @@ impl TasksPage {
             let (base, col) = if item.done { ("done".to_string(), "done".to_string()) } else { (self.canonical(status), status.to_string()) };
             let position = top - (count - i as f64) * 1000.;
             let parent = item.parent.map(|p| ids[p].clone());
-            self.rows.push(TaskRow { id: ids[i].clone(), title: item.title.clone(), notes: item.notes.clone(), status: base.clone(), column_id: Some(col.clone()), thread: None, thread_command_id: None, thread_error: None, project: (!project.is_null()).then(|| project.clone()), position, created_at: crate::now_ms() as f64, priority: None, due_date: None, due_time: None, parent_id: parent.clone(), links: vec![], comment_count: None, created_by: None, linear: None });
+            self.rows.push(TaskRow { id: ids[i].clone(), title: item.title.clone(), notes: item.notes.clone(), status: base.clone(), column_id: Some(col.clone()), thread: None, thread_command_id: None, thread_error: None, project: (!project.is_null()).then(|| project.clone()), position, created_at: crate::now_ms() as f64, priority: None, due_date: None, due_time: None, parent_id: parent.clone(), links: vec![], comment_count: None, created_by: None, linear: None, favorite: false });
             calls.push(json!({"id": ids[i], "title": item.title, "notes": item.notes, "status": base, "columnId": col, "project": project, "position": position, "parentId": parent}));
         }
         self.busy = true;
@@ -1270,6 +1285,8 @@ impl TasksPage {
             };
             let selected = &visible[index];
             self.selected_task = Some(selected.id.clone());
+            // The keys act on what was just picked, not what the pointer last crossed.
+            self.hovered_task = None;
             if board {
                 let group = if self.by_project() { project_key(&selected.project) } else { "all".into() };
                 let column = format!("column:{group}:{}", column_id(selected));
@@ -1351,6 +1368,10 @@ impl TasksPage {
                 let (p, row) = (page.clone(), t.clone());
                 let label = if row.thread.is_some() { "View Thread" } else if row.thread_error.is_some() { "Thread Failed" } else if row.thread_command_id.is_some() { "Starting Thread…" } else { "Send to Thread" };
                 menu = menu.item(PopupMenuItem::new(label).on_click(move |_, window, cx| { p.update(cx, |p, cx| p.send_task(&row, window, cx)).ok(); }));
+                let (p, row) = (page.clone(), t.clone());
+                menu = menu.item(PopupMenuItem::new(if t.favorite { "Remove from Favorites" } else { "Add to Favorites" }).icon(favorite_icon(t.favorite, 14., cx)).on_click(move |_, _, cx| {
+                    p.update(cx, |p, cx| p.toggle_favorite(&row, cx)).ok();
+                }));
                 if linear_ready {
                     menu = linear_items(menu, &page, &t);
                 }
@@ -1448,10 +1469,16 @@ impl TasksPage {
         let (drop_status, drop_group, drop_before) = (column_id(task).to_string(), group.to_string(), task.id.clone());
         let check_task = task.clone();
         let edit = task.clone();
+        // Under Favorites it's a second copy: its own ids, and no dragging or
+        // dropping, since the task moves in its own section.
+        let fav = group == FAVORITES;
+        let drop = cx.listener(move |this, drag: &TaskDrag, _, cx| this.drop_task(drag, &drop_status, &drop_group, Some(&drop_before), cx));
+        let hovered = id.clone();
         h_flex()
-            .id(SharedString::from(format!("task-{id}")))
+            .id(SharedString::from(if fav { format!("fav-task-{id}") } else { format!("task-{id}") }))
             .group("task-row")
-            .relative().child(self.bounds_marker(id.clone()))
+            .relative().child(self.bounds_marker(if fav { format!("fav:{id}") } else { id.clone() }))
+            .on_hover(cx.listener(move |this, over: &bool, _, _| this.hover_task(&hovered, *over)))
             .when(self.selected_task.as_deref() == Some(id.as_str()), |d| d.bg(style::accent(cx).opacity(0.12)))
             .items_start()
             .gap(px(8.))
@@ -1460,9 +1487,8 @@ impl TasksPage {
             .border_b_1()
             .border_color(style::hairline(cx))
             .hover(move |s| s.bg(hover))
-            .when(self.manual(), |d| d.on_drag(TaskDrag { id: id.clone(), title: task.title.clone() }, |drag, _, _, cx| cx.new(|_| Ghost(drag.title.clone()))))
-            .drag_over::<TaskDrag>(move |s, _, _, _| s.border_t_2().border_color(accent))
-            .on_drop(cx.listener(move |this, drag: &TaskDrag, _, cx| this.drop_task(drag, &drop_status, &drop_group, Some(&drop_before), cx)))
+            .when(self.manual() && !fav, |d| d.on_drag(TaskDrag { id: id.clone(), title: task.title.clone() }, |drag, _, _, cx| cx.new(|_| Ghost(drag.title.clone()))))
+            .when(!fav, |d| d.drag_over::<TaskDrag>(move |s, _, _, _| s.border_t_2().border_color(accent)).on_drop(drop))
             // A dead gap after the box, so a click meant for the title never ticks it.
             .child(
                 div().pt(px(2.)).mr(px(10.)).flex_none().child(
@@ -1500,12 +1526,16 @@ impl TasksPage {
         let (drop_status, drop_group, drop_before) = (column_id(task).to_string(), group.to_string(), task.id.clone());
         let edit = task.clone();
         let done = task.status == "done";
+        let fav = group == FAVORITES;
+        let drop = cx.listener(move |this, drag: &TaskDrag, _, cx| this.drop_task(drag, &drop_status, &drop_group, Some(&drop_before), cx));
+        let hovered = id.clone();
         v_flex()
-            .id(SharedString::from(format!("card-{id}")))
+            .id(SharedString::from(if fav { format!("fav-card-{id}") } else { format!("card-{id}") }))
             .role(Role::Button)
             .aria_label(SharedString::from(format!("Open {}", task.title)))
             .group("task-card")
-            .relative().child(self.bounds_marker(id.clone()))
+            .relative().child(self.bounds_marker(if fav { format!("fav:{id}") } else { id.clone() }))
+            .on_hover(cx.listener(move |this, over: &bool, _, _| this.hover_task(&hovered, *over)))
             .gap(px(6.))
             .p(px(10.))
             .pl(px(12.))
@@ -1514,12 +1544,13 @@ impl TasksPage {
             .border_1()
             .border_color(if self.selected_task.as_deref() == Some(id.as_str()) { accent } else { edge })
             .bg(cx.theme().background).shadow_sm()
-            .cursor_grab()
-            .on_drag(TaskDrag { id: id.clone(), title: task.title.clone() }, |drag, _, _, cx| cx.new(|_| Ghost(drag.title.clone())))
-            .drag_over::<TaskDrag>(move |s, _, _, _| s.border_t_2().border_color(accent))
-            .on_drop(cx.listener(move |this, drag: &TaskDrag, _, cx| this.drop_task(drag, &drop_status, &drop_group, Some(&drop_before), cx)))
+            .when(!fav, |d| d.cursor_grab()
+                .on_drag(TaskDrag { id: id.clone(), title: task.title.clone() }, |drag, _, _, cx| cx.new(|_| Ghost(drag.title.clone())))
+                .drag_over::<TaskDrag>(move |s, _, _, _| s.border_t_2().border_color(accent))
+                .on_drop(drop))
+            .when(fav, |d| d.cursor_pointer())
             .on_click(cx.listener(move |this, _, window, cx| this.open_editor(&edit, false, window, cx)))
-            .tip("Open the task. Drag to move it.")
+            .tip(if fav { "Open the task" } else { "Open the task. Drag to move it." })
             .child(
                 h_flex()
                     .items_start()
@@ -1647,6 +1678,9 @@ impl TasksPage {
                     .on_click(cx.listener(|this, _, window, cx| this.open_linear_import(window, cx)))))).into_any_element();
         }
         let statuses: Vec<String> = self.list_order().into_iter().filter(|s| self.canonical(s) != "done" || self.show_done).collect();
+        if let Some(favorites) = self.favorites_section(rows, cx) {
+            out = out.child(favorites);
+        }
         for group in self.groups(rows) {
             let mut block = v_flex().mb(px(18.));
             if group != "all" {
@@ -1714,6 +1748,10 @@ impl TasksPage {
         let mut columns = h_flex().id(SharedString::from(format!("columns-{group}"))).items_start().w_full().min_w_0().max_w_full().when(group == "all" && !wrap, |d| d.h_full()).gap(px(12.)).pb(px(8.))
             .when(wrap, |d| d.flex_wrap())
             .when(!wrap, |d| d.overflow_x_scroll().track_scroll(&self.pane_scroll(&format!("board:{group}"))));
+        // Favorites leads the board; grouped by project, it's on a row of its own above them.
+        if group == "all" {
+            columns = columns.children(self.favorites_column(rows, cx));
+        }
         for status in self.board_order() {
             let items: Vec<&TaskRow> = rows.iter().filter(|r| column_id(r) == status && (group == "all" || project_key(&r.project) == group)).collect();
             let (accent, soft) = (style::accent(cx), style::accent(cx).opacity(0.08));
@@ -1797,6 +1835,9 @@ impl TasksPage {
             return div().size_full().min_w_0().child(self.board_columns("all", rows, cx)).into_any_element();
         }
         let mut out = v_flex();
+        if let Some(favorites) = self.favorites_column(rows, cx) {
+            out = out.child(div().mb(px(14.)).child(favorites));
+        }
         for group in self.groups(rows) {
             let count = rows.iter().filter(|r| project_key(&r.project) == group).count();
             out = out.child(self.project_header(&group, count, cx));
@@ -2565,6 +2606,18 @@ impl Render for TasksPage {
             .key_context("TasksPage")
             .track_focus(&self.focus)
             .on_key_down(cx.listener(|this, event: &KeyDownEvent, window, cx| {
+                // The quick picker has every key while it's open; then Linear's
+                // keys on the list or board (task_keys.rs). The app's own
+                // shortcuts are bindings, which have already had the key.
+                if this.quick_pick.is_some() {
+                    this.quick_pick_key(event, window, cx);
+                    cx.stop_propagation();
+                    return;
+                }
+                if this.task_key_down(event, window, cx) {
+                    cx.stop_propagation();
+                    return;
+                }
                 let modifiers = &event.keystroke.modifiers;
                 if modifiers.platform || modifiers.control || modifiers.alt || modifiers.shift { return; }
                 let key = event.keystroke.key.as_str();
@@ -2585,6 +2638,10 @@ impl Render for TasksPage {
                 }
             }))
             .on_action(cx.listener(|this, _: &CloseTasks, window, cx| {
+                if this.quick_pick.is_some() {
+                    this.close_quick_pick(window, cx);
+                    return;
+                }
                 if this.detail.picker.is_some() {
                     this.detail.picker = None;
                     window.focus(&this.focus, cx);
@@ -2642,6 +2699,9 @@ impl Render for TasksPage {
         shell = shell.child(page.bg(gpui_kit::transparent_black()));
         if self.customize {
             shell = shell.child(div().absolute().top(px(64.)).right(px(28.)).child(self.customize_panel(cx)));
+        }
+        if let Some(pick) = self.quick_pick_view(cx) {
+            shell = shell.child(pick);
         }
         if let Some((text, method, _)) = self.toast.clone() {
             shell = shell.child(

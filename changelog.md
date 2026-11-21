@@ -8,6 +8,7 @@ How Prints work today, what's missing and what's next: [Prints status](https://g
 
 ### Added
 
+- Tasks have Favorites: add a task from its ⋯ menu, the star on its page or Option-F, and it shows under Favorites at the top of the list and as the board's first column while staying in its own column. The list and board also take Linear's keys for what tasks have: C for a new task, S, P and Shift-D for status, priority and due date pickers (type to filter or press a number), Command-Shift-D, Command-Delete, Shift-R and Control-Shift-I. The app's own shortcuts always win.
 - Tasks can go to Linear when Linear is connected in Connectors. Send to Linear makes one issue in the team and project you pick, with sub-tasks as a checklist and the task's pictures uploaded. Add from Linear brings issues in as tasks, and Link to Linear issue ties a task to one that exists. Tasks you keep in sync copy status, priority, due date, title and comments from Linear every hour (or 6, 12 or 24 hours), with no tokens spent. Without Linear, Tasks is unchanged.
 
 ### Fixed

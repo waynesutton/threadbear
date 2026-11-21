@@ -510,4 +510,6 @@
 //    defaults }. tasksLinear:* claims a send, settles it, links and imports
 //    issues, applies what Linear says and claims the sync sweep. A runner
 //    offers Linear only from 105.
-export const API_VERSION = 105;
+// 106: (this copy's) task favorites. Tasks take an optional `favorite`, and
+//    tasks:update sets it. A runner sends favorite only from 106.
+export const API_VERSION = 106;

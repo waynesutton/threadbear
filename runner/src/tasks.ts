@@ -38,6 +38,8 @@ export type NativeTask = {
   links?: TaskLink[];
   commentCount?: number;
   createdBy?: TaskAuthor;
+  // API 106: on the Favorites list and board too.
+  favorite?: boolean;
   // API 105 (linear-tasks.ts).
   linear?: {
     state: 'creating' | 'linked' | 'failed';
@@ -154,6 +156,8 @@ export class Tasks {
       throw new Error('Update the Threadbear backend to use due times and reminders.');
     if (source.apiVersion !== undefined && source.apiVersion < 104 && operation === 'deleteColumn')
       throw new Error('Update the Threadbear backend to delete task columns.');
+    if (source.apiVersion !== undefined && source.apiVersion < 106 && 'favorite' in args)
+      throw new Error('Update the Threadbear backend to use task favorites.');
     if (operation === 'related') {
       const local = this.local();
       const empty: TaskRelated = { threads: [], prints: [] };

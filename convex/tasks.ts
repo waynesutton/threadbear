@@ -284,6 +284,8 @@ export const update = mutation({
     dueTime: v.optional(v.union(v.string(), v.null())),
     parentId: v.optional(v.union(v.string(), v.null())),
     links: v.optional(v.array(taskLink)),
+    // API 106: shown under Favorites as well as where it is.
+    favorite: v.optional(v.boolean()),
     author: v.optional(taskAuthor),
   },
   returns: v.null(),

@@ -1417,3 +1417,6 @@ a.task-linear:hover {
   padding-bottom: 14px;
   background: var(--raised);
 }
+
+/* A task in Favorites (set in the Mac app): a quiet star after its title. */
+.task-favorite { margin-left: 6px; color: #e2a336; font-size: 12px; }

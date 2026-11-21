@@ -38,6 +38,7 @@
 - `runner/src/linear-tasks.ts`: Tasks and Linear through the Connectors gateway: send (with picture uploads), search, import, link, refresh and the timed sync sweep.
 - `desktop/gpui/src/tasks_page.rs`: native Tasks list, scrolling/wrapped board, detail navigation and photo sliders.
 - `desktop/gpui/src/task_detail.rs`: task properties, calendar, sub-tasks, attachments and activity UI.
+- `desktop/gpui/src/task_keys.rs`: Tasks' Linear-style keys on the list and board, the status, priority and due date quick picker, and Favorites (list section, board column, star).
 - `desktop/core/src/task_dates.rs`: priority labels, calendar grids, due-date labels and date tests.
 - `web/src/tasks.tsx`, `web/src/tasks.css`: authenticated responsive Tasks route.
 - `web/src/tasks-issue.tsx`: browser task properties, attachments, sub-tasks and activity editor.

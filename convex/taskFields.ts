@@ -123,6 +123,8 @@ export const taskFields = {
   parentId: v.optional(v.union(v.string(), v.null())),
   links: v.optional(v.array(taskLink)),
   commentCount: v.optional(v.number()),
+  // API 106: on the Favorites list and board too, as well as its own column.
+  favorite: v.optional(v.boolean()),
   createdBy: v.optional(taskAuthor),
   // Deleted along with its parent, so restoring the parent brings it back. Never listed.
   deletedWithParent: v.optional(v.boolean()),

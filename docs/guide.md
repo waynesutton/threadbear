@@ -3707,6 +3707,32 @@ or press Return for the first match. Escape closes the search.
 In the list, Up and Down navigate tasks and Enter opens one. Arrow keys still
 edit text normally while a field has focus.
 
+**Favorites.** Choose Add to Favorites in a task's ⋯ menu, click the star on
+its page, or press Option-F. The task stays in its own section or column and
+also shows under Favorites, at the top of the list and as the board's first
+column. Favorites can fold but can't be dragged; move the task in its own
+section. Remove from Favorites (or Option-F again) takes it off.
+
+**Keys on the list and board.** These follow Linear's and act on the task under
+the pointer, or the one you picked with Up and Down. They work only while no
+text field has focus, and any key the app itself uses wins.
+
+| Key | Does |
+|---|---|
+| C | New task (the quick-add box, or a card in Building on the board) |
+| S | Change status |
+| P | Set priority |
+| Shift-D | Set due date |
+| Command-Shift-D | Remove due date |
+| Command-Delete | Delete the task (asks first) |
+| Shift-R | Rename (opens the task with its title ready) |
+| Control-Shift-I | Edit the description |
+| Option-F | Add to or remove from Favorites |
+
+S, P and Shift-D open a picker: type to filter, use Up, Down and Return, or
+press a row's number. Escape closes it. Linear's keys for assignees, labels,
+estimates, templates and reminders aren't here, since tasks don't have those.
+
 In a thread's Highlights, a row's right-click menu has Add to Tasks: it makes a
 task named after the row, linking to the page, or to the thread for a file or
 commit, and says so when it's in.
@@ -3732,6 +3758,9 @@ through its task tools.
 5. Send to Thread starts a thread from the task's title and note, in its
    project's folder. Agents in threads can read and change tasks with their
    task tools.
+6. Star the tasks you're focused on (Option-F, or Add to Favorites in the ⋯
+   menu) to see them together under Favorites. Press S, P or Shift-D on a task
+   to change its status, priority or due date from the keyboard.
 
 ### How tasks work with Linear
 

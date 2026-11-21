@@ -9621,6 +9621,15 @@ sends `author` only to a backend it knows is 102 or later.
 Agent tools: `create_task` takes `priority` and `dueDate`; `update_task` takes
 them too (null clears) and `comment`, which adds a comment as the agent.
 
+### Task favorites (API 106)
+
+A task takes an optional `favorite: boolean`, set and cleared with
+`tasks.update { id, favorite }`. It changes nothing else: the task keeps its
+column, position and project, and the Mac app also shows it under Favorites
+(the list's first section, the board's first column). A runner refuses
+`favorite` with a message when the backend is older than 106. No activity is
+logged for it.
+
 ### Tasks and Linear (API 105)
 
 Optional: nothing here shows or runs unless the `tasks` experiment is on, the
