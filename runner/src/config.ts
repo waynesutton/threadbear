@@ -188,7 +188,7 @@ export type Config = {
   // The same gateway's MCP endpoint and the command that prints its
   // Authorization header, for reading projects' Notion boards
   // (notion-tasks.ts). Only with connectorsUrl.
-  connectorsClient?: { mcpUrl: string; headersHelper: string };
+  connectorsClient?: { mcpUrl: string; headersHelper: string; linearHeadersHelper?: string };
   // Why a configured gateway URL isn't used (plain http off this Mac,
   // secure-url.ts): the Connectors panel's off state and the log say it.
   connectorsRefused?: string;
@@ -283,7 +283,8 @@ export type RunnerJson = {
   experiments?: Record<string, boolean>;
   // The gateway, when it isn't the `connectors` MCP server in
   // ~/.claude.json; url "" or enabled: false turns the panel's polling off.
-  connectors?: { url?: string; enabled?: boolean; headersHelper?: string };
+  // linearHeadersHelper: the Connectors login Tasks uses for Linear (linear-tasks.ts).
+  connectors?: { url?: string; enabled?: boolean; headersHelper?: string; linearHeadersHelper?: string };
   // The Git panel (git-panel.ts): the remote owners its Push and Sync may
   // push to ("*" for any; absent: your GitHub login), and when its chips
   // show ("when-needed", the default, "always" or "off").
@@ -552,7 +553,8 @@ function connectorsConfig(raw: RunnerJson['connectors'], env: NodeJS.ProcessEnv,
   const url = gatewayBase(found.url);
   if (!url) return {};
   const client = fromEnv !== undefined ? undefined : findGatewayClient(raw, claudeJson);
-  return { connectorsUrl: url, ...(client ? { connectorsClient: client } : {}) };
+  const linear = typeof raw?.linearHeadersHelper === 'string' && raw.linearHeadersHelper.trim() ? raw.linearHeadersHelper.trim() : undefined;
+  return { connectorsUrl: url, ...(client ? { connectorsClient: { ...client, ...(linear ? { linearHeadersHelper: linear } : {}) } } : {}) };
 }
 
 // THREADBEAR_SYNC=off wins over runner.json; THREADBEAR_SYNC_URL points a

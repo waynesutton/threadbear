@@ -169,7 +169,9 @@ test('every public task operation rejects an invalid account credential', async 
     deleteColumn: { id: 'paused' },
   };
   // moveColumnTasks is internal: only deleteColumn schedules it.
-  assert.deepEqual(Object.keys(tasks).filter((k) => k !== 'moveColumnTasks').sort(), Object.keys(cases).sort(), 'new operations need an auth case');
+  // Registered functions only: tasks.ts also exports helpers tasksLinear.ts shares.
+  const registered = Object.entries(tasks).filter(([, f]) => typeof (f as { handler?: unknown } | undefined)?.handler === 'function').map(([k]) => k);
+  assert.deepEqual(registered.filter((k) => k !== 'moveColumnTasks').sort(), Object.keys(cases).sort(), 'new operations need an auth case');
   for (const [operation, args] of Object.entries(cases)) {
     for (const auth of [{ token: 'invalid' }, { key: 'invalid' }]) {
       assert.equal(await outcome(b.run(operation, { ...args, auth })), 'auth', operation);

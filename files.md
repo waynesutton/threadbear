@@ -33,7 +33,9 @@
 ## Realtime Tasks
 
 - `convex/tasks.ts`, `convex/taskFields.ts`: authenticated cloud-owned tasks and synced preferences.
+- `convex/tasksLinear.ts`: a task's Linear issue: send claim and settle, link, import, sync apply and the one-Mac sync sweep claim.
 - `runner/src/tasks.ts`: desktop/agent bridge and realtime invalidation.
+- `runner/src/linear-tasks.ts`: Tasks and Linear through the Connectors gateway: send (with picture uploads), search, import, link, refresh and the timed sync sweep.
 - `desktop/gpui/src/tasks_page.rs`: native Tasks list, scrolling/wrapped board, detail navigation and photo sliders.
 - `desktop/gpui/src/task_detail.rs`: task properties, calendar, sub-tasks, attachments and activity UI.
 - `desktop/core/src/task_dates.rs`: priority labels, calendar grids, due-date labels and date tests.

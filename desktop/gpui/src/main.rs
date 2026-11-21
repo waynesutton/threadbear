@@ -86,6 +86,8 @@ mod installed;
 mod key_hints;
 mod librarian;
 mod librarian_look;
+mod linear_import;
+mod linear_send;
 mod look_cards;
 mod looks;
 mod picture_picker;

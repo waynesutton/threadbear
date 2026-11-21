@@ -9,35 +9,35 @@ import { BUILDING, columnIds, defaultColumns, defaultSectionOrder, fullColumnOrd
 import type { Infer } from 'convex/values';
 import type { Id } from './_generated/dataModel';
 
-const authField = v.union(v.object({ token: v.string() }), v.object({ key: v.string() }));
-type Auth = Infer<typeof authField>;
+export const authField = v.union(v.object({ token: v.string() }), v.object({ key: v.string() }));
+export type Auth = Infer<typeof authField>;
 type Ctx = QueryCtx | MutationCtx;
-async function authenticate(ctx: Ctx, auth: Auth) {
+export async function authenticate(ctx: Ctx, auth: Auth) {
   if ('token' in auth) await checkPhoneToken(ctx, auth.token);
   else await runnerAuth(ctx, auth.key, 'nativeTasks');
 }
-function bad(message: string): never {
+export function bad(message: string): never {
   throw new ConvexError({ kind: 'badArgs', message });
 }
-function text(value: string, max: number, name: string) {
+export function text(value: string, max: number, name: string) {
   if (value.length > max) bad(`${name} is too long`);
   return value;
 }
-function title(value: string) {
+export function title(value: string) {
   const clean = text(value.trim(), 500, 'Title');
   if (!clean) bad('Give the task a title');
   return clean;
 }
-async function changedAt(ctx: Ctx): Promise<number> {
+export async function changedAt(ctx: Ctx): Promise<number> {
   const last = await ctx.db.query('tasks').withIndex('by_updated').order('desc').first();
   return Math.max(Date.now(), (last?.updatedAt ?? 0) + 1);
 }
-const find = (ctx: Ctx, id: string) =>
+export const find = (ctx: Ctx, id: string) =>
   ctx.db
     .query('tasks')
     .withIndex('by_task_id', (q) => q.eq('id', id))
     .unique();
-async function projectExists(ctx: Ctx, project: Infer<typeof taskProject> | null | undefined) {
+export async function projectExists(ctx: Ctx, project: Infer<typeof taskProject> | null | undefined) {
   if (
     project &&
     !(await ctx.db
@@ -106,7 +106,7 @@ async function actor(ctx: MutationCtx, auth: Auth, given: Author | undefined): P
   }
   return { kind: 'user', name: prefs?.ownerName ?? 'You' };
 }
-async function log(ctx: MutationCtx, taskId: string, author: Author, body: string, kind: 'event' | 'comment' = 'event') {
+export async function log(ctx: MutationCtx, taskId: string, author: Author, body: string, kind: 'event' | 'comment' = 'event') {
   const createdAt = Date.now();
   const _id = await ctx.db.insert('taskActivity', { taskId, kind, body, author, createdAt });
   return { id: _id as string, taskId, kind, body, author, createdAt };
@@ -362,7 +362,7 @@ export const restore = mutation({
   returns: v.null(),
   handler: (ctx, a) => deleted(ctx, a.auth, a.id, false),
 });
-const prefRow = (ctx: Ctx) =>
+export const prefRow = (ctx: Ctx) =>
   ctx.db
     .query('taskPreferences')
     .withIndex('by_name', (q) => q.eq('name', 'tasks'))
@@ -377,7 +377,7 @@ function boardOrder(row: Prefs, columns = columnsOf(row)) {
 function sectionOrder(row: Prefs, columns = columnsOf(row)) {
   return columnIds(row?.sectionOrder, columns, row?.columns ? fullColumnOrder(row.listOrder, listStatuses) : defaultSectionOrder);
 }
-async function boardOf(ctx: Ctx): Promise<Board> {
+export async function boardOf(ctx: Ctx): Promise<Board> {
   const row = await prefRow(ctx);
   const columns = columnsOf(row);
   return { columns, order: boardOrder(row, columns) };
@@ -385,7 +385,7 @@ async function boardOf(ctx: Ctx): Promise<Board> {
 const building = (columns: TaskColumn[]): TaskColumn => columns.find((c) => c.id === BUILDING) ?? defaultColumns.find((c) => c.id === BUILDING)!;
 // Where a status goes when no column is named: its built-in column if it's
 // still there, else the first on the board with that status, else Building.
-function columnForStatus({ columns, order }: Board, status: TaskStatus): TaskColumn {
+export function columnForStatus({ columns, order }: Board, status: TaskStatus): TaskColumn {
   return columns.find((c) => c.id === status) ?? order.map((id) => columns.find((c) => c.id === id)).find((c) => c?.status === status) ?? building(columns);
 }
 // A task whose column was deleted shows where its tasks are being moved, so
@@ -398,7 +398,7 @@ function place(board: Board, row: { columnId?: string; status: TaskStatus }) {
 }
 // columnId may be an id or, for agents, a column's name. With only a status,
 // a task already in a column with that status stays there.
-async function columnFields(ctx: Ctx, columnId: string | undefined, status: TaskStatus | undefined, current?: { columnId?: string; status: TaskStatus }) {
+export async function columnFields(ctx: Ctx, columnId: string | undefined, status: TaskStatus | undefined, current?: { columnId?: string; status: TaskStatus }) {
   if (columnId === '') bad('Choose a known column');
   const board = await boardOf(ctx);
   const named = columnId?.trim().toLowerCase();
@@ -486,6 +486,12 @@ export const setPreferences = mutation({
       patch.reminders.to = patch.reminders.to.trim();
       if (patch.reminders.to.length > 200) bad('Use an address or channel under 201 characters');
       if (!Number.isInteger(patch.reminders.lead) || patch.reminders.lead < 0 || patch.reminders.lead > 1440) bad('Remind between 0 and 1440 minutes early');
+    }
+    if (patch.linear) {
+      if (patch.linear.defaults.length > 200 || patch.linear.defaults.some((d) => d.projectKey.length > 300 || d.teamId.length > 100 || (d.projectId?.length ?? 0) > 100)) bad('Too many Linear defaults');
+      // lastSweepAt belongs to the runner's sweep; a settings save keeps it.
+      const was = (await prefRow(ctx))?.linear;
+      patch.linear = { ...patch.linear, ...(was?.lastSweepAt !== undefined ? { lastSweepAt: Math.max(was.lastSweepAt, patch.linear.lastSweepAt ?? 0) } : {}) };
     }
     if (patch.fade !== undefined && (!Number.isFinite(patch.fade) || patch.fade < 0 || patch.fade > 1)) bad('Fade must be between 0 and 1');
     if (patch.backgroundColor !== undefined && patch.backgroundColor !== '' && !/^#[0-9a-f]{6}$/i.test(patch.backgroundColor)) bad('Choose a hex color');
@@ -650,7 +656,7 @@ export const get = query({
   },
 });
 // A task's comments and events, oldest first (API 87).
-const activityItem = v.object({ id: v.string(), taskId: v.string(), kind: taskActivityKind, body: v.string(), author: taskAuthor, createdAt: v.number() });
+const activityItem = v.object({ id: v.string(), taskId: v.string(), kind: taskActivityKind, body: v.string(), author: taskAuthor, createdAt: v.number(), source: v.optional(v.literal('linear')), externalId: v.optional(v.string()) });
 export const activity = query({
   args: { auth: authField, id: v.string() },
   returns: v.object({ items: v.array(activityItem) }),
@@ -686,6 +692,8 @@ export const removeComment = mutation({
     const itemId = ctx.db.normalizeId('taskActivity', a.commentId);
     const item = itemId ? await ctx.db.get("taskActivity", itemId) : null;
     if (!item || item.taskId !== a.id || item.kind !== 'comment') return null;
+    // Comments copied from Linear stay as long as the issue has them.
+    if (item.source === 'linear') bad('That comment is from Linear: remove it there');
     await ctx.db.delete("taskActivity", item._id);
     const row = await find(ctx, a.id);
     if (row) await ctx.db.patch("tasks", row._id, { commentCount: Math.max(0, (row.commentCount ?? 1) - 1), updatedAt: await changedAt(ctx) });

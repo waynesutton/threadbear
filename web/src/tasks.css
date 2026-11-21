@@ -559,6 +559,17 @@
   position: relative;
   top: 1px;
 }
+a.task-linear {
+  text-decoration: none;
+}
+a.task-linear:hover {
+  color: var(--text);
+  border-color: currentColor;
+}
+.task-chip.is-warning {
+  color: #b4541a;
+  border-color: color-mix(in srgb, #b4541a 45%, transparent);
+}
 .task-chip {
   flex: none;
   max-width: 160px;

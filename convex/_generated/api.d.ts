@@ -8,15 +8,17 @@
  * @module
  */
 
-import type * as boxes from "../boxes.js";
 import type * as boxHooks from "../boxHooks.js";
 import type * as boxMachine from "../boxMachine.js";
 import type * as boxProviders_fly from "../boxProviders/fly.js";
 import type * as boxProviders_types from "../boxProviders/types.js";
 import type * as boxService from "../boxService.js";
 import type * as boxStates from "../boxStates.js";
+import type * as boxes from "../boxes.js";
 import type * as clearMachine from "../clearMachine.js";
 import type * as clearStates from "../clearStates.js";
+import type * as cloudTokenMachine from "../cloudTokenMachine.js";
+import type * as cloudTokenStates from "../cloudTokenStates.js";
 import type * as commandMachine from "../commandMachine.js";
 import type * as commandStates from "../commandStates.js";
 import type * as crons from "../crons.js";
@@ -30,8 +32,8 @@ import type * as mcpRpc from "../mcpRpc.js";
 import type * as memorySync from "../memorySync.js";
 import type * as migrations from "../migrations.js";
 import type * as moveMachine from "../moveMachine.js";
-import type * as moves from "../moves.js";
 import type * as moveStates from "../moveStates.js";
+import type * as moves from "../moves.js";
 import type * as phone from "../phone.js";
 import type * as prints from "../prints.js";
 import type * as profile from "../profile.js";
@@ -50,14 +52,18 @@ import type * as runnerAccess from "../runnerAccess.js";
 import type * as share from "../share.js";
 import type * as shareCard from "../shareCard.js";
 import type * as shareRekey from "../shareRekey.js";
+import type * as stepping from "../stepping.js";
 import type * as sync from "../sync.js";
 import type * as taskFields from "../taskFields.js";
 import type * as tasks from "../tasks.js";
+import type * as tasksLinear from "../tasksLinear.js";
 import type * as tokens from "../tokens.js";
 import type * as uploads from "../uploads.js";
 import type * as version from "../version.js";
 import type * as viewer from "../viewer.js";
 import type * as wakes from "../wakes.js";
+import type * as webPush from "../webPush.js";
+import type * as webPushEndpoint from "../webPushEndpoint.js";
 import type * as webhooks from "../webhooks.js";
 
 import type {
@@ -67,15 +73,17 @@ import type {
 } from "convex/server";
 
 declare const fullApi: ApiFromModules<{
-  boxes: typeof boxes;
   boxHooks: typeof boxHooks;
   boxMachine: typeof boxMachine;
   "boxProviders/fly": typeof boxProviders_fly;
   "boxProviders/types": typeof boxProviders_types;
   boxService: typeof boxService;
   boxStates: typeof boxStates;
+  boxes: typeof boxes;
   clearMachine: typeof clearMachine;
   clearStates: typeof clearStates;
+  cloudTokenMachine: typeof cloudTokenMachine;
+  cloudTokenStates: typeof cloudTokenStates;
   commandMachine: typeof commandMachine;
   commandStates: typeof commandStates;
   crons: typeof crons;
@@ -89,8 +97,8 @@ declare const fullApi: ApiFromModules<{
   memorySync: typeof memorySync;
   migrations: typeof migrations;
   moveMachine: typeof moveMachine;
-  moves: typeof moves;
   moveStates: typeof moveStates;
+  moves: typeof moves;
   phone: typeof phone;
   prints: typeof prints;
   profile: typeof profile;
@@ -109,14 +117,18 @@ declare const fullApi: ApiFromModules<{
   share: typeof share;
   shareCard: typeof shareCard;
   shareRekey: typeof shareRekey;
+  stepping: typeof stepping;
   sync: typeof sync;
   taskFields: typeof taskFields;
   tasks: typeof tasks;
+  tasksLinear: typeof tasksLinear;
   tokens: typeof tokens;
   uploads: typeof uploads;
   version: typeof version;
   viewer: typeof viewer;
   wakes: typeof wakes;
+  webPush: typeof webPush;
+  webPushEndpoint: typeof webPushEndpoint;
   webhooks: typeof webhooks;
 }>;
 

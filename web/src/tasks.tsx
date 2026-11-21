@@ -233,6 +233,7 @@ function TasksContent({ token, projectFilter = '', issues = false }: { token: st
       <>
         {t.dueDate && <DueChip day={t.dueDate} time={t.dueTime} done={t.status === 'done'} />}
         <SubTaskChip items={childrenOf.get(t.id) ?? []} />
+        <LinearChip task={t} />
       </>
     );
   visible.sort((a, b) =>
@@ -552,7 +553,7 @@ function TasksContent({ token, projectFilter = '', issues = false }: { token: st
         <button className="task-more" title="More: project, note, status, delete" aria-label={`More for ${t.title}`} data-popover-toggle aria-haspopup="menu" aria-expanded={menu?.task.id === t.id} onClick={(e) => openMenu(t, e)}>
           <Dots />
         </button>
-        {(t.notes || (t.project && !byProject && !filter) || (issues && (t.priority || t.dueDate || childrenOf.has(t.id)))) && (
+        {(t.notes || (t.project && !byProject && !filter) || (issues && (t.priority || t.dueDate || childrenOf.has(t.id) || t.linear))) && (
           <div className="task-meta">
             {issues && t.priority && <PriorityIcon priority={t.priority} />}
             {t.notes && <NoteIcon />}
@@ -1088,6 +1089,7 @@ function TasksContent({ token, projectFilter = '', issues = false }: { token: st
           >
             <div className="task-editor-top">
               <span className="task-chip">{projectName(projectKey(editing.project ?? null))}</span>
+              {editing.id && <LinearChip task={editing as Task} long />}
               <button type="button" className="task-editor-close" title="Close (Esc)" aria-label="Close" onClick={() => setEditing(null)}>
                 ×
               </button>
@@ -1191,6 +1193,24 @@ export function ProjectTasksLink({ token, runnerId, id }: { token: string; runne
       }}
     >
       {count === undefined ? 'Tasks' : count.count ? `Tasks ${count.count}${count.more ? '+' : ''}` : 'Add task'}
+    </a>
+  );
+}
+
+// API 105: the Linear issue a task belongs to. Read-only here: sending,
+// linking and sync settings live in the Mac app, which can reach Linear.
+function LinearChip({ task, long }: { task: Pick<Task, 'linear'>; long?: boolean }) {
+  const l = task.linear;
+  if (!l) return null;
+  if (l.state === 'creating') return <span className="task-chip">{l.waitingUrl ? 'Waiting for approval' : 'Sending to Linear…'}</span>;
+  if (l.state === 'failed') return <span className="task-chip is-warning" title={l.error}>Linear send failed</span>;
+  if (!l.url || !l.identifier) return null;
+  const label = long && l.status ? `${l.identifier} · ${l.status}` : l.identifier;
+  const sync = l.missing ? 'Not found in Linear' : l.sync ? 'Kept in sync with Linear' : 'Not syncing with Linear';
+  return (
+    <a className="task-chip task-linear" href={l.url} target="_blank" rel="noreferrer" title={`Open ${l.identifier} in Linear. ${sync}.`} onClick={(e) => e.stopPropagation()}>
+      {label}
+      {l.sync && !l.missing && <span aria-label="Kept in sync"> ⟳</span>}
     </a>
   );
 }

@@ -46,6 +46,7 @@ export const GATED_READS: ReadonlySet<string> = new Set([
   'tasks.projectCount',
   'tasks.preferences',
   'tasks.photo',
+  'linear.status',
   'projects.get',
   'instructions.get',
   'librarian.status',

@@ -3718,3 +3718,75 @@ keeps its draft to retry. Notes remains local and encrypted; Tasks is stored in
 your configured Convex backend. Notion project boards stay separate. Ask a
 thread to "add a task to review the launch checklist" to use the same collection
 through its task tools.
+
+### How tasks work
+
+1. Turn on Tasks in Settings > Experiments. Open it with Tasks below Notes, or
+   Command-7.
+2. Type a task in the box at the top and press Return. Paste a Markdown list
+   to add many at once; indented items become sub-tasks.
+3. Switch between List and Board. Tick a task's box to mark it done, or drag a
+   card to another column.
+4. Open a task to set its priority, due date and time, project and reminders,
+   add links, pictures, prints and comments, and see its activity.
+5. Send to Thread starts a thread from the task's title and note, in its
+   project's folder. Agents in threads can read and change tasks with their
+   task tools.
+
+### How tasks work with Linear
+
+This is optional. Without Linear connected, Tasks looks and works the same, and
+none of this shows. Connect Linear in the Connectors panel (Add a service, then
+Linear) and it appears.
+
+**Send a task to Linear.** Pick Send to Linear from a task's ⋯ menu, or on its
+page. The sheet shows which Linear workspace it goes to. Pick a team, then a
+project in that team (or none), check the title and the exact description, and
+untick any pictures you don't want to send. Sub-tasks go in as a checklist,
+web links go with the issue, and pictures upload to Linear and show in the
+description. Prints, threads and anything else on your Mac stay here. Click
+Create: the click is your approval, so it doesn't ask again. The sheet
+remembers the team and project for that Threadbear project next time.
+
+The task then shows its issue, like `ENG-123 · Todo`. Click it to open the issue.
+A task is only ever sent once: a double click, a second Mac or a retry after a
+crash links the issue it already made rather than making another.
+
+**Keep it in sync.** "Keep in sync with Linear" is on by default for a task you
+send, add or link, and you can turn it off on the task's page or its ⋯ menu.
+For tasks you keep in sync, Threadbear copies from Linear:
+
+- status (closing the issue ticks the task done, canceling moves it to
+  Canceled, reopening moves it back)
+- priority and due date
+- the title
+- comments, shown read-only in Activity with a Linear mark
+
+It never changes your note, and it never changes anything in Linear. A field
+only changes here when it changed in Linear, so your own edit stays until Linear
+changes that same field. Threadbear checks every hour, or every 6 hours, 12
+hours or once a day as you pick in Tasks settings ("Check Linear for changes"),
+and again whenever you open the task or click Refresh. The checks are direct
+calls from your Mac, with no model involved, so they cost no tokens. Your Mac
+has to be awake: it catches up when it wakes. If the issue is deleted, the task
+says "Not found in Linear" and stops syncing.
+
+**Bring Linear issues in.** Add from Linear (in the Tasks toolbar, or "Start
+from your Linear issues" on an empty board) opens a search of your Linear
+issues: yours and open ones to start, by team or project if you like. Tick the
+ones you want, pick a Threadbear project, and Add. Each becomes a task linked to
+its issue, with its description copied once into the note, its comments in
+Activity, and sync on. Tick "Include sub-issues as sub-tasks" to bring those
+too. An issue that already has a task shows "In Tasks" and can't be added
+twice. Nothing comes in on its own.
+
+**Link a task you already have.** Link to Linear issue in a task's ⋯ menu takes
+an issue key like `ENG-123` or its link. It links the two without changing
+either one.
+
+**Unlink** forgets the issue here and never deletes anything in Linear.
+
+Threadbear talks to Linear through Connectors as its own login, which can read
+your Linear, upload pictures and create issues, and nothing else. Changing an
+existing issue still waits for your approval in Connectors, the same as it does
+for agents in threads.

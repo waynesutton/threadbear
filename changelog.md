@@ -6,6 +6,10 @@ How Prints work today, what's missing and what's next: [Prints status](https://g
 
 ## [Unreleased]
 
+### Added
+
+- Tasks can go to Linear when Linear is connected in Connectors. Send to Linear makes one issue in the team and project you pick, with sub-tasks as a checklist and the task's pictures uploaded. Add from Linear brings issues in as tasks, and Link to Linear issue ties a task to one that exists. Tasks you keep in sync copy status, priority, due date, title and comments from Linear every hour (or 6, 12 or 24 hours), with no tokens spent. Without Linear, Tasks is unchanged.
+
 ### Fixed
 
 - Restore sign-in discovery alongside Usage refresh after the 20 November merge, and include new deployment helpers in the isolated deploy tests.

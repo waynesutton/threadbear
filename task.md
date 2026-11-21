@@ -9,6 +9,8 @@ Status and gap list: prds/prints-status.md
 
 ## In Progress
 
+- [ ] 2026-11-21 02:30 UTC Tasks and Linear (API 105): send, link, import and per-task sync from Linear. Convex, runner (19 unit + 7 local-backend integration tests) and web done; Mac app UI in progress. prds/tasks-linear.md
+
 - [ ] 2026-11-20 18:33 UTC Land approved lint fixes and login-refresh regression coverage on top of the separately approved slot-22 release landing. Preserve its merge resolutions; restore the upstream suppression baseline. Verify .diff links stay in the pane after the app updates. prds/bring-in-2026-11-20-verification.md
 
 

@@ -61,7 +61,42 @@ export const taskActivityFields = {
   body: v.string(),
   author: taskAuthor,
   createdAt: v.number(),
+  // API 105: a comment copied from the task's Linear issue, read-only here.
+  // externalId is Linear's comment id, so a sync never copies one twice.
+  source: v.optional(v.literal('linear')),
+  externalId: v.optional(v.string()),
 };
+// API 105: the Linear issue a task was sent to, imported from or linked with.
+// creating is a claim (so a double click or a second Mac can't make two
+// issues); requestId ties every later write to that one attempt. last is
+// what Linear said at the previous sync, so a field changes here only when it
+// changed in Linear, and a local edit survives until then.
+export const linearSync = v.union(v.literal('1h'), v.literal('6h'), v.literal('12h'), v.literal('1d'));
+export const taskLinear = v.object({
+  state: v.union(v.literal('creating'), v.literal('linked'), v.literal('failed')),
+  requestId: v.string(),
+  claimedAt: v.number(),
+  teamId: v.string(),
+  teamName: v.string(),
+  projectId: v.optional(v.string()),
+  projectName: v.optional(v.string()),
+  issueId: v.optional(v.string()),
+  identifier: v.optional(v.string()),
+  url: v.optional(v.string()),
+  status: v.optional(v.string()),
+  statusType: v.optional(v.string()),
+  sync: v.boolean(),
+  issueUpdatedAt: v.optional(v.string()),
+  syncedAt: v.optional(v.number()),
+  error: v.optional(v.string()),
+  // Linear's approval page while a create waits on it (the fallback login).
+  waitingUrl: v.optional(v.string()),
+  // The issue was deleted or can't be reached any more; sync stopped.
+  missing: v.optional(v.boolean()),
+  last: v.optional(v.object({ title: v.string(), priority: v.number(), dueDate: v.union(v.string(), v.null()), statusType: v.string() })),
+  // Pictures already uploaded to Linear, so a retry doesn't upload them twice.
+  uploads: v.optional(v.array(v.object({ storageId: v.id('_storage'), assetUrl: v.string() }))),
+});
 export const taskFields = {
   id: v.string(),
   title: v.string(),
@@ -91,6 +126,7 @@ export const taskFields = {
   createdBy: v.optional(taskAuthor),
   // Deleted along with its parent, so restoring the parent brings it back. Never listed.
   deletedWithParent: v.optional(v.boolean()),
+  linear: v.optional(taskLinear),
 };
 export const taskPreferenceFields = {
   defaultView: v.optional(taskView),
@@ -120,4 +156,12 @@ export const taskPreferenceFields = {
   })),
   // API 87: the owner's first name, as the runner last gave it, for activity a browser writes.
   ownerName: v.optional(v.string()),
+  // API 105: how often synced tasks check Linear, when the last check ran,
+  // and the team and project the send sheet starts on for each Threadbear
+  // project (projectKey is runnerId/id, or none).
+  linear: v.optional(v.object({
+    syncEvery: linearSync,
+    lastSweepAt: v.optional(v.number()),
+    defaults: v.array(v.object({ projectKey: v.string(), teamId: v.string(), projectId: v.optional(v.string()) })),
+  })),
 };

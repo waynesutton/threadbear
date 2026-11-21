@@ -503,4 +503,11 @@
 //    full. tasks:deleteColumn removes any column but Building (id todo) and
 //    moves its tasks. columnId also takes a column's name. A runner sends
 //    deleteColumn only from 104.
-export const API_VERSION = 104;
+// 105: (this copy's) Tasks and Linear. Tasks take an optional `linear`
+//    (the issue a task was sent to, imported from or linked with, its status
+//    and a per-task sync switch), activity takes source 'linear' and an
+//    externalId, and preferences take linear { syncEvery, lastSweepAt,
+//    defaults }. tasksLinear:* claims a send, settles it, links and imports
+//    issues, applies what Linear says and claims the sync sweep. A runner
+//    offers Linear only from 105.
+export const API_VERSION = 105;

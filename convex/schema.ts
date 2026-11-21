@@ -239,9 +239,9 @@ export const moveStates = ['asking', 'ready', 'packing', 'unpacking', 'claimed',
 // defined against it.
 export const appSchema = defineSchema({
   // Cloud-owned tasks, not part of the runner's replaceable project mirror.
-  tasks: defineTable(taskFields).index('by_thread_command', ['threadCommandId']).index('by_task_id', ['id']).index('by_deleted_id', ['deleted', 'id']).index('by_updated', ['updatedAt']).index('by_project_deleted', ['project.runnerId', 'project.id', 'deleted']).index('by_parent', ['parentId', 'deleted']).index('by_column_status', ['columnId', 'status']),
+  tasks: defineTable(taskFields).index('by_thread_command', ['threadCommandId']).index('by_task_id', ['id']).index('by_deleted_id', ['deleted', 'id']).index('by_updated', ['updatedAt']).index('by_project_deleted', ['project.runnerId', 'project.id', 'deleted']).index('by_parent', ['parentId', 'deleted']).index('by_column_status', ['columnId', 'status']).index('by_linear_issue', ['linear.issueId']).index('by_linear_sync', ['linear.sync', 'deleted']),
   // A task's comments and the events the backend writes on changes (API 102).
-  taskActivity: defineTable(taskActivityFields).index('by_task', ['taskId', 'createdAt']),
+  taskActivity: defineTable(taskActivityFields).index('by_task', ['taskId', 'createdAt']).index('by_external', ['externalId']),
   taskPreferences: defineTable({ name: v.string(), ...taskPreferenceFields }).index('by_name', ['name']),
   // One row per runner (the Mac, Tinker Desk later), written every minute.
   // A phone treats one not seen for 3 minutes as offline.

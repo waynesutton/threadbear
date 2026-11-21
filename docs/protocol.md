@@ -9620,3 +9620,80 @@ sends `author` only to a backend it knows is 102 or later.
 
 Agent tools: `create_task` takes `priority` and `dueDate`; `update_task` takes
 them too (null clears) and `comment`, which adds a comment as the agent.
+
+### Tasks and Linear (API 105)
+
+Optional: nothing here shows or runs unless the `tasks` experiment is on, the
+Connectors gateway reports Linear `connected`, and the backend is 105 or later.
+`linear.status {}` answers `{ ready, why? }`, and the apps show Linear only
+when `ready` (an already linked task keeps its chip as a link).
+
+**Who talks to Linear.** The runner, through the gateway's MCP endpoint, as the
+gateway's own `threadbear` agent (`runner/src/linear-tasks.ts`). Its token is
+in the Keychain (`security … -s connectors -a threadbear`), read by the main
+login's `headers.sh threadbear`; `runner.json` `connectors.linearHeadersHelper`
+overrides the command. The gateway's `policy.json` limits that agent to
+`linear__list_teams`, `list_projects`, `list_issues`, `get_issue`,
+`list_comments`, `get_workspace`, `prepare_file_upload` and a create-only
+`save_issue` (a `save_issue` with `id`, an update, asks; everything else is
+denied). Without that agent the runner uses the main login, whose creates are
+held for approval: it reports `waitingUrl` and waits on
+`connectors__await_approval` for up to a day. No model is involved.
+
+**The task's `linear` field** (`convex/taskFields.ts` `taskLinear`): `state`
+(`creating`, `linked`, `failed`), `requestId` and `claimedAt` (the send's
+claim), `teamId`/`teamName`, `projectId`/`projectName` (Linear uuids),
+`issueId` (uuid), `identifier` (ENG-123), `url`, `status`, `statusType`,
+`sync`, `issueUpdatedAt`, `syncedAt`, `error`, `waitingUrl`, `missing`, `last`
+(what Linear said at the previous sync) and `uploads`. A linked task also has a
+`kind: 'link'` link with id `linear-issue`. Activity items may carry
+`source: 'linear'` and `externalId` (Linear's comment id); `removeComment`
+refuses those. Preferences take `linear { syncEvery: '1h'|'6h'|'12h'|'1d',
+lastSweepAt?, defaults: [{ projectKey, teamId, projectId? }] }`.
+
+**RPCs** (app only; a thread's key may call only `linear.status`):
+
+| Method | Params | Result |
+|---|---|---|
+| `linear.status` | | `{ ready, why? }` |
+| `linear.options` | `refresh?` | `{ workspace: { name, url }, teams: [{ id, key, name, displayName }] }` |
+| `linear.projects` | `teamId, refresh?` | `{ projects: [{ id, identifier, name, status }] }`, open ones |
+| `linear.preview` | `taskId` | `{ title, description, priority, dueDate, subtasks, links, pictures: [{ id, title, imageUrl }] }` |
+| `linear.send` | `taskId, teamId, projectId?, title?, imageIds?, sync?` | `{ started, requestId }`; the task's `linear.state` says the rest |
+| `linear.refresh` | `taskId` | `{ changed }` |
+| `linear.search` | `query?, teamId?, projectId?, assignedToMe?, openOnly?, cursor?` | `{ issues: [… , inTasks?], cursor? }` |
+| `linear.import` | `issues: [identifier], project, sync?, includeSubIssues?` | `{ created, skipped }` |
+| `linear.link` | `taskId, issue` (key or URL), `sync?` | `{ identifier }` |
+| `linear.setSync` | `taskId, sync` | `null` |
+| `linear.unlink` | `taskId` | `null`; never touches Linear |
+| `linear.sync` | | runs a sweep now |
+
+**Sending** claims the task (`tasksLinear:claim` refuses a done, deleted or
+linked task, or one another claim under 10 minutes old holds), checks the
+project is still open in the team, then searches the team's issues for the
+marker line `Threadbear task <id>` and reads each hit's full description (the
+search is fuzzy). A hit is linked rather than made again. Otherwise it uploads
+the ticked pictures one at a time (`prepare_file_upload`, then a PUT with the
+signed headers as given, no redirects), recording each in `uploads`, and calls
+`save_issue` with the team, project, title, description (note, sub-tasks as a
+checklist, pictures, the marker), priority (urgent 1, high 2, normal 3, low 4),
+due date and web links. `tasksLinear:settle` takes the answer only for its own
+`requestId`, and refuses an issue another task already has.
+
+**Sync** reads Linear only for tasks with `sync` on. The runner wakes every 10
+minutes; `tasksLinear:claimSweep` hands the sweep to one Mac once `syncEvery`
+has passed, with the time of the last one. The sweep makes one `list_issues`
+per team with `updatedAt` since then, and reads again (`get_issue`,
+`list_comments`) only issues that changed. `tasksLinear:apply` ignores an
+answer no newer than `issueUpdatedAt`, always updates the chip, and with sync
+on copies a field only when it differs from `last`: title, priority (0 clears
+it), due date (clearing it clears the time) and status (`triage`/`backlog` to
+backlog, `unstarted` to todo, `started` to doing, `completed` to done,
+`canceled` to the Canceled column when the board has one). New comments come in
+once, by `externalId`. A missing issue sets `missing` and turns sync off.
+Opening a task, Refresh and turning sync on refresh it at once.
+
+**Importing** makes each picked issue a task with id `linear-<uuid>`, linked
+and synced, its description copied once into the note, its comments, and its
+sub-issues one level deep when asked. `by_linear_issue` keeps one task per
+issue, for import and link alike.

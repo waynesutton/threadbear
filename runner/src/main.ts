@@ -51,6 +51,7 @@ import { MemorySync } from './memory-sync.ts';
 import { Reinstaller } from './reinstall.ts';
 import { MacScreen } from './mac-screen.ts';
 import { Tasks, relatedFor, taskMethods } from './tasks.ts';
+import { LinearTasks, linearCaller, linearHelper, linearMethods } from './linear-tasks.ts';
 import { Projects, drainProjectMethods, projectMethods } from './projects.ts';
 import { Librarian, librarianMethods } from './librarian.ts';
 import { ConnectorsMonitor, connectorsMethods, findLauncher, gatewayBase, gatewayIsLocal, readLocalIds, type StaticClientDeps } from './connectors.ts';
@@ -812,6 +813,12 @@ async function main(): Promise<void> {
   // Calls to the gateway's tools as the runner itself (Notion task boards,
   // naming where a held Slack call goes).
   const gatewayCall = cfg.connectorsClient ? gatewayCaller({ mcpUrl: cfg.connectorsClient.mcpUrl, headers: helperHeaders(cfg.connectorsClient.headersHelper) }) : undefined;
+  // Tasks and Linear call as the gateway's own threadbear login when it has
+  // one (create without asking, nothing else), else as the main login.
+  const linearHelperCommand = cfg.connectorsClient ? linearHelper(cfg.connectorsClient.headersHelper, cfg.connectorsClient.linearHeadersHelper) : undefined;
+  const linearCall = cfg.connectorsClient
+    ? linearCaller({ mcpUrl: cfg.connectorsClient.mcpUrl, headers: helperHeaders(linearHelperCommand ?? cfg.connectorsClient.headersHelper), ...(linearHelperCommand ? { fallback: helperHeaders(cfg.connectorsClient.headersHelper) } : {}), log })
+    : undefined;
   // Gateway approvals on a card in the thread that made the call, when the
   // gateway is on this Mac and has /api/approvals (gateway-approvals.ts).
   const gatewayBaseUrl = cfg.connectorsUrl ? gatewayBase(cfg.connectorsUrl) : undefined;
@@ -1485,13 +1492,23 @@ async function main(): Promise<void> {
     },
   });
   taskReminders.start();
+  const linearTasks = new LinearTasks({
+    call: () => linearCall,
+    connected: () => connectors.status().services.some((x) => x.id === 'linear' && x.state === 'connected'),
+    apiVersion: () => sync.relaySource()?.apiVersion,
+    tasksOn: () => experimentOn(cfg.home, 'tasks'),
+    tasks: (op, args) => nativeTasks!.call(op, args),
+    linear: (op, args) => nativeTasks!.linear(op, args),
+    log,
+  });
+  linearTasks.start();
   // The thread on a held Codex version: archiving or deleting it changes
   // what its Updates row says. (Here, as the runner is made after updates.)
   runner.onNotification((n) => {
     if (n.method === 'thread.updated') updates.threadChanged(n.params.thread.id);
     else if (n.method === 'thread.deleted') updates.threadChanged(n.params.threadId);
   });
-  const methods = { ...taskMethods(nativeTasks), ...profilePageMethods(publicProfile), ...restartMethods(restarter), ...scheduleMethods(scheduler), ...projectMethods(projects), ...pageMethods(pagesFor, askAboutPage, printPublisher), ...drainProjectMethods(projects), ...librarianMethods(librarian), ...connectorsMethods(connectors, { on: () => experimentOn(cfg.home, 'connectorsSetup'), start: (r) => startOwnThread(runner, r, undefined), open: openThread, local: () => experimentOn(cfg.home, 'localConnectors'), findLauncher: (l) => findLauncher(l) }, staticClients), ...settingsMethods(settings), ...skillMethods(skills), ...instructionsMethods(instructions), ...modelMethods(models), ...devicesMethods(sync), ...agentsMethods(sync, () => experimentOn(cfg.home, OUTSIDE_AGENTS)), ...tablesMethods({ tables: () => tables, on: tablesOn }), ...bearsMethods({ bears, on: bearsOn, mention: (p) => mentions.ask(p), unseat: (id) => tables.unseatEverywhere(id), touch: () => runner.touchThreads(runner.list(['inbox', 'snoozed', 'archived']).filter((t) => bears.forCwd(t.cwd)).map((t) => t.id)), cwdOf: (id) => (runner.has(id) ? runner.get(id).cwd : undefined), revokeHooks: (folder) => (webhooksOn() ? revokeHooksFor(sync, folder) : Promise.resolve(0)) }), ...webhooksMethods({ backend: sync, registry: hookRegistry, on: webhooksOn, runnerId: syncRunnerId, needApi: WEBHOOKS_API_VERSION, modeOf: (id) => (runner.has(id) ? runner.get(id).permissionMode : undefined), bearFolder: (b) => { if (!bearsOn()) return undefined; try { return bears.get(b, { faces: false }).folder; } catch { return undefined; } } }), ...xSearchMethods({ on: () => experimentOn(cfg.home, 'xSearch'), secretsDir: paths.secrets(cfg.home) }), ...usageStatsMethods({ tally, history: usageHistory, clock: realClock }) };
+  const methods = { ...taskMethods(nativeTasks), ...linearMethods(linearTasks), ...profilePageMethods(publicProfile), ...restartMethods(restarter), ...scheduleMethods(scheduler), ...projectMethods(projects), ...pageMethods(pagesFor, askAboutPage, printPublisher), ...drainProjectMethods(projects), ...librarianMethods(librarian), ...connectorsMethods(connectors, { on: () => experimentOn(cfg.home, 'connectorsSetup'), start: (r) => startOwnThread(runner, r, undefined), open: openThread, local: () => experimentOn(cfg.home, 'localConnectors'), findLauncher: (l) => findLauncher(l) }, staticClients), ...settingsMethods(settings), ...skillMethods(skills), ...instructionsMethods(instructions), ...modelMethods(models), ...devicesMethods(sync), ...agentsMethods(sync, () => experimentOn(cfg.home, OUTSIDE_AGENTS)), ...tablesMethods({ tables: () => tables, on: tablesOn }), ...bearsMethods({ bears, on: bearsOn, mention: (p) => mentions.ask(p), unseat: (id) => tables.unseatEverywhere(id), touch: () => runner.touchThreads(runner.list(['inbox', 'snoozed', 'archived']).filter((t) => bears.forCwd(t.cwd)).map((t) => t.id)), cwdOf: (id) => (runner.has(id) ? runner.get(id).cwd : undefined), revokeHooks: (folder) => (webhooksOn() ? revokeHooksFor(sync, folder) : Promise.resolve(0)) }), ...webhooksMethods({ backend: sync, registry: hookRegistry, on: webhooksOn, runnerId: syncRunnerId, needApi: WEBHOOKS_API_VERSION, modeOf: (id) => (runner.has(id) ? runner.get(id).permissionMode : undefined), bearFolder: (b) => { if (!bearsOn()) return undefined; try { return bears.get(b, { faces: false }).folder; } catch { return undefined; } } }), ...xSearchMethods({ on: () => experimentOn(cfg.home, 'xSearch'), secretsDir: paths.secrets(cfg.home) }), ...usageStatsMethods({ tally, history: usageHistory, clock: realClock }) };
   // runner.status carries the CLI statuses too (protocol, "runner.status").
   const restartStatus = methods['runner.status'];
   methods['runner.status'] = (p) => {

@@ -38,6 +38,27 @@ export type NativeTask = {
   links?: TaskLink[];
   commentCount?: number;
   createdBy?: TaskAuthor;
+  // API 105 (linear-tasks.ts).
+  linear?: {
+    state: 'creating' | 'linked' | 'failed';
+    requestId: string;
+    claimedAt: number;
+    teamId: string;
+    teamName: string;
+    projectId?: string;
+    projectName?: string;
+    issueId?: string;
+    identifier?: string;
+    url?: string;
+    status?: string;
+    statusType?: string;
+    sync: boolean;
+    issueUpdatedAt?: string;
+    syncedAt?: number;
+    error?: string;
+    waitingUrl?: string;
+    missing?: boolean;
+  };
 };
 export type TaskPriority = 'urgent' | 'high' | 'normal' | 'low';
 export type TaskAuthor = { kind: 'user' | 'agent'; name: string };
@@ -56,6 +77,7 @@ const API87_OPERATIONS = new Set(['activity', 'get', 'comment', 'removeComment',
 const API87_FIELDS = ['priority', 'dueDate', 'parentId', 'links'];
 // What needs backend API 88: due times, reminder settings and claiming one.
 const API88_FIELDS = ['dueTime', 'reminders'];
+const LINEAR_OPERATIONS = new Set(['claim', 'uploaded', 'waiting', 'settle', 'link', 'importIssues', 'apply', 'missing', 'setSync', 'unlink', 'synced', 'linkedIssues', 'claimSweep']);
 const AUTHORED = new Set(['create', 'update', 'comment']);
 const IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
 const IMAGE_LIMIT = 10 * 1024 * 1024;
@@ -182,6 +204,19 @@ export class Tasks {
       auth: { key: source.key },
     });
     if (!queries.has(operation)) this.changed();
+    return result;
+  }
+  // tasksLinear:* (API 105), for linear-tasks.ts only: never from an agent's tool.
+  async linear(operation: string, args: Record<string, unknown> = {}): Promise<unknown> {
+    if (!this.enabled()) throw new Error('Turn on Tasks in Settings > Experiments.');
+    if (!LINEAR_OPERATIONS.has(operation)) throw new Error('Unknown Linear operation');
+    const source = this.source();
+    if (!source) throw new Error('Tasks needs a connection to your Threadbear backend.');
+    if (source.apiVersion !== undefined && source.apiVersion < 105) throw new Error('Update the Threadbear backend to use Linear with Tasks.');
+    const { auth: _auth, ...fields } = args;
+    const query = operation === 'synced' || operation === 'linkedIssues';
+    const result = await source.post(query ? 'query' : 'mutation', `tasksLinear:${operation}`, { ...fields, auth: { key: source.key } });
+    if (!query && operation !== 'claimSweep') this.changed();
     return result;
   }
   watch(): void {

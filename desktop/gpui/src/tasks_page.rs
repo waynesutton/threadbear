@@ -24,6 +24,7 @@ actions!(tasks_page, [CloseTasks]);
 #[path = "task_detail.rs"]
 mod detail;
 use detail::{due_chip, priority_icon, subtask_chip};
+pub(crate) use detail::fetch_picture;
 
 #[derive(Clone, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -59,6 +60,35 @@ struct TaskRow {
     comment_count: Option<u64>,
     #[serde(default)]
     created_by: Option<Value>,
+    // API 105: the Linear issue it went to or came from (linear-tasks.ts).
+    #[serde(default)]
+    linear: Option<LinearLink>,
+}
+/// A task's Linear issue, as the runner's NativeTask.linear has it.
+#[derive(Clone, Default, PartialEq, serde::Deserialize, serde::Serialize)]
+#[serde(rename_all = "camelCase", default)]
+pub(crate) struct LinearLink {
+    pub state: String,
+    pub request_id: String,
+    pub claimed_at: Option<f64>,
+    pub team_id: String,
+    pub team_name: String,
+    pub project_id: Option<String>,
+    pub project_name: Option<String>,
+    pub issue_id: Option<String>,
+    pub identifier: Option<String>,
+    pub url: Option<String>,
+    pub status: Option<String>,
+    pub status_type: Option<String>,
+    pub sync: bool,
+    pub issue_updated_at: Option<String>,
+    pub synced_at: Option<f64>,
+    pub error: Option<String>,
+    pub waiting_url: Option<String>,
+    pub missing: bool,
+}
+impl LinearLink {
+    fn linked(&self) -> bool { self.state == "linked" && self.identifier.is_some() }
 }
 fn links_or_none<'de, D: serde::Deserializer<'de>>(d: D) -> Result<Vec<Value>, D::Error> {
     let value: Value = serde::Deserialize::deserialize(d)?;
@@ -227,6 +257,8 @@ impl Threadbear {
                 "priority":t.priority,"dueDate":t.due_date,"dueTime":t.due_time,"parentId":t.parent_id,"links":t.links,"commentCount":t.comment_count})).collect::<Vec<_>>()),
             "topLevel":page.map(|p| p.visible().iter().map(|t| t.title.clone()).collect::<Vec<_>>()),
             "wrapColumns":page.map(|p| p.wrap_columns),
+            "linearReady":page.map(|p| p.linear_ready),
+            "linear":page.map(|p| p.rows.iter().filter_map(|t| t.linear.as_ref().map(|l| json!({"id":t.id,"linear":l}))).collect::<Vec<_>>()),
             "detail":page.filter(|p| p.editor_open && p.editing_baseline.is_some()).map(|p| json!({"task":p.editing,"picker":p.detail.picker,"commentsOnly":p.detail.comments_only,
                 "activity":match &p.detail.activity { Some(Ok(items)) => json!(items.iter().map(|i| json!({"kind":i["kind"],"body":i["body"]})).collect::<Vec<_>>()), Some(Err(e)) => json!({"error":e}), None => Value::Null },
                 "related":p.detail.related.as_ref().map(|r| r.clone().unwrap_or_else(|e| json!({"error":e}))),"error":p.detail.error,"month":[p.detail.month.0,p.detail.month.1]})),
@@ -338,6 +370,11 @@ pub(crate) struct TasksPage {
     // A save from the task's page keeps it open.
     keep_open: bool,
     wrap_columns: bool,
+    // linear.status: whether Linear is offered at all. Off, nothing of it shows
+    // but a linked task's chip, as a plain link.
+    linear_ready: bool,
+    linear_asking: bool,
+    linear_again: bool,
     _subscriptions: Vec<Subscription>,
 }
 
@@ -486,6 +523,9 @@ impl TasksPage {
             print_search,
             keep_open: false,
             wrap_columns: false,
+            linear_ready: false,
+            linear_asking: false,
+            linear_again: false,
             _subscriptions: subs,
         }
     }
@@ -628,6 +668,7 @@ impl TasksPage {
             self.refresh_again = true;
             return;
         }
+        self.load_linear_status(cx);
         let client = self.client.clone();
         self.loading = true;
         cx.spawn(async move |this, cx| {
@@ -809,6 +850,7 @@ impl TasksPage {
     }
     fn undo(&mut self, cx: &mut Context<Self>) {
         let Some((_, method, args)) = self.toast.take() else { return };
+        if method.is_empty() { return; }
         if method == "tasks.update" {
             let id = args["id"].as_str().unwrap_or("").to_string();
             let mut patch = args.clone();
@@ -910,7 +952,7 @@ impl TasksPage {
         let project = if group != "all" { self.group_project(group) } else if self.filter.is_object() { self.filter.clone() } else { Value::Null };
         let position = self.rows.iter().filter(|r| column_id(r) == status).map(|r| r.position).min_by(f64::total_cmp).map_or(crate::now_ms() as f64, |p| p - 1000.);
         let id = threadbear_core::notes::new_id();
-        self.rows.push(TaskRow { id: id.clone(), title: title.clone(), notes: notes.clone(), status: self.canonical(status), column_id: Some(status.into()), thread: None, thread_command_id: None, thread_error: None, project: (!project.is_null()).then(|| project.clone()), position, created_at: crate::now_ms() as f64, priority: None, due_date: None, due_time: None, parent_id: None, links: vec![], comment_count: None, created_by: None });
+        self.rows.push(TaskRow { id: id.clone(), title: title.clone(), notes: notes.clone(), status: self.canonical(status), column_id: Some(status.into()), thread: None, thread_command_id: None, thread_error: None, project: (!project.is_null()).then(|| project.clone()), position, created_at: crate::now_ms() as f64, priority: None, due_date: None, due_time: None, parent_id: None, links: vec![], comment_count: None, created_by: None, linear: None });
         self.busy = true;
         self.error = None;
         cx.notify();
@@ -954,7 +996,7 @@ impl TasksPage {
             let (base, col) = if item.done { ("done".to_string(), "done".to_string()) } else { (self.canonical(status), status.to_string()) };
             let position = top - (count - i as f64) * 1000.;
             let parent = item.parent.map(|p| ids[p].clone());
-            self.rows.push(TaskRow { id: ids[i].clone(), title: item.title.clone(), notes: item.notes.clone(), status: base.clone(), column_id: Some(col.clone()), thread: None, thread_command_id: None, thread_error: None, project: (!project.is_null()).then(|| project.clone()), position, created_at: crate::now_ms() as f64, priority: None, due_date: None, due_time: None, parent_id: parent.clone(), links: vec![], comment_count: None, created_by: None });
+            self.rows.push(TaskRow { id: ids[i].clone(), title: item.title.clone(), notes: item.notes.clone(), status: base.clone(), column_id: Some(col.clone()), thread: None, thread_command_id: None, thread_error: None, project: (!project.is_null()).then(|| project.clone()), position, created_at: crate::now_ms() as f64, priority: None, due_date: None, due_time: None, parent_id: parent.clone(), links: vec![], comment_count: None, created_by: None, linear: None });
             calls.push(json!({"id": ids[i], "title": item.title, "notes": item.notes, "status": base, "columnId": col, "project": project, "position": position, "parentId": parent}));
         }
         self.busy = true;
@@ -1290,6 +1332,7 @@ impl TasksPage {
         let projects = self.project_choices();
         let statuses = if self.view_name() == "list" { self.list_order() } else { self.board_order() };
         let labels: Vec<String> = statuses.iter().map(|s| self.column_name(s)).collect();
+        let linear_ready = self.linear_ready;
         Button::new(SharedString::from(format!("task-more-{}", task.id)))
             .icon(icons::symbol("ellipsis"))
             .ghost()
@@ -1308,6 +1351,9 @@ impl TasksPage {
                 let (p, row) = (page.clone(), t.clone());
                 let label = if row.thread.is_some() { "View Thread" } else if row.thread_error.is_some() { "Thread Failed" } else if row.thread_command_id.is_some() { "Starting Thread…" } else { "Send to Thread" };
                 menu = menu.item(PopupMenuItem::new(label).on_click(move |_, window, cx| { p.update(cx, |p, cx| p.send_task(&row, window, cx)).ok(); }));
+                if linear_ready {
+                    menu = linear_items(menu, &page, &t);
+                }
                 let (p, row, choices) = (page.clone(), t.clone(), projects.clone());
                 menu = menu.submenu_with_icon(Some(icons::symbol("square.stack")), "Move to Project", window, cx, move |sub, _, _| {
                     let mut sub = sub;
@@ -1383,6 +1429,7 @@ impl TasksPage {
         }
         let (done, all) = self.subtask_counts(&task.id);
         if all > 0 { out.push(subtask_chip(done, all, cx)); }
+        out.extend(self.linear_chip(task, cx));
         if !task.links.is_empty() {
             out.push(div().id(SharedString::from(format!("links-mark-{}", task.id))).flex_none().tip(if task.links.len() == 1 { "1 link".to_string() } else { format!("{} links", task.links.len()) })
                 .child(icons::symbol("link").with_size(px(12.)).text_color(style::tertiary_label(cx))).into_any_element());
@@ -1594,7 +1641,10 @@ impl TasksPage {
                 .child(Button::new("tasks-add").icon(icons::symbol("arrow.up")).small().primary().loading(self.busy).disabled(self.busy).tooltip("Add task (Return)").on_click(cx.listener(|this, _, window, cx| this.submit_composer(window, cx)))),
         );
         if rows.is_empty() && !self.loading {
-            return out.child(v_flex().items_center().gap(px(10.)).py(px(64.)).text_color(style::tertiary_label(cx)).child(status_icon("todo", cx)).child("Nothing here yet. Type a task above and press Return.")).into_any_element();
+            return out.child(v_flex().items_center().gap(px(10.)).py(px(64.)).text_color(style::tertiary_label(cx)).child(status_icon("todo", cx)).child("Nothing here yet. Type a task above and press Return.")
+                .when(self.linear_ready, |d| d.child(Button::new("tasks-empty-linear").label("Start from your Linear issues").icon(crate::linear_send::linear_mark(13., style::secondary_label(cx))).small().outline()
+                    .tooltip("Pick Linear issues to add as tasks")
+                    .on_click(cx.listener(|this, _, window, cx| this.open_linear_import(window, cx)))))).into_any_element();
         }
         let statuses: Vec<String> = self.list_order().into_iter().filter(|s| self.canonical(s) != "done" || self.show_done).collect();
         for group in self.groups(rows) {
@@ -2012,6 +2062,9 @@ impl TasksPage {
                 .child(slider_row("Position", "tasks-place", "Which part of the photo shows: top, center or bottom", &self.place_slider, place_label.to_string(), cx));
         }
         panel = panel.child(self.notifications_section(cx));
+        if self.linear_ready {
+            panel = panel.child(self.linear_section(cx));
+        }
         panel.into_any_element()
     }
     fn editor_sheet(&self, cx: &mut Context<Self>) -> AnyElement {
@@ -2124,6 +2177,306 @@ impl TasksPage {
     }
 }
 
+/// The ⋯ menu's Linear items, only when Linear is ready (linear.status).
+fn linear_items(mut menu: PopupMenu, page: &WeakEntity<TasksPage>, t: &TaskRow) -> PopupMenu {
+    let linear = t.linear.clone().unwrap_or_default();
+    if !linear.linked() && linear.state != "creating" && t.status == "done" { return menu; }
+    menu = menu.separator();
+    if linear.linked() {
+        let url = linear.url.clone();
+        menu = menu.item(PopupMenuItem::new("Open in Linear").icon(icons::symbol("arrow.up.forward.square")).disabled(url.is_none()).on_click(move |_, _, cx| {
+            if let Some(url) = &url { crate::open_gate::open_web(url, cx); }
+        }));
+        let (p, id, on) = (page.clone(), t.id.clone(), linear.sync);
+        menu = menu.item(PopupMenuItem::new(if on { "Stop syncing" } else { "Keep in sync" }).icon(icons::symbol("arrow.triangle.2.circlepath")).on_click(move |_, _, cx| {
+            p.update(cx, |p, cx| p.set_linear_sync(&id, !on, cx)).ok();
+        }));
+        let (p, id) = (page.clone(), t.id.clone());
+        menu = menu.item(PopupMenuItem::new("Unlink from Linear").icon(icons::symbol("xmark.circle")).on_click(move |_, _, cx| {
+            p.update(cx, |p, cx| p.unlink_linear(&id, cx)).ok();
+        }));
+    } else if linear.state == "creating" {
+        menu = menu.item(PopupMenuItem::new("Sending to Linear…").disabled(true));
+    } else if t.status != "done" {
+        let (p, row) = (page.clone(), t.clone());
+        menu = menu.item(PopupMenuItem::new("Send to Linear…").icon(icons::symbol("paperplane")).on_click(move |_, window, cx| {
+            p.update(cx, |p, cx| p.open_linear_send(&row, window, cx)).ok();
+        }));
+        let (p, row) = (page.clone(), t.clone());
+        menu = menu.item(PopupMenuItem::new("Link to Linear issue…").icon(icons::symbol("link")).on_click(move |_, window, cx| {
+            p.update(cx, |p, cx| p.open_linear_link(&row, window, cx)).ok();
+        }));
+    }
+    menu
+}
+
+/// "Synced 3 min ago", from the task's linear.syncedAt.
+fn synced_words(at: Option<f64>, now: i64) -> String {
+    let Some(at) = at else { return "Not synced yet".into() };
+    let mins = ((now - at as i64) / 60_000).max(0);
+    let plural = |n: i64| if n == 1 { "" } else { "s" };
+    match mins {
+        0 => "Synced just now".into(),
+        1..60 => format!("Synced {mins} min ago"),
+        60..1440 => format!("Synced {} hour{} ago", mins / 60, plural(mins / 60)),
+        _ => format!("Synced {} day{} ago", mins / 1440, plural(mins / 1440)),
+    }
+}
+
+// Tasks and Linear (runner/src/linear-tasks.ts). Every call here is the
+// runner's linear.* RPCs; the sheets are linear_send.rs and linear_import.rs.
+impl TasksPage {
+    /// linear.status, asked as the page loads and after tasks.updated or
+    /// connectors.updated. A runner without it (or any error) means not ready.
+    pub(crate) fn load_linear_status(&mut self, cx: &mut Context<Self>) {
+        if self.linear_asking {
+            self.linear_again = true;
+            return;
+        }
+        self.linear_asking = true;
+        let client = self.client.clone();
+        cx.spawn(async move |this, cx| {
+            let result = call(client, "linear.status", json!({})).await;
+            this.update(cx, |this, cx| {
+                this.linear_asking = false;
+                let ready = result.as_ref().ok().and_then(|v| v["ready"].as_bool()).unwrap_or(false);
+                if ready != this.linear_ready {
+                    this.linear_ready = ready;
+                    cx.notify();
+                }
+                if ready { this.refresh_open_linear(cx); }
+                if std::mem::take(&mut this.linear_again) { this.load_linear_status(cx); }
+            }).ok();
+        }).detach();
+    }
+    /// Once per opening of a linked task's page that keeps in sync: catch it
+    /// up with Linear, without holding up the page. A failure is only logged.
+    pub(super) fn refresh_open_linear(&mut self, cx: &mut Context<Self>) {
+        if !self.linear_ready || self.detail.linear_refreshed || !self.editor_open || self.editing_baseline.is_none() { return; }
+        let Some(row) = self.open_row() else { return };
+        if !row.linear.as_ref().is_some_and(|l| l.linked() && l.sync) { return; }
+        let id = row.id.clone();
+        self.detail.linear_refreshed = true;
+        let client = self.client.clone();
+        cx.spawn(async move |this, cx| {
+            let result = call(client, "linear.refresh", json!({"taskId": id})).await;
+            match result {
+                Err(e) => threadbear_client::log::write("tasks", &format!("linear.refresh {id} failed: {}", e.message)),
+                Ok(v) if v["changed"].as_array().is_some_and(|c| !c.is_empty()) => { this.update(cx, |this, cx| this.refresh(cx)).ok(); }
+                Ok(_) => {}
+            }
+        }).detach();
+    }
+    /// Refresh on the task's page: read the issue now, saying if it fails.
+    pub(super) fn refresh_linear(&mut self, id: &str, cx: &mut Context<Self>) {
+        if self.detail.linear_refreshing { return; }
+        self.detail.linear_refreshing = true;
+        self.detail.error = None;
+        cx.notify();
+        let (client, id) = (self.client.clone(), id.to_string());
+        cx.spawn(async move |this, cx| {
+            let result = call(client, "linear.refresh", json!({"taskId": id})).await;
+            this.update(cx, |this, cx| {
+                this.detail.linear_refreshing = false;
+                match result {
+                    Ok(_) => this.refresh(cx),
+                    Err(e) => this.detail.error = Some(format!("Couldn't refresh from Linear: {}", e.message)),
+                }
+                cx.notify();
+            }).ok();
+        }).detach();
+    }
+    /// A linear.* call that changes only the task in Convex; the rows follow
+    /// with the next refresh, and an error comes back where the page shows them.
+    fn linear_call(&mut self, method: &'static str, args: Value, toast: Option<(String, &'static str, Value)>, cx: &mut Context<Self>) {
+        self.error = None;
+        cx.notify();
+        let client = self.client.clone();
+        cx.spawn(async move |this, cx| {
+            let result = call(client, method, args).await;
+            this.update(cx, |this, cx| {
+                match result {
+                    Ok(_) => if let Some((text, method, args)) = toast { this.show_toast(text, method, args, cx); },
+                    Err(e) => this.error = Some(e.message),
+                }
+                this.refresh(cx);
+                cx.notify();
+            }).ok();
+        }).detach();
+    }
+    pub(super) fn set_linear_sync(&mut self, id: &str, on: bool, cx: &mut Context<Self>) {
+        if let Some(l) = self.rows.iter_mut().find(|r| r.id == id).and_then(|r| r.linear.as_mut()) { l.sync = on; }
+        self.linear_call("linear.setSync", json!({"taskId": id, "sync": on}), None, cx);
+    }
+    /// Unlink only forgets the issue here; Linear is never touched. Undo links it again.
+    fn unlink_linear(&mut self, id: &str, cx: &mut Context<Self>) {
+        let Some(l) = self.rows.iter_mut().find(|r| r.id == id).and_then(|r| r.linear.take()) else { return };
+        let undo = l.identifier.clone().map(|key| (format!("Unlinked from {key}"), "linear.link", json!({"taskId": id, "issue": key, "sync": l.sync})));
+        self.linear_call("linear.unlink", json!({"taskId": id}), undo, cx);
+    }
+    fn link_linear(&mut self, id: &str, issue: String, sync: bool, cx: &mut Context<Self>) {
+        self.error = None;
+        self.detail.error = None;
+        cx.notify();
+        let (client, id) = (self.client.clone(), id.to_string());
+        cx.spawn(async move |this, cx| {
+            let result = call(client, "linear.link", json!({"taskId": id, "issue": issue, "sync": sync})).await;
+            this.update(cx, |this, cx| {
+                match result {
+                    Ok(v) => {
+                        let key = v["identifier"].as_str().unwrap_or("the issue").to_string();
+                        this.show_toast(format!("Linked to {key}"), "linear.unlink", json!({"taskId": id}), cx);
+                    }
+                    Err(e) => this.error = Some(e.message),
+                }
+                this.refresh(cx);
+                cx.notify();
+            }).ok();
+        }).detach();
+    }
+    /// Link to Linear issue…: a key or a link, and whether to keep it in sync.
+    fn open_linear_link(&mut self, row: &TaskRow, window: &mut Window, cx: &mut Context<Self>) {
+        if !self.linear_ready { return; }
+        let field = cx.new(|cx| InputState::new(window, cx).placeholder("ENG-123 or a Linear link"));
+        let sync = Rc::new(std::cell::Cell::new(true));
+        let (page, typed, id, title) = (cx.entity().downgrade(), field.clone(), row.id.clone(), row.title.clone());
+        window.open_alert_dialog(cx, move |dialog, _, _| {
+            let (page, field, id, sync) = (page.clone(), typed.clone(), id.clone(), sync.clone());
+            let toggle = sync.clone();
+            dialog.title(format!("Link {title} to a Linear issue")).width(px(400.))
+                .child(v_flex().gap(px(10.))
+                    .child(div().id("linear-link-issue").tip("The issue's key, like ENG-123, or its link").child(Input::new(&typed)))
+                    .child(Checkbox::new("linear-link-sync").label("Keep in sync with Linear").checked(sync.get())
+                        .tooltip("Its status and comments follow the issue")
+                        .on_click(move |on: &bool, window, _| { toggle.set(*on); window.refresh(); })))
+                .button_props(DialogButtonProps::default().ok_text("Link").show_cancel(true))
+                .on_ok(move |_, _, cx| {
+                    let issue = field.read(cx).value().trim().to_string();
+                    if issue.is_empty() { return false; }
+                    page.update(cx, |p, cx| p.link_linear(&id, issue, sync.get(), cx)).ok();
+                    true
+                })
+        });
+        field.update(cx, |f, cx| f.focus(window, cx));
+        crate::web_panels::keyboard_to_app(window);
+    }
+    /// Send to Linear… (and Retry): the send sheet, handed what it needs so
+    /// it never reads this page while the page is being updated.
+    fn open_linear_send(&mut self, row: &TaskRow, window: &mut Window, cx: &mut Context<Self>) {
+        if !self.linear_ready { return; }
+        let images = self.detail.images.iter().filter_map(|(url, image)| image.clone().map(|i| (url.clone(), i))).collect();
+        let request = crate::linear_send::SendRequest {
+            client: self.client.clone(),
+            page: cx.entity().downgrade(),
+            task_id: row.id.clone(),
+            title: row.title.clone(),
+            project_key: project_key(&row.project),
+            defaults: self.linear_prefs()["defaults"].as_array().cloned().unwrap_or_default(),
+            images,
+        };
+        crate::linear_send::open(request, window, cx);
+    }
+    /// Add from Linear: the picker, with the same projects Move to Project offers.
+    fn open_linear_import(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        if !self.linear_ready { return; }
+        let project = if self.filter.is_object() { self.filter.clone() } else { Value::Null };
+        crate::linear_import::open(self.client.clone(), cx.entity().downgrade(), self.project_choices(), project, window, cx);
+    }
+    /// The send sheet's Create came back: the row says Sending… at once.
+    pub(crate) fn linear_sent(&mut self, task_id: &str, team_name: String, sync: bool, cx: &mut Context<Self>) {
+        if let Some(row) = self.rows.iter_mut().find(|r| r.id == task_id) {
+            row.linear = Some(LinearLink { state: "creating".into(), team_name, sync, ..Default::default() });
+        }
+        self.refresh(cx);
+        cx.notify();
+    }
+    /// A short note with nothing to undo (Add from Linear's result).
+    pub(crate) fn linear_note(&mut self, text: String, cx: &mut Context<Self>) {
+        self.show_toast(text, "", Value::Null, cx);
+        self.refresh(cx);
+        cx.notify();
+    }
+    /// The whole linear preference, as setPreferences takes it back: lastSweepAt
+    /// as read, the defaults kept, every hour when it was never set.
+    fn linear_prefs(&self) -> Value {
+        let l = &self.prefs["linear"];
+        let mut out = json!({"syncEvery": l["syncEvery"].as_str().unwrap_or("1h"), "defaults": l["defaults"].as_array().cloned().unwrap_or_default()});
+        if l["lastSweepAt"].is_number() { out["lastSweepAt"] = l["lastSweepAt"].clone(); }
+        out
+    }
+    /// The team and project a send chose, as the start for the next send
+    /// from the same Threadbear project.
+    pub(crate) fn save_linear_default(&mut self, project_key: &str, team_id: &str, project_id: Option<&str>, cx: &mut Context<Self>) {
+        let mut l = self.linear_prefs();
+        let mut defaults: Vec<Value> = l["defaults"].as_array().cloned().unwrap_or_default().into_iter().filter(|d| d["projectKey"] != project_key).collect();
+        let mut entry = json!({"projectKey": project_key, "teamId": team_id});
+        if let Some(p) = project_id { entry["projectId"] = json!(p); }
+        if defaults.len() >= 200 { defaults.remove(0); }
+        defaults.push(entry);
+        l["defaults"] = json!(defaults);
+        self.set_pref("linear", l, cx);
+    }
+    fn linear_section(&self, cx: &mut Context<Self>) -> AnyElement {
+        let every = self.linear_prefs()["syncEvery"].as_str().unwrap_or("1h").to_string();
+        let choices: [(&str, &str); 4] = [("1h", "Every hour"), ("6h", "Every 6 hours"), ("12h", "Every 12 hours"), ("1d", "Once a day")];
+        let name = choices.iter().find(|(id, _)| *id == every).map(|(_, n)| *n).unwrap_or("Every hour");
+        let page = cx.entity().downgrade();
+        let button = Button::new("tasks-linear-every").label(name).small().outline().tooltip("How often tasks you keep in sync check Linear").dropdown_menu(move |menu: PopupMenu, _, _| {
+            let mut menu = menu;
+            for (id, label) in choices {
+                let p = page.clone();
+                menu = menu.item(PopupMenuItem::new(label).checked(every == id).on_click(move |_, _, cx| {
+                    p.update(cx, |p, cx| {
+                        let mut l = p.linear_prefs();
+                        l["syncEvery"] = json!(id);
+                        p.set_pref("linear", l, cx);
+                    }).ok();
+                }));
+            }
+            menu
+        });
+        v_flex().gap(px(8.))
+            .child(div().h(px(1.)).bg(style::hairline(cx)))
+            .child(div().text_size(px(12.)).text_color(style::secondary_label(cx)).child("Linear"))
+            .child(h_flex().gap(px(10.)).child(div().flex_1().text_size(px(12.)).text_color(style::secondary_label(cx)).child("Check Linear for changes")).child(button))
+            .child(div().text_size(px(11.)).text_color(style::tertiary_label(cx)).child("Only for tasks you keep in sync. It costs no tokens."))
+            .into_any_element()
+    }
+    /// A row's or card's Linear chip: the issue's key (a link, even when Linear
+    /// isn't ready), and while ready, Sending… or a warning when the send failed.
+    fn linear_chip(&self, task: &TaskRow, cx: &App) -> Option<AnyElement> {
+        let l = task.linear.as_ref()?;
+        let chip = |id: String| h_flex().id(SharedString::from(id)).flex_none().gap(px(3.)).px(px(6.)).py(px(1.)).rounded_full().border_1().border_color(style::hairline(cx)).text_size(px(12.));
+        let tertiary = style::tertiary_label(cx);
+        if l.linked() {
+            let key = l.identifier.clone().unwrap_or_default();
+            let url = l.url.clone();
+            let tip = match l.status.as_deref().filter(|s| !s.is_empty()) { Some(s) => format!("{key} in Linear: {s}"), None => format!("Open {key} in Linear") };
+            return Some(chip(format!("linear-chip-{}", task.id)).role(Role::Link).aria_label(SharedString::from(format!("Open {key} in Linear"))).cursor_pointer().tip(tip)
+                .text_color(style::secondary_label(cx))
+                .on_click(move |_, _, cx| {
+                    cx.stop_propagation();
+                    if let Some(url) = &url { crate::open_gate::open_web(url, cx); }
+                })
+                .child(crate::linear_send::linear_mark(11., tertiary))
+                .child(key.clone().test_text(format!("Linear {key}")))
+                .when(l.sync && self.linear_ready, |d| d.child(icons::symbol("arrow.triangle.2.circlepath").with_size(px(10.)).text_color(tertiary)))
+                .into_any_element());
+        }
+        if !self.linear_ready { return None; }
+        match l.state.as_str() {
+            "creating" => Some(chip(format!("linear-chip-{}", task.id)).text_color(tertiary).tip(if l.waiting_url.is_some() { "Waiting for approval in Connectors" } else { "Making the issue in Linear" })
+                .child(crate::linear_send::linear_mark(11., tertiary)).child("Sending…".test_text("Linear Sending…")).into_any_element()),
+            "failed" => {
+                let warn = style::needs_you_text(cx);
+                Some(chip(format!("linear-chip-{}", task.id)).text_color(warn).tip(l.error.clone().map(|e| format!("Couldn't send to Linear: {e}")).unwrap_or_else(|| "Couldn't send to Linear".into()))
+                    .child(icons::symbol("exclamationmark.triangle").with_size(px(11.)).text_color(warn)).child("Linear".test_text("Linear failed")).into_any_element())
+            }
+            _ => None,
+        }
+    }
+}
+
 impl Render for TasksPage {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         if self.opening.is_some() && !self.loading {
@@ -2142,7 +2495,13 @@ impl Render for TasksPage {
                 cx.notify();
             })));
         }
-        let mut actions = h_flex().flex_1().min_w_0().flex_wrap().justify_end().gap(px(6.)).child(segment.flex_none()).child(self.display_menu(cx));
+        let mut actions = h_flex().flex_1().min_w_0().flex_wrap().justify_end().gap(px(6.));
+        if self.linear_ready {
+            actions = actions.child(Button::new("tasks-add-linear").label("Add from Linear").icon(crate::linear_send::linear_mark(13., style::secondary_label(cx))).small().ghost()
+                .tooltip("Pick Linear issues to add as tasks")
+                .on_click(cx.listener(|this, _, window, cx| this.open_linear_import(window, cx))));
+        }
+        actions = actions.child(segment.flex_none()).child(self.display_menu(cx));
         // An icon, as Linear has it; the dot says a photo is set.
         let customize = Button::new("tasks-customize").icon(icons::symbol("slider.horizontal.3")).accessibility_label("Customize Tasks").small().outline().selected(self.customize)
             .tooltip("Appearance, background photo and the default view")
@@ -2284,7 +2643,7 @@ impl Render for TasksPage {
         if self.customize {
             shell = shell.child(div().absolute().top(px(64.)).right(px(28.)).child(self.customize_panel(cx)));
         }
-        if let Some((text, _, _)) = self.toast.clone() {
+        if let Some((text, method, _)) = self.toast.clone() {
             shell = shell.child(
                 div().absolute().bottom(px(24.)).left_0().right_0().flex().justify_center().child(
                     h_flex()
@@ -2300,7 +2659,8 @@ impl Render for TasksPage {
                         .text_size(px(13.))
                         .shadow_lg()
                         .child(text.clone().test_text(text))
-                        .child(Button::new("undo-task").label("Undo").small().outline().tooltip("Undo the last change").on_click(cx.listener(|this, _, _, cx| this.undo(cx)))),
+                        // A note with nothing to undo (Add from Linear's result) has no button.
+                        .when(!method.is_empty(), |d| d.child(Button::new("undo-task").label("Undo").small().outline().tooltip("Undo the last change").on_click(cx.listener(|this, _, _, cx| this.undo(cx))))),
                 ),
             );
         }

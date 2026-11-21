@@ -1161,7 +1161,13 @@ impl Threadbear {
                 "pages.updated" => self.receive_prints(threadbear_core::prints::Page::list(&params["pages"]), cx),
                 "clis.updated" => self.clis_updated(&params),
                 "runner.updates" => self.runner_updates_changed(&params),
-                "connectors.updated" => self.connectors_updated(&params),
+                "connectors.updated" => {
+                    self.connectors_updated(&params);
+                    // Linear connected or not changes what Tasks offers (linear.status).
+                    if let Some(page) = &self.tasks_page {
+                        page.update(cx, |p, cx| p.load_linear_status(cx));
+                    }
+                }
                 "tasks.updated" => self.tasks_updated(cx),
                 "tasks.due" => {
                     crate::notify::post_task_due(&params, cx);

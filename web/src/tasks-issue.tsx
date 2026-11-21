@@ -439,13 +439,16 @@ function Activity({ token, task, disabled, write }: { token: string; task: Task;
                   </span>
                   <strong>{i.author.name}</strong>
                   {i.author.kind === 'agent' && <span className="task-chip">Agent</span>}
+                  {i.source === 'linear' && <span className="task-chip">Linear</span>}
                   <time className="issue-hint" dateTime={new Date(i.createdAt).toISOString()}>
                     {when(i.createdAt)}
                   </time>
                   <span className="spacer" />
-                  <button type="button" className="issue-remove" title="Delete this comment" aria-label="Delete comment" disabled={disabled} onClick={() => void write(() => removeComment({ auth, id: task.id, commentId: i.id }))}>
-                    ×
-                  </button>
+                  {i.source !== 'linear' && (
+                    <button type="button" className="issue-remove" title="Delete this comment" aria-label="Delete comment" disabled={disabled} onClick={() => void write(() => removeComment({ auth, id: task.id, commentId: i.id }))}>
+                      ×
+                    </button>
+                  )}
                 </header>
                 <p>{i.body}</p>
               </li>
