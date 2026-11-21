@@ -526,7 +526,7 @@ impl Threadbear {
     /// `available` in `RootView.content`: Highlights, Files and a thread's own
     /// panels for a thread that has them; the rest always.
     pub(crate) fn panel_available(&self, panel: &str, cx: &App) -> bool {
-        // Folded away with ⌘/: the main panel takes its room, and it comes
+        // Folded away with ⌘B: the main panel takes its room, and it comes
         // back at the same width (thread_panels.rs).
         if panel == THREADS {
             return !self.threads_collapsed();
@@ -607,7 +607,7 @@ impl Threadbear {
     }
 
     /// Hide or Show Threads (`toggleThreadsPanel`): closed, or opened down
-    /// the left of the window; folded away with ⌘/ counts as hidden.
+    /// the left of the window; folded away with ⌘B counts as hidden.
     fn toggle_threads_panel(&mut self, cx: &mut Context<Self>) {
         let contains = self.dock.read(cx).layout().contains(THREADS);
         if contains && !self.threads_collapsed() {
@@ -775,7 +775,7 @@ impl Threadbear {
             Command::PreviousTab => self.step_project_tab(-1, cx),
             Command::NextTab => self.step_project_tab(1, cx),
             Command::OpenAnything | Command::OpenAnythingAlso => self.toggle_open_anything(window, cx),
-            // Each brings the Threads panel back if ⌘/ folded it away.
+            // Each brings the Threads panel back if ⌘B folded it away.
             Command::ShowInbox | Command::ShowScheduled | Command::ShowProjects | Command::ShowLibrarian | Command::ShowHibernating | Command::ShowArchived => {
                 self.unfold_threads(cx);
                 match command {

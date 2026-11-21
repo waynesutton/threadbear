@@ -106,7 +106,7 @@ pub struct Saved {
     /// a project.
     #[serde(rename = "projectsList.openRows")]
     pub projects_open_rows: Option<Vec<String>>,
-    /// `threadsCollapsed`: ⌘/ folded the Threads panel away (thread_panels.rs).
+    /// `threadsCollapsed`: ⌘B folded the Threads panel away (thread_panels.rs).
     /// None is no.
     pub threads_collapsed: Option<bool>,
     /// ⌘K's Recent (open_anything.rs): what was opened lately, newest first,

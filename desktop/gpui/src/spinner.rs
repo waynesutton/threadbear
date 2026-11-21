@@ -231,7 +231,7 @@ impl Render for ArcLayer {
                 LAYERED.with(|l| l.borrow_mut().insert(window.window_handle().window_id(), Instant::now()));
             },
             move |_, _, window, cx| {
-                // As the dock draws it: a collapsed sidebar (⌘/) is left out,
+                // As the dock draws it: a collapsed sidebar (⌘B) is left out,
                 // and a tab with nothing to show gives way to the next.
                 let in_front = dock_view.read(cx).shows(panel, cx);
                 let dragging = dock.read(cx).controller.drag.is_some() || dock_view.read(cx).is_landing();
