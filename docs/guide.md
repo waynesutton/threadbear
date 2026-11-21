@@ -981,10 +981,12 @@ the rail brings it to the front. Unpin, on the same menu, puts the
 ordinary panel back. Pinned panels are in the new desktop app only.
 
 The View menu has the rest: Show or Hide Threads (⌃⌘S) for the list,
-Collapse or Expand Threads (⌘B, ⌘/ in the Swift app), which folds the list away while the bar
-of icons on the left stays, gives its room to the thread, and brings it
-back at the same width (clicking Threads, Scheduled, Projects or
-Librarian in that bar brings it back too),
+Collapse or Expand Sidebar (⌘B), which folds the whole left sidebar away
+(the list and any of Runners, Connectors, Updates, Usage or Setup open
+under it) while the bar of icons on the left stays, gives its room to the
+thread, and brings it all back at the same width (clicking any icon in
+that bar brings it back too; the Swift app calls it Collapse Threads, on
+⌘/, and folds only the list),
 Show or Hide Panels (⌥⌘B, ⌥⌘P in the Swift app) for the panels beside the thread, Show or Hide
 Terminal (⌘J), and Reset Panel Layout, which puts everything back how it
 started. Threadbear remembers your layout between launches.
@@ -2203,7 +2205,7 @@ key:
 - Zoom Out: `zoomOut`, ⌘-
 - Actual Size: `actualSize`, ⌘0
 - Show Threads: `toggleThreads`, ⌃⌘S
-- Collapse Threads: `collapseThreads`, ⌘B (⌘/ in the Swift app)
+- Collapse Sidebar: `collapseThreads`, ⌘B (Collapse Threads on ⌘/ in the Swift app)
 - Show Panels: `togglePanels`, ⌥⌘B (⌥⌘P in the Swift app)
 - Show Terminal: `toggleTerminal`, ⌘J
 - Reset Panel Layout: `resetPanelLayout`, no key

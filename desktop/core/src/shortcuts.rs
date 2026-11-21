@@ -289,7 +289,7 @@ impl ShortcutCommand {
             Self::TogglePanels => "Show Panels",
             Self::ToggleTerminal => "Show Terminal",
             Self::ResetPanelLayout => "Reset Panel Layout",
-            Self::CollapseThreads => "Collapse Threads",
+            Self::CollapseThreads => "Collapse Sidebar",
             Self::Settings => "Settings…",
         }
     }

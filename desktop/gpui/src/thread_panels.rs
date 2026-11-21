@@ -87,11 +87,26 @@ impl Threadbear {
         cx.notify();
     }
 
-    /// ⌘B (`toggleThreadsCollapsed`): folds the Threads panel away, or
-    /// brings it back as it was. The activity bar stays. If Hide Threads had
-    /// taken the panel out of the layout, this puts it back instead.
+    /// The left sidebar has something in the layout: the Threads panel or
+    /// one of the panels under it (Runners, Connectors, Updates, Usage, Setup).
+    fn left_sidebar_open(&self, cx: &App) -> bool {
+        let layout = self.dock.read(cx).layout();
+        layout.contains(THREADS) || crate::shell::UNDER_THREADS.iter().any(|p| layout.contains(p))
+    }
+
+    /// The left sidebar is on screen, which is what the View menu's Collapse
+    /// or Expand Sidebar goes by.
+    pub(crate) fn left_sidebar_showing(&self, cx: &App) -> bool {
+        self.left_sidebar_open(cx) && !self.threads_collapsed()
+    }
+
+    /// ⌘B (`toggleThreadsCollapsed`): folds the whole left sidebar away, the
+    /// Threads panel and whatever's open under it, or brings it all back as
+    /// it was, as VS Code's ⌘B does (Wayne, 21 Nov). The activity bar stays.
+    /// With nothing there (Hide Threads took the panel out), it puts the
+    /// Threads panel back instead.
     pub(crate) fn toggle_threads_collapsed(&mut self, cx: &mut Context<Self>) {
-        if !self.dock.read(cx).layout().contains(THREADS) {
+        if !self.left_sidebar_open(cx) {
             self.set_threads_collapsed(false, cx);
             self.dock.update(cx, |m, cx| m.open(THREADS, DockDrop::window(DockEdge::Left), cx));
             return;
