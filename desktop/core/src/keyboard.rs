@@ -50,7 +50,7 @@ pub const SEARCH_PROMPT: &str = "Search shortcuts";
 pub fn group(command: ShortcutCommand) -> Group {
     use ShortcutCommand::*;
     match command {
-        NewThread | Archive | Hibernate | Stop | CopyTranscript => Group::Threads,
+        NewThread | Archive | Hibernate | Stop | CopyTranscript | ChooseModel => Group::Threads,
         Back | Forward | NextInboxThread | OpenAnything | OpenAnythingAlso | ShowInbox | ShowScheduled | ShowProjects | ShowLibrarian | ShowHibernating | ShowArchived | ShowSkills | ShowNotes | ShowTasks | PreviousTab | NextTab | Settings => Group::Go,
         ZoomIn | ZoomOut | ActualSize | ToggleThreads | TogglePanels | ToggleTerminal | ResetPanelLayout | CollapseThreads => Group::View,
     }
@@ -393,7 +393,7 @@ mod tests {
     #[test]
     fn the_groups_are_the_swift_pages() {
         let titles = |g: Group| g.commands().into_iter().map(ShortcutCommand::title).collect::<Vec<_>>();
-        assert_eq!(titles(Group::Threads), ["New Thread", "Archive", "Hibernate", "Stop", "Copy Transcript as Markdown"]);
+        assert_eq!(titles(Group::Threads), ["New Thread", "Archive", "Hibernate", "Stop", "Copy Transcript as Markdown", "Choose Model"]);
         assert_eq!(titles(Group::Go)[..3], ["Back", "Forward", "Next Inbox Thread"]);
         assert_eq!(titles(Group::Go).last(), Some(&"Settings…"));
         assert_eq!(titles(Group::View).first(), Some(&"Zoom In"));

@@ -298,6 +298,7 @@ actions!(
         WakeWhenPrompt,
         StopTurn,
         CopyTranscript,
+        ChooseModel,
         GoBack,
         GoForward,
         NextInboxThread,
@@ -390,6 +391,7 @@ commands!(
     (WakeWhen, WakeWhenPrompt, None),
     (Stop, StopTurn, Some(ShortcutCommand::Stop)),
     (CopyTranscript, CopyTranscript, Some(ShortcutCommand::CopyTranscript)),
+    (ChooseModel, ChooseModel, Some(ShortcutCommand::ChooseModel)),
     (Back, GoBack, Some(ShortcutCommand::Back)),
     (Forward, GoForward, Some(ShortcutCommand::Forward)),
     (NextInboxThread, NextInboxThread, Some(ShortcutCommand::NextInboxThread)),
@@ -773,6 +775,12 @@ impl Threadbear {
             Command::CopyTranscript => {
                 if let Some(pane) = &self.pane {
                     pane.update(cx, |p, cx| p.copy_transcript(cx));
+                }
+            }
+            // The open thread's box, or the new-thread page's.
+            Command::ChooseModel => {
+                if let Some(composer) = self.composer(cx) {
+                    composer.update(cx, |c, cx| c.toggle_model_picker(cx));
                 }
             }
             Command::Back => self.go_back(window, cx),
@@ -1445,6 +1453,7 @@ impl Threadbear {
                     item(if archived { "Unarchive" } else { "Archive" }, Command::Archive).enabled(has_thread),
                     Submenu { title: "Hibernate".into(), items: self.hibernate_menu_items() },
                     item("Stop", Command::Stop).enabled(busy),
+                    item("Choose Model…", Command::ChooseModel).enabled(self.composer(cx).is_some()),
                     Separator,
                     item("Copy Transcript as Markdown", Command::CopyTranscript).enabled(has_thread),
                     Separator,

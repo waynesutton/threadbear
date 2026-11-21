@@ -517,12 +517,26 @@ impl Composer {
             }
         };
         let trigger = ChipTrigger { busy: self.chips_busy(cx).0, badge: settings.model_chip_badge(), id: "composer-model-chip".into(), kind: TriggerKind::Chip, title: title.into(), icon: Some(icon), tip: tip.into(), selected: false };
+        // ⌘/'s ask, taken now, so a chip that's spinning drops it rather
+        // than opening by surprise once its change lands.
+        let request = self.model_picker_request.take();
         // A login or pool change can't be guessed: it spins till it lands.
         if trigger.busy {
             return trigger.into_any_element();
         }
         let picker = self.picker_state(window, cx);
+        if let Some(open) = request {
+            self.model_picker_shown = open;
+            // Opened from the keyboard, its search takes the typing.
+            picker.update(cx, |p, _| p.focus_search = open);
+        }
+        let composer = cx.entity().downgrade();
         Popover::new("composer-model")
+            .when_some(request, |p, open| p.open(open))
+            .on_open_change(move |open, _, cx| {
+                let open = *open;
+                composer.update(cx, |c, _| c.model_picker_shown = open).ok();
+            })
             // Its chip's title may shrink to fit a narrow box.
             .trigger_style(StyleRefinement::default().min_w_0())
             // Centred over its chip, as an NSPopover opens.
@@ -856,6 +870,8 @@ pub(crate) struct ModelPickerView {
     column: Option<String>,
     /// The Login line's list is open.
     login_open: bool,
+    /// ⌘/ opened it: the search takes focus on its next draw.
+    focus_search: bool,
     _subs: Vec<Subscription>,
 }
 
@@ -869,7 +885,7 @@ impl ModelPickerView {
             }
             cx.notify();
         });
-        ModelPickerView { composer, search, column: None, login_open: false, _subs: vec![sub] }
+        ModelPickerView { composer, search, column: None, login_open: false, focus_search: false, _subs: vec![sub] }
     }
 
     /// The column the list shows, the provider its models are from, and its
@@ -902,7 +918,10 @@ impl ModelPickerView {
 }
 
 impl Render for ModelPickerView {
-    fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        if std::mem::take(&mut self.focus_search) {
+            self.search.update(cx, |s, cx| s.focus(window, cx));
+        }
         let Some(composer) = self.composer.upgrade() else { return div().into_any_element() };
         let data = composer.read(cx).chip_data(cx);
         let Some(settings) = data.settings() else { return div().into_any_element() };

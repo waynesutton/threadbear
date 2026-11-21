@@ -147,6 +147,9 @@ pub enum ShortcutCommand {
     Hibernate,
     Stop,
     CopyTranscript,
+    /// ⌘/ opens the message box's model picker, as Cursor's does (Wayne, 21
+    /// Nov). The GPUI app's own, like Open Anything.
+    ChooseModel,
     Back,
     Forward,
     NextInboxThread,
@@ -187,12 +190,13 @@ pub enum ShortcutCommand {
 }
 
 impl ShortcutCommand {
-    pub const ALL: [ShortcutCommand; 30] = [
+    pub const ALL: [ShortcutCommand; 31] = [
         Self::NewThread,
         Self::Archive,
         Self::Hibernate,
         Self::Stop,
         Self::CopyTranscript,
+        Self::ChooseModel,
         Self::Back,
         Self::Forward,
         Self::NextInboxThread,
@@ -230,6 +234,7 @@ impl ShortcutCommand {
             Self::Back => "back",
             Self::Forward => "forward",
             Self::NextInboxThread => "nextInboxThread",
+            Self::ChooseModel => "chooseModel",
             Self::OpenAnything => "openAnything",
             Self::OpenAnythingAlso => "openAnythingAlso",
             Self::ShowInbox => "showInbox",
@@ -269,6 +274,7 @@ impl ShortcutCommand {
             Self::Back => "Back",
             Self::Forward => "Forward",
             Self::NextInboxThread => "Next Inbox Thread",
+            Self::ChooseModel => "Choose Model",
             Self::OpenAnything => "Open Anything",
             Self::OpenAnythingAlso => "Open Anything (second key)",
             Self::ShowInbox => "Show Inbox",
@@ -317,6 +323,7 @@ impl ShortcutCommand {
             Self::PreviousTab => Some(ShortcutKey::with("[", false, false, true)),
             Self::NextTab => Some(ShortcutKey::with("]", false, false, true)),
             Self::NextInboxThread => Some(ShortcutKey::with("down", true, false, false)),
+            Self::ChooseModel => Some(ShortcutKey::new("/")),
             Self::OpenAnything => Some(ShortcutKey::new("k")),
             Self::OpenAnythingAlso => Some(ShortcutKey::new("p")),
             Self::ShowInbox => Some(ShortcutKey::new("1")),
@@ -488,7 +495,7 @@ mod tests {
         let keys: Vec<ShortcutKey> = ShortcutCommand::ALL.iter().filter_map(|c| c.default_key()).collect();
         let unique: std::collections::HashSet<&ShortcutKey> = keys.iter().collect();
         assert_eq!(keys.len(), unique.len(), "two commands can't start on one key");
-        assert_eq!(ShortcutCommand::ALL.len(), 30);
+        assert_eq!(ShortcutCommand::ALL.len(), 31);
         // The Swift app's names and keys, as both apps read shortcuts.json.
         assert_eq!(ShortcutCommand::from_name("previousTab"), Some(ShortcutCommand::PreviousTab));
         assert_eq!(ShortcutCommand::PreviousTab.default_key(), Some(key("cmd+shift+[")));
@@ -496,6 +503,8 @@ mod tests {
         assert_eq!(ShortcutCommand::NextTab.default_key().unwrap().display(), "⇧⌘]");
         assert_eq!(ShortcutCommand::NextTab.default_key().unwrap().chord(true), "shift-cmd-]");
         assert_eq!(ShortcutCommand::OpenAnything.default_key(), Some(key("cmd+k")));
+        assert_eq!(ShortcutCommand::ChooseModel.default_key(), Some(key("cmd+/")));
+        assert_eq!(ShortcutCommand::from_name("chooseModel"), Some(ShortcutCommand::ChooseModel));
         assert_eq!(ShortcutCommand::OpenAnythingAlso.default_key(), Some(key("cmd+p")));
         assert_eq!(ShortcutCommand::CollapseThreads.default_key(), Some(key("cmd+b")));
         assert_eq!(ShortcutCommand::TogglePanels.default_key(), Some(key("cmd+opt+b")));
