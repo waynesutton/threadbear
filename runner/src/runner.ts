@@ -2407,9 +2407,12 @@ export class Runner {
       const formatted = formatFastAnswer(res.answer, res.citations);
       const itemId = crypto.randomUUID();
       this.emit(st, { type: 'assistant.text', itemId, text: formatted, final: true }, turn.turnId);
-      // The turn's last words, through the reply phase (reply-phase.ts):
-      // with no end_turn and no asks in them, it needs nothing.
+      // The turn's last words, then settled as an end_turn saying it needs
+      // nothing would be, both through the reply phase (reply-phase.ts).
       this.reply(st, { kind: 'text', itemId, text: formatted });
+      const settled = `${itemId}.end`;
+      this.reply(st, { kind: 'call', itemId: settled, input: { needs: 'nothing' }, by: undefined });
+      this.reply(st, { kind: 'result', itemId: settled, ok: true, text: 'Noted.' });
       this.emit(st, { type: 'system.note', text: formatFastNote(res.durationMs, res.source) }, turn.turnId);
       rec.preview = oneLine(res.answer, LIMITS.previewChars);
       if (!rec.sessionUsed && !rt.session) {
