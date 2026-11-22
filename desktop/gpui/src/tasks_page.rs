@@ -63,10 +63,10 @@ struct TaskRow {
     comment_count: Option<u64>,
     #[serde(default)]
     created_by: Option<Value>,
-    // API 105: the Linear issue it went to or came from (linear-tasks.ts).
+    // API 107: the Linear issue it went to or came from (linear-tasks.ts).
     #[serde(default)]
     linear: Option<LinearLink>,
-    // API 106: also under Favorites (task_keys.rs).
+    // API 108: also under Favorites (task_keys.rs).
     #[serde(default)]
     favorite: bool,
 }

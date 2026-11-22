@@ -69,7 +69,7 @@ export function Rail({ token, route }: { token: string; route: Route }) {
       </a>
       {view('scheduled', 'Scheduled', <Icon.Clock />, active)}
       {view('projects', 'Projects', <Icon.Stack />)}
-      {(account?.apiVersion ?? 0) >= 98 && view('tasks', 'Tasks', <Icon.Checklist />)}
+      {(account?.apiVersion ?? 0) >= 100 && view('tasks', 'Tasks', <Icon.Checklist />)}
       <span className="grow" />
       {runnersShown(runners ?? [], now).map((r) => (
         <a

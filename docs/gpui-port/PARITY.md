@@ -5442,3 +5442,4 @@ Prints in the GPUI app, the rest of Wayne's Swift changes (14 Nov 2026, thread e
 - Rules and their tests: `desktop/core/src/open_policy.rs` (`Opener`,
   `still_same`, `checked_copy`), the gate: `desktop/gpui/src/open_gate.rs`
   (`open_checked`), `desktop/core/tests/open_gate_source.rs`.
+The slice log, one entry a slice with how each was checked, is [LOG.md](LOG.md).

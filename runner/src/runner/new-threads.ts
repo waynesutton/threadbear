@@ -5,9 +5,8 @@
 import type { Runner } from '../runner.ts';
 import type { RunnerPart } from './part.ts';
 import { SAMPLE_THREADS, WELCOME_PATCH } from '../samples.ts';
-import type { Account, EffortLevel, ImageRef, MessageOrigin, PermissionMode, ThreadStartedBy, ThreadSummary } from '../protocol.ts';
+import type { Account, EffortLevel, ImageRef, MessageOrigin, PermissionMode, Provider, ThreadStartedBy, ThreadSummary } from '../protocol.ts';
 import { ErrorCode, LIMITS, RpcError } from '../protocol.ts';
-import type { Schedule } from '../protocol.ts';
 import type { ThreadRecord } from '../store.ts';
 import { expandHome, peekRunnerJson } from '../config.ts';
 import { isDirectory } from '../fsutil.ts';
@@ -30,6 +29,7 @@ export const newThreadsPart = {
     cwd?: string;
     accountId?: string;
     poolId?: string;
+    provider?: Provider;
     model?: string;
     effort?: EffortLevel;
     permissionMode?: PermissionMode;
@@ -215,6 +215,7 @@ export const newThreadsPart = {
     cwd?: string;
     accountId?: string;
     poolId?: string;
+    provider?: Provider;
     model?: string;
     effort?: EffortLevel;
     permissionMode?: PermissionMode;
@@ -250,6 +251,7 @@ export const newThreadsPart = {
     cwd?: string;
     accountId?: string;
     poolId?: string;
+    provider?: Provider;
     model?: string;
     effort?: EffortLevel;
     permissionMode?: PermissionMode;
@@ -277,7 +279,7 @@ export const newThreadsPart = {
     let poolId: string | undefined;
     let accountId = params.accountId;
     if (accountId === undefined && (params.poolId !== undefined || !peekRunnerJson(this.cfg.home).defaults?.keepAccount)) {
-      const picked = this.pickForNew({ poolId: params.poolId, cwd, model: params.model });
+      const picked = this.pickForNew({ poolId: params.poolId, cwd, model: params.model, provider: params.provider });
       if (picked) ({ poolId, accountId } = picked);
     }
     // A schedule pinned to a signed-out login runs this time on a pool

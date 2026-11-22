@@ -59,6 +59,8 @@ pub(crate) enum Target {
     Page(String),
     /// A GitHub pull request's tab, by its own URL (pr_view.rs).
     Pr(String),
+    /// A design review's page, by the review's id (review_pane.rs).
+    Review(String),
 }
 
 /// A folder's selection and open rows, kept so coming Back to it finds it as
@@ -125,7 +127,8 @@ fn remembered_open(p: &PanePreview) -> Option<crate::pane_store::Open> {
         Target::File(path) => (path.clone(), false),
         Target::Folder(path) => (path.clone(), true),
         // A PR is read from GitHub again each launch, so isn't kept.
-        Target::Page(_) | Target::Pr(_) => return None,
+        // A review opens again from its card.
+        Target::Page(_) | Target::Pr(_) | Target::Review(_) => return None,
     };
     let back = p.back.iter().filter_map(remembered_open).collect();
     Some(crate::pane_store::Open { path, folder, title: p.title.clone(), from: p.from.clone(), back })
@@ -325,6 +328,8 @@ pub(crate) struct SidePane {
     pub(crate) list_focus: [FocusHandle; 3],
     /// The PRs open as tabs (pr_view.rs).
     pub(crate) prs: crate::pr_view::PrPanes,
+    /// The reviews open as pages (review_pane.rs).
+    pub(crate) reviews: crate::review_pane::ReviewPanes,
     _subs: Vec<Subscription>,
 }
 
@@ -367,6 +372,7 @@ impl SidePane {
             list_search: ["Search Prints", "Search Bears", "Search Tables"].map(|label| cx.new(|cx| InputState::new(window, cx).placeholder(label))),
             list_focus: std::array::from_fn(|_| cx.focus_handle()),
             prs: Default::default(),
+            reviews: Default::default(),
             _subs: vec![],
         };
         for kind in crate::sidebar_lists::Kind::ALL {
@@ -458,6 +464,8 @@ impl SidePane {
         if let Some(shown) = self.thread(cx) {
             self.restore_preview(&shown.id, cx);
         }
+        // Another thread on show: the pane's only wide for a review's page.
+        self.sync_review_width(cx);
         let t = app.read(cx);
         let Some(thread) = t.selected.as_ref().and_then(|id| t.threads.get(id)) else { return };
         let key = (thread.id.clone(), thread.last_seq, thread.highlights_at.clone());
@@ -649,7 +657,12 @@ impl SidePane {
                 return;
             }
             self.leave_edit(thread_id, cx);
-            self.park_preview(thread_id);
+            if self.previews.get(thread_id).is_some_and(|p| matches!(p.target, Target::Review(_))) {
+                self.previews.remove(thread_id);
+                self.review_closed(thread_id, cx);
+            } else {
+                self.park_preview(thread_id);
+            }
         }
         // One put aside for this section comes back.
         self.unpark_preview(thread_id, id, cx);
@@ -840,6 +853,8 @@ impl SidePane {
         self.stop_explaining(thread_id);
         // A file being worked on is saved before anything takes its place.
         self.leave_edit(thread_id, cx);
+        // Anything but a review's page takes one's place for good.
+        let leaves_review = !matches!(preview.target, Target::Review(_)) && self.previews.get(thread_id).is_some_and(|p| matches!(p.target, Target::Review(_)));
         preview.opened = self.previews.get(thread_id).map_or(0, |p| p.opened) + 1;
         // A Markdown file opens as its bar's menu last left it, on this
         // runner's machine (`MarkdownView.opensRaw`); any other text file
@@ -859,6 +874,9 @@ impl SidePane {
             parked.remove(&preview.from);
         }
         self.previews.insert(thread_id.to_owned(), preview);
+        if leaves_review {
+            self.review_closed(thread_id, cx);
+        }
         self.remember(thread_id);
         self.menu = None;
         if let Some(thread) = self.thread(cx) {
@@ -900,6 +918,7 @@ impl SidePane {
         }
         let Some(current) = self.previews.get(thread_id).cloned() else { return };
         self.leave_edit(thread_id, cx);
+        let was_review = matches!(current.target, Target::Review(_));
         match current.back.split_last() {
             None => {
                 self.previews.remove(thread_id);
@@ -914,6 +933,9 @@ impl SidePane {
                 }
             }
         }
+        if was_review {
+            self.review_closed(thread_id, cx);
+        }
         self.remember(thread_id);
         cx.notify();
     }
@@ -924,7 +946,10 @@ impl SidePane {
             return;
         }
         self.leave_edit(thread_id, cx);
-        self.previews.remove(thread_id);
+        let was_review = self.previews.remove(thread_id).is_some_and(|p| matches!(p.target, Target::Review(_)));
+        if was_review {
+            self.review_closed(thread_id, cx);
+        }
         self.remember(thread_id);
         cx.notify();
     }

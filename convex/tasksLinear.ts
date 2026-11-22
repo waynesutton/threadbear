@@ -1,4 +1,4 @@
-// API 105: Native Tasks and Linear. The runner talks to Linear (through the
+// API 107: Native Tasks and Linear. The runner talks to Linear (through the
 // Connectors gateway, as its own login); this file keeps what it learned on
 // the task, and is the one place that decides what a Linear change does here.
 //

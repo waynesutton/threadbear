@@ -13,7 +13,7 @@ Shows the agent's progress on the whole request above the message box: which tas
 
 ## Lives in
 
-`runner/src/completion.ts`, `runner.ts`, `store.ts` and `threadbear-mcp.ts`; completion fields in the protocol and API 100 mirror; the desktop reducer and composer card, website composer and phone card. Highlights' Task list: `runner/src/runner/highlights.ts` and `highlights.ts` (`threads.highlights`' `completion`), `desktop/core/src/highlights.rs` (`HighlightSections.tasks`) and `SidePane::tasks_block` in `desktop/gpui/src/highlights.rs`, with the mock runner's copy.
+`runner/src/completion.ts`, `runner.ts`, `store.ts` and `threadbear-mcp.ts`; completion fields in the protocol and API 102 mirror; the desktop reducer and composer card, website composer and phone card. Highlights' Task list: `runner/src/runner/highlights.ts` and `highlights.ts` (`threads.highlights`' `completion`), `desktop/core/src/highlights.rs` (`HighlightSections.tasks`) and `SidePane::tasks_block` in `desktop/gpui/src/highlights.rs`, with the mock runner's copy.
 
 ## Taking it out
 

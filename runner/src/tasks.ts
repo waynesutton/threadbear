@@ -38,9 +38,9 @@ export type NativeTask = {
   links?: TaskLink[];
   commentCount?: number;
   createdBy?: TaskAuthor;
-  // API 106: on the Favorites list and board too.
+  // API 108: on the Favorites list and board too.
   favorite?: boolean;
-  // API 105 (linear-tasks.ts).
+  // API 107 (linear-tasks.ts).
   linear?: {
     state: 'creating' | 'linked' | 'failed';
     requestId: string;
@@ -146,17 +146,17 @@ export class Tasks {
       this.stop();
       throw new Error('Tasks needs a connection to your Threadbear backend. Your draft has not been saved.');
     }
-    if ((source.apiVersion ?? 99) < 99) throw new Error('Update the Threadbear backend to use Tasks.');
-    if (source.apiVersion !== undefined && source.apiVersion < 101 && (operation === 'startThread' || ['columnId', 'columns', 'boardColumnOrder', 'sectionOrder'].some(field => field in args)))
+    if ((source.apiVersion ?? 101) < 101) throw new Error('Update the Threadbear backend to use Tasks.');
+    if (source.apiVersion !== undefined && source.apiVersion < 103 && (operation === 'startThread' || ['columnId', 'columns', 'boardColumnOrder', 'sectionOrder'].some(field => field in args)))
       throw new Error('Update the Threadbear backend to use task columns and Send to thread.');
-    const api87 = source.apiVersion === undefined || source.apiVersion >= 102;
+    const api87 = source.apiVersion === undefined || source.apiVersion >= 104;
     if (!api87 && (API87_OPERATIONS.has(operation) || API87_FIELDS.some((field) => field in args)))
       throw new Error('Update the Threadbear backend to use task priority, due dates, sub-tasks, links and comments.');
-    if (source.apiVersion !== undefined && source.apiVersion < 103 && (operation === 'claimReminder' || API88_FIELDS.some((field) => field in args)))
+    if (source.apiVersion !== undefined && source.apiVersion < 105 && (operation === 'claimReminder' || API88_FIELDS.some((field) => field in args)))
       throw new Error('Update the Threadbear backend to use due times and reminders.');
-    if (source.apiVersion !== undefined && source.apiVersion < 104 && operation === 'deleteColumn')
+    if (source.apiVersion !== undefined && source.apiVersion < 106 && operation === 'deleteColumn')
       throw new Error('Update the Threadbear backend to delete task columns.');
-    if (source.apiVersion !== undefined && source.apiVersion < 106 && 'favorite' in args)
+    if (source.apiVersion !== undefined && source.apiVersion < 108 && 'favorite' in args)
       throw new Error('Update the Threadbear backend to use task favorites.');
     if (operation === 'related') {
       const local = this.local();
@@ -188,7 +188,7 @@ export class Tasks {
     // Never accept credentials or an author from a UI or agent; this runner supplies its own.
     const { auth: _auth, author: _author, ...fields } = args;
     // Only to a backend known to take it: an older one refuses the whole write.
-    if (source.apiVersion !== undefined && source.apiVersion >= 102 && AUTHORED.has(operation)) fields.author = author ?? { kind: 'user', name: USER_NAME ?? 'You' };
+    if (source.apiVersion !== undefined && source.apiVersion >= 104 && AUTHORED.has(operation)) fields.author = author ?? { kind: 'user', name: USER_NAME ?? 'You' };
     if (typeof fields.project === 'string') {
       const options = (await this.call('projects')) as {
         id: string;
@@ -210,13 +210,13 @@ export class Tasks {
     if (!queries.has(operation)) this.changed();
     return result;
   }
-  // tasksLinear:* (API 105), for linear-tasks.ts only: never from an agent's tool.
+  // tasksLinear:* (API 107), for linear-tasks.ts only: never from an agent's tool.
   async linear(operation: string, args: Record<string, unknown> = {}): Promise<unknown> {
     if (!this.enabled()) throw new Error('Turn on Tasks in Settings > Experiments.');
     if (!LINEAR_OPERATIONS.has(operation)) throw new Error('Unknown Linear operation');
     const source = this.source();
     if (!source) throw new Error('Tasks needs a connection to your Threadbear backend.');
-    if (source.apiVersion !== undefined && source.apiVersion < 105) throw new Error('Update the Threadbear backend to use Linear with Tasks.');
+    if (source.apiVersion !== undefined && source.apiVersion < 107) throw new Error('Update the Threadbear backend to use Linear with Tasks.');
     const { auth: _auth, ...fields } = args;
     const query = operation === 'synced' || operation === 'linkedIssues';
     const result = await source.post(query ? 'query' : 'mutation', `tasksLinear:${operation}`, { ...fields, auth: { key: source.key } });

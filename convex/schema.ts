@@ -14,6 +14,7 @@ import { clearStateV } from './clearStates';
 import { boxStateV } from './boxStates';
 import { requiredUnlessStepping } from './stepping';
 import { tokenStateV } from './cloudTokenStates';
+import { installStateV } from './relayInstallStates';
 
 // A thread's sharing, as the runner mirrors it (ThreadShare in
 // docs/protocol.md): "link" is readable by anyone with /s/<slug>; "off"
@@ -120,7 +121,7 @@ export const threadFields = {
   // one shows as its text; threadId for a thread one, at (ISO) for a
   // booked check-in.
   looseEnds: v.optional(v.array(v.object({ kind: v.string(), text: v.string(), threadId: v.optional(v.string()), at: v.optional(v.string()) }))),
-  // Agent-reported task progress; independent of runner-checked loose ends (API 100).
+  // Agent-reported task progress; independent of runner-checked loose ends (API 102).
   completion: v.optional(v.object({ tasks: v.array(v.object({
     id: v.string(), title: v.string(),
     status: v.union(v.literal('completed'), v.literal('pending'), v.literal('blocked')),
@@ -240,7 +241,7 @@ export const moveStates = ['asking', 'ready', 'packing', 'unpacking', 'claimed',
 export const appSchema = defineSchema({
   // Cloud-owned tasks, not part of the runner's replaceable project mirror.
   tasks: defineTable(taskFields).index('by_thread_command', ['threadCommandId']).index('by_task_id', ['id']).index('by_deleted_id', ['deleted', 'id']).index('by_updated', ['updatedAt']).index('by_project_deleted', ['project.runnerId', 'project.id', 'deleted']).index('by_parent', ['parentId', 'deleted']).index('by_column_status', ['columnId', 'status']).index('by_linear_issue', ['linear.issueId']).index('by_linear_sync', ['linear.sync', 'deleted']),
-  // A task's comments and the events the backend writes on changes (API 102).
+  // A task's comments and the events the backend writes on changes (API 104).
   taskActivity: defineTable(taskActivityFields).index('by_task', ['taskId', 'createdAt']).index('by_external', ['externalId']),
   taskPreferences: defineTable({ name: v.string(), ...taskPreferenceFields }).index('by_name', ['name']),
   // One row per runner (the Mac, Tinker Desk later), written every minute.
@@ -497,7 +498,7 @@ export const appSchema = defineSchema({
   // Mac app can list other runners' threads without the busy fields of
   // `threads`: a runner writes a row only when one of these changes, apart
   // from preview and lastActivityAt, which ride along but never cause a
-  // write (docs/step6-plan.md, part 2).
+  // write (docs/archive/step6-plan.md, part 2).
   threadIndex: defineTable({
     runnerId: v.string(),
     threadId: v.string(),
@@ -519,6 +520,8 @@ export const appSchema = defineSchema({
     startedBy: v.optional(v.object({ kind: v.string(), label: v.string(), icon: v.optional(v.string()), threadTitle: v.optional(v.string()), why: v.optional(v.string()) })),
     // What Mike last said to it, one line: the Mac row's "You: ...". Since API 32.
     asked: v.optional(v.string()),
+    // What Mike first asked it, one line: another Mac's Feed card. Since API 96.
+    request: v.optional(v.string()),
     recap: v.optional(v.string()), // the recap box's, gone 11 Nov; kept so old rows load
     keywords: v.optional(v.string()), // the librarian's search words, since API 74
     // Its access mode, so another Mac's composer shows it. Since API 88.
@@ -902,7 +905,7 @@ export const appSchema = defineSchema({
     // The Machines page's counts and lists of requests in a state (viewer.ts).
     .index('by_request_state', ['requestState.kind']),
 
-  // Full sync (API 52, docs/full-convex.md step 4; sync.full in runner.json).
+  // Full sync (API 52, docs/archive/full-convex.md step 4; sync.full in runner.json).
   // One row per tool call, under the seq of its one-line `messages` row, with
   // its output, input, diffs and the reasoning before it. Convex charges a read
   // for the whole document, so these are never in a list read: each is fetched
@@ -923,7 +926,7 @@ export const appSchema = defineSchema({
     diffs: v.optional(v.string()),
     reasoning: v.optional(v.string()),
     images: v.optional(v.number()), // how many pictures the tool handed back (see heldPictures)
-    cut: v.optional(v.boolean()), // shortened to fit (docs/full-convex.md)
+    cut: v.optional(v.boolean()), // shortened to fit (docs/convex-backend.md, "Full sync")
   })
     .index('by_thread_seq', ['threadId', 'seq'])
     .index('by_at', ['at'])
@@ -1041,7 +1044,7 @@ export const appSchema = defineSchema({
     .index('by_ip_at', ['ip', 'at'])
     .index('by_at', ['at']),
 
-  // Published Prints (docs/protocol.md, "Prints", since API 96): one row
+  // Published Prints (docs/protocol.md, "Prints", since API 98): one row
   // per print its runner's user chose to publish, with the print's
   // index.html as text, for the website's /p/<slug> page and the phone.
   // Nothing about a print is here until it's published, and the row goes
@@ -1456,12 +1459,24 @@ export const appSchema = defineSchema({
     d: v.string(),
     createdAt: v.number(),
   }),
+  // The install saved before relayRegistrations (20 Nov 2026): the first
+  // send after the update takes it over (devices.ts takeRelayInstall) and
+  // deletes it. Nothing writes it now.
   relayInstall: defineTable({
     installId: v.string(),
     installKey: v.string(),
     url: v.string(),
     createdAt: v.number(),
   }),
+
+  // This deployment's install with the push relay, one row per relay
+  // address (push.ts), its lifecycle on a machine (relayInstallMachine.ts):
+  // registering, registered with its id and key, or unregistered.
+  relayRegistrations: defineTable({
+    url: v.string(),
+    installState: installStateV,
+    installStateTimers: machineTimers,
+  }).index('by_url', ['url']),
 
   // Whether pushes are getting through (pushHealth.ts): one row, written
   // by push.ts after each send, read by the owner runner's heartbeat.
@@ -1477,10 +1492,13 @@ export const appSchema = defineSchema({
   // A registration with the push relay in progress (push.ts relayInstall):
   // the nonce sent with it, which the relay posts back to /relay/verify
   // (http.ts) to check the request came from this deployment. Used once,
-  // and gone within minutes either way.
+  // and gone within minutes either way. `attempt` (20 Nov 2026): the
+  // registration it's for (relayInstallStates.ts), which must still hold the
+  // install, with time to spare, for the relay to be told yes.
   relayChecks: defineTable({
     nonce: v.string(),
     createdAt: v.number(),
+    attempt: v.optional(v.string()),
   }).index('by_nonce', ['nonce']),
 
   // The public profile page, /profile (profile.ts, docs/guide.md "The

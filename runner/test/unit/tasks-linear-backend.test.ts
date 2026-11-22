@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { call, load, memoryBackend, outcome } from '../helpers/convex-memory.ts';
 
-// convex/tasksLinear.ts (API 105) on the in-memory backend, its writes
+// convex/tasksLinear.ts (API 107) on the in-memory backend, its writes
 // checked against convex/schema.ts.
 const tasks = load('tasks');
 const linear = load('tasksLinear');

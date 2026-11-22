@@ -389,13 +389,6 @@ impl Threadbear {
         self.anything_panels_shown = showing;
     }
 
-    /// Whether an experiment is on for this Mac's runner. Settings' switch
-    /// first, as it changes without a new hello, else the hello's list.
-    pub(crate) fn experiment_on(&self, id: &str) -> bool {
-        let switch = self.runner_settings.as_ref().and_then(|s| s["experiments"].as_array()?.iter().find(|e| e["id"] == id).map(|e| e["on"].as_bool() == Some(true)));
-        switch.unwrap_or_else(|| self.remote.experiments.iter().any(|e| e == id))
-    }
-
     /// The experiments with keys that are on now, in a fixed order.
     pub(crate) fn key_experiments_on(&self) -> Vec<&'static str> {
         let mut ids: Vec<&'static str> = ShortcutCommand::ALL.iter().filter_map(|c| c.experiment()).collect();

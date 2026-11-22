@@ -61,12 +61,12 @@ export const taskActivityFields = {
   body: v.string(),
   author: taskAuthor,
   createdAt: v.number(),
-  // API 105: a comment copied from the task's Linear issue, read-only here.
+  // API 107: a comment copied from the task's Linear issue, read-only here.
   // externalId is Linear's comment id, so a sync never copies one twice.
   source: v.optional(v.literal('linear')),
   externalId: v.optional(v.string()),
 };
-// API 105: the Linear issue a task was sent to, imported from or linked with.
+// API 107: the Linear issue a task was sent to, imported from or linked with.
 // creating is a claim (so a double click or a second Mac can't make two
 // issues); requestId ties every later write to that one attempt. last is
 // what Linear said at the previous sync, so a field changes here only when it
@@ -123,7 +123,7 @@ export const taskFields = {
   parentId: v.optional(v.union(v.string(), v.null())),
   links: v.optional(v.array(taskLink)),
   commentCount: v.optional(v.number()),
-  // API 106: on the Favorites list and board too, as well as its own column.
+  // API 108: on the Favorites list and board too, as well as its own column.
   favorite: v.optional(v.boolean()),
   createdBy: v.optional(taskAuthor),
   // Deleted along with its parent, so restoring the parent brings it back. Never listed.
@@ -158,7 +158,7 @@ export const taskPreferenceFields = {
   })),
   // API 87: the owner's first name, as the runner last gave it, for activity a browser writes.
   ownerName: v.optional(v.string()),
-  // API 105: how often synced tasks check Linear, when the last check ran,
+  // API 107: how often synced tasks check Linear, when the last check ran,
   // and the team and project the send sheet starts on for each Threadbear
   // project (projectKey is runnerId/id, or none).
   linear: v.optional(v.object({

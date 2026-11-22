@@ -84,7 +84,7 @@ function harness(o: { tools?: Record<string, Handler>; tasks?: NativeTask[]; con
   const l = new LinearTasks({
     call: () => call,
     connected: () => o.connected ?? true,
-    apiVersion: () => o.api ?? 105,
+    apiVersion: () => o.api ?? 107,
     tasksOn: () => true,
     tasks: async (op, args) => {
       if (op === 'get') return rows.get(String(args?.id)) ?? null;
@@ -155,7 +155,7 @@ test("another agent's helper swaps only the agent id, and refuses an id that is 
 
 test('Linear is offered only when it is connected and the backend is new enough', async () => {
   assert.equal(harness({ connected: false }).l.status().ready, false);
-  assert.match(harness({ api: 104 }).l.status().why!, /Update the Threadbear backend/);
+  assert.match(harness({ api: 106 }).l.status().why!, /Update the Threadbear backend/);
   assert.deepEqual(harness().l.status(), { ready: true });
   await assert.rejects(harness({ connected: false }).l.send({ taskId: 'task-1', teamId: 'team-1' }), /Linear isn’t connected/);
 });

@@ -1173,14 +1173,14 @@ function TasksContent({ token, projectFilter = '', issues = false }: { token: st
 export function TasksPage(props: { token: string; projectFilter?: string }) {
   const me = useQuery(api.phone.me, { token: props.token });
   if (!me) return <p className="pad">Loading Tasks…</p>;
-  if (me.apiVersion < 101) return <p className="pad">Update your Threadbear backend to use Tasks here.</p>;
-  return <TasksContent key={props.projectFilter ?? ''} {...props} issues={me.apiVersion >= 102} />;
+  if (me.apiVersion < 103) return <p className="pad">Update your Threadbear backend to use Tasks here.</p>;
+  return <TasksContent key={props.projectFilter ?? ''} {...props} issues={me.apiVersion >= 104} />;
 }
 
 export function ProjectTasksLink({ token, runnerId, id }: { token: string; runnerId: string; id: string }) {
   const me = useQuery(api.phone.me, { token });
-  const count = useQuery(api.tasks.count, (me?.apiVersion ?? 0) >= 98 ? { auth: { token }, project: { runnerId, id } } : 'skip');
-  if ((me?.apiVersion ?? 0) < 98) return null;
+  const count = useQuery(api.tasks.count, (me?.apiVersion ?? 0) >= 100 ? { auth: { token }, project: { runnerId, id } } : 'skip');
+  if ((me?.apiVersion ?? 0) < 100) return null;
   const href = `/tasks/${encodeURIComponent(`${runnerId}/${id}`)}`;
   return (
     <a
@@ -1198,7 +1198,7 @@ export function ProjectTasksLink({ token, runnerId, id }: { token: string; runne
   );
 }
 
-// API 105: the Linear issue a task belongs to. Read-only here: sending,
+// API 107: the Linear issue a task belongs to. Read-only here: sending,
 // linking and sync settings live in the Mac app, which can reach Linear.
 function LinearChip({ task, long }: { task: Pick<Task, 'linear'>; long?: boolean }) {
   const l = task.linear;

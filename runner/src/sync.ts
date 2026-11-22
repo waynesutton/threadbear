@@ -148,7 +148,7 @@ export type SyncConfig = {
   runnerId?: string;
   icon?: string;
   pastedPictures?: boolean;
-  // Full sync (docs/full-convex.md step 4): tool output, input and diffs go up too.
+  // Full sync (docs/archive/full-convex.md step 4): tool output, input and diffs go up too.
   // Off unless it's asked for; off, nothing here writes eventBodies.
   // false hides the estimate's warning near Convex's Free limits (convex-use.ts).
   usageWarning?: boolean;
@@ -161,13 +161,14 @@ export type SyncConfig = {
 // lower one means its backend hasn't been deployed since this runner was:
 // said in runner.status, tb status and the log rather than stopping, since
 // the runner only adds to what it sends while the number stays the same.
-// 106 in this copy's backend: Mike's 81 to 95, then this copy's own 96 to
-// 106 (Prints, webhooks, Tasks, completion, Tasks and Linear, task
+// 108 in this copy's backend: Mike's 81 to 97, then this copy's own 98 to
+// 108 (Prints, webhooks, Tasks, completion, Tasks and Linear, task
 // favorites; convex/version.ts).
-export const BACKEND_API_VERSION = 106;
+export const BACKEND_API_VERSION = 108;
 // Optional agent-reported task summaries on thread cards (this copy's: 85,
-// moved to 100 when Mike's release took 81 to 95, 20 Nov 2026).
-export const COMPLETION_API_VERSION = 100;
+// moved to 100 when Mike's release took 81 to 95, 20 Nov 2026, then to 102
+// when his took 96 and 97, 21 Nov).
+export const COMPLETION_API_VERSION = 102;
 // From this one sync:removeThreads takes the runner's id and leaves a row
 // that's another runner's alone (a thread moved away), whatever the key.
 export const REMOVE_OWN_ROWS_API_VERSION = 92;
@@ -177,12 +178,12 @@ export const LOGIN_NOTES_API_VERSION = 78;
 const HELD_NOTES = 200;
 // webhooks:* and the /hook/ route (this copy's, experiment webhooks): 78,
 // then 81, then 82, moved to 97 when Mike's release took 81 to 95 (20 Nov
-// 2026).
-export const WEBHOOKS_API_VERSION = 97;
+// 2026), then to 99 when his took 96 and 97 (21 Nov).
+export const WEBHOOKS_API_VERSION = 99;
 // sync:publishPrint and sync:unpublishPrint (Prints can be published).
 // This copy's: 73, then 77, then 80, then 81, moved to 96 when Mike's
-// release took 81 to 95 (20 Nov 2026).
-export const PRINTS_API_VERSION = 96;
+// release took 81 to 95 (20 Nov 2026), then 98 when his took 96 and 97.
+export const PRINTS_API_VERSION = 98;
 // From this one sync:sharedThreads lists a runner's rows shared by link, which
 // it checks against its own threads on every start and every
 // SHARE_RECONCILE_MS (reconcileShares).
@@ -422,6 +423,10 @@ export const INDEX_MODE_API_VERSION = 88;
 // experiment) and the phone's pictures say their type. An older backend
 // would turn the row down.
 export const LIVE_PAGES_API_VERSION = 95;
+// From this one a threadIndex row carries `request`, what Mike first asked
+// a thread, for the Mac's Feed of another runner's threads. An older
+// backend's validator would turn the row down, so it goes without.
+export const INDEX_REQUEST_API_VERSION = 96;
 // How far back a start looks for pictures, as new ones go up as they come.
 // Reading a whole log for each thread is too much to do for all of them on
 // every start, and it's the threads in use that Mike opens on the phone.
@@ -1792,6 +1797,7 @@ export class ConvexSync {
         takesStartedBy: () => (this.backendApiVersion ?? 0) >= INDEX_STARTED_BY_API_VERSION,
         takesStars: () => (this.backendApiVersion ?? 0) >= STARS_API_VERSION,
         takesAsked: () => (this.backendApiVersion ?? 0) >= INDEX_ASKED_API_VERSION,
+        takesRequest: () => (this.backendApiVersion ?? 0) >= INDEX_REQUEST_API_VERSION,
         takesKeywords: () => (this.backendApiVersion ?? 0) >= KEYWORDS_API_VERSION,
         takesMode: () => (this.backendApiVersion ?? 0) >= INDEX_MODE_API_VERSION,
         takesSince: () => (this.backendApiVersion ?? 0) >= INDEX_SINCE_API_VERSION,
@@ -2267,7 +2273,7 @@ export class ConvexSync {
   // rows still refused are left out with a log line, so one can't stall the
   // whole mirror; anything else (an outage) throws, for the flush's retry.
   // Rows the backend left out itself (`skipped`) are said the same way.
-  // ---- Full sync: tool output (docs/full-convex.md step 4). Nothing here runs with
+  // ---- Full sync: tool output (docs/archive/full-convex.md step 4). Nothing here runs with
   // sync.full off.
 
   private queueBodies(found: RawBody[]): void {

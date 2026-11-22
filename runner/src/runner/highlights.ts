@@ -11,7 +11,6 @@ import { emptyHighlights, MAX_URL, observe as observeHighlights, pinItem, remove
 import { experimentOn } from '../experiments.ts';
 import { PANEL_ACK_WAIT_MS, PANEL_PLACES, resolvePanel } from '../panel-requests.ts';
 import fs from 'node:fs';
-import path from 'node:path';
 import crypto from 'node:crypto';
 import type { ThreadState } from '../runner.ts';
 

@@ -227,7 +227,7 @@
 //    before. phone:project still returns them whole.
 // 51: an owned schedule can carry `check`, a shell command its runner runs
 //    before each run. An older runner sends none.
-// 52: full sync (docs/full-convex.md step 4). eventBodies, sync:appendBodies,
+// 52: full sync (docs/archive/full-convex.md step 4). eventBodies, sync:appendBodies,
 //    sync:remoteBody and phone:eventBody: a tool's output, input and diffs under
 //    the seq of its row, only from a runner with sync.full on. heldPictures,
 //    phone:requestPicture, phone:heldPicture and a `picture` command: one tool
@@ -466,50 +466,55 @@
 //    phoneImage carries `mediaType` for a reply's media, so the phones run
 //    a page in a sealed view rather than decode it. A runner sends pages
 //    only to a backend of 95 or later.
-// 96: Prints can be published (this copy's; it was 73, then 77, then 80,
+// 96: a threadIndex row (sync:setThreadIndex) takes `request`, Mike's first
+//    message to the thread as one line (docs/protocol.md, "What Mike first
+//    asked"), for the Mac's Feed of another runner's threads. A runner sends
+//    it only to a backend of 96 or later.
+// 98 to 108 are this copy's, 96 to 106 until Mike's release took 96 and 97
+//    (21 Nov 2026).
+// 98: Prints can be published (this copy's; it was 73, then 77, then 80,
 //    then 81, until Mike's releases took 73 to 95, 12 to 20 Nov 2026).
 //    sync:publishPrint stores one print's index.html (static, at most
 //    700,000 characters) under a link its runner made, sync:unpublishPrint
 //    removes it, prints:view answers the website's /p/<slug> page for anyone
 //    with the link, and prints:list gives the phone and the website the
-//    published ones. A runner publishes only from 96; nothing about a print
+//    published ones. A runner publishes only from 98; nothing about a print
 //    is stored before it's published.
-// 97: webhooks (this copy's, 13 Nov 2026, experiment webhooks; it was 78,
+// 99: webhooks (this copy's, 13 Nov 2026, experiment webhooks; it was 78,
 //    then 81, then 82, until Mike's releases took 77 to 95, 14 to 20 Nov 2026).
 //    POST /hook/<key> takes a delivery (webhooks:deliver, capped, limited,
 //    deduped, batched); webhooks:issueWebhook, listWebhooks and
-//    revokeWebhook take the owner key. A runner offers webhooks only from 97.
-// 98 to 104 are this copy's, 83 to 89 until Mike's release took 81 to 95
-//    (20 Nov 2026).
-// 98: Native Tasks, cloud-owned and editable while the runner is offline.
-// 99: Tasks take a Doing status and a position on create, and preferences
+//    revokeWebhook take the owner key. A runner offers webhooks only from 99.
+// 100 to 106 were 83 to 89 until Mike's release took 81 to 95 (20 Nov 2026).
+// 100: Native Tasks, cloud-owned and editable while the runner is offline.
+// 101: Tasks take a Doing status and a position on create, and preferences
 //    keep projectOrder and listOrder; a columnOrder saved before Doing comes
 //    back with it.
-// 100: clearer completion task summaries on thread cards (experiment clearerCompletion).
-// 101: Tasks custom columns and ordered sections, with a retry-safe thread launch command.
-// 102: Tasks grow issue fields (this copy's): priority, dueDate, parentId
+// 102: clearer completion task summaries on thread cards (experiment clearerCompletion).
+// 103: Tasks custom columns and ordered sections, with a retry-safe thread launch command.
+// 104: Tasks grow issue fields (this copy's): priority, dueDate, parentId
 //    (one level of sub-tasks; deleting a parent deletes them, restoring
 //    brings them back), links (link, print, image, thread; list adds
 //    imageUrl), commentCount and createdBy, and tasks:activity, comment,
 //    removeComment and addImage. create and update take an `author`
-//    from a runner key. A runner sends any of them only from 102.
-// 103: (this copy's) Tasks take an optional dueTime (HH:MM, the Macs' local time) on a
+//    from a runner key. A runner sends any of them only from 104.
+// 105: (this copy's) Tasks take an optional dueTime (HH:MM, the Macs' local time) on a
 //    dueDate, preferences take reminders { mac, channel, to, lead }, and
 //    tasks:claimReminder hands each due time's reminder to one Mac. A runner
-//    sends dueTime and reminders, and claims, only from 103.
-// 104: (this copy's) Tasks start on eight columns (Backlog, On Deck, Shaping,
+//    sends dueTime and reminders, and claims, only from 105.
+// 106: (this copy's) Tasks start on eight columns (Backlog, On Deck, Shaping,
 //    Building, Observing, Done, Paused, Canceled) until columns are saved, and
 //    preferences always return columns, boardColumnOrder and sectionOrder in
 //    full. tasks:deleteColumn removes any column but Building (id todo) and
 //    moves its tasks. columnId also takes a column's name. A runner sends
-//    deleteColumn only from 104.
-// 105: (this copy's) Tasks and Linear. Tasks take an optional `linear`
+//    deleteColumn only from 106.
+// 107: (this copy's) Tasks and Linear. Tasks take an optional `linear`
 //    (the issue a task was sent to, imported from or linked with, its status
 //    and a per-task sync switch), activity takes source 'linear' and an
 //    externalId, and preferences take linear { syncEvery, lastSweepAt,
 //    defaults }. tasksLinear:* claims a send, settles it, links and imports
 //    issues, applies what Linear says and claims the sync sweep. A runner
-//    offers Linear only from 105.
-// 106: (this copy's) task favorites. Tasks take an optional `favorite`, and
-//    tasks:update sets it. A runner sends favorite only from 106.
-export const API_VERSION = 106;
+//    offers Linear only from 107.
+// 108: (this copy's) task favorites. Tasks take an optional `favorite`, and
+//    tasks:update sets it. A runner sends favorite only from 108.
+export const API_VERSION = 108;

@@ -6,7 +6,7 @@
 // here or cancelled.
 use super::panel::Shared;
 use crate::panel_rules::Event;
-use crate::preview_rules::{may_browse, may_request, opens_in_browser, own_path, policy, PreviewSite};
+use crate::preview_rules::{asked, may_browse, may_request, opens_in_browser, own_path, policy, PreviewSite};
 use cef::*;
 use std::os::raw::c_int;
 use std::sync::{Arc, Mutex};
@@ -19,10 +19,16 @@ wrap_request_handler! {
 
     impl RequestHandler {
         // The main frame shows its page and nothing else; a frame inside it
-        // its own origin, or what preview_rules allows.
+        // its own origin, or what preview_rules allows. A click on one of the
+        // app's own links, on a page the app made, is told to the app and
+        // goes nowhere like any other.
         fn on_before_browse(&self, _browser: Option<&mut Browser>, frame: Option<&mut Frame>, request: Option<&mut Request>, user_gesture: c_int, is_redirect: c_int) -> c_int {
             let url = request.map(|r| CefString::from(&r.url()).to_string()).unwrap_or_default();
             let main = frame.is_some_and(|f| f.is_main() == 1);
+            if let Some(ask) = asked(&url, &self.preview, main, user_gesture == 1 && is_redirect == 0) {
+                self.shared.send(Event::Asked(ask));
+                return 1;
+            }
             // A todo list's box or a board's arrow, clicked: the app's to act
             // on, and never followed.
             if main && user_gesture == 1 && url.starts_with("threadbear-print:") {
