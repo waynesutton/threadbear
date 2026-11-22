@@ -2827,7 +2827,7 @@ impl Composer {
             "Send (Return)"
         };
         let (fg, bg) = if can_send && self.fast_armed {
-            (gpui_kit::white().into(), style::accent(cx))
+            (gpui_kit::white(), style::accent(cx))
         } else if can_send {
             (cx.theme().background, cx.theme().foreground)
         } else {
@@ -2931,7 +2931,7 @@ impl Composer {
                 if m.shift || m.control || m.alt || m.platform {
                     let input = this.input.read(cx);
                     this.bear_gate.dismissed_at = threadbear_core::bears::token(
-                        &input.value().to_string(),
+                        input.value().as_ref(),
                         input.selected_range().end,
                     )
                     .map(|r| r.start);
@@ -3128,6 +3128,10 @@ impl Composer {
 }
 
 impl Render for Composer {
+    #[expect(
+        clippy::too_many_lines,
+        reason = "baselined when the lint came in with Mike's 21 Nov 2026 release; split it when it's next worked on"
+    )]
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         self.preload_mentions(cx);
         self.draw_spelling_marks(cx);

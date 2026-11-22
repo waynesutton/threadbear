@@ -898,7 +898,7 @@ impl SkillsPage {
                             crate::open_gate::reveal(&file, crate::open_gate::Origin::ThisMac, cx);
                         }),
                 );
-                let (app, n) = (app.clone(), name.clone());
+                let (app, n) = (app.clone(), name);
                 menu.separator().item(
                     PopupMenuItem::new("Remove")
                         .icon(icons::symbol("trash"))

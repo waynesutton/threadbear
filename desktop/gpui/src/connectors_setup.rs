@@ -779,6 +779,10 @@ impl Threadbear {
         cx.notify();
     }
 
+    #[expect(
+        clippy::unwrap_used,
+        reason = "only drawn while what it unwraps is set, just above or by its caller"
+    )]
     fn render_custom_connector(&mut self, cx: &mut Context<Self>) -> AnyElement {
         let form = self.connectors_panel.setup.custom.as_ref().unwrap();
         let mut rows = vec![];
@@ -1035,7 +1039,7 @@ impl Threadbear {
             for (write,label,tip) in [(true,"Can start Ask threads and message them","Threads it starts always ask you before any tool runs"),(false,"Can read all my threads and published Prints","Without this it reads only threads it started and no Prints. Only published Prints are shared; archived threads are never shown.")] {
                 let checked = if write {self.connectors_panel.setup.write}else{self.connectors_panel.setup.read_all};
                 let app = cx.entity().downgrade();
-                let toggle = Checkbox::new(if write {"agent-write"}else{"agent-read-all"}).checked(checked).label(label).small().on_click(move|on:&bool,_,cx|{app.update(cx,|t,cx|{if write{t.connectors_panel.setup.write=*on;}else{t.connectors_panel.setup.read_all=*on;}cx.notify();}).ok();});
+                let toggle = Checkbox::new(if write {"agent-write"}else{"agent-read-all"}).checked(checked).label(label).small().on_click(move|on:&bool,_,cx|{app.update(cx,|t,cx|{if write{t.connectors_panel.setup.write = *on;}else{t.connectors_panel.setup.read_all = *on;}cx.notify();}).ok();});
                 rows.push(tipped_as(div().id(if write {"agent-write-holder"}else{"agent-read-holder"}),tip,Role::GenericContainer).child(toggle).into_any_element());
             }
         }
@@ -1071,6 +1075,10 @@ impl Threadbear {
         v_flex().gap(px(8.)).children(rows).into_any_element()
     }
 
+    #[expect(
+        clippy::unwrap_used,
+        reason = "only drawn while what it unwraps is set, just above or by its caller"
+    )]
     fn render_new_agent_key(&mut self, cx: &mut Context<Self>) -> AnyElement {
         let made = self.connectors_panel.setup.made.as_ref().unwrap();
         let agent = OutsideAgentApp::for_key(&made.key.name);

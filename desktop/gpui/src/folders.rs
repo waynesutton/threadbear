@@ -1725,7 +1725,10 @@ impl SidePane {
 
     /// A line a folder's search found: its file, with Back to the folder and
     /// its results, opened at the line with the words found there.
-    #[allow(clippy::too_many_arguments)]
+    #[allow(
+        clippy::too_many_arguments,
+        reason = "the parts of one row or card, drawn in one place"
+    )]
     pub(crate) fn open_search_hit(
         &mut self,
         key: &str,

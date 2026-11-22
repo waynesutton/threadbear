@@ -16,7 +16,7 @@ import { CallerGate } from './rpc-gate.ts';
 import { threadOfSocket } from './peer.ts';
 import { threadKey as makeThreadKey } from './rpc-auth.ts';
 import { makePrivate } from './win-acl.ts';
-import { loadConfig, ensureHome, readToken, paths, recordListening, defaultHome, DEFAULT_CWD, RUNNER_VERSION, RunnerJsonError, readRunnerJson, peekRunnerJson, writeRunnerJson, expandHome } from './config.ts';
+import { loadConfig, ensureHome, readToken, paths, recordListening, defaultHome, DEFAULT_CWD, RUNNER_VERSION, RunnerJsonError, readRunnerJson, peekRunnerJson, expandHome } from './config.ts';
 import { configureGitPanel, gitPanelSettings, handleGitPanel } from './git-panel.ts';
 import { startHousekeeping } from './housekeeping.ts';
 import { startBorrowSweep } from './runner/worktrees.ts';
@@ -487,7 +487,7 @@ async function main(): Promise<void> {
     claudePath: cfg.claudePath,
     registry,
     log,
-    mcpServersFor: (threadId) => ({ [SERVER_NAME]: threadbearMcpServer(router(), threadId, scheduleControl(), projectControl(), appRestarts, () => cfg.bulletReplies, pocketControl, () => cfg.oneReply, () => cfg.connectorsUrl, gatewayHealth, remoteControl, xSearchFor, pagesFor, () => printPublisher, () => cfg.printsWhenAsked, () => experimentOn(cfg.home, 'tasks') ? nativeTasks : undefined, () => experimentOn(cfg.home, 'clearerCompletion'), () => cfg.progressPrints, () => experimentOn(cfg.home, 'loadEndTurn')) }),
+    mcpServersFor: (threadId) => ({ [SERVER_NAME]: threadbearMcpServer(router(), threadId, scheduleControl(), projectControl(), appRestarts, () => cfg.bulletReplies, pocketControl, () => cfg.oneReply, () => cfg.connectorsUrl, gatewayHealth, remoteControl, () => experimentOn(cfg.home, 'loadEndTurn'), xSearchFor, pagesFor, () => printPublisher, () => cfg.printsWhenAsked, () => experimentOn(cfg.home, 'tasks') ? nativeTasks : undefined, () => experimentOn(cfg.home, 'clearerCompletion'), () => cfg.progressPrints) }),
     oneReply: () => cfg.oneReply,
     alwaysAsk: ALWAYS_ASK_TOOLS,
     neverAsk: NEVER_ASK_TOOLS,

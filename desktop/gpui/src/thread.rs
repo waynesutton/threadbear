@@ -1424,6 +1424,10 @@ impl ThreadPane {
     }
 
     /// Sends a message, optionally routing the turn through the read-only Fast lane (`fast: true`).
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "baselined when the lint came in with Mike's 21 Nov 2026 release"
+    )]
     pub(crate) fn send_message_with_fast(
         &mut self,
         text: String,
@@ -2562,6 +2566,10 @@ impl ThreadPane {
 }
 
 impl Render for ThreadPane {
+    #[expect(
+        clippy::too_many_lines,
+        reason = "baselined when the lint came in with Mike's 21 Nov 2026 release; split it when it's next worked on"
+    )]
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         // The first frame drawn with its rows, for the read's timings: once
         // this frame is on screen.

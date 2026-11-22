@@ -769,6 +769,10 @@ impl Composer {
 
     /// RowRenderer.doneText: Done, with Archive at the right, and the agent's
     /// follow-ups under "Or carry on", each a row with a tick and a "?".
+    #[expect(
+        clippy::too_many_lines,
+        reason = "baselined when the lint came in with Mike's 21 Nov 2026 release; split it when it's next worked on"
+    )]
     fn render_done_card(
         &mut self,
         card: &AsksCard,
@@ -2665,7 +2669,7 @@ fn card_title(
                 .line_height(px(17.))
                 .font_weight(FontWeight::MEDIUM)
                 .text_color(style::label_text(cx))
-                .child(words.to_owned()),
+                .child(words),
         )
 }
 
@@ -3218,37 +3222,6 @@ fn small_label(text: &'static str, cx: &App) -> impl IntoElement {
         .child(text)
 }
 
-#[cfg(test)]
-mod tests {
-    // By name: the kit's prelude has a `test` of its own.
-    use super::{ask_paragraph, starts_a_block};
-    use threadbear_core::reducer::Ask;
-
-    #[test]
-    fn an_ask_that_reads_as_markdown_structure_stays_words() {
-        for (text, escaped) in [
-            ("- remove the old key", "\\- remove the old key"),
-            ("2. then this", "2\\. then this"),
-            ("10) or this", "10\\) or this"),
-            ("# not a heading", "\\# not a heading"),
-            ("> quoted", "\\> quoted"),
-            ("<b>", "\\<b>"),
-        ] {
-            assert!(starts_a_block(text), "{text}");
-            assert_eq!(ask_paragraph(&Ask::new(text)), escaped);
-        }
-        for text in [
-            "Accept the new agreement",
-            "2026 was busy",
-            "-1 is fine",
-            "#hashtag",
-            "10.5 points",
-        ] {
-            assert!(!starts_a_block(text), "{text}");
-        }
-    }
-}
-
 /// The chevron at a card's top right: folds it to its heading and back.
 fn collapse_chevron(collapsed: bool, this: WeakEntity<Composer>, cx: &App) -> AnyElement {
     div()
@@ -3284,4 +3257,35 @@ fn collapse_chevron(collapsed: bool, this: WeakEntity<Composer>, cx: &App) -> An
             }
         })
         .into_any_element()
+}
+
+#[cfg(test)]
+mod tests {
+    // By name: the kit's prelude has a `test` of its own.
+    use super::{ask_paragraph, starts_a_block};
+    use threadbear_core::reducer::Ask;
+
+    #[test]
+    fn an_ask_that_reads_as_markdown_structure_stays_words() {
+        for (text, escaped) in [
+            ("- remove the old key", "\\- remove the old key"),
+            ("2. then this", "2\\. then this"),
+            ("10) or this", "10\\) or this"),
+            ("# not a heading", "\\# not a heading"),
+            ("> quoted", "\\> quoted"),
+            ("<b>", "\\<b>"),
+        ] {
+            assert!(starts_a_block(text), "{text}");
+            assert_eq!(ask_paragraph(&Ask::new(text)), escaped);
+        }
+        for text in [
+            "Accept the new agreement",
+            "2026 was busy",
+            "-1 is fine",
+            "#hashtag",
+            "10.5 points",
+        ] {
+            assert!(!starts_a_block(text), "{text}");
+        }
+    }
 }

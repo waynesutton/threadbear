@@ -12,6 +12,8 @@
 // rebuild of a card) shows as the routes disagreeing, not as a bug on Alex's
 // backend. Nothing here touches the network or a model, so it's as quick and
 // steady as a unit test.
+import fs from 'node:fs';
+import path from 'node:path';
 import { makeHarness } from './fakes.ts';
 import { call, load, memoryBackend } from './convex-memory.ts';
 import { ConvexSync } from '../../src/sync.ts';

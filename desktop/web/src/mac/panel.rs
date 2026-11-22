@@ -389,9 +389,10 @@ impl PanelPage {
         if self.dark.replace(Some(dark)) == Some(dark) {
             return;
         }
-        let _ = self.devtools("Emulation.setEmulatedMedia", json!({
+        // Nothing waits on the answer: the next appearance change sends again.
+        drop(self.devtools("Emulation.setEmulatedMedia", json!({
             "features": [{ "name": "prefers-color-scheme", "value": if dark { "dark" } else { "light" } }]
-        }));
+        })));
     }
 
     /// Loads `url` as the panel's own page.

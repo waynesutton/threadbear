@@ -24,9 +24,13 @@ pub(crate) fn choose(
         extern "C" fn done(context: *mut c_void, path: *const c_char) {
             // The native completion runs once, including cancellation. Copy
             // its borrowed UTF-8 path before returning to the native block.
+            // SAFETY: context is the Box::into_raw of a Sender made below, and
+            // the native side calls this once, so it's taken back once.
             let sender = unsafe { Box::from_raw(context.cast::<Sender>()) };
             let path = (!path.is_null()).then(|| {
                 PathBuf::from(
+                    // SAFETY: a non-null, NUL-terminated UTF-8 path the native
+                    // block keeps alive until this returns.
                     unsafe { CStr::from_ptr(path) }
                         .to_string_lossy()
                         .into_owned(),
@@ -43,6 +47,8 @@ pub(crate) fn choose(
             });
         let (sender, receiver) = futures::channel::oneshot::channel::<Option<PathBuf>>();
         if let (Some(view), Ok(prompt)) = (view, CString::new(prompt)) {
+            // SAFETY: view is this window's own NSView, the prompt outlives the
+            // call, and the boxed sender is taken back once by `done`.
             unsafe {
                 tb_picture_sheet(
                     view,

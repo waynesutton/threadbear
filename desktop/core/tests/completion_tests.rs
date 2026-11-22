@@ -18,7 +18,10 @@ fn completion(needs: &str, tasks: serde_json::Value) -> Event {
 }
 
 fn open_card(model: &TranscriptModel) -> &AsksCard {
-    let RowContent::Asks(card) = &model.open_card().expect("an open card").content else {
+    let Some(row) = model.open_card() else {
+        panic!("an open card")
+    };
+    let RowContent::Asks(card) = &row.content else {
         panic!("asks card")
     };
     card

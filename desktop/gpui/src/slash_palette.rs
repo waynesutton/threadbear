@@ -422,7 +422,7 @@ impl Composer {
             }
         }
         let can_open_files = data.away.is_none();
-        let everything = all.clone();
+        let everything = all;
         let all = slash::searched(&everything, &self.palette.search, &recent);
         let cli_name = data.logins.cli_name(&provider);
         PaletteView {

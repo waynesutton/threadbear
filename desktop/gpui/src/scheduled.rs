@@ -704,7 +704,7 @@ impl Threadbear {
             task.title.clone()
         };
         let place = self.due_task_meta(task);
-        let (hover_key, id) = (key.clone(), task.id.clone());
+        let (hover_key, id) = (key, task.id.clone());
         let (hover_bg, selected_bg) = (p.hover, p.selected);
         let aria = format!("{title}, due {label}");
         v_flex()

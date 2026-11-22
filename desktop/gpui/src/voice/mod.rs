@@ -222,7 +222,7 @@ impl Voice {
                     if this
                         .update(cx, |v, cx| {
                             if v.helper_gen == gen {
-                                v.from_helper(event, cx)
+                                v.on_helper(event, cx)
                             }
                         })
                         .is_err()
@@ -264,7 +264,7 @@ impl Voice {
         (event["session"].as_i64() == Some(session)).then_some(who)
     }
 
-    fn from_helper(&mut self, event: Value, cx: &mut Context<Self>) {
+    fn on_helper(&mut self, event: Value, cx: &mut Context<Self>) {
         match event["event"].as_str().unwrap_or("") {
             "gone" => {
                 self.helper = None;

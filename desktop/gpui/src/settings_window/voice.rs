@@ -22,6 +22,10 @@ fn label(text: impl Into<SharedString>) -> AnyElement {
 }
 
 impl SettingsWindow {
+    #[expect(
+        clippy::too_many_lines,
+        reason = "baselined when the lint came in with Mike's 21 Nov 2026 release; split it when it's next worked on"
+    )]
     pub(super) fn render_voice(&mut self, cx: &mut Context<Self>) -> Vec<AnyElement> {
         let voice = crate::voice::get(&self.app, cx);
         if voice.read(cx).available(cx) {

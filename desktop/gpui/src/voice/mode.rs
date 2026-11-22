@@ -479,7 +479,7 @@ impl Voice {
                     _ => "allow",
                 };
                 if let Some(pane) = self.pane(thread, cx) {
-                    let id = card.approval_id.clone();
+                    let id = card.approval_id;
                     cx.defer(move |cx| {
                         pane.update(cx, |p, cx| p.respond_approval(&id, raw, None, None, cx))
                     });

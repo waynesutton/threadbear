@@ -110,8 +110,11 @@ const TAG_LEN: usize = 16;
 #[derive(Debug, PartialEq, Eq)]
 pub struct BadData;
 
+#[expect(
+    clippy::expect_used,
+    reason = "AES-256 takes any 32 bytes, so this can't fail"
+)]
 fn aead_key(key: &[u8; 32]) -> LessSafeKey {
-    // AES-256 takes any 32 bytes, so this can't fail.
     LessSafeKey::new(UnboundKey::new(&AES_256_GCM, key).expect("a 32-byte key"))
 }
 
@@ -771,7 +774,7 @@ mod tests {
             .collect()
     }
 
-    fn texts<'a>(text: &'a str, kind: Kind) -> Vec<&'a str> {
+    fn texts(text: &str, kind: Kind) -> Vec<&str> {
         spans(text)
             .into_iter()
             .filter(|s| s.kind == kind)

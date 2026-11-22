@@ -284,6 +284,10 @@ impl Threadbear {
             .child(Input::new(&input).small().disabled(self.profile.removing))
             .into_any_element()
     }
+    #[expect(
+        clippy::too_many_lines,
+        reason = "baselined when the lint came in with Mike's 21 Nov 2026 release; split it when it's next worked on"
+    )]
     pub(crate) fn render_profile_sections(
         &mut self,
         look: &LibrarianLook,
@@ -536,13 +540,13 @@ impl Threadbear {
             cx,
             |this, on, cx| this.edit_profile(cx, |s| s.set_shown(on, ProfilePart::Changelog)),
         )];
-        if draft.shows(ProfilePart::Github) || draft.shows(ProfilePart::Changelog) {
-            if look.github_user.is_empty() {
-                rows.push(note(
-                    "Type your GitHub user name under GitHub activity above.",
-                    cx,
-                ));
-            }
+        if (draft.shows(ProfilePart::Github) || draft.shows(ProfilePart::Changelog))
+            && look.github_user.is_empty()
+        {
+            rows.push(note(
+                "Type your GitHub user name under GitHub activity above.",
+                cx,
+            ));
         }
         if draft.shows(ProfilePart::Changelog) {
             let input = self.profile_input("repo", draft.changelog_repo.as_deref().unwrap_or(""), "owner/threadbear", "A public GitHub repository, owner/name. Leave empty for your GitHub user name/threadbear", window, cx);

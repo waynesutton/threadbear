@@ -935,7 +935,7 @@ impl Threadbear {
                         "Terminal",
                         self.dock.read(cx).controller.is_showing(shell::TERMINAL),
                     ),
-                    |this, window, cx| crate::terminal::toggle(this, window, cx),
+                    crate::terminal::toggle,
                     cx,
                 ));
             }

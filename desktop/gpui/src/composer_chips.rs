@@ -178,11 +178,7 @@ impl Composer {
         }
         // Going into Plan first, from Shift-Tab or this menu alike, notes the
         // access to put back when Shift-Tab steps on (turn_modes.rs).
-        if let Some(from) = self
-            .chip_data(cx)
-            .settings()
-            .map(|s| s.permission_mode.clone())
-        {
+        if let Some(from) = self.chip_data(cx).settings().map(|s| s.permission_mode) {
             crate::turn_modes::permission_changing(&self.mode_key(), &from, mode);
         }
         self.change_thread(
@@ -571,11 +567,8 @@ impl Composer {
             coding = coding
                 .child(self.render_model_chip(&data, window, cx))
                 .child(chip_divider(cx));
-            coding = coding.child(self.render_permission_chip(
-                settings.permission_mode,
-                &composer,
-                cx,
-            ));
+            coding =
+                coding.child(self.render_permission_chip(settings.permission_mode, &composer, cx));
             // Dim coding chips while Fast lane is armed so it is unmistakable the turn bypasses them.
             if dim_for_fast {
                 coding = coding.opacity(0.35);

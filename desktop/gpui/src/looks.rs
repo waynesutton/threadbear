@@ -687,7 +687,7 @@ impl Threadbear {
                                 })
                             {
                                 sizes.borrow_mut().insert(slot, now);
-                                let notify = notify.clone();
+                                let notify = notify;
                                 cx.defer(move |cx| {
                                     notify.update(cx, |_, cx| cx.notify()).ok();
                                 });
@@ -712,7 +712,10 @@ impl Threadbear {
     /// edge), and a page too tall for the window stacks them and scrolls;
     /// without, they're only the order parts stack in, as the Librarian page
     /// has always had them.
-    #[allow(clippy::too_many_arguments)]
+    #[allow(
+        clippy::too_many_arguments,
+        reason = "the parts of one row or card, drawn in one place"
+    )]
     pub(crate) fn render_customized_page(
         &mut self,
         page: Page,
@@ -1290,7 +1293,7 @@ impl Threadbear {
                 )
                 .on_drag(PositionDrag(slot), |drag, _, _, cx| {
                     cx.stop_propagation();
-                    cx.new(|_| drag.clone())
+                    cx.new(|_| *drag)
                 })
                 .on_drag_move(cx.listener(
                     move |this, ev: &DragMoveEvent<PositionDrag>, _, cx| {
@@ -1699,7 +1702,10 @@ pub(crate) fn choice_menu(
 
 /// One part's row in Layout: its name, then its switch and its place in
 /// columns of their own, so they line up whatever the name or place.
-#[allow(clippy::too_many_arguments)]
+#[allow(
+    clippy::too_many_arguments,
+    reason = "the parts of one row or card, drawn in one place"
+)]
 pub(crate) fn layout_row(
     id: String,
     title: &'static str,
@@ -1769,20 +1775,6 @@ pub(crate) fn tile_fill(on_picture: bool, cx: &App) -> Hsla {
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::path;
-
-    #[test]
-    fn a_name_never_leaves_the_folder() {
-        assert!(path("").is_none());
-        assert!(path("../x.png").is_none());
-        assert!(path("a/b.png").is_none());
-        assert!(path("..").is_none());
-        assert!(path("picture-1234.png").is_some_and(|p| p.ends_with("looks/picture-1234.png")));
-    }
-}
-
 impl Threadbear {
     /// The Look parts in the dump: which pages are customizable, each look
     /// as kept, the panel that's open, and the main window's picture.
@@ -1801,6 +1793,20 @@ impl Threadbear {
             "main": { "on": self.main_background().on, "file": self.main_background().file, "everywhere": self.main_background().everywhere },
             "problems": self.looks.problems,
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::path;
+
+    #[test]
+    fn a_name_never_leaves_the_folder() {
+        assert!(path("").is_none());
+        assert!(path("../x.png").is_none());
+        assert!(path("a/b.png").is_none());
+        assert!(path("..").is_none());
+        assert!(path("picture-1234.png").is_some_and(|p| p.ends_with("looks/picture-1234.png")));
     }
 }
 

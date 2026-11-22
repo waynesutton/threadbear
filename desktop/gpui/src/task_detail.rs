@@ -138,24 +138,20 @@ pub(super) struct Detail {
 use std::sync::Arc;
 
 /// A picture from storage, off the UI thread, held to 10 MB.
-pub(crate) fn fetch_picture(
-    url: String,
-) -> impl std::future::Future<Output = Result<Arc<Image>, String>> {
-    async move {
-        let agent: ureq::Agent = ureq::Agent::config_builder()
-            .timeout_global(Some(std::time::Duration::from_secs(20)))
-            .build()
-            .into();
-        let mut response = agent.get(&url).call().map_err(|e| e.to_string())?;
-        let bytes = response
-            .body_mut()
-            .with_config()
-            .limit(10 * 1024 * 1024)
-            .read_to_vec()
-            .map_err(|e| e.to_string())?;
-        let format = crate::viewer::format_of("", &bytes).ok_or("Unsupported picture format")?;
-        Ok(Arc::new(Image::from_bytes(format, bytes)))
-    }
+pub(crate) async fn fetch_picture(url: String) -> Result<Arc<Image>, String> {
+    let agent: ureq::Agent = ureq::Agent::config_builder()
+        .timeout_global(Some(std::time::Duration::from_secs(20)))
+        .build()
+        .into();
+    let mut response = agent.get(&url).call().map_err(|e| e.to_string())?;
+    let bytes = response
+        .body_mut()
+        .with_config()
+        .limit(10 * 1024 * 1024)
+        .read_to_vec()
+        .map_err(|e| e.to_string())?;
+    let format = crate::viewer::format_of("", &bytes).ok_or("Unsupported picture format")?;
+    Ok(Arc::new(Image::from_bytes(format, bytes)))
 }
 
 fn link_symbol(kind: &str) -> &'static str {
@@ -405,7 +401,7 @@ impl TasksPage {
             .update(cx, |f, cx| f.set_value("", window, cx));
         cx.notify();
         let args = json!({"id": id, "title": title, "notes": "", "status": "todo", "columnId": "todo", "project": parent.project, "position": position, "parentId": parent.id});
-        let typed = title.clone();
+        let typed = title;
         let client = self.client.clone();
         cx.spawn_in(window, async move |this, cx| {
             let result = call(client, "tasks.create", args).await;
@@ -892,6 +888,10 @@ impl TasksPage {
             .shadow_lg()
             .text_color(style::label_text(cx))
     }
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "baselined when the lint came in with Mike's 21 Nov 2026 release"
+    )]
     fn picker_row(
         &self,
         id: String,
@@ -1165,7 +1165,7 @@ impl TasksPage {
             let url = l.url.clone();
             line = line.child(
                 Button::new("task-linear-open")
-                    .label(label.clone())
+                    .label(label)
                     .small()
                     .ghost()
                     .tooltip(format!("Open {key} in Linear"))
@@ -1326,6 +1326,10 @@ impl TasksPage {
         Some(line.into_any_element())
     }
 
+    #[expect(
+        clippy::too_many_lines,
+        reason = "baselined when the lint came in with Mike's 21 Nov 2026 release; split it when it's next worked on"
+    )]
     pub(super) fn detail_view(
         &self,
         row: &TaskRow,
@@ -1365,7 +1369,7 @@ impl TasksPage {
                     .on_click(cx.listener(|this, _, window, cx| this.leave_detail(window, cx))),
             )
             .child(div().text_size(px(13.)).text_color(tertiary).child(crumb));
-        if let Some(parent) = parent.clone() {
+        if let Some(parent) = parent {
             bar = bar.child(div().text_color(tertiary).child("›")).child(
                 Button::new("task-parent")
                     .label(parent.title.clone())
@@ -1537,7 +1541,7 @@ impl TasksPage {
             cx,
         );
         let (p, pid, selected, choices) = (
-            page.clone(),
+            page,
             row.id.clone(),
             row.project.clone().unwrap_or(Value::Null),
             self.project_choices(),

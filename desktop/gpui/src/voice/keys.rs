@@ -142,6 +142,7 @@ pub(super) fn install(voice: WeakEntity<Voice>, cx: &mut App) {
     })
     .detach();
     #[cfg(target_os = "macos")]
+    // SAFETY: both are plain extern "C" functions that live for the program's run.
     unsafe {
         tb_voice_keys_install(on_key, on_resign)
     };
@@ -274,6 +275,7 @@ impl Monitor {
         }
         self.trigger_down = false;
         #[cfg(target_os = "macos")]
+        // SAFETY: takes nothing and only reads the system's uptime.
         let at = unsafe { tb_voice_uptime() };
         #[cfg(not(target_os = "macos"))]
         let at = 0.0;
@@ -290,6 +292,8 @@ fn type_in(words: &str) {
         let Ok(words) = std::ffi::CString::new(words) else {
             return;
         };
+        // SAFETY: the shim copies the words before it returns, and the three
+        // callbacks are extern "C" functions that live for the program's run.
         unsafe { tb_voice_type_later(words.as_ptr(), compose, free_text, typed) };
     }
     #[cfg(not(target_os = "macos"))]
@@ -301,6 +305,7 @@ extern "C" fn compose(
     before: u32,
     after: u32,
 ) -> *mut std::ffi::c_char {
+    // SAFETY: the shim passes the NUL-terminated copy it made of type_in's words.
     let words = unsafe { std::ffi::CStr::from_ptr(words) }.to_string_lossy();
     let side = |c: u32| char::from_u32(c).filter(|_| c != 0);
     insertion(&words, side(before), side(after))
@@ -310,6 +315,8 @@ extern "C" fn compose(
 
 extern "C" fn free_text(text: *mut std::ffi::c_char) {
     if !text.is_null() {
+        // SAFETY: text is a pointer compose made with CString::into_raw,
+        // handed back once.
         drop(unsafe { std::ffi::CString::from_raw(text) });
     }
 }
@@ -326,6 +333,7 @@ extern "C" fn typed(done: bool) {
 
 fn has_text_box() -> bool {
     #[cfg(target_os = "macos")]
+    // SAFETY: the shim writes two u32s through pointers to locals that outlive the call.
     unsafe {
         let (mut before, mut after) = (0u32, 0u32);
         tb_voice_text_context(&mut before, &mut after)

@@ -779,7 +779,7 @@ impl Threadbear {
                         let Some(file) = v["file"].as_str().map(str::to_owned) else {
                             return;
                         };
-                        this.save_print_pdf(file, dest, page.title.clone(), cx);
+                        this.save_print_pdf(file, dest, page.title, cx);
                     },
                 );
             })
@@ -1145,7 +1145,7 @@ impl Threadbear {
         let picked = self.print_picked(&page.id);
         let busy = self.print_busy(&page.id);
         let (open_id, menu_id, more_id) = (page.id.clone(), page.id.clone(), page.id.clone());
-        let hover_key = key.clone();
+        let hover_key = key;
         let more = div()
             .id(SharedString::from(format!("print-more-{}", page.id)))
             .role(Role::Button)

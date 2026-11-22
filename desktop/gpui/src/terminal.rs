@@ -1205,7 +1205,7 @@ impl Terminals {
         let tab = crate::highlights::tipped_as(
             div()
                 .id(("terminal-tab", ix))
-                .group(group.clone())
+                .group(group)
                 .flex_none()
                 .h(px(22.))
                 .pl(px(8.))
@@ -1797,6 +1797,7 @@ impl Session {
             }
             // SAFETY: takes a descriptor by value and touches no memory of
             // ours; `pty` is borrowed from self, so the fd is open.
+            // SAFETY: tcgetpgrp only reads the process group of an open descriptor.
             let group = unsafe { libc::tcgetpgrp(pty.as_raw_fd()) };
             // Its own group has the terminal, and it's still the shell:
             // `exec ssh` and `exec vim` keep both its pid and its group.
@@ -2732,6 +2733,7 @@ impl Session {
                 return None;
             }
             let (pid, pty) = (self.pid?, self.pty.as_ref()?);
+            // SAFETY: tcgetpgrp only reads the process group of an open descriptor.
             let group = unsafe { libc::tcgetpgrp(pty.as_raw_fd()) };
             if group <= 0 || self.shell_alone_in_front() {
                 return None;

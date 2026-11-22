@@ -115,6 +115,8 @@ impl Page {
             links
                 .view
                 .store(view as usize, std::sync::atomic::Ordering::Release);
+            // SAFETY: view is the browser's own NSView, just made and still
+            // held by this page; the shim only adds an event watch to it.
             unsafe { super::host::tb_view_watch_input(view) };
         }
         Ok(Page {

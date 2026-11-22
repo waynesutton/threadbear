@@ -403,7 +403,7 @@ fn place_photo(folder: &str, source: Option<&Path>) -> Result<Option<PathBuf>, S
     let dir = Path::new(folder);
     let new = match source {
         Some(source) => {
-            let name = rules::photo_name(source, crate::now_ms() as i64).ok_or("That isn't a picture Threadbear can use as a photo. Pick a PNG, JPEG, WebP or GIF.")?;
+            let name = rules::photo_name(source, crate::now_ms()).ok_or("That isn't a picture Threadbear can use as a photo. Pick a PNG, JPEG, WebP or GIF.")?;
             let meta = std::fs::metadata(source)
                 .map_err(|e| format!("Couldn't read that picture: {e}"))?;
             if !meta.is_file() || meta.len() > rules::PHOTO_LIMIT {

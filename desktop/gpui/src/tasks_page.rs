@@ -477,6 +477,10 @@ fn place_name(value: f32) -> &'static str {
 }
 
 impl TasksPage {
+    #[expect(
+        clippy::too_many_lines,
+        reason = "baselined when the lint came in with Mike's 21 Nov 2026 release; split it when it's next worked on"
+    )]
     fn new(
         app: WeakEntity<Threadbear>,
         client: std::sync::Arc<threadbear_client::runner::Client>,
@@ -1172,7 +1176,7 @@ impl TasksPage {
         }
         if method == "tasks.update" {
             let id = args["id"].as_str().unwrap_or("").to_string();
-            let mut patch = args.clone();
+            let mut patch = args;
             patch.as_object_mut().map(|o| o.remove("id"));
             self.patch(&id, patch, None, cx);
         } else {
@@ -1261,7 +1265,7 @@ impl TasksPage {
                 .hour_cycle(cycle);
             state.set_time(
                 had_time.unwrap_or_else(|| {
-                    threadbear_core::chrono::NaiveTime::from_hms_opt(9, 0, 0).unwrap()
+                    threadbear_core::chrono::NaiveTime::from_hms_opt(9, 0, 0).unwrap_or_default()
                 }),
                 window,
                 cx,
@@ -1607,12 +1611,12 @@ impl TasksPage {
         if let Some(base) = &self.editing_baseline {
             // Send only what changed here, so another device's edits survive.
             let original = json!({"title":base.title,"notes":base.notes,"status":base.status,"columnId":column_id(base),"project":base.project});
-            args.as_object_mut()
-                .unwrap()
-                .retain(|key, value| original[key] != *value);
+            if let Some(fields) = args.as_object_mut() {
+                fields.retain(|key, value| original[key] != *value);
+            }
         }
         args["id"] = json!(self.editing.as_ref().unwrap_or(&self.draft_id));
-        self.editing = Some(args["id"].as_str().unwrap().to_string());
+        self.editing = args["id"].as_str().map(str::to_owned);
         if self.busy {
             return;
         }
@@ -1829,7 +1833,7 @@ impl TasksPage {
         self.scrolls
             .borrow_mut()
             .entry(key.to_string())
-            .or_insert_with(ScrollHandle::new)
+            .or_default()
             .clone()
     }
     fn bounds_marker(&self, key: String) -> AnyElement {
@@ -2030,6 +2034,10 @@ impl TasksPage {
             self.change("tasks.startThread", json!({"id":row.id}), cx);
         }
     }
+    #[expect(
+        clippy::too_many_lines,
+        reason = "baselined when the lint came in with Mike's 21 Nov 2026 release; split it when it's next worked on"
+    )]
     fn more_menu(&self, task: &TaskRow, cx: &mut Context<Self>) -> AnyElement {
         let page = cx.entity().downgrade();
         let t = task.clone();
@@ -4286,6 +4294,10 @@ impl TasksPage {
 }
 
 impl Render for TasksPage {
+    #[expect(
+        clippy::too_many_lines,
+        reason = "baselined when the lint came in with Mike's 21 Nov 2026 release; split it when it's next worked on"
+    )]
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         if self.opening.is_some() && !self.loading {
             self.open_pending(window, cx);
@@ -4609,7 +4621,7 @@ impl Render for TasksPage {
                             f32::from(bounds.size.width) / one,
                             f32::from(bounds.size.height) / one,
                         );
-                        let page = page.clone();
+                        let page = page;
                         cx.defer(move |cx| {
                             page.update(cx, |p, cx| {
                                 if (p.background_size.0 - size.0).abs() > 0.5
@@ -4781,7 +4793,7 @@ pub(crate) fn automation(
                     .map(|r| r.id.clone())
             })
             .or_else(|| p.editing.clone());
-        if let Some(id) = target.clone() {
+        if let Some(id) = target {
             if cmd.get("priority").is_some() {
                 p.set_field(&id, "priority", cmd["priority"].clone(), cx);
             }

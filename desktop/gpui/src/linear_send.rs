@@ -464,6 +464,10 @@ impl LinearSend {
 }
 
 impl Render for LinearSend {
+    #[expect(
+        clippy::too_many_lines,
+        reason = "baselined when the lint came in with Mike's 21 Nov 2026 release; split it when it's next worked on"
+    )]
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let (secondary, tertiary) = (style::secondary_label(cx), style::tertiary_label(cx));
         let label = |text: &'static str| {

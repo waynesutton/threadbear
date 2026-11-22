@@ -207,6 +207,8 @@ impl LinksOut {
         if view.is_null() {
             return;
         }
+        // SAFETY: view is non-null here and is the page's own NSView, stored
+        // by open; handlers run on the main thread while the page lives.
         let inputs = unsafe { super::host::tb_view_input_count(view) };
         if self
             .gate

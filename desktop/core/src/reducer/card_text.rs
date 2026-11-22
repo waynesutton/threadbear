@@ -314,10 +314,7 @@ impl ApprovalText {
             return None;
         }
         let tool = tool.strip_prefix(&format!("{service}_")).unwrap_or(tool);
-        let words: Vec<&str> = tool
-            .split(|c| c == '_' || c == '-')
-            .filter(|w| !w.is_empty())
-            .collect();
+        let words: Vec<&str> = tool.split(['_', '-']).filter(|w| !w.is_empty()).collect();
         if words.is_empty() {
             return None;
         }

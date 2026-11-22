@@ -242,7 +242,7 @@ pub mod rows {
             .filter(|p| p.deleted_at.is_none())
             .cloned()
             .collect();
-        out.sort_by(|a, b| b.updated_at.cmp(&a.updated_at));
+        out.sort_by_key(|p| std::cmp::Reverse(p.updated_at));
         out
     }
 

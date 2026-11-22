@@ -86,7 +86,10 @@ impl Composer {
                 self.pick_bear(range, bear, window, cx);
             }
             // Slash-palette navigation keys remain the text box's here.
-            #[allow(unreachable_patterns)]
+            #[allow(
+                unreachable_patterns,
+                reason = "a catch-all for keys added to the enum later"
+            )]
             _ => return false,
         }
         cx.notify();
@@ -116,7 +119,7 @@ impl Composer {
         cx: &mut Context<Self>,
     ) -> Option<AnyElement> {
         let input = self.input.read(cx);
-        let token = bears::token(&input.value().to_string(), input.selected_range().end);
+        let token = bears::token(input.value().as_ref(), input.selected_range().end);
         self.bear_gate.moved(token.as_ref().map(|r| r.start));
         let (range, found) = self.bear_offer(window, cx)?;
         self.bear_selected = self.bear_selected.min(found.len() - 1);

@@ -457,6 +457,10 @@ impl SidePane {
     /// The bar, over the text (`NSTextFinder`'s, measured on the Swift app's
     /// pictures): a 30 point strip with a hairline under it, the field taking
     /// the room, then ‹ › and Done.
+    #[expect(
+        clippy::too_many_lines,
+        reason = "baselined when the lint came in with Mike's 21 Nov 2026 release; split it when it's next worked on"
+    )]
     pub(crate) fn render_find_bar(
         &self,
         thread_id: &str,

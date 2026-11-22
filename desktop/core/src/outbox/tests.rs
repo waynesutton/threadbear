@@ -65,6 +65,7 @@ fn user_message(thread: &str, seq: i64, text: &str) -> ThreadEvent {
             answers: Vec::new(),
             edit_of: None,
             review: None,
+            mode: None,
         },
     )
 }

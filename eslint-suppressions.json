@@ -42,7 +42,7 @@
   },
   "convex/devices.ts": {
     "@convex-dev/explicit-table-ids": {
-      "count": 8
+      "count": 6
     },
     "@convex-dev/no-collect-in-query": {
       "count": 1
@@ -187,7 +187,7 @@
   },
   "convex/sync.ts": {
     "@convex-dev/explicit-table-ids": {
-      "count": 117
+      "count": 114
     },
     "@convex-dev/no-collect-in-query": {
       "count": 17
@@ -199,7 +199,7 @@
       "count": 4
     },
     "@typescript-eslint/no-explicit-any": {
-      "count": 41
+      "count": 42
     },
     "machines/no-direct-state-writes": {
       "count": 10
@@ -504,6 +504,11 @@
       "count": 2
     }
   },
+  "runner/test/unit/connectors-setup.test.ts": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 18
+    }
+  },
   "runner/test/unit/context-budget.test.ts": {
     "@eslint-community/eslint-comments/require-description": {
       "count": 1
@@ -618,6 +623,16 @@
   "runner/test/unit/notion-tasks.test.ts": {
     "mikecann-lint/no-sleep-in-tests": {
       "count": 1
+    }
+  },
+  "runner/test/unit/outside-agents-backend.test.ts": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 7
+    }
+  },
+  "runner/test/unit/outside-agents.test.ts": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 5
     }
   },
   "runner/test/unit/patch-hash-binding.test.ts": {
@@ -814,6 +829,11 @@
       "count": 4
     }
   },
+  "runner/test/unit/static-clients.test.ts": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 10
+    }
+  },
   "runner/test/unit/store.test.ts": {
     "@typescript-eslint/no-explicit-any": {
       "count": 6
@@ -826,6 +846,11 @@
   },
   "runner/test/unit/sync-main.test.ts": {
     "mikecann-lint/no-sleep-in-tests": {
+      "count": 1
+    }
+  },
+  "runner/test/unit/tasks-backend.test.ts": {
+    "@typescript-eslint/no-explicit-any": {
       "count": 1
     }
   },
@@ -897,10 +922,7 @@
   },
   "web/src/App.tsx": {
     "react-hooks/exhaustive-deps": {
-      "count": 4
-    },
-    "react-hooks/set-state-in-effect": {
-      "count": 1
+      "count": 3
     }
   },
   "web/src/inbox.tsx": {

@@ -322,7 +322,7 @@ fn card(id: &str, window: &mut Window, cx: &mut App) -> AnyElement {
         .items_center()
         .child(glyph)
         .child(words);
-    if let (Some(app), Some(page)) = (app.clone(), page.as_ref()) {
+    if let (Some(app), Some(page)) = (app, page.as_ref()) {
         let pid = page.id.clone();
         footer = footer
             .child(button(
@@ -364,7 +364,7 @@ fn card(id: &str, window: &mut Window, cx: &mut App) -> AnyElement {
                 false,
                 cx,
                 {
-                    let (app, pid) = (app.clone(), pid.clone());
+                    let (app, pid) = (app, pid);
                     move |ev, window, cx| {
                         let at = ev.position();
                         app.update(cx, |a, cx| {
@@ -489,7 +489,10 @@ fn preview(
         .into_any_element()
 }
 
-#[allow(clippy::too_many_arguments)]
+#[allow(
+    clippy::too_many_arguments,
+    reason = "the parts of one row or card, drawn in one place"
+)]
 fn button(
     id: String,
     symbol: &'static str,

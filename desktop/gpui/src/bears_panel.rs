@@ -448,7 +448,7 @@ impl Threadbear {
         };
         let picked = self.sidebar_selected(kind);
         if picked.len() > 1 && picked.iter().any(|id| id == key) {
-            let keys = picked.clone();
+            let keys = picked;
             return vec![
                 MenuRow::item(
                     format!("Delete {} items\u{2026}", keys.len()),

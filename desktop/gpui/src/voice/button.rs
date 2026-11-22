@@ -60,7 +60,7 @@ pub(crate) fn beside_send(
         )
     };
     let (toggle, dismiss) = (voice.clone(), voice.clone());
-    let id = thread.clone();
+    let id = thread;
     let button = face
         .test_support()
         .role(Role::Button)

@@ -3174,7 +3174,7 @@ impl SidePane {
             );
         }
         if !done.is_empty() {
-            let id = thread_id.clone();
+            let id = thread_id;
             list = list.child(
                 PaneRow::new("hl-tasks-done", format!("{} completed", done.len()))
                     .icon(if done_open {

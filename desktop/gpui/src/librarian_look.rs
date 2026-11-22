@@ -514,6 +514,10 @@ impl Threadbear {
     }
 
     /// The Name and user name boxes, made once, and filled again after Reset.
+    #[expect(
+        clippy::expect_used,
+        reason = "only drawn while what it unwraps is set, just above or by its caller"
+    )]
     fn librarian_boxes(
         &mut self,
         look: &LibrarianLook,
@@ -628,8 +632,10 @@ pub(crate) fn full_user_name() -> String {
         unsafe extern "C" {
             fn tb_full_user_name() -> *const std::ffi::c_char;
         }
+        // SAFETY: takes nothing and returns a C string the shim owns, or null.
         let name = unsafe { tb_full_user_name() };
         if !name.is_null() {
+            // SAFETY: name is non-null here and NUL-terminated.
             return unsafe { std::ffi::CStr::from_ptr(name) }
                 .to_string_lossy()
                 .into_owned();

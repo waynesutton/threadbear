@@ -38,7 +38,7 @@ pub(crate) fn beside_send(
     let accent = style::accent(cx);
     let bolt_color = match state {
         ButtonState::Off => style::secondary_text(cx),
-        ButtonState::Armed | ButtonState::Sending => gpui_kit::white().into(),
+        ButtonState::Armed | ButtonState::Sending => gpui_kit::white(),
     };
     let bolt = Icon::default()
         .data(BOLT_SVG.as_bytes())

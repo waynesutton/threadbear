@@ -862,7 +862,7 @@ function TasksContent({ token, projectFilter = '', issues = false }: { token: st
         </header>
 
         {view === 'list' && (
-          <form className="tasks-composer" onSubmit={submitComposer}>
+          <form className="tasks-composer" onSubmit={(e) => void submitComposer(e)}>
             <textarea
               ref={composerRef}
               rows={1}
@@ -1069,7 +1069,7 @@ function TasksContent({ token, projectFilter = '', issues = false }: { token: st
             role="dialog"
             aria-modal="true"
             aria-label={editingBaseline ? 'Edit task' : 'New task'}
-            onSubmit={saveEditor}
+            onSubmit={(e) => void saveEditor(e)}
             onKeyDown={(e) => {
               if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
                 e.preventDefault();

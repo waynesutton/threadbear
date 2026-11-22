@@ -625,7 +625,7 @@ impl Threadbear {
                         let now = f32::from(bounds.size.width) / style::zoomed(1.);
                         if (measured.get() - now).abs() > 0.5 {
                             measured.set(now);
-                            let notify = notify.clone();
+                            let notify = notify;
                             cx.defer(move |cx| {
                                 notify.update(cx, |_, cx| cx.notify()).ok();
                             });
@@ -644,7 +644,10 @@ impl Threadbear {
 
 /// A card's frame: the heading and its stepper, the calendar, then the
 /// readout and Less to More.
-#[allow(clippy::too_many_arguments)]
+#[allow(
+    clippy::too_many_arguments,
+    reason = "the parts of one row or card, drawn in one place"
+)]
 fn calendar_card(
     id: &'static str,
     title: &'static str,
@@ -728,7 +731,7 @@ fn thousands(n: i64) -> String {
     let digits = n.abs().to_string();
     let mut out = String::new();
     for (i, c) in digits.chars().enumerate() {
-        if i > 0 && (digits.len() - i) % 3 == 0 {
+        if i > 0 && (digits.len() - i).is_multiple_of(3) {
             out.push(',');
         }
         out.push(c);

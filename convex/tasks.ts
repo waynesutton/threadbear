@@ -6,7 +6,7 @@ import { internal } from './_generated/api';
 import { checkPhoneToken, runnerAuth } from './lib';
 import { mainRunner, queue } from './phone';
 import { BUILDING, columnIds, defaultColumns, defaultSectionOrder, fullColumnOrder, taskStatuses, listStatuses, type TaskColumn, type TaskStatus, taskActivityKind, taskAuthor, taskFields, taskLink, taskLinkOut, taskPreferenceFields, taskPriority, taskProject, taskStatus } from './taskFields';
-import type { Infer } from 'convex/values';
+import type { Infer, ObjectType } from 'convex/values';
 import type { Id } from './_generated/dataModel';
 
 export const authField = v.union(v.object({ token: v.string() }), v.object({ key: v.string() }));
@@ -47,11 +47,10 @@ export async function projectExists(ctx: Ctx, project: Infer<typeof taskProject>
   )
     bad('That project is no longer available');
 }
-const taskFieldsValidator = v.object(taskFields);
 // What clients see: image links carry their URL, and deletedWithParent stays inside.
 const { deletedWithParent: _deletedWithParent, links: _links, ...listedFields } = taskFields;
 const taskOut = v.object({ ...listedFields, links: v.optional(v.array(taskLinkOut)) });
-async function expose(ctx: Ctx, row: Infer<typeof taskFieldsValidator>): Promise<Infer<typeof taskOut>> {
+async function expose(ctx: Ctx, row: ObjectType<typeof taskFields>): Promise<Infer<typeof taskOut>> {
   const { deletedWithParent: _hidden, links, ...rest } = row;
   if (!links) return rest;
   return {

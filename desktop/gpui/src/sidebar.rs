@@ -3738,7 +3738,10 @@ impl Threadbear {
 /// reads as Swift's cut-out does. `runner_tile`: another runner's thread with
 /// no project draws its machine's icon (a little larger, as a Mac mini is a
 /// flat box) in place of the folder, and names it in the tooltip.
-#[allow(clippy::too_many_arguments)]
+#[allow(
+    clippy::too_many_arguments,
+    reason = "the parts of one row or card, drawn in one place"
+)]
 fn render_tile(
     t: &ThreadSummary,
     look: &RowLook,
