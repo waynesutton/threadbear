@@ -103,6 +103,7 @@ pasted (`Desktop only for now.` for all three) is left out of this table.
 | A design review answer's picks and notes | `message.reviewResponse` | Yes | Yes | No: Not drawn yet. |
 | The user's answers to a card, each under its question | `message.answers` | Yes | No: Not drawn yet. | No: Not drawn yet. |
 | A summary that gives way to a longer reply | `message.givesWay` | No: Not drawn yet. | Yes | No: Not drawn yet. |
+| A message sent through the Fast lane (its mode) | `message.mode` | No: Not drawn yet. | No: Not drawn yet. | No: Not drawn yet. |
 | Why the runner sent its message | `message.wakeReason` | No: Not drawn yet. | No: Not drawn yet. | No: Not drawn yet. |
 | An edited message | `message.editOf` | No: Not drawn yet. | No: Not drawn yet. | No: Not drawn yet. |
 | Narration (a paraphrase of what the agent wrote) | `message.narration` | No: Not drawn yet. | No: Not drawn yet. | No: Not drawn yet. |
@@ -133,6 +134,7 @@ pasted (`Desktop only for now.` for all three) is left out of this table.
 | Another lab's review ledger | `turn.review` | Yes | Yes | Yes |
 | Done card's loose ends | `turn.looseEnds` | Yes | Yes | Yes |
 | What it cost | `turn.costUsd` | Yes | No: Not drawn yet. | Yes |
+| A turn's task list (the completion ledger) | `turn.completion` | No: Not drawn yet. | No: Not drawn yet. | Yes |
 | Completed, stopped or failed | `turn.outcome` | No: Not drawn yet. | Yes | No: Not drawn yet. |
 | Fix for a known failure (usage limit, context, sign-in, network) | `turn.errorKind` | No: Not drawn yet. | Yes | No: Not drawn yet. |
 | A failed turn's error | `turn.error` | No: Not drawn yet. | No: Not drawn yet. | No: Not drawn yet. |
