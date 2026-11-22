@@ -46,7 +46,11 @@ impl PanelBear {
     }
 
     pub fn title(&self) -> String {
-        if self.head { format!("{} (head bear)", self.name) } else { self.name.clone() }
+        if self.head {
+            format!("{} (head bear)", self.name)
+        } else {
+            self.name.clone()
+        }
     }
 }
 
@@ -72,9 +76,20 @@ pub fn decode(v: &Value) -> Option<Vec<PanelBear>> {
                     head: b["head"].as_bool() == Some(true),
                     pinned: b["state"]["pinned"].is_number(),
                     archived: b["archived"].as_bool() == Some(true),
-                    away_until: (b["away"].as_bool() == Some(true)).then(|| text(&b["state"], "awayUntil")).flatten(),
-                    routines: b["routines"].as_array().map_or(0, |r| r.iter().filter(|r| r["paused"].as_bool() != Some(true)).count()),
-                    projects: b["state"]["projects"].as_array().into_iter().flatten().filter_map(|p| p.as_str().map(str::to_owned)).collect(),
+                    away_until: (b["away"].as_bool() == Some(true))
+                        .then(|| text(&b["state"], "awayUntil"))
+                        .flatten(),
+                    routines: b["routines"].as_array().map_or(0, |r| {
+                        r.iter()
+                            .filter(|r| r["paused"].as_bool() != Some(true))
+                            .count()
+                    }),
+                    projects: b["state"]["projects"]
+                        .as_array()
+                        .into_iter()
+                        .flatten()
+                        .filter_map(|p| p.as_str().map(str::to_owned))
+                        .collect(),
                     photo: None,
                 })
             })
@@ -84,7 +99,10 @@ pub fn decode(v: &Value) -> Option<Vec<PanelBear>> {
 
 /// The order of the sections down the panel.
 pub fn section_rank(section: &str) -> usize {
-    [PINNED, BEARS, TABLES, ARCHIVED].iter().position(|s| *s == section).unwrap_or(4)
+    [PINNED, BEARS, TABLES, ARCHIVED]
+        .iter()
+        .position(|s| *s == section)
+        .unwrap_or(4)
 }
 
 /// A row's key in the selection: "bear:<id>" or "table:<project id>".
@@ -135,7 +153,11 @@ impl Selection {
             }
             Click::Range => {
                 let to = order.iter().position(|k| k == key);
-                let from = self.anchor.as_ref().and_then(|a| order.iter().position(|k| k == a)).or(to);
+                let from = self
+                    .anchor
+                    .as_ref()
+                    .and_then(|a| order.iter().position(|k| k == a))
+                    .or(to);
                 if let (Some(from), Some(to)) = (from, to) {
                     let (a, b) = if from <= to { (from, to) } else { (to, from) };
                     self.keys = order[a..=b].to_vec();
@@ -174,7 +196,8 @@ impl Selection {
 /// What the Delete sheet says: its title, and what goes.
 pub fn delete_words(bears: &[String], tables: &[String]) -> (String, String) {
     const BEAR: &str = "A bear's folder moves to the runner's trash, its routines are removed and its threads are archived.";
-    const TABLE: &str = "A table stops being a project. Its chat threads and its folder stay where they are.";
+    const TABLE: &str =
+        "A table stops being a project. Its chat threads and its folder stay where they are.";
     let quote = |s: &str| format!("\u{201C}{s}\u{201D}");
     match (bears, tables) {
         ([one], []) => (format!("Delete {}?", quote(one)), "Its folder moves to the runner's trash, its routines are removed and its threads are archived.".to_owned()),
@@ -211,15 +234,23 @@ pub const PHOTO_LIMIT: u64 = 20 * 1024 * 1024;
 /// newest wins; `photo.png` dropped in by hand counts too.
 pub fn is_photo_name(name: &str) -> bool {
     let lower = name.to_ascii_lowercase();
-    let Some((stem, ext)) = lower.rsplit_once('.') else { return false };
-    PHOTO_KINDS.contains(&ext) && (stem == "photo" || stem.strip_prefix("photo-").is_some_and(|n| !n.is_empty() && n.bytes().all(|b| b.is_ascii_digit())))
+    let Some((stem, ext)) = lower.rsplit_once('.') else {
+        return false;
+    };
+    PHOTO_KINDS.contains(&ext)
+        && (stem == "photo"
+            || stem
+                .strip_prefix("photo-")
+                .is_some_and(|n| !n.is_empty() && n.bytes().all(|b| b.is_ascii_digit())))
 }
 
 /// The photo's file name for a picture `source` at `ms`, or none for a kind
 /// that isn't a picture.
 pub fn photo_name(source: &std::path::Path, ms: i64) -> Option<String> {
     let ext = source.extension()?.to_str()?.to_ascii_lowercase();
-    PHOTO_KINDS.contains(&ext.as_str()).then(|| format!("photo-{ms}.{ext}"))
+    PHOTO_KINDS
+        .contains(&ext.as_str())
+        .then(|| format!("photo-{ms}.{ext}"))
 }
 
 /// The bear's photo in `folder`, the newest by name.
@@ -227,21 +258,32 @@ pub fn find_photo(folder: &str) -> Option<std::path::PathBuf> {
     if folder.is_empty() {
         return None;
     }
-    let mut names: Vec<String> = std::fs::read_dir(folder).ok()?.flatten().filter_map(|e| e.file_name().to_str().map(str::to_owned)).filter(|n| is_photo_name(n)).collect();
+    let mut names: Vec<String> = std::fs::read_dir(folder)
+        .ok()?
+        .flatten()
+        .filter_map(|e| e.file_name().to_str().map(str::to_owned))
+        .filter(|n| is_photo_name(n))
+        .collect();
     names.sort_by_key(|n| photo_rank(n));
     names.pop().map(|n| std::path::Path::new(folder).join(n))
 }
 
 /// `photo-<ms>` sorts by its time; a bare `photo` is oldest.
 fn photo_rank(name: &str) -> u64 {
-    name.split_once('-').and_then(|(_, rest)| rest.split('.').next()?.parse().ok()).unwrap_or(0)
+    name.split_once('-')
+        .and_then(|(_, rest)| rest.split('.').next()?.parse().ok())
+        .unwrap_or(0)
 }
 
 /// The first message of a thread that changes a bear or a table for Wayne,
 /// through the bears skill (never by hand-editing a bear's memory).
 pub fn change_prompt(key: &str, name: &str, folder: &str, ask: &str) -> String {
     let ask = ask.trim();
-    let what = if ask.is_empty() { "Ask me what to change. Start by showing what it's set to now.".to_owned() } else { format!("What to change: {ask}") };
+    let what = if ask.is_empty() {
+        "Ask me what to change. Start by showing what it's set to now.".to_owned()
+    } else {
+        format!("What to change: {ask}")
+    };
     if let Some(id) = key.strip_prefix("table:") {
         format!(
             "Use the bears skill to change the table \u{201C}{name}\u{201D} (project id {id}, folder {folder}). Seat or unseat bears with `tb tables seat`, and change its title, goals or parent project with the project tools.\n\n{what}\n\nSay what you changed when you're done."
@@ -267,7 +309,10 @@ mod tests {
         assert!(!is_photo_name("photo-.png"));
         assert!(!is_photo_name("photo.txt"));
         assert!(!is_photo_name("myphoto.png"));
-        assert_eq!(photo_name(std::path::Path::new("/a/Me.JPEG"), 5).as_deref(), Some("photo-5.jpeg"));
+        assert_eq!(
+            photo_name(std::path::Path::new("/a/Me.JPEG"), 5).as_deref(),
+            Some("photo-5.jpeg")
+        );
         assert_eq!(photo_name(std::path::Path::new("/a/notes.md"), 5), None);
     }
 
@@ -286,7 +331,12 @@ mod tests {
 
     #[test]
     fn change_prompts_name_the_row() {
-        let bear = change_prompt("bear:writer-1a2b", "Writer", "/b/writer", "  shorter replies ");
+        let bear = change_prompt(
+            "bear:writer-1a2b",
+            "Writer",
+            "/b/writer",
+            "  shorter replies ",
+        );
         assert!(bear.contains("bear \u{201C}Writer\u{201D} (id writer-1a2b, folder /b/writer)"));
         assert!(bear.contains("What to change: shorter replies"));
         let table = change_prompt("table:p_1", "Launch crew", "/t/launch", "");
@@ -310,7 +360,10 @@ mod tests {
         ]});
         let bears = decode(&v).unwrap();
         assert_eq!(bears.len(), 4);
-        assert_eq!(bears.iter().map(PanelBear::section).collect::<Vec<_>>(), vec![PINNED, PINNED, BEARS, ARCHIVED]);
+        assert_eq!(
+            bears.iter().map(PanelBear::section).collect::<Vec<_>>(),
+            vec![PINNED, PINNED, BEARS, ARCHIVED]
+        );
         assert_eq!(bears[0].title(), "Head Bear (head bear)");
         assert_eq!(bears[1].routines, 1);
         assert_eq!(bears[1].projects, vec!["p_1".to_owned()]);
@@ -321,7 +374,10 @@ mod tests {
     #[test]
     fn plain_click_opens_and_clears() {
         let order = keys(&["a", "b", "c"]);
-        let mut s = Selection { keys: keys(&["a", "b"]), anchor: None };
+        let mut s = Selection {
+            keys: keys(&["a", "b"]),
+            anchor: None,
+        };
         assert!(s.click("c", Click::Plain, &order));
         assert!(s.is_empty());
         assert_eq!(s.anchor.as_deref(), Some("c"));
@@ -355,7 +411,10 @@ mod tests {
 
     #[test]
     fn retain_drops_gone_rows() {
-        let mut s = Selection { keys: keys(&["a", "b"]), anchor: Some("b".into()) };
+        let mut s = Selection {
+            keys: keys(&["a", "b"]),
+            anchor: Some("b".into()),
+        };
         s.retain(&keys(&["a"]));
         assert_eq!(s.keys, keys(&["a"]));
         assert_eq!(s.anchor, None);

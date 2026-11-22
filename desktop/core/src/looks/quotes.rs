@@ -30,15 +30,30 @@ impl Quote {
     }
 }
 
-const fn q(text: &'static str, author: &'static str, role: &'static str, source: &'static str) -> Quote {
-    Quote { text, author, role, source }
+const fn q(
+    text: &'static str,
+    author: &'static str,
+    role: &'static str,
+    source: &'static str,
+) -> Quote {
+    Quote {
+        text,
+        author,
+        role,
+        source,
+    }
 }
 
 /// The day a quote belongs to: the local date after taking 4 hours off, so
 /// a quote lasts through a late night and changes at 4 am.
 pub fn day_key(local: NaiveDateTime) -> String {
     let shifted = local - Duration::hours(4);
-    format!("{:04}-{:02}-{:02}", shifted.year(), shifted.month(), shifted.day())
+    format!(
+        "{:04}-{:02}-{:02}",
+        shifted.year(),
+        shifted.month(),
+        shifted.day()
+    )
 }
 
 /// Today's quote, moved on `skips` times by the refresh button. The same
@@ -81,7 +96,9 @@ pub(crate) fn shuffled(count: usize) -> Vec<usize> {
     let mut order: Vec<usize> = (0..count).collect();
     let mut seed: u64 = 0x7468_7265_6164_6265; // "threadbe"
     for i in (1..count).rev() {
-        seed = seed.wrapping_mul(6_364_136_223_846_793_005).wrapping_add(1_442_695_040_888_963_407);
+        seed = seed
+            .wrapping_mul(6_364_136_223_846_793_005)
+            .wrapping_add(1_442_695_040_888_963_407);
         let j = ((seed >> 33) % (i as u64 + 1)) as usize;
         order.swap(i, j);
     }
@@ -91,18 +108,39 @@ pub(crate) fn shuffled(count: usize) -> Vec<usize> {
 /// Text that may never be shown, whoever it's put down to: slogans tied to
 /// tech founders, and quotes usually pinned on the wrong person.
 pub const BLOCKED_TEXT: &[&str] = &[
-    "done is better than perfect", "move fast and break things", "stay hungry, stay foolish",
-    "insanity is doing the same thing", "be yourself; everyone else is already taken",
-    "simplicity is the ultimate sophistication", "never too late to be what you might have been",
-    "the secret of getting ahead is getting started", "culture eats strategy",
-    "what gets measured gets managed", "10,000 ways that won't work",
+    "done is better than perfect",
+    "move fast and break things",
+    "stay hungry, stay foolish",
+    "insanity is doing the same thing",
+    "be yourself; everyone else is already taken",
+    "simplicity is the ultimate sophistication",
+    "never too late to be what you might have been",
+    "the secret of getting ahead is getting started",
+    "culture eats strategy",
+    "what gets measured gets managed",
+    "10,000 ways that won't work",
 ];
 
 /// People who may never be quoted.
 pub const BLOCKED_AUTHORS: &[&str] = &[
-    "Elon Musk", "Mark Zuckerberg", "Steve Jobs", "Bill Gates", "Jeff Bezos", "Peter Thiel",
-    "Reid Hoffman", "Paul Graham", "Naval Ravikant", "Marcus Aurelius", "Seneca", "Buddha",
-    "Rumi", "Lao Tzu", "Confucius", "Winston Churchill", "Abraham Lincoln", "Grace Hopper",
+    "Elon Musk",
+    "Mark Zuckerberg",
+    "Steve Jobs",
+    "Bill Gates",
+    "Jeff Bezos",
+    "Peter Thiel",
+    "Reid Hoffman",
+    "Paul Graham",
+    "Naval Ravikant",
+    "Marcus Aurelius",
+    "Seneca",
+    "Buddha",
+    "Rumi",
+    "Lao Tzu",
+    "Confucius",
+    "Winston Churchill",
+    "Abraham Lincoln",
+    "Grace Hopper",
 ];
 
 pub const QUOTES: &[Quote] = &[
@@ -186,7 +224,9 @@ mod tests {
         assert_eq!(days("2026-11-09") - days("2026-11-08"), 1);
         assert_eq!(days("2025-01-01") - days("2024-12-31"), 1);
         assert!(days("2026-01-01") > 0);
-        let seen: HashSet<String> = (0..QUOTES.len() as i64).map(|s| pick("2026-01-01", s).unwrap().id()).collect();
+        let seen: HashSet<String> = (0..QUOTES.len() as i64)
+            .map(|s| pick("2026-01-01", s).unwrap().id())
+            .collect();
         assert_eq!(seen.len(), QUOTES.len());
         assert_ne!(pick("2026-11-09", 1), pick("2026-11-09", 0));
         assert_eq!(pick_from("2026-11-09", 0, &[]), None);
@@ -199,11 +239,25 @@ mod tests {
         assert_eq!(ids.len(), QUOTES.len(), "no quote twice");
         for quote in QUOTES {
             assert!(!quote.text.is_empty() && !quote.author.is_empty() && !quote.role.is_empty());
-            assert!(!quote.source.is_empty(), "every quote says where it's from: {}", quote.text);
+            assert!(
+                !quote.source.is_empty(),
+                "every quote says where it's from: {}",
+                quote.text
+            );
             let author = quote.author.to_lowercase();
-            assert!(!BLOCKED_AUTHORS.iter().any(|b| author.contains(&b.to_lowercase())), "{}", quote.author);
+            assert!(
+                !BLOCKED_AUTHORS
+                    .iter()
+                    .any(|b| author.contains(&b.to_lowercase())),
+                "{}",
+                quote.author
+            );
             let text = quote.text.to_lowercase();
-            assert!(!BLOCKED_TEXT.iter().any(|b| text.contains(b)), "{}", quote.text);
+            assert!(
+                !BLOCKED_TEXT.iter().any(|b| text.contains(b)),
+                "{}",
+                quote.text
+            );
             assert!(!quote.text.contains('\u{2014}'), "no em dashes in UI copy");
         }
     }

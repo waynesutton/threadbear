@@ -43,11 +43,23 @@ fn is_function_key(key: &str) -> bool {
 
 impl ShortcutKey {
     pub fn new(key: &str) -> Self {
-        Self { key: key.to_string(), command: true, option: false, control: false, shift: false }
+        Self {
+            key: key.to_string(),
+            command: true,
+            option: false,
+            control: false,
+            shift: false,
+        }
     }
 
     pub fn with(key: &str, option: bool, control: bool, shift: bool) -> Self {
-        Self { key: key.to_string(), command: true, option, control, shift }
+        Self {
+            key: key.to_string(),
+            command: true,
+            option,
+            control,
+            shift,
+        }
     }
 
     /// "cmd+opt+down". None for anything that isn't a key (`init(string:)`).
@@ -65,7 +77,13 @@ impl ShortcutKey {
         if !(last.chars().count() == 1 || is_named(&last)) {
             return None;
         }
-        let mut k = Self { key: last, command: false, option: false, control: false, shift: false };
+        let mut k = Self {
+            key: last,
+            command: false,
+            option: false,
+            control: false,
+            shift: false,
+        };
         for part in parts {
             match part.as_str() {
                 "cmd" | "command" => k.command = true,
@@ -99,8 +117,18 @@ impl ShortcutKey {
 
     /// As menus show it: "⌥⌘↓". ⌃ ⌥ ⇧ ⌘ is the order macOS menus show them.
     pub fn display(&self) -> String {
-        let mods = format!("{}{}{}{}", if self.control { "⌃" } else { "" }, if self.option { "⌥" } else { "" }, if self.shift { "⇧" } else { "" }, if self.command { "⌘" } else { "" });
-        let key = NAMED.iter().find(|(n, _)| *n == self.key).map(|(_, s)| s.to_string()).unwrap_or_else(|| self.key.to_uppercase());
+        let mods = format!(
+            "{}{}{}{}",
+            if self.control { "⌃" } else { "" },
+            if self.option { "⌥" } else { "" },
+            if self.shift { "⇧" } else { "" },
+            if self.command { "⌘" } else { "" }
+        );
+        let key = NAMED
+            .iter()
+            .find(|(n, _)| *n == self.key)
+            .map(|(_, s)| s.to_string())
+            .unwrap_or_else(|| self.key.to_uppercase());
         format!("{mods}{key}")
     }
 
@@ -351,7 +379,10 @@ impl ShortcutCommand {
             Self::ToggleTerminal => Some(ShortcutKey::new("j")),
             Self::CollapseThreads => Some(ShortcutKey::new("b")),
             Self::CollapseSidebar => Some(ShortcutKey::with("b", true, false, true)),
-            Self::Hibernate | Self::ShowHibernating | Self::ShowArchived | Self::ResetPanelLayout => None,
+            Self::Hibernate
+            | Self::ShowHibernating
+            | Self::ShowArchived
+            | Self::ResetPanelLayout => None,
         }
     }
 }
@@ -375,7 +406,9 @@ impl ShortcutBindings {
     /// line only loses that line.
     pub fn parse(json: &str) -> Result<Self, String> {
         let value: Value = serde_json::from_str(json).map_err(|e| e.to_string())?;
-        let Value::Object(map) = value else { return Err("not an object".into()) };
+        let Value::Object(map) = value else {
+            return Err("not an object".into());
+        };
         let mut out = Self::default();
         for (name, value) in map {
             let Some(command) = ShortcutCommand::from_name(&name) else {
@@ -392,10 +425,12 @@ impl ShortcutBindings {
             };
             match value {
                 Value::Null => out.set(command, None),
-                Value::String(text) => match ShortcutKey::parse(&text).filter(|k| !k.types_instead()) {
-                    Some(key) => out.set(command, Some(key)),
-                    None => out.problems.push(format!("{name}: {text}")),
-                },
+                Value::String(text) => {
+                    match ShortcutKey::parse(&text).filter(|k| !k.types_instead()) {
+                        Some(key) => out.set(command, Some(key)),
+                        None => out.problems.push(format!("{name}: {text}")),
+                    }
+                }
                 other => out.problems.push(format!("{name}: {other}")),
             }
         }
@@ -410,10 +445,18 @@ impl ShortcutBindings {
         }
         let mut map = Map::new();
         for (command, key) in &self.changes {
-            map.insert(command.name().to_string(), key.as_ref().map(|k| Value::String(k.string())).unwrap_or(Value::Null));
+            map.insert(
+                command.name().to_string(),
+                key.as_ref()
+                    .map(|k| Value::String(k.string()))
+                    .unwrap_or(Value::Null),
+            );
         }
         for (name, value) in &self.others {
-            map.insert(name.clone(), value.clone().map(Value::String).unwrap_or(Value::Null));
+            map.insert(
+                name.clone(),
+                value.clone().map(Value::String).unwrap_or(Value::Null),
+            );
         }
         serde_json::to_string_pretty(&Value::Object(map)).ok()
     }
@@ -438,8 +481,15 @@ impl ShortcutBindings {
     }
 
     /// The command on this key, other than `except`.
-    pub fn command_using(&self, key: &ShortcutKey, except: Option<ShortcutCommand>) -> Option<ShortcutCommand> {
-        ShortcutCommand::ALL.iter().copied().find(|c| Some(*c) != except && self.key(*c).as_ref() == Some(key))
+    pub fn command_using(
+        &self,
+        key: &ShortcutKey,
+        except: Option<ShortcutCommand>,
+    ) -> Option<ShortcutCommand> {
+        ShortcutCommand::ALL
+            .iter()
+            .copied()
+            .find(|c| Some(*c) != except && self.key(*c).as_ref() == Some(key))
     }
 }
 
@@ -455,7 +505,11 @@ mod tests {
     fn a_key_reads_and_writes_the_way_the_file_says_it() {
         assert_eq!(ShortcutKey::new("n"), key("cmd+n"));
         assert_eq!(key("cmd+opt+down").string(), "cmd+opt+down");
-        assert_eq!(key("shift+cmd+c").string(), "cmd+shift+c", "the same order however it was written");
+        assert_eq!(
+            key("shift+cmd+c").string(),
+            "cmd+shift+c",
+            "the same order however it was written"
+        );
         assert_eq!(key("CTRL+J").string(), "ctrl+j");
         assert_eq!(key("alt+cmd+p"), key("opt+cmd+p"));
         assert_eq!(key("cmd++").key, "+", "a plus sign is a key too");
@@ -500,31 +554,92 @@ mod tests {
 
     #[test]
     fn the_defaults_are_the_twenty_eight_in_the_menus() {
-        let keys: Vec<ShortcutKey> = ShortcutCommand::ALL.iter().filter_map(|c| c.default_key()).collect();
+        let keys: Vec<ShortcutKey> = ShortcutCommand::ALL
+            .iter()
+            .filter_map(|c| c.default_key())
+            .collect();
         let unique: std::collections::HashSet<&ShortcutKey> = keys.iter().collect();
-        assert_eq!(keys.len(), unique.len(), "two commands can't start on one key");
+        assert_eq!(
+            keys.len(),
+            unique.len(),
+            "two commands can't start on one key"
+        );
         assert_eq!(ShortcutCommand::ALL.len(), 32);
         // The Swift app's names and keys, as both apps read shortcuts.json.
-        assert_eq!(ShortcutCommand::from_name("previousTab"), Some(ShortcutCommand::PreviousTab));
-        assert_eq!(ShortcutCommand::PreviousTab.default_key(), Some(key("cmd+shift+[")));
-        assert_eq!(ShortcutCommand::NextTab.default_key(), Some(key("cmd+shift+]")));
-        assert_eq!(ShortcutCommand::NextTab.default_key().unwrap().display(), "⇧⌘]");
-        assert_eq!(ShortcutCommand::NextTab.default_key().unwrap().chord(true), "shift-cmd-]");
-        assert_eq!(ShortcutCommand::OpenAnything.default_key(), Some(key("cmd+k")));
-        assert_eq!(ShortcutCommand::ChooseModel.default_key(), Some(key("cmd+/")));
-        assert_eq!(ShortcutCommand::from_name("chooseModel"), Some(ShortcutCommand::ChooseModel));
-        assert_eq!(ShortcutCommand::OpenAnythingAlso.default_key(), Some(key("cmd+p")));
-        assert_eq!(ShortcutCommand::CollapseThreads.default_key(), Some(key("cmd+b")));
-        assert_eq!(ShortcutCommand::CollapseSidebar.default_key(), Some(key("cmd+opt+shift+b")));
-        assert_eq!(ShortcutCommand::CollapseSidebar.default_key().unwrap().display(), "⌥⇧⌘B");
-        assert_eq!(ShortcutCommand::TogglePanels.default_key(), Some(key("cmd+opt+b")));
-        assert_eq!(ShortcutCommand::from_name("showNotes"), Some(ShortcutCommand::ShowNotes));
+        assert_eq!(
+            ShortcutCommand::from_name("previousTab"),
+            Some(ShortcutCommand::PreviousTab)
+        );
+        assert_eq!(
+            ShortcutCommand::PreviousTab.default_key(),
+            Some(key("cmd+shift+["))
+        );
+        assert_eq!(
+            ShortcutCommand::NextTab.default_key(),
+            Some(key("cmd+shift+]"))
+        );
+        assert_eq!(
+            ShortcutCommand::NextTab.default_key().unwrap().display(),
+            "⇧⌘]"
+        );
+        assert_eq!(
+            ShortcutCommand::NextTab.default_key().unwrap().chord(true),
+            "shift-cmd-]"
+        );
+        assert_eq!(
+            ShortcutCommand::OpenAnything.default_key(),
+            Some(key("cmd+k"))
+        );
+        assert_eq!(
+            ShortcutCommand::ChooseModel.default_key(),
+            Some(key("cmd+/"))
+        );
+        assert_eq!(
+            ShortcutCommand::from_name("chooseModel"),
+            Some(ShortcutCommand::ChooseModel)
+        );
+        assert_eq!(
+            ShortcutCommand::OpenAnythingAlso.default_key(),
+            Some(key("cmd+p"))
+        );
+        assert_eq!(
+            ShortcutCommand::CollapseThreads.default_key(),
+            Some(key("cmd+b"))
+        );
+        assert_eq!(
+            ShortcutCommand::CollapseSidebar.default_key(),
+            Some(key("cmd+opt+shift+b"))
+        );
+        assert_eq!(
+            ShortcutCommand::CollapseSidebar
+                .default_key()
+                .unwrap()
+                .display(),
+            "⌥⇧⌘B"
+        );
+        assert_eq!(
+            ShortcutCommand::TogglePanels.default_key(),
+            Some(key("cmd+opt+b"))
+        );
+        assert_eq!(
+            ShortcutCommand::from_name("showNotes"),
+            Some(ShortcutCommand::ShowNotes)
+        );
         assert_eq!(ShortcutCommand::ShowNotes.default_key(), Some(key("cmd+6")));
         assert_eq!(ShortcutCommand::ShowTasks.default_key(), Some(key("cmd+7")));
         assert_eq!(ShortcutCommand::ShowTasks.experiment(), Some("tasks"));
-        assert_eq!(ShortcutCommand::from_name("showSkills"), Some(ShortcutCommand::ShowSkills));
-        assert_eq!(ShortcutCommand::ShowSkills.default_key(), Some(key("cmd+5")));
-        assert_eq!(ShortcutCommand::ShowSkills.experiment(), Some("skillsStore"));
+        assert_eq!(
+            ShortcutCommand::from_name("showSkills"),
+            Some(ShortcutCommand::ShowSkills)
+        );
+        assert_eq!(
+            ShortcutCommand::ShowSkills.default_key(),
+            Some(key("cmd+5"))
+        );
+        assert_eq!(
+            ShortcutCommand::ShowSkills.experiment(),
+            Some("skillsStore")
+        );
     }
 
     #[test]
@@ -537,7 +652,11 @@ mod tests {
         let read = ShortcutBindings::parse(&text).unwrap();
         assert_eq!(read.key(ShortcutCommand::Archive), Some(key("cmd+k")));
         assert_eq!(read.key(ShortcutCommand::Stop), None);
-        assert_eq!(read.key(ShortcutCommand::NewThread), Some(key("cmd+n")), "the rest stay at their defaults");
+        assert_eq!(
+            read.key(ShortcutCommand::NewThread),
+            Some(key("cmd+n")),
+            "the rest stay at their defaults"
+        );
         // Setting it back to the default is no change at all.
         let mut back = read.clone();
         back.set(ShortcutCommand::Archive, Some(key("cmd+e")));
@@ -548,7 +667,8 @@ mod tests {
     fn a_half_done_edit_keeps_the_keys_in_use() {
         assert!(ShortcutBindings::parse("{ not json").is_err());
         assert!(ShortcutBindings::parse("[1, 2]").is_err());
-        let read = ShortcutBindings::parse("{\"archive\": \"banana\", \"newThread\": \"cmd+t\"}").unwrap();
+        let read =
+            ShortcutBindings::parse("{\"archive\": \"banana\", \"newThread\": \"cmd+t\"}").unwrap();
         assert_eq!(read.problems.len(), 1, "the bad line only loses that line");
         assert_eq!(read.key(ShortcutCommand::NewThread), Some(key("cmd+t")));
         assert_eq!(read.key(ShortcutCommand::Archive), Some(key("cmd+e")));

@@ -90,7 +90,9 @@ pub(crate) fn beside_send(
     let halo: Option<AnyElement> = match state {
         ButtonState::Off => None,
         ButtonState::Armed => Some(halo_ring(accent.opacity(0.32)).into_any_element()),
-        ButtonState::Sending if cx.reduce_motion() => Some(halo_ring(accent.opacity(0.36)).into_any_element()),
+        ButtonState::Sending if cx.reduce_motion() => {
+            Some(halo_ring(accent.opacity(0.36)).into_any_element())
+        }
         ButtonState::Sending => Some(
             halo_ring(accent.opacity(0.24))
                 .with_animation(
@@ -106,7 +108,12 @@ pub(crate) fn beside_send(
     };
 
     let wrapped = div().relative().flex_none().children(halo).child(circle);
-    h_flex().gap(px(6.)).items_center().child(wrapped).child(send).into_any_element()
+    h_flex()
+        .gap(px(6.))
+        .items_center()
+        .child(wrapped)
+        .child(send)
+        .into_any_element()
 }
 
 fn halo_ring(color: Hsla) -> Div {

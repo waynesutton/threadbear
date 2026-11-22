@@ -19,7 +19,9 @@ use serde_json::Value;
 use std::cell::RefCell;
 use std::time::Duration;
 use threadbear_core::voice::{insertion, UtteranceTracker};
-use threadbear_core::voice_keys::{Key, KeyAction, KeyEvent, KeyMode, VoiceKeyMachine, VoiceKeys, HOLD_DELAY};
+use threadbear_core::voice_keys::{
+    Key, KeyAction, KeyEvent, KeyMode, VoiceKeyMachine, VoiceKeys, HOLD_DELAY,
+};
 
 #[derive(Clone, Debug, Default, PartialEq)]
 pub(crate) enum DictationPhase {
@@ -44,7 +46,13 @@ pub(crate) struct Dictation {
 
 impl Default for Dictation {
     fn default() -> Dictation {
-        Dictation { phase: DictationPhase::Off, mode: KeyMode::Idle, level: 0.0, tracker: UtteranceTracker::new(0.8), start: 0 }
+        Dictation {
+            phase: DictationPhase::Off,
+            mode: KeyMode::Idle,
+            level: 0.0,
+            tracker: UtteranceTracker::new(0.8),
+            start: 0,
+        }
     }
 }
 
@@ -80,10 +88,18 @@ thread_local! {
 
 #[cfg(target_os = "macos")]
 extern "C" {
-    fn tb_voice_keys_install(on_key: extern "C" fn(i32, u16, u64, f64, bool) -> bool, on_resign: extern "C" fn());
+    fn tb_voice_keys_install(
+        on_key: extern "C" fn(i32, u16, u64, f64, bool) -> bool,
+        on_resign: extern "C" fn(),
+    );
     fn tb_voice_uptime() -> f64;
     fn tb_voice_text_context(before: *mut u32, after: *mut u32) -> bool;
-    fn tb_voice_type_later(utf8: *const std::ffi::c_char, compose: extern "C" fn(*const std::ffi::c_char, u32, u32) -> *mut std::ffi::c_char, free_text: extern "C" fn(*mut std::ffi::c_char), typed: extern "C" fn(bool));
+    fn tb_voice_type_later(
+        utf8: *const std::ffi::c_char,
+        compose: extern "C" fn(*const std::ffi::c_char, u32, u32) -> *mut std::ffi::c_char,
+        free_text: extern "C" fn(*mut std::ffi::c_char),
+        typed: extern "C" fn(bool),
+    );
 }
 
 const FLAG_SHIFT: u64 = 1 << 17;
@@ -116,7 +132,10 @@ pub(super) fn install(voice: WeakEntity<Voice>, cx: &mut App) {
     cx.spawn(async move |cx| {
         use futures::StreamExt as _;
         while let Some(typed) = typed_rx.next().await {
-            if answers.update(cx, |v, cx| v.dictation_typed(typed, cx)).is_err() {
+            if answers
+                .update(cx, |v, cx| v.dictation_typed(typed, cx))
+                .is_err()
+            {
                 break;
             }
         }
@@ -155,7 +174,9 @@ fn modifier_went_down(code: u16, flags: u64) -> bool {
 /// swallows the key.
 extern "C" fn on_key(kind: i32, code: u16, flags: u64, timestamp: f64, repeat: bool) -> bool {
     MONITOR.with(|m| {
-        let Ok(mut m) = m.try_borrow_mut() else { return false };
+        let Ok(mut m) = m.try_borrow_mut() else {
+            return false;
+        };
         if !m.active {
             if m.trigger_down || m.machine.mode() != KeyMode::Idle {
                 m.let_go();
@@ -176,9 +197,21 @@ extern "C" fn on_key(kind: i32, code: u16, flags: u64, timestamp: f64, repeat: b
                     m.had_text_box = has_text_box();
                 }
                 if down {
-                    log(&format!("{} down, a text box {}", keys.trigger.display(), if m.had_text_box { "has the cursor" } else { "doesn't have the cursor" }));
+                    log(&format!(
+                        "{} down, a text box {}",
+                        keys.trigger.display(),
+                        if m.had_text_box {
+                            "has the cursor"
+                        } else {
+                            "doesn't have the cursor"
+                        }
+                    ));
                 }
-                m.run(if down { KeyEvent::TriggerDown(timestamp) } else { KeyEvent::TriggerUp(timestamp) });
+                m.run(if down {
+                    KeyEvent::TriggerDown(timestamp)
+                } else {
+                    KeyEvent::TriggerUp(timestamp)
+                });
                 // Shift held first, then the trigger: Shift + trigger.
                 if down && flags & FLAG_SHIFT != 0 {
                     m.run(KeyEvent::ShiftDown);
@@ -254,17 +287,25 @@ impl Monitor {
 fn type_in(words: &str) {
     #[cfg(target_os = "macos")]
     {
-        let Ok(words) = std::ffi::CString::new(words) else { return };
+        let Ok(words) = std::ffi::CString::new(words) else {
+            return;
+        };
         unsafe { tb_voice_type_later(words.as_ptr(), compose, free_text, typed) };
     }
     #[cfg(not(target_os = "macos"))]
     let _ = (words, insertion);
 }
 
-extern "C" fn compose(words: *const std::ffi::c_char, before: u32, after: u32) -> *mut std::ffi::c_char {
+extern "C" fn compose(
+    words: *const std::ffi::c_char,
+    before: u32,
+    after: u32,
+) -> *mut std::ffi::c_char {
     let words = unsafe { std::ffi::CStr::from_ptr(words) }.to_string_lossy();
     let side = |c: u32| char::from_u32(c).filter(|_| c != 0);
-    insertion(&words, side(before), side(after)).and_then(|t| std::ffi::CString::new(t).ok()).map_or(std::ptr::null_mut(), std::ffi::CString::into_raw)
+    insertion(&words, side(before), side(after))
+        .and_then(|t| std::ffi::CString::new(t).ok())
+        .map_or(std::ptr::null_mut(), std::ffi::CString::into_raw)
 }
 
 extern "C" fn free_text(text: *mut std::ffi::c_char) {
@@ -349,7 +390,12 @@ impl Voice {
             return;
         }
         let start = self.keys.start + 1;
-        self.keys = Dictation { start, mode, phase: DictationPhase::Starting("Asking for the microphone…".to_owned()), ..Dictation::default() };
+        self.keys = Dictation {
+            start,
+            mode,
+            phase: DictationPhase::Starting("Asking for the microphone…".to_owned()),
+            ..Dictation::default()
+        };
         // No text box with the cursor: the open thread's message box.
         let had_box = MONITOR.with(|m| m.try_borrow().map(|m| m.had_text_box).unwrap_or(true));
         if mode != KeyMode::Command && !had_box {
@@ -362,11 +408,20 @@ impl Voice {
     }
 
     fn focus_composer(&self, cx: &mut Context<Self>) {
-        let Some(app) = self.app.upgrade() else { return };
-        let (window, pane) = { let a = app.read(cx); (a.main_window, a.pane.clone()) };
+        let Some(app) = self.app.upgrade() else {
+            return;
+        };
+        let (window, pane) = {
+            let a = app.read(cx);
+            (a.main_window, a.pane.clone())
+        };
         let Some(pane) = pane else { return };
         cx.defer(move |cx| {
-            window.update(cx, |_, window, cx| pane.update(cx, |p, cx| p.focus_composer(window, cx))).ok();
+            window
+                .update(cx, |_, window, cx| {
+                    pane.update(cx, |p, cx| p.focus_composer(window, cx))
+                })
+                .ok();
         });
     }
 
@@ -387,13 +442,25 @@ impl Voice {
                 log("dictating from the keyboard");
                 cx.notify();
             }
-            Some("listenFailed") => self.dictation_failed(event["message"].as_str().unwrap_or("The microphone wouldn't start."), cx),
+            Some("listenFailed") => self.dictation_failed(
+                event["message"]
+                    .as_str()
+                    .unwrap_or("The microphone wouldn't start."),
+                cx,
+            ),
             Some("heard") => {
                 if !self.keys.is_on() {
                     return;
                 }
-                let heard = threadbear_core::voice::Heard::new(event["text"].as_str().unwrap_or(""), event["start"].as_f64().unwrap_or(0.0), event["end"].as_f64().unwrap_or(0.0), event["final"].as_bool().unwrap_or(false));
-                if self.keys.tracker.add(heard, now()) && self.keys.phase != DictationPhase::Finishing {
+                let heard = threadbear_core::voice::Heard::new(
+                    event["text"].as_str().unwrap_or(""),
+                    event["start"].as_f64().unwrap_or(0.0),
+                    event["end"].as_f64().unwrap_or(0.0),
+                    event["final"].as_bool().unwrap_or(false),
+                );
+                if self.keys.tracker.add(heard, now())
+                    && self.keys.phase != DictationPhase::Finishing
+                {
                     self.keys.phase = DictationPhase::Hearing(self.keys.tracker.pending());
                     cx.notify();
                 }
@@ -467,7 +534,10 @@ impl Voice {
     fn end_dictation(&mut self, cx: &mut Context<Self>) {
         self.stop_listening(Listener::Keys, cx);
         let start = self.keys.start + 1;
-        self.keys = Dictation { start, ..Dictation::default() };
+        self.keys = Dictation {
+            start,
+            ..Dictation::default()
+        };
         cx.notify();
     }
 
@@ -493,12 +563,23 @@ impl Voice {
             self.type_dictated(&text, cx);
             return;
         }
-        let Some(app) = self.app.upgrade() else { return };
-        let (window, pane) = { let a = app.read(cx); (a.main_window, a.pane.clone()) };
+        let Some(app) = self.app.upgrade() else {
+            return;
+        };
+        let (window, pane) = {
+            let a = app.read(cx);
+            (a.main_window, a.pane.clone())
+        };
         match pane {
             Some(pane) => cx.defer(move |cx| pane.update(cx, |p, cx| p.send(text, None, cx))),
             None => cx.defer(move |cx| {
-                window.update(cx, |_, window, cx| app.update(cx, |app, cx| app.send_new_thread(text, Vec::new(), String::new(), window, cx))).ok();
+                window
+                    .update(cx, |_, window, cx| {
+                        app.update(cx, |app, cx| {
+                            app.send_new_thread(text, Vec::new(), String::new(), window, cx)
+                        })
+                    })
+                    .ok();
             }),
         }
         log("sent a Command Mode message");
@@ -518,6 +599,9 @@ impl Voice {
         if !self.keys.is_on() {
             self.keys.phase = DictationPhase::Listening;
         }
-        self.dictation_failed("There was no text box to type into. Click into one, then try again.", cx);
+        self.dictation_failed(
+            "There was no text box to type into. Click into one, then try again.",
+            cx,
+        );
     }
 }

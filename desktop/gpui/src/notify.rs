@@ -22,7 +22,12 @@ pub(crate) fn post(thread: &ThreadSummary, cx: &App) {
         return;
     }
     let (title, body) = inbox::notification_words(thread);
-    cx.show_system_notification(SystemNotification { tag: inbox::notification_tag(thread).into(), title: title.into(), body: body.into(), actions: vec![] });
+    cx.show_system_notification(SystemNotification {
+        tag: inbox::notification_tag(thread).into(),
+        title: title.into(),
+        body: body.into(),
+        actions: vec![],
+    });
 }
 
 /// A task's due time came and this Mac's runner claimed its reminder
@@ -32,17 +37,27 @@ pub(crate) fn post_task_due(params: &serde_json::Value, cx: &App) {
     if !enabled() || crate::handover::waiting() {
         return;
     }
-    let (Some(id), Some(title)) = (params["id"].as_str(), params["title"].as_str()) else { return };
+    let (Some(id), Some(title)) = (params["id"].as_str(), params["title"].as_str()) else {
+        return;
+    };
     let when = params["when"].as_str().unwrap_or("now");
     cx.show_system_notification(SystemNotification {
-        tag: format!("task:{id}:{}T{}", params["dueDate"].as_str().unwrap_or(""), params["dueTime"].as_str().unwrap_or("")).into(),
+        tag: format!(
+            "task:{id}:{}T{}",
+            params["dueDate"].as_str().unwrap_or(""),
+            params["dueTime"].as_str().unwrap_or("")
+        )
+        .into(),
         title: title.to_string().into(),
         body: format!("Task due {when}").into(),
         actions: vec![],
     });
 }
 fn task_in_tag(tag: &str) -> Option<&str> {
-    tag.strip_prefix("task:")?.split(':').next().filter(|id| !id.is_empty())
+    tag.strip_prefix("task:")?
+        .split(':')
+        .next()
+        .filter(|id| !id.is_empty())
 }
 
 /// A click on one opens its thread in the main window, once the list has
@@ -55,15 +70,23 @@ pub(crate) fn install(app: WeakEntity<Threadbear>, window: AnyWindowHandle, cx: 
         if let Some(task) = task_in_tag(&response.tag).map(str::to_owned) {
             cx.activate(true);
             let app = app.clone();
-            window.update(cx, |_, window, cx| { app.update(cx, |this, cx| this.open_task(task, window, cx)).ok(); }).ok();
+            window
+                .update(cx, |_, window, cx| {
+                    app.update(cx, |this, cx| this.open_task(task, window, cx))
+                        .ok();
+                })
+                .ok();
             return;
         }
-        let Some(id) = inbox::thread_in_tag(&response.tag).map(str::to_owned) else { return };
+        let Some(id) = inbox::thread_in_tag(&response.tag).map(str::to_owned) else {
+            return;
+        };
         cx.activate(true);
         let app = app.clone();
         window
             .update(cx, |_, window, cx| {
-                app.update(cx, |this, cx| this.open_from_outside(id, window, cx)).ok();
+                app.update(cx, |this, cx| this.open_from_outside(id, window, cx))
+                    .ok();
             })
             .ok();
     });
@@ -85,7 +108,9 @@ mod platform {
     use objc2_foundation::NSString;
 
     pub(super) fn set_badge(label: Option<&str>) {
-        let Some(mtm) = MainThreadMarker::new() else { return };
+        let Some(mtm) = MainThreadMarker::new() else {
+            return;
+        };
         let tile = NSApplication::sharedApplication(mtm).dockTile();
         tile.setBadgeLabel(label.map(NSString::from_str).as_deref());
     }

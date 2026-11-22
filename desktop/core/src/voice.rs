@@ -21,7 +21,12 @@ pub struct Heard {
 
 impl Heard {
     pub fn new(text: &str, start: f64, end: f64, is_final: bool) -> Heard {
-        Heard { text: text.to_owned(), start, end, is_final }
+        Heard {
+            text: text.to_owned(),
+            start,
+            end,
+            is_final,
+        }
     }
 }
 
@@ -49,7 +54,15 @@ pub struct UtteranceTracker {
 
 impl UtteranceTracker {
     pub fn new(pause: f64) -> UtteranceTracker {
-        UtteranceTracker { pause, finals: Vec::new(), volatile: None, sent_through: -1.0, last_heard: None, last_sent: Vec::new(), last_sent_start: -1.0 }
+        UtteranceTracker {
+            pause,
+            finals: Vec::new(),
+            volatile: None,
+            sent_through: -1.0,
+            last_heard: None,
+            last_sent: Vec::new(),
+            last_sent_start: -1.0,
+        }
     }
 
     fn waiting(&self) -> impl Iterator<Item = &Heard> {
@@ -87,14 +100,24 @@ impl UtteranceTracker {
         // after it are new. Without this every phrase went twice, once as a
         // guess and again as final text (8 Nov, Fn dictation).
         if result.start < self.sent_through - 0.001 {
-            let sent: &[String] = if result.start >= self.last_sent_start - 0.001 { &self.last_sent } else { &[] };
-            let Some(rest) = words_after(&result.text, sent) else { return false };
+            let sent: &[String] = if result.start >= self.last_sent_start - 0.001 {
+                &self.last_sent
+            } else {
+                &[]
+            };
+            let Some(rest) = words_after(&result.text, sent) else {
+                return false;
+            };
             result.text = rest;
             result.start = self.sent_through;
         }
         let words = !result.text.trim().is_empty();
         if result.is_final {
-            if self.volatile.as_ref().is_some_and(|v| v.end <= result.end + 0.001) {
+            if self
+                .volatile
+                .as_ref()
+                .is_some_and(|v| v.end <= result.end + 0.001)
+            {
                 self.volatile = None;
             }
             if words {
@@ -121,7 +144,11 @@ impl UtteranceTracker {
     /// Sends whatever there is now (Voice turned off mid-sentence).
     pub fn flush(&mut self) -> Option<String> {
         let text = self.pending();
-        let end = self.waiting().map(|r| r.end).reduce(f64::max).unwrap_or(self.sent_through);
+        let end = self
+            .waiting()
+            .map(|r| r.end)
+            .reduce(f64::max)
+            .unwrap_or(self.sent_through);
         if let Some(start) = self.pending_start().filter(|_| !text.is_empty()) {
             self.last_sent = text.split_whitespace().map(str::to_owned).collect();
             self.last_sent_start = start;
@@ -143,18 +170,31 @@ fn words_after(text: &str, sent: &[String]) -> Option<String> {
         return None;
     }
     let words: Vec<&str> = text.split_whitespace().collect();
-    let plain = |w: &str| w.to_lowercase().chars().filter(|c| c.is_alphanumeric()).collect::<String>();
+    let plain = |w: &str| {
+        w.to_lowercase()
+            .chars()
+            .filter(|c| c.is_alphanumeric())
+            .collect::<String>()
+    };
     let mut matched = 0;
     while matched < words.len().min(sent.len()) && plain(words[matched]) == plain(&sent[matched]) {
         matched += 1;
     }
     // A reworded revision: skip as many words as went, so it isn't typed twice.
-    let skip = if matched == sent.len() { matched } else { sent.len() };
+    let skip = if matched == sent.len() {
+        matched
+    } else {
+        sent.len()
+    };
     (words.len() > skip).then(|| words[skip..].join(" "))
 }
 
 fn join<'a>(parts: impl Iterator<Item = &'a str>) -> String {
-    parts.map(str::trim).filter(|p| !p.is_empty()).collect::<Vec<_>>().join(" ")
+    parts
+        .map(str::trim)
+        .filter(|p| !p.is_empty())
+        .collect::<Vec<_>>()
+        .join(" ")
 }
 
 // ---- SpokenText ----
@@ -171,7 +211,10 @@ pub fn sentences(markdown: &str) -> Vec<String> {
 }
 
 pub fn sentences_within(markdown: &str, max_length: usize) -> Vec<String> {
-    split_sentences(&plain(markdown)).into_iter().flat_map(|s| cut(&s, max_length)).collect()
+    split_sentences(&plain(markdown))
+        .into_iter()
+        .flat_map(|s| cut(&s, max_length))
+        .collect()
 }
 
 /// The reply as plain spoken text: the markdown taken out, code and tables
@@ -215,7 +258,11 @@ pub fn plain(markdown: &str) -> String {
         }
         lines.push(text);
     }
-    let joined = lines.into_iter().filter(|l| !l.is_empty()).collect::<Vec<_>>().join(" ");
+    let joined = lines
+        .into_iter()
+        .filter(|l| !l.is_empty())
+        .collect::<Vec<_>>()
+        .join(" ");
     joined.split_whitespace().collect::<Vec<_>>().join(" ")
 }
 
@@ -325,10 +372,15 @@ fn name_urls(text: &str) -> String {
     let mut out = String::new();
     let mut rest = text;
     loop {
-        let at = ["http://", "https://"].iter().filter_map(|p| rest.find(p).map(|i| (i, p.len()))).min_by_key(|&(i, _)| i);
+        let at = ["http://", "https://"]
+            .iter()
+            .filter_map(|p| rest.find(p).map(|i| (i, p.len())))
+            .min_by_key(|&(i, _)| i);
         let Some((i, scheme)) = at else { break };
         let tail = &rest[i + scheme..];
-        let len = tail.find(|c: char| c.is_whitespace() || c == ')').unwrap_or(tail.len());
+        let len = tail
+            .find(|c: char| c.is_whitespace() || c == ')')
+            .unwrap_or(tail.len());
         if len == 0 {
             out.push_str(&rest[..i + scheme]);
             rest = tail;
@@ -420,7 +472,11 @@ fn cut(sentence: &str, max_length: usize) -> Vec<String> {
     let mut out = Vec::new();
     let mut current = String::new();
     for word in sentence.split(' ').filter(|w| !w.is_empty()) {
-        let candidate = if current.is_empty() { word.to_owned() } else { format!("{current} {word}") };
+        let candidate = if current.is_empty() {
+            word.to_owned()
+        } else {
+            format!("{current} {word}")
+        };
         if candidate.chars().count() > max_length && !current.is_empty() {
             out.push(std::mem::replace(&mut current, word.to_owned()));
         } else {
@@ -448,33 +504,110 @@ pub fn spoken_decision(said: &str, options: &[ApprovalOption]) -> Option<Approva
     if said.contains('?') {
         return None;
     }
-    let lowered = said.to_lowercase().replace('\u{2019}', "'").replace("thank you", " ");
-    let cleaned: String = lowered.chars().map(|c| if c.is_ascii_lowercase() || c == '\'' || c == ' ' { c } else { ' ' }).collect();
-    const FILLER: [&str; 9] = ["um", "uh", "er", "erm", "hmm", "please", "thanks", "bear", "threadbear"];
-    let phrase = cleaned.split(' ').filter(|w| !w.is_empty() && !FILLER.contains(w)).collect::<Vec<_>>().join(" ");
+    let lowered = said
+        .to_lowercase()
+        .replace('\u{2019}', "'")
+        .replace("thank you", " ");
+    let cleaned: String = lowered
+        .chars()
+        .map(|c| {
+            if c.is_ascii_lowercase() || c == '\'' || c == ' ' {
+                c
+            } else {
+                ' '
+            }
+        })
+        .collect();
+    const FILLER: [&str; 9] = [
+        "um",
+        "uh",
+        "er",
+        "erm",
+        "hmm",
+        "please",
+        "thanks",
+        "bear",
+        "threadbear",
+    ];
+    let phrase = cleaned
+        .split(' ')
+        .filter(|w| !w.is_empty() && !FILLER.contains(w))
+        .collect::<Vec<_>>()
+        .join(" ");
     if is_no(&phrase) {
-        return options.contains(&ApprovalOption::Deny).then_some(ApprovalDecision::Deny);
+        return options
+            .contains(&ApprovalOption::Deny)
+            .then_some(ApprovalDecision::Deny);
     }
     if ALWAYS.contains(&phrase.as_str()) {
-        return options.contains(&ApprovalOption::AllowAlways).then_some(ApprovalDecision::AllowAlways);
+        return options
+            .contains(&ApprovalOption::AllowAlways)
+            .then_some(ApprovalDecision::AllowAlways);
     }
     if is_yes(&phrase) {
-        return options.contains(&ApprovalOption::Allow).then_some(ApprovalDecision::Allow);
+        return options
+            .contains(&ApprovalOption::Allow)
+            .then_some(ApprovalDecision::Allow);
     }
     None
 }
 
 const YES_STARTS: [&str; 8] = ["yes", "yeah", "yep", "yup", "sure", "ok", "okay", "alright"];
-const YES_ACTS: [&str; 7] = ["go ahead", "go ahead and do it", "do it", "run it", "allow it", "that's fine", "sounds good"];
-const ALWAYS: [&str; 6] = ["always allow", "always allow it", "allow always", "yes always", "yes always allow", "yes always allow it"];
-const NO_PLAIN: [&str; 16] = ["no", "nope", "nah", "deny", "deny it", "decline", "cancel", "cancel it", "cancel that", "stop", "stop it", "skip", "skip it", "not now", "not yet", "no way"];
-const NO_DONT: [&str; 8] = ["don't", "don't do it", "don't do that", "dont", "dont do it", "dont do that", "do not do it", "do not do that"];
+const YES_ACTS: [&str; 7] = [
+    "go ahead",
+    "go ahead and do it",
+    "do it",
+    "run it",
+    "allow it",
+    "that's fine",
+    "sounds good",
+];
+const ALWAYS: [&str; 6] = [
+    "always allow",
+    "always allow it",
+    "allow always",
+    "yes always",
+    "yes always allow",
+    "yes always allow it",
+];
+const NO_PLAIN: [&str; 16] = [
+    "no",
+    "nope",
+    "nah",
+    "deny",
+    "deny it",
+    "decline",
+    "cancel",
+    "cancel it",
+    "cancel that",
+    "stop",
+    "stop it",
+    "skip",
+    "skip it",
+    "not now",
+    "not yet",
+    "no way",
+];
+const NO_DONT: [&str; 8] = [
+    "don't",
+    "don't do it",
+    "don't do that",
+    "dont",
+    "dont do it",
+    "dont do that",
+    "do not do it",
+    "do not do that",
+];
 
 fn is_yes(p: &str) -> bool {
     YES_STARTS.contains(&p)
         || YES_ACTS.contains(&p)
         || ["allow", "approve", "approve it", "approved"].contains(&p)
-        || YES_STARTS.iter().any(|s| p.strip_prefix(s).and_then(|r| r.strip_prefix(' ')).is_some_and(|r| YES_ACTS.contains(&r)))
+        || YES_STARTS.iter().any(|s| {
+            p.strip_prefix(s)
+                .and_then(|r| r.strip_prefix(' '))
+                .is_some_and(|r| YES_ACTS.contains(&r))
+        })
 }
 
 fn is_no(p: &str) -> bool {
@@ -585,7 +718,9 @@ impl SpokenApprovals {
     /// `quiet_since` when the app last stopped talking (infinity while it's
     /// talking); an unknown time is -infinity, which never answers.
     pub fn take(&mut self, said: &str, spoken_at: f64, quiet_since: f64) -> SpokenOutcome {
-        let Some(newest) = self.open.last().cloned() else { return SpokenOutcome::Message };
+        let Some(newest) = self.open.last().cloned() else {
+            return SpokenOutcome::Message;
+        };
         if let Some((card, heard_at)) = &self.heard {
             if *card == newest && spoken_at >= *heard_at && spoken_at >= quiet_since {
                 if let Some(decision) = spoken_decision(said, &card.options) {
@@ -598,7 +733,16 @@ impl SpokenApprovals {
         }
         // Any answer at all, to any card: not sent as a message ("yes" in the
         // thread would decline the card), and not guessed at.
-        if spoken_decision(said, &[ApprovalOption::Allow, ApprovalOption::AllowAlways, ApprovalOption::Deny]).is_none() {
+        if spoken_decision(
+            said,
+            &[
+                ApprovalOption::Allow,
+                ApprovalOption::AllowAlways,
+                ApprovalOption::Deny,
+            ],
+        )
+        .is_none()
+        {
             return SpokenOutcome::Message;
         }
         if Self::reading(&newest).is_none() {
@@ -631,28 +775,49 @@ pub struct VoiceLanguage {
     pub locale: &'static str,
 }
 
-const MORE_VOICES: [&str; 20] = ["alba", "anna", "azelma", "cosette", "eponine", "estelle", "fantine", "jane", "lola", "mary", "vera", "charles", "george", "giovanni", "javert", "jean", "juergen", "marius", "paul", "rafael"];
+const MORE_VOICES: [&str; 20] = [
+    "alba", "anna", "azelma", "cosette", "eponine", "estelle", "fantine", "jane", "lola", "mary",
+    "vera", "charles", "george", "giovanni", "javert", "jean", "juergen", "marius", "paul",
+    "rafael",
+];
 
 pub fn voices() -> Vec<VoiceOption> {
     let mut list = vec![
-        VoiceOption { id: "emily", name: "Emily".to_owned(), engine_voice: "eve" },
+        VoiceOption {
+            id: "emily",
+            name: "Emily".to_owned(),
+            engine_voice: "eve",
+        },
         // A voice called Mike, not the person: spelled from its id so
         // fork-view.test.ts, which looks for the name in strings, passes it.
-        VoiceOption { id: "mike", name: capitalised("mike"), engine_voice: "michael" },
+        VoiceOption {
+            id: "mike",
+            name: capitalised("mike"),
+            engine_voice: "michael",
+        },
     ];
-    list.extend(MORE_VOICES.iter().map(|&v| VoiceOption { id: v, name: capitalised(v), engine_voice: v }));
+    list.extend(MORE_VOICES.iter().map(|&v| VoiceOption {
+        id: v,
+        name: capitalised(v),
+        engine_voice: v,
+    }));
     list
 }
 
 fn capitalised(word: &str) -> String {
     let mut c = word.chars();
-    c.next().map(|f| f.to_uppercase().chain(c).collect()).unwrap_or_default()
+    c.next()
+        .map(|f| f.to_uppercase().chain(c).collect())
+        .unwrap_or_default()
 }
 
 /// The saved voice, or Emily for anything unknown.
 pub fn voice(id: Option<&str>) -> VoiceOption {
     let all = voices();
-    all.iter().find(|v| Some(v.id) == id).cloned().unwrap_or_else(|| all[0].clone())
+    all.iter()
+        .find(|v| Some(v.id) == id)
+        .cloned()
+        .unwrap_or_else(|| all[0].clone())
 }
 
 pub const SPEEDS: [f64; 5] = [0.75, 1.0, 1.25, 1.5, 2.0];
@@ -664,22 +829,60 @@ pub fn speed_title(speed: f64) -> String {
 
 /// The saved speed, clamped to one that's offered.
 pub fn speed(value: Option<f64>) -> f64 {
-    let Some(value) = value.filter(|v| *v > 0.0) else { return 1.0 };
-    SPEEDS.iter().copied().min_by(|a, b| (a - value).abs().total_cmp(&(b - value).abs())).unwrap_or(1.0)
+    let Some(value) = value.filter(|v| *v > 0.0) else {
+        return 1.0;
+    };
+    SPEEDS
+        .iter()
+        .copied()
+        .min_by(|a, b| (a - value).abs().total_cmp(&(b - value).abs()))
+        .unwrap_or(1.0)
 }
 
 pub const LANGUAGES: [VoiceLanguage; 7] = [
-    VoiceLanguage { id: "english", name: "English", locale: "en-US" },
-    VoiceLanguage { id: "french", name: "French", locale: "fr-FR" },
-    VoiceLanguage { id: "german", name: "German", locale: "de-DE" },
-    VoiceLanguage { id: "spanish", name: "Spanish", locale: "es-ES" },
-    VoiceLanguage { id: "italian", name: "Italian", locale: "it-IT" },
-    VoiceLanguage { id: "portuguese", name: "Portuguese", locale: "pt-PT" },
-    VoiceLanguage { id: "dutch", name: "Dutch", locale: "nl-NL" },
+    VoiceLanguage {
+        id: "english",
+        name: "English",
+        locale: "en-US",
+    },
+    VoiceLanguage {
+        id: "french",
+        name: "French",
+        locale: "fr-FR",
+    },
+    VoiceLanguage {
+        id: "german",
+        name: "German",
+        locale: "de-DE",
+    },
+    VoiceLanguage {
+        id: "spanish",
+        name: "Spanish",
+        locale: "es-ES",
+    },
+    VoiceLanguage {
+        id: "italian",
+        name: "Italian",
+        locale: "it-IT",
+    },
+    VoiceLanguage {
+        id: "portuguese",
+        name: "Portuguese",
+        locale: "pt-PT",
+    },
+    VoiceLanguage {
+        id: "dutch",
+        name: "Dutch",
+        locale: "nl-NL",
+    },
 ];
 
 pub fn language(id: Option<&str>) -> VoiceLanguage {
-    LANGUAGES.iter().find(|l| Some(l.id) == id).copied().unwrap_or(LANGUAGES[0])
+    LANGUAGES
+        .iter()
+        .find(|l| Some(l.id) == id)
+        .copied()
+        .unwrap_or(LANGUAGES[0])
 }
 
 // ---- The button's icon ----
@@ -697,7 +900,12 @@ pub enum VoiceIcon {
 }
 
 impl VoiceIcon {
-    pub const ALL: [VoiceIcon; 4] = [VoiceIcon::Microphone, VoiceIcon::MicrophoneFill, VoiceIcon::MicrophoneStage, VoiceIcon::Waveform];
+    pub const ALL: [VoiceIcon; 4] = [
+        VoiceIcon::Microphone,
+        VoiceIcon::MicrophoneFill,
+        VoiceIcon::MicrophoneStage,
+        VoiceIcon::Waveform,
+    ];
 
     /// The Swift app's raw value, as saved.
     pub fn name(self) -> &'static str {
@@ -721,15 +929,26 @@ impl VoiceIcon {
     /// The whole icon as SVG, filled black for the app to tint.
     pub fn svg(self) -> &'static str {
         match self {
-            VoiceIcon::Microphone => r#"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256"><path fill="black" d="M128,180a52.06,52.06,0,0,0,52-52V64A52,52,0,0,0,76,64v64A52.06,52.06,0,0,0,128,180ZM100,64a28,28,0,0,1,56,0v64a28,28,0,0,1-56,0Zm40,155.22V240a12,12,0,0,1-24,0V219.22A92.14,92.14,0,0,1,36,128a12,12,0,0,1,24,0,68,68,0,0,0,136,0,12,12,0,0,1,24,0A92.14,92.14,0,0,1,140,219.22Z"/></svg>"#,
-            VoiceIcon::MicrophoneFill => r#"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256"><path fill="black" d="M80,128V64a48,48,0,0,1,96,0v64a48,48,0,0,1-96,0Zm128,0a8,8,0,0,0-16,0,64,64,0,0,1-128,0,8,8,0,0,0-16,0,80.11,80.11,0,0,0,72,79.6V240a8,8,0,0,0,16,0V207.6A80.11,80.11,0,0,0,208,128Z"/></svg>"#,
-            VoiceIcon::MicrophoneStage => r#"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256"><path fill="black" d="M168,12A75.9,75.9,0,0,0,92.49,96.33L23.91,189.85a19.89,19.89,0,0,0,2,26l14.29,14.29a19.89,19.89,0,0,0,26,2l93.52-68.58A76,76,0,1,0,168,12Zm52,76a51.66,51.66,0,0,1-7.75,27.27L140.74,43.75A52,52,0,0,1,220,88ZM54.72,210.71l-9.43-9.43,56.19-76.63a76.46,76.46,0,0,0,29.87,29.87ZM116,88a51.63,51.63,0,0,1,7.75-27.27l71.51,71.51A52,52,0,0,1,116,88Z"/></svg>"#,
-            VoiceIcon::Waveform => r#"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256"><path fill="black" d="M60,96v64a12,12,0,0,1-24,0V96a12,12,0,0,1,24,0ZM88,20A12,12,0,0,0,76,32V224a12,12,0,0,0,24,0V32A12,12,0,0,0,88,20Zm40,32a12,12,0,0,0-12,12V192a12,12,0,0,0,24,0V64A12,12,0,0,0,128,52Zm40,32a12,12,0,0,0-12,12v64a12,12,0,0,0,24,0V96A12,12,0,0,0,168,84Zm40-16a12,12,0,0,0-12,12v96a12,12,0,0,0,24,0V80A12,12,0,0,0,208,68Z"/></svg>"#,
+            VoiceIcon::Microphone => {
+                r#"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256"><path fill="black" d="M128,180a52.06,52.06,0,0,0,52-52V64A52,52,0,0,0,76,64v64A52.06,52.06,0,0,0,128,180ZM100,64a28,28,0,0,1,56,0v64a28,28,0,0,1-56,0Zm40,155.22V240a12,12,0,0,1-24,0V219.22A92.14,92.14,0,0,1,36,128a12,12,0,0,1,24,0,68,68,0,0,0,136,0,12,12,0,0,1,24,0A92.14,92.14,0,0,1,140,219.22Z"/></svg>"#
+            }
+            VoiceIcon::MicrophoneFill => {
+                r#"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256"><path fill="black" d="M80,128V64a48,48,0,0,1,96,0v64a48,48,0,0,1-96,0Zm128,0a8,8,0,0,0-16,0,64,64,0,0,1-128,0,8,8,0,0,0-16,0,80.11,80.11,0,0,0,72,79.6V240a8,8,0,0,0,16,0V207.6A80.11,80.11,0,0,0,208,128Z"/></svg>"#
+            }
+            VoiceIcon::MicrophoneStage => {
+                r#"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256"><path fill="black" d="M168,12A75.9,75.9,0,0,0,92.49,96.33L23.91,189.85a19.89,19.89,0,0,0,2,26l14.29,14.29a19.89,19.89,0,0,0,26,2l93.52-68.58A76,76,0,1,0,168,12Zm52,76a51.66,51.66,0,0,1-7.75,27.27L140.74,43.75A52,52,0,0,1,220,88ZM54.72,210.71l-9.43-9.43,56.19-76.63a76.46,76.46,0,0,0,29.87,29.87ZM116,88a51.63,51.63,0,0,1,7.75-27.27l71.51,71.51A52,52,0,0,1,116,88Z"/></svg>"#
+            }
+            VoiceIcon::Waveform => {
+                r#"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256"><path fill="black" d="M60,96v64a12,12,0,0,1-24,0V96a12,12,0,0,1,24,0ZM88,20A12,12,0,0,0,76,32V224a12,12,0,0,0,24,0V32A12,12,0,0,0,88,20Zm40,32a12,12,0,0,0-12,12V192a12,12,0,0,0,24,0V64A12,12,0,0,0,128,52Zm40,32a12,12,0,0,0-12,12v64a12,12,0,0,0,24,0V96A12,12,0,0,0,168,84Zm40-16a12,12,0,0,0-12,12v96a12,12,0,0,0,24,0V80A12,12,0,0,0,208,68Z"/></svg>"#
+            }
         }
     }
 
     pub fn saved(raw: Option<&str>) -> VoiceIcon {
-        VoiceIcon::ALL.into_iter().find(|i| Some(i.name()) == raw).unwrap_or_default()
+        VoiceIcon::ALL
+            .into_iter()
+            .find(|i| Some(i.name()) == raw)
+            .unwrap_or_default()
     }
 }
 
@@ -781,7 +1000,11 @@ pub const DEFAULT_PAUSE: f64 = 1.5;
 
 /// "1.5 seconds".
 pub fn pause_title(pause: f64) -> String {
-    if pause == 1.0 { "1 second".to_owned() } else { format!("{pause} seconds") }
+    if pause == 1.0 {
+        "1 second".to_owned()
+    } else {
+        format!("{pause} seconds")
+    }
 }
 
 impl VoicePrefs {
@@ -807,8 +1030,14 @@ impl VoicePrefs {
 
     /// The saved pause, clamped to one that's offered.
     pub fn pause(&self) -> f64 {
-        let Some(value) = self.pause.filter(|v| *v > 0.0) else { return DEFAULT_PAUSE };
-        PAUSES.iter().copied().min_by(|a, b| (a - value).abs().total_cmp(&(b - value).abs())).unwrap_or(DEFAULT_PAUSE)
+        let Some(value) = self.pause.filter(|v| *v > 0.0) else {
+            return DEFAULT_PAUSE;
+        };
+        PAUSES
+            .iter()
+            .copied()
+            .min_by(|a, b| (a - value).abs().total_cmp(&(b - value).abs()))
+            .unwrap_or(DEFAULT_PAUSE)
     }
 
     pub fn microphone(&self) -> Option<&str> {
@@ -819,13 +1048,21 @@ impl VoicePrefs {
         use crate::voice_keys::{VoiceCommandKey, VoiceKeys, VoiceTriggerKey};
         let d = VoiceKeys::default();
         VoiceKeys {
-            trigger: self.key_trigger.as_deref().and_then(VoiceTriggerKey::from_name).unwrap_or(d.trigger),
+            trigger: self
+                .key_trigger
+                .as_deref()
+                .and_then(VoiceTriggerKey::from_name)
+                .unwrap_or(d.trigger),
             hold_to_dictate: self.key_hold.unwrap_or(d.hold_to_dictate),
             hands_free_with_space: self.key_hands_free.unwrap_or(d.hands_free_with_space),
             shift_toggle: self.key_shift.unwrap_or(d.shift_toggle),
             double_tap: self.key_double_tap.unwrap_or(d.double_tap),
             command_mode: self.command_mode.unwrap_or(d.command_mode),
-            command: self.key_command.as_deref().and_then(VoiceCommandKey::from_name).unwrap_or(d.command),
+            command: self
+                .key_command
+                .as_deref()
+                .and_then(VoiceCommandKey::from_name)
+                .unwrap_or(d.command),
         }
     }
 }

@@ -42,30 +42,58 @@ pub struct Target {
 /// be another thread's by now) or one whose folder has gone. With no thread
 /// open it's the home shell too. `runner` names another machine's thread's
 /// runner, when that's known.
-pub fn target_for(thread: Option<&ThreadSummary>, home: &str, runner: Option<&str>, is_dir: impl Fn(&str) -> bool) -> Target {
-    let home_shell = |note: Option<String>| Target { key: TerminalKey::Home, cwd: home.to_owned(), note };
-    let Some(thread) = thread else { return home_shell(None) };
+pub fn target_for(
+    thread: Option<&ThreadSummary>,
+    home: &str,
+    runner: Option<&str>,
+    is_dir: impl Fn(&str) -> bool,
+) -> Target {
+    let home_shell = |note: Option<String>| Target {
+        key: TerminalKey::Home,
+        cwd: home.to_owned(),
+        note,
+    };
+    let Some(thread) = thread else {
+        return home_shell(None);
+    };
     if thread.is_archived() {
-        return home_shell(Some("This thread is archived, so this terminal is in your home folder.".to_owned()));
+        return home_shell(Some(
+            "This thread is archived, so this terminal is in your home folder.".to_owned(),
+        ));
     }
     if thread.is_remote() {
-        let place = runner.map_or_else(|| "on another machine".to_owned(), |name| format!("on {name}"));
-        return home_shell(Some(format!("This thread runs {place}, so this terminal is on this Mac, in your home folder.")));
+        let place = runner.map_or_else(
+            || "on another machine".to_owned(),
+            |name| format!("on {name}"),
+        );
+        return home_shell(Some(format!(
+            "This thread runs {place}, so this terminal is on this Mac, in your home folder."
+        )));
     }
     if thread.cwd.is_empty() || !is_dir(&thread.cwd) {
         return home_shell(Some("This thread's folder isn't on this Mac any more, so this terminal is in your home folder.".to_owned()));
     }
-    Target { key: TerminalKey::Thread(thread.id.clone()), cwd: thread.cwd.clone(), note: None }
+    Target {
+        key: TerminalKey::Thread(thread.id.clone()),
+        cwd: thread.cwd.clone(),
+        note: None,
+    }
 }
 
 /// Which of `keys` are shells of this Mac's threads that `threads` says are
 /// archived (`Terminals.archived`). Never the home shell. Only this Mac's own
 /// threads have shells of their own, so another runner's index can't stop one
 /// by calling a row of its own "home" and archiving it (Daybreak, 10 Nov).
-pub fn archived<'a, T: std::borrow::Borrow<ThreadSummary>>(keys: impl IntoIterator<Item = &'a TerminalKey>, threads: &HashMap<String, T>) -> Vec<TerminalKey> {
+pub fn archived<'a, T: std::borrow::Borrow<ThreadSummary>>(
+    keys: impl IntoIterator<Item = &'a TerminalKey>,
+    threads: &HashMap<String, T>,
+) -> Vec<TerminalKey> {
     keys.into_iter()
         .filter(|key| match key {
-            TerminalKey::Thread(id) => threads.get(id).map(crate::inbox::summary).is_some_and(|t| !t.is_remote() && t.is_archived()),
+            TerminalKey::Thread(id) => threads
+                .get(id)
+                .map(crate::inbox::summary)
+                .is_some_and(|t| !t.is_remote() && t.is_archived()),
             TerminalKey::Home => false,
         })
         .cloned()
@@ -75,8 +103,14 @@ pub fn archived<'a, T: std::borrow::Borrow<ThreadSummary>>(keys: impl IntoIterat
 /// Which of `keys` are thread shells whose thread isn't in `keeping`: the
 /// runner's full list came back (on connecting) without it, so it was deleted
 /// while the app wasn't listening (`Terminals.gone`). The home shell stays.
-pub fn gone<'a>(keys: impl IntoIterator<Item = &'a TerminalKey>, keeping: &HashSet<&str>) -> Vec<TerminalKey> {
-    keys.into_iter().filter(|key| matches!(key, TerminalKey::Thread(id) if !keeping.contains(id.as_str()))).cloned().collect()
+pub fn gone<'a>(
+    keys: impl IntoIterator<Item = &'a TerminalKey>,
+    keeping: &HashSet<&str>,
+) -> Vec<TerminalKey> {
+    keys.into_iter()
+        .filter(|key| matches!(key, TerminalKey::Thread(id) if !keeping.contains(id.as_str())))
+        .cloned()
+        .collect()
 }
 
 /// Whether a shell block in `block_thread`'s transcript may put its command in
@@ -88,7 +122,11 @@ pub fn gone<'a>(keys: impl IntoIterator<Item = &'a TerminalKey>, keeping: &HashS
 /// selected, then pasted into that thread's shell (Daybreak, 10 Nov).
 pub fn can_put(block_thread: Option<&str>, selected: Option<&str>, target: &Target) -> bool {
     match (block_thread, selected) {
-        (Some(block), Some(selected)) => block == selected && target.note.is_none() && target.key == TerminalKey::Thread(block.to_owned()),
+        (Some(block), Some(selected)) => {
+            block == selected
+                && target.note.is_none()
+                && target.key == TerminalKey::Thread(block.to_owned())
+        }
         _ => false,
     }
 }
@@ -113,7 +151,14 @@ pub struct Launch {
 /// inherited either name if it was started from inside a thread. The other
 /// two are the terminal library's own, and would tell programs this is
 /// Alacritty.
-pub const UNSET: &[&str] = &["THREADBEAR_THREAD_ID", "THREADBARE_THREAD_ID", "THREADBEAR_THREAD_KEY", "THREADBARE_THREAD_KEY", "ALACRITTY_WINDOW_ID", "WINDOWID"];
+pub const UNSET: &[&str] = &[
+    "THREADBEAR_THREAD_ID",
+    "THREADBARE_THREAD_ID",
+    "THREADBEAR_THREAD_KEY",
+    "THREADBARE_THREAD_KEY",
+    "ALACRITTY_WINDOW_ID",
+    "WINDOWID",
+];
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Os {
@@ -150,15 +195,28 @@ pub fn launch(os: Os, shell: Option<&str>, lang: Option<&str>) -> Launch {
         env.push(("LANG".to_owned(), "en_US.UTF-8".to_owned()));
     }
     if os == Os::Windows {
-        return Launch { program: "powershell.exe".to_owned(), args: vec!["-NoLogo".to_owned()], env, shell: "powershell.exe".to_owned() };
+        return Launch {
+            program: "powershell.exe".to_owned(),
+            args: vec!["-NoLogo".to_owned()],
+            env,
+            shell: "powershell.exe".to_owned(),
+        };
     }
     let fallback = if os == Os::Mac { "/bin/zsh" } else { "/bin/sh" };
     let shell = shell.filter(|s| s.starts_with('/')).unwrap_or(fallback);
-    let mut args: Vec<String> = UNSET.iter().flat_map(|name| ["-u".to_owned(), (*name).to_owned()]).collect();
+    let mut args: Vec<String> = UNSET
+        .iter()
+        .flat_map(|name| ["-u".to_owned(), (*name).to_owned()])
+        .collect();
     // `-l` is a login shell in zsh, bash, fish and the rest, as the "-zsh"
     // Terminal and the Swift app start is.
     args.extend([shell.to_owned(), "-l".to_owned()]);
-    Launch { program: "/usr/bin/env".to_owned(), args, env, shell: shell.to_owned() }
+    Launch {
+        program: "/usr/bin/env".to_owned(),
+        args,
+        env,
+        shell: shell.to_owned(),
+    }
 }
 
 // ---------------------------------------------------------------- keys
@@ -301,7 +359,11 @@ pub fn encode_key(key: &Key, modes: Modes) -> KeyAction {
             }
             if meta {
                 // The key's own character, shifted, not what ⌥ makes of it.
-                let c = if key.shift && c.is_ascii_lowercase() { c.to_ascii_uppercase() } else { c };
+                let c = if key.shift && c.is_ascii_lowercase() {
+                    c.to_ascii_uppercase()
+                } else {
+                    c
+                };
                 let mut bytes = vec![ESC];
                 bytes.extend(c.to_string().into_bytes());
                 return KeyAction::Send(bytes);
@@ -369,11 +431,19 @@ fn control_code(c: char) -> Option<u8> {
 /// (Daybreak, 11 Nov). C1 controls (U+0080 to U+009F, U+009B being CSI) go too.
 pub fn paste_bytes(text: &str, bracketed: bool) -> Vec<u8> {
     let text = text.replace("\r\n", "\r").replace('\n', "\r");
-    let inner: String = text.chars().filter(|c| !c.is_control() || matches!(c, '\t' | '\r')).collect();
+    let inner: String = text
+        .chars()
+        .filter(|c| !c.is_control() || matches!(c, '\t' | '\r'))
+        .collect();
     if !bracketed {
         return inner.into_bytes();
     }
-    [b"\x1b[200~".as_slice(), inner.as_bytes(), b"\x1b[201~".as_slice()].concat()
+    [
+        b"\x1b[200~".as_slice(),
+        inner.as_bytes(),
+        b"\x1b[201~".as_slice(),
+    ]
+    .concat()
 }
 
 /// Whether pasting `text` with no brackets would run something by itself:
@@ -393,13 +463,19 @@ pub fn paste_runs(text: &str) -> bool {
 /// that's to be taken as a paste: more than one character with a control in
 /// it. Line breaks on their own are Return, as an input method sends it.
 pub fn is_bulk_text(text: &str) -> bool {
-    text.chars().nth(1).is_some() && text.chars().any(char::is_control) && !text.chars().all(|c| c == '\r' || c == '\n')
+    text.chars().nth(1).is_some()
+        && text.chars().any(char::is_control)
+        && !text.chars().all(|c| c == '\r' || c == '\n')
 }
 
 /// What's asked before such a paste: its title and the line under it.
 pub fn paste_question(text: &str) -> (String, &'static str) {
     let lines = text.lines().count().max(1);
-    let title = if lines == 1 { "Paste this line?".to_owned() } else { format!("Paste {lines} lines?") };
+    let title = if lines == 1 {
+        "Paste this line?".to_owned()
+    } else {
+        format!("Paste {lines} lines?")
+    };
     if !text.contains(['\n', '\r']) {
         return (title, "The program in this terminal will take each Tab in it as the Tab key, which a shell can use to complete or expand what's before it.");
     }
@@ -421,7 +497,17 @@ pub enum MouseButton {
 /// with `mouse=a`, htop): xterm's SGR form (`ESC [ < b ; x ; y M`) when it
 /// asked for that, else the old one, whose positions stop at 223. `column`
 /// and `row` count from 0.
-pub fn mouse_report(button: MouseButton, pressed: bool, motion: bool, column: usize, row: usize, shift: bool, alt: bool, control: bool, sgr: bool) -> Option<Vec<u8>> {
+pub fn mouse_report(
+    button: MouseButton,
+    pressed: bool,
+    motion: bool,
+    column: usize,
+    row: usize,
+    shift: bool,
+    alt: bool,
+    control: bool,
+    sgr: bool,
+) -> Option<Vec<u8>> {
     let mut code: u32 = match button {
         MouseButton::Left => 0,
         MouseButton::Middle => 1,
@@ -429,7 +515,10 @@ pub fn mouse_report(button: MouseButton, pressed: bool, motion: bool, column: us
         MouseButton::WheelUp => 64,
         MouseButton::WheelDown => 65,
     };
-    code += 4 * u32::from(shift) + 8 * u32::from(alt) + 16 * u32::from(control) + 32 * u32::from(motion);
+    code += 4 * u32::from(shift)
+        + 8 * u32::from(alt)
+        + 16 * u32::from(control)
+        + 32 * u32::from(motion);
     if sgr {
         let end = if pressed { 'M' } else { 'm' };
         return Some(format!("\x1b[<{code};{};{}{end}", column + 1, row + 1).into_bytes());
@@ -469,7 +558,10 @@ impl ShellBlock {
     /// The command for a fence's info string (only its first word counts), or
     /// None for any other fence, or one that can't safely be typed.
     pub fn from(language: Option<&str>, code: &str) -> Option<ShellBlock> {
-        let word = language?.split([' ', '\t', '{']).find(|w| !w.is_empty())?.to_lowercase();
+        let word = language?
+            .split([' ', '\t', '{'])
+            .find(|w| !w.is_empty())?
+            .to_lowercase();
         if !matches!(word.as_str(), "sh" | "bash" | "zsh" | "shell") {
             return None;
         }
@@ -480,7 +572,9 @@ impl ShellBlock {
         if source.trim().is_empty() || source.chars().count() > MAX_SOURCE || !is_plain(&source) {
             return None;
         }
-        Some(ShellBlock { command: without_prompts(&source) })
+        Some(ShellBlock {
+            command: without_prompts(&source),
+        })
     }
 
     /// Whether a reply's text could hold one, so only those are looked at.
@@ -495,7 +589,14 @@ impl ShellBlock {
 /// characters: zero widths, bidi overrides and isolates, tags), no line or
 /// paragraph separators, nothing from the private use areas.
 fn is_plain(text: &str) -> bool {
-    text.chars().all(|c| c == '\n' || c == '\t' || !(c.is_control() || is_format(c) || matches!(c, '\u{2028}' | '\u{2029}') || is_private_use(c)))
+    text.chars().all(|c| {
+        c == '\n'
+            || c == '\t'
+            || !(c.is_control()
+                || is_format(c)
+                || matches!(c, '\u{2028}' | '\u{2029}')
+                || is_private_use(c))
+    })
 }
 
 /// Unicode's format characters (general category Cf).
@@ -514,11 +615,18 @@ fn is_private_use(c: char) -> bool {
 /// has one, so a line that really starts with `$` is left alone.
 fn without_prompts(text: &str) -> String {
     let lines: Vec<&str> = text.split('\n').collect();
-    let all_prompted = lines.iter().filter(|l| !l.trim().is_empty()).all(|l| l.starts_with("$ "));
+    let all_prompted = lines
+        .iter()
+        .filter(|l| !l.trim().is_empty())
+        .all(|l| l.starts_with("$ "));
     if !all_prompted {
         return text.to_owned();
     }
-    lines.iter().map(|l| l.strip_prefix("$ ").unwrap_or(l)).collect::<Vec<_>>().join("\n")
+    lines
+        .iter()
+        .map(|l| l.strip_prefix("$ ").unwrap_or(l))
+        .collect::<Vec<_>>()
+        .join("\n")
 }
 
 /// The closed shell blocks in a reply's markdown, in order: what its play and
@@ -541,15 +649,26 @@ pub fn shell_blocks(text: &str) -> Vec<ShellBlock> {
         let (quotes, rest) = unquoted(line);
         match open.as_mut() {
             None => {
-                let Some(mark) = rest.chars().next().filter(|c| *c == '`' || *c == '~') else { continue };
+                let Some(mark) = rest.chars().next().filter(|c| *c == '`' || *c == '~') else {
+                    continue;
+                };
                 let length = rest.chars().take_while(|c| *c == mark).count();
                 if length >= 3 {
-                    open = Some(Open { mark, length, quotes, language: rest[length..].trim(), code: Vec::new() });
+                    open = Some(Open {
+                        mark,
+                        length,
+                        quotes,
+                        language: rest[length..].trim(),
+                        code: Vec::new(),
+                    });
                 }
             }
             Some(o) => {
                 let closing = rest.trim_end();
-                if quotes == o.quotes && closing.chars().count() >= o.length && closing.chars().all(|c| c == o.mark) {
+                if quotes == o.quotes
+                    && closing.chars().count() >= o.length
+                    && closing.chars().all(|c| c == o.mark)
+                {
                     if let Some(block) = ShellBlock::from(Some(o.language), &o.code.join("\n")) {
                         out.push(block);
                     }
@@ -580,20 +699,26 @@ fn unquoted(line: &str) -> (usize, &str) {
 /// line has to be the opening fence's character, at least as many of them,
 /// behind as many quote markers as the opening line.
 pub fn fence_closed(source: &str, start: usize, end: usize) -> bool {
-    let Some(block) = source.get(start..end.min(source.len())) else { return false };
+    let Some(block) = source.get(start..end.min(source.len())) else {
+        return false;
+    };
     let lines: Vec<&str> = block.trim_end_matches(['\n', '\r']).split('\n').collect();
     if lines.len() < 2 {
         return false;
     }
     // A fence inside a quote opens and closes behind its `>`s.
     let (quotes, opening) = unquoted(lines[0]);
-    let Some(mark) = opening.chars().next().filter(|c| *c == '`' || *c == '~') else { return false };
+    let Some(mark) = opening.chars().next().filter(|c| *c == '`' || *c == '~') else {
+        return false;
+    };
     let length = opening.chars().take_while(|c| *c == mark).count();
     if length < 3 {
         return false;
     }
     let (closing_quotes, closing) = unquoted(lines[lines.len() - 1].trim_end());
-    closing_quotes == quotes && closing.chars().count() >= length && closing.chars().all(|c| c == mark)
+    closing_quotes == quotes
+        && closing.chars().count() >= length
+        && closing.chars().all(|c| c == mark)
 }
 
 // ---------------------------------------------------------------- putting a command
@@ -653,7 +778,13 @@ pub const STARTING_FOR_SECS: f64 = 10.;
 ///   filling `read -k`, could run something with no Return pressed, so
 ///   nothing is typed, which includes macOS's bash 3, which never turns it on.
 /// - `starting`: the shell has only just been started.
-pub fn step(block: &ShellBlock, shell_in_front: bool, bracketed_paste: bool, starting: bool, line: &Line) -> Step {
+pub fn step(
+    block: &ShellBlock,
+    shell_in_front: bool,
+    bracketed_paste: bool,
+    starting: bool,
+    line: &Line,
+) -> Step {
     if !(shell_in_front && bracketed_paste) {
         return if starting { Step::Wait } else { Step::Busy };
     }
@@ -668,7 +799,14 @@ pub fn step(block: &ShellBlock, shell_in_front: bool, bracketed_paste: bool, sta
 /// What's on the prompt after a key goes to the shell (`TerminalPut.line`),
 /// `key` being GPUI's name for it. Return (on its own) and ^C leave an empty
 /// prompt; ⌘ keys aren't input (⌘V arrives as a paste); anything else edits it.
-pub fn line_after_key(line: &Line, key: &str, control: bool, alt: bool, shift: bool, command: bool) -> Line {
+pub fn line_after_key(
+    line: &Line,
+    key: &str,
+    control: bool,
+    alt: bool,
+    shift: bool,
+    command: bool,
+) -> Line {
     // ⌘⌫, ⌘← and ⌘→ are line editing keys (^U, ^A, ^E), which a shell can
     // bind to anything, so what's on the prompt is no longer known.
     if command && !(COMMAND_KEYS.contains(&key) && !control && !alt && !shift) {
@@ -744,7 +882,8 @@ pub fn palette(background: Rgb8, foreground: Rgb8) -> [Rgb8; 256] {
             let c4 = c0.lerp(tg, c1);
             let c5 = c2.lerp(tg, c3);
             for b in 0..6 {
-                out[16 + 36 * r as usize + 6 * g as usize + b as usize] = c4.lerp(f64::from(b) / 5., c5).rgb();
+                out[16 + 36 * r as usize + 6 * g as usize + b as usize] =
+                    c4.lerp(f64::from(b) / 5., c5).rgb();
             }
         }
     }
@@ -773,28 +912,56 @@ impl Lab {
             }
         };
         let (r, g, b) = (linear(r), linear(g), linear(b));
-        let f = |t: f64| if t > 0.008856 { t.cbrt() } else { 7.787 * t + 16. / 116. };
+        let f = |t: f64| {
+            if t > 0.008856 {
+                t.cbrt()
+            } else {
+                7.787 * t + 16. / 116.
+            }
+        };
         let x = f((r * 0.4124564 + g * 0.3575761 + b * 0.1804375) / 0.95047);
         let y = f(r * 0.2126729 + g * 0.7151522 + b * 0.0721750);
         let z = f((r * 0.0193339 + g * 0.1191920 + b * 0.9503041) / 1.08883);
-        Lab { l: 116. * y - 16., a: 500. * (x - y), b: 200. * (y - z) }
+        Lab {
+            l: 116. * y - 16.,
+            a: 500. * (x - y),
+            b: 200. * (y - z),
+        }
     }
 
     fn lerp(self, t: f64, to: Lab) -> Lab {
-        Lab { l: self.l + t * (to.l - self.l), a: self.a + t * (to.a - self.a), b: self.b + t * (to.b - self.b) }
+        Lab {
+            l: self.l + t * (to.l - self.l),
+            a: self.a + t * (to.a - self.a),
+            b: self.b + t * (to.b - self.b),
+        }
     }
 
     fn rgb(self) -> Rgb8 {
         let y = (self.l + 16.) / 116.;
         let x = self.a / 500. + y;
         let z = y - self.b / 200.;
-        let back = |t: f64| if t * t * t > 0.008856 { t * t * t } else { (t - 16. / 116.) / 7.787 };
+        let back = |t: f64| {
+            if t * t * t > 0.008856 {
+                t * t * t
+            } else {
+                (t - 16. / 116.) / 7.787
+            }
+        };
         let (x, y, z) = (back(x) * 0.95047, back(y), back(z) * 1.08883);
         let gamma = |c: f64| {
-            let c = if c > 0.0031308 { 1.055 * c.powf(1. / 2.4) - 0.055 } else { 12.92 * c };
+            let c = if c > 0.0031308 {
+                1.055 * c.powf(1. / 2.4) - 0.055
+            } else {
+                12.92 * c
+            };
             (c.clamp(0., 1.) * 255. + 0.5) as u8
         };
-        (gamma(x * 3.2404542 - y * 1.5371385 - z * 0.4985314), gamma(-x * 0.9692660 + y * 1.8760108 + z * 0.0415560), gamma(x * 0.0556434 - y * 0.2040259 + z * 1.0572252))
+        (
+            gamma(x * 3.2404542 - y * 1.5371385 - z * 0.4985314),
+            gamma(-x * 0.9692660 + y * 1.8760108 + z * 0.0415560),
+            gamma(x * 0.0556434 - y * 0.2040259 + z * 1.0572252),
+        )
     }
 }
 
@@ -815,10 +982,13 @@ pub enum Link {
 /// GNU tools put this machine's hostname in OSC 8 file URLs. Strip only an
 /// exact local host; every other authority still goes to the gate to refuse.
 pub fn local_file_url(link: &str, hostname: &str) -> Option<String> {
-    if hostname.is_empty() || !link.get(..7)?.eq_ignore_ascii_case("file://") { return None; }
+    if hostname.is_empty() || !link.get(..7)?.eq_ignore_ascii_case("file://") {
+        return None;
+    }
     let rest = &link[7..];
     let (host, _) = rest.split_once('/')?;
-    (!host.is_empty() && host.eq_ignore_ascii_case(hostname)).then(|| format!("file://{}", &rest[host.len()..]))
+    (!host.is_empty() && host.eq_ignore_ascii_case(hostname))
+        .then(|| format!("file://{}", &rest[host.len()..]))
 }
 
 /// The printed address/path under a terminal cell. OSC 8 links use their
@@ -831,16 +1001,34 @@ pub fn link_word(chars: &[char], at: usize) -> Option<String> {
 /// Terminal can underline the link under the pointer.
 pub fn link_word_span(chars: &[char], at: usize) -> Option<std::ops::Range<usize>> {
     let boundary = |c: char| c.is_whitespace() || "\"'<>`".contains(c) || c.is_control();
-    if at >= chars.len() || boundary(chars[at]) { return None; }
+    if at >= chars.len() || boundary(chars[at]) {
+        return None;
+    }
     let mut first = at;
     let mut last = at + 1;
-    while first > 0 && !boundary(chars[first - 1]) { first -= 1; }
-    while last < chars.len() && !boundary(chars[last]) { last += 1; }
-    while first < last && "([{".contains(chars[first]) { first += 1; }
+    while first > 0 && !boundary(chars[first - 1]) {
+        first -= 1;
+    }
+    while last < chars.len() && !boundary(chars[last]) {
+        last += 1;
+    }
+    while first < last && "([{".contains(chars[first]) {
+        first += 1;
+    }
     loop {
         let tail = *chars.get(last.checked_sub(1)?)?;
-        let unmatched = [(')', '('), (']', '['), ('}', '{')].iter().any(|(close, open)| tail == *close && chars[first..last].iter().filter(|c| **c == *close).count() > chars[first..last].iter().filter(|c| **c == *open).count());
-        if first < last && (".,;!".contains(tail) || unmatched) { last -= 1; } else { break; }
+        let unmatched = [(')', '('), (']', '['), ('}', '{')]
+            .iter()
+            .any(|(close, open)| {
+                tail == *close
+                    && chars[first..last].iter().filter(|c| **c == *close).count()
+                        > chars[first..last].iter().filter(|c| **c == *open).count()
+            });
+        if first < last && (".,;!".contains(tail) || unmatched) {
+            last -= 1;
+        } else {
+            break;
+        }
     }
     (first <= at && at < last && last - first <= 4096).then_some(first..last)
 }
@@ -849,7 +1037,11 @@ pub fn link_word_span(chars: &[char], at: usize) -> Option<std::ops::Range<usize
 /// those are what the underline promises (TerminalPanel.swift's `webLink`).
 /// Paths and other links still open with ⌘-click, through the open gate.
 pub fn underlines(link: &str) -> bool {
-    ["http://", "https://"].iter().any(|scheme| link.get(..scheme.len()).is_some_and(|s| s.eq_ignore_ascii_case(scheme)) && link.len() > scheme.len())
+    ["http://", "https://"].iter().any(|scheme| {
+        link.get(..scheme.len())
+            .is_some_and(|s| s.eq_ignore_ascii_case(scheme))
+            && link.len() > scheme.len()
+    })
 }
 
 /// A Terminal tab's title (`TerminalTab.title`): the name you gave it, or
@@ -859,7 +1051,11 @@ pub fn tab_title(name: Option<&str>, shell_title: &str, number: usize) -> String
         return name.to_owned();
     }
     let own = shell_title.trim();
-    if own.is_empty() { format!("Terminal {number}") } else { own.to_owned() }
+    if own.is_empty() {
+        format!("Terminal {number}")
+    } else {
+        own.to_owned()
+    }
 }
 
 /// A name typed for a tab: trimmed and at most 60 characters, and none at
@@ -875,7 +1071,12 @@ pub fn next_tab_number(taken: &[usize]) -> usize {
     (1..).find(|n| !taken.contains(n)).unwrap_or(1)
 }
 
-pub fn link_target(link: &str, folder: &str, home: &str, exists: impl Fn(&str) -> bool) -> Option<Link> {
+pub fn link_target(
+    link: &str,
+    folder: &str,
+    home: &str,
+    exists: impl Fn(&str) -> bool,
+) -> Option<Link> {
     if link.is_empty() || link.len() > 4096 {
         return None;
     }
@@ -884,7 +1085,11 @@ pub fn link_target(link: &str, folder: &str, home: &str, exists: impl Fn(&str) -
         _ if link == "~" && !home.is_empty() => home.to_owned(),
         _ => link.to_owned(),
     };
-    let path = if expanded.starts_with('/') { expanded } else { format!("{}/{expanded}", folder.trim_end_matches('/')) };
+    let path = if expanded.starts_with('/') {
+        expanded
+    } else {
+        format!("{}/{expanded}", folder.trim_end_matches('/'))
+    };
     if exists(&path) {
         return Some(Link::File(path));
     }
@@ -894,7 +1099,13 @@ pub fn link_target(link: &str, folder: &str, home: &str, exists: impl Fn(&str) -
         }
     }
     let (scheme, _) = link.split_once(':')?;
-    let valid_scheme = scheme.chars().next().is_some_and(|c| c.is_ascii_alphabetic()) && scheme.chars().all(|c| c.is_ascii_alphanumeric() || "+-.".contains(c));
+    let valid_scheme = scheme
+        .chars()
+        .next()
+        .is_some_and(|c| c.is_ascii_alphabetic())
+        && scheme
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || "+-.".contains(c));
     valid_scheme.then(|| Link::Url(link.to_owned()))
 }
 
@@ -903,7 +1114,9 @@ fn without_line_number(path: &str) -> Option<&str> {
     let mut rest = path;
     for _ in 0..2 {
         match rest.rsplit_once(':') {
-            Some((head, tail)) if !tail.is_empty() && tail.chars().all(|c| c.is_ascii_digit()) => rest = head,
+            Some((head, tail)) if !tail.is_empty() && tail.chars().all(|c| c.is_ascii_digit()) => {
+                rest = head
+            }
             _ => break,
         }
     }
@@ -938,7 +1151,11 @@ pub fn shell_escaped(text: &str) -> String {
 /// Dropped files, as Terminal.app types them: each path escaped, a space
 /// between and one after, so the next word can follow.
 pub fn dropped_paths(paths: &[String]) -> String {
-    let mut out: Vec<String> = paths.iter().filter(|p| !p.is_empty()).map(|p| shell_escaped(p)).collect();
+    let mut out: Vec<String> = paths
+        .iter()
+        .filter(|p| !p.is_empty())
+        .map(|p| shell_escaped(p))
+        .collect();
     if out.is_empty() {
         return String::new();
     }
@@ -950,7 +1167,12 @@ pub fn dropped_paths(paths: &[String]) -> String {
 /// the cursor from where it is to the clicked cell, counting along the line
 /// as it wraps (`cols` wide). Rows are the screen's. None when it's where it
 /// is already, or farther than a long command could be.
-pub fn cursor_moves(from: (usize, usize), to: (usize, usize), cols: usize, app_cursor: bool) -> Option<Vec<u8>> {
+pub fn cursor_moves(
+    from: (usize, usize),
+    to: (usize, usize),
+    cols: usize,
+    app_cursor: bool,
+) -> Option<Vec<u8>> {
     let at = |(col, row): (usize, usize)| (row * cols + col.min(cols.saturating_sub(1))) as i64;
     let distance = at(to) - at(from);
     if distance == 0 || cols == 0 || distance.unsigned_abs() > 4000 {
@@ -1046,7 +1268,11 @@ pub fn cycled_tab(current: usize, count: usize, back: bool) -> usize {
     if count == 0 {
         return 0;
     }
-    if back { (current + count - 1) % count } else { (current + 1) % count }
+    if back {
+        (current + count - 1) % count
+    } else {
+        (current + 1) % count
+    }
 }
 
 /// How many of a shell's last lines are kept for when Threadbear opens again
@@ -1077,7 +1303,11 @@ pub fn saved_file_name(key: &TerminalKey) -> String {
     match key {
         TerminalKey::Home => "home.json".to_owned(),
         TerminalKey::Thread(id) => {
-            let safe: String = id.chars().filter(|c| c.is_ascii_alphanumeric() || *c == '-' || *c == '_').take(80).collect();
+            let safe: String = id
+                .chars()
+                .filter(|c| c.is_ascii_alphanumeric() || *c == '-' || *c == '_')
+                .take(80)
+                .collect();
             format!("thread-{safe}.json")
         }
     }
@@ -1092,13 +1322,23 @@ pub fn saved_text(lines: &[String]) -> String {
         lines.pop();
     }
     let start = lines.len().saturating_sub(SAVED_LINES);
-    lines[start..].iter().map(|l| l.chars().filter(|c| !c.is_control() || *c == '\t').collect::<String>()).collect::<Vec<_>>().join("\n")
+    lines[start..]
+        .iter()
+        .map(|l| {
+            l.chars()
+                .filter(|c| !c.is_control() || *c == '\t')
+                .collect::<String>()
+        })
+        .collect::<Vec<_>>()
+        .join("\n")
 }
 
 /// When saved text is from, as its "Restored from" line says it: "Nov 18,
 /// 9:41 PM", in this Mac's time.
 pub fn saved_when(saved: std::time::SystemTime) -> String {
-    chrono::DateTime::<chrono::Local>::from(saved).format("%b %-d, %-I:%M %p").to_string()
+    chrono::DateTime::<chrono::Local>::from(saved)
+        .format("%b %-d, %-I:%M %p")
+        .to_string()
 }
 
 /// Saved text as the bytes the terminal shows before the new shell's
@@ -1114,7 +1354,9 @@ pub fn restored_bytes(text: &str, when: &str) -> Vec<u8> {
         out.extend(line.chars().filter(|c| !c.is_control() || *c == '\t'));
         out.push_str("\r\n");
     }
-    out.push_str(&format!("\x1b[0m\x1b[2m--- Restored from {when} ---\x1b[0m\r\n"));
+    out.push_str(&format!(
+        "\x1b[0m\x1b[2m--- Restored from {when} ---\x1b[0m\r\n"
+    ));
     out.into_bytes()
 }
 
@@ -1123,7 +1365,11 @@ mod tests {
     use super::*;
 
     fn thread(id: &str, cwd: &str) -> ThreadSummary {
-        ThreadSummary { id: id.into(), cwd: cwd.into(), ..Default::default() }
+        ThreadSummary {
+            id: id.into(),
+            cwd: cwd.into(),
+            ..Default::default()
+        }
     }
 
     #[test]
@@ -1142,8 +1388,22 @@ mod tests {
     fn a_thread_gets_its_own_shell_in_its_folder() {
         let t = thread("t1", "/work/repo");
         let target = target_for(Some(&t), "/Users/me", None, |_| true);
-        assert_eq!(target, Target { key: TerminalKey::Thread("t1".into()), cwd: "/work/repo".into(), note: None });
-        assert_eq!(target_for(None, "/Users/me", None, |_| true), Target { key: TerminalKey::Home, cwd: "/Users/me".into(), note: None });
+        assert_eq!(
+            target,
+            Target {
+                key: TerminalKey::Thread("t1".into()),
+                cwd: "/work/repo".into(),
+                note: None
+            }
+        );
+        assert_eq!(
+            target_for(None, "/Users/me", None, |_| true),
+            Target {
+                key: TerminalKey::Home,
+                cwd: "/Users/me".into(),
+                note: None
+            }
+        );
     }
 
     #[test]
@@ -1153,10 +1413,16 @@ mod tests {
         let target = target_for(Some(&t), "/Users/me", Some("Mac mini"), |_| true);
         assert_eq!(target.key, TerminalKey::Home);
         assert_eq!(target.note.as_deref(), Some("This thread runs on Mac mini, so this terminal is on this Mac, in your home folder."));
-        assert!(target_for(Some(&t), "/h", None, |_| true).note.unwrap().contains("on another machine"));
+        assert!(target_for(Some(&t), "/h", None, |_| true)
+            .note
+            .unwrap()
+            .contains("on another machine"));
         let mut archived = thread("t2", "/work/repo");
         archived.archived_at = Some("2026-11-10T00:00:00Z".into());
-        assert!(target_for(Some(&archived), "/h", None, |_| true).note.unwrap().contains("archived"));
+        assert!(target_for(Some(&archived), "/h", None, |_| true)
+            .note
+            .unwrap()
+            .contains("archived"));
         let gone_folder = thread("t3", "/nowhere");
         let target = target_for(Some(&gone_folder), "/h", None, |_| false);
         assert_eq!(target.key, TerminalKey::Home);
@@ -1178,20 +1444,40 @@ mod tests {
         for t in [archived_local, archived_remote, home_row, thread("c", "/x")] {
             threads.insert(t.id.clone(), t);
         }
-        let keys = [TerminalKey::Home, TerminalKey::Thread("a".into()), TerminalKey::Thread("b".into()), TerminalKey::Thread("c".into()), TerminalKey::Thread("missing".into())];
-        assert_eq!(archived(&keys, &threads), vec![TerminalKey::Thread("a".into())]);
+        let keys = [
+            TerminalKey::Home,
+            TerminalKey::Thread("a".into()),
+            TerminalKey::Thread("b".into()),
+            TerminalKey::Thread("c".into()),
+            TerminalKey::Thread("missing".into()),
+        ];
+        assert_eq!(
+            archived(&keys, &threads),
+            vec![TerminalKey::Thread("a".into())]
+        );
         let keeping: HashSet<&str> = ["a", "b", "c"].into_iter().collect();
-        assert_eq!(gone(&keys, &keeping), vec![TerminalKey::Thread("missing".into())]);
+        assert_eq!(
+            gone(&keys, &keeping),
+            vec![TerminalKey::Thread("missing".into())]
+        );
     }
 
     #[test]
     fn only_the_open_threads_own_shell_takes_a_command() {
-        let own = Target { key: TerminalKey::Thread("t1".into()), cwd: "/w".into(), note: None };
+        let own = Target {
+            key: TerminalKey::Thread("t1".into()),
+            cwd: "/w".into(),
+            note: None,
+        };
         assert!(can_put(Some("t1"), Some("t1"), &own));
         // A block in a thread open in a panel of its own, not the main panel.
         assert!(!can_put(Some("t2"), Some("t1"), &own));
         assert!(!can_put(None, Some("t1"), &own));
-        let home = Target { key: TerminalKey::Home, cwd: "/h".into(), note: Some("This thread runs on Mac mini…".into()) };
+        let home = Target {
+            key: TerminalKey::Home,
+            cwd: "/h".into(),
+            note: Some("This thread runs on Mac mini…".into()),
+        };
         assert!(!can_put(Some("t1"), Some("t1"), &home));
     }
 
@@ -1199,26 +1485,69 @@ mod tests {
     fn the_shell_is_a_login_shell_without_a_thread_id() {
         let l = launch(Os::Mac, Some("/opt/homebrew/bin/fish"), Some("en_GB.UTF-8"));
         assert_eq!(l.program, "/usr/bin/env");
-        assert_eq!(&l.args[l.args.len() - 2..], ["/opt/homebrew/bin/fish", "-l"]);
+        assert_eq!(
+            &l.args[l.args.len() - 2..],
+            ["/opt/homebrew/bin/fish", "-l"]
+        );
         assert_eq!(l.shell, "/opt/homebrew/bin/fish");
-        for name in ["THREADBEAR_THREAD_ID", "THREADBARE_THREAD_ID", "THREADBEAR_THREAD_KEY"] {
-            assert!(l.args.windows(2).any(|w| w[0] == "-u" && w[1] == name), "{name}");
+        for name in [
+            "THREADBEAR_THREAD_ID",
+            "THREADBARE_THREAD_ID",
+            "THREADBEAR_THREAD_KEY",
+        ] {
+            assert!(
+                l.args.windows(2).any(|w| w[0] == "-u" && w[1] == name),
+                "{name}"
+            );
         }
         assert!(l.env.contains(&("TERM".into(), "xterm-256color".into())));
-        assert!(l.env.contains(&("TERM_PROGRAM".into(), "Threadbear".into())));
-        assert!(!l.env.iter().any(|(k, _)| k == "LANG"), "keeps the app's own LANG");
+        assert!(l
+            .env
+            .contains(&("TERM_PROGRAM".into(), "Threadbear".into())));
+        assert!(
+            !l.env.iter().any(|(k, _)| k == "LANG"),
+            "keeps the app's own LANG"
+        );
         // No SHELL, or a relative one: the system's own.
-        assert_eq!(launch(Os::Mac, None, None).args.iter().rev().nth(1).unwrap(), "/bin/zsh");
-        assert_eq!(launch(Os::OtherUnix, Some("zsh"), None).args.iter().rev().nth(1).unwrap(), "/bin/sh");
-        assert!(launch(Os::Mac, None, Some("")).env.contains(&("LANG".into(), "en_US.UTF-8".into())));
+        assert_eq!(
+            launch(Os::Mac, None, None)
+                .args
+                .iter()
+                .rev()
+                .nth(1)
+                .unwrap(),
+            "/bin/zsh"
+        );
+        assert_eq!(
+            launch(Os::OtherUnix, Some("zsh"), None)
+                .args
+                .iter()
+                .rev()
+                .nth(1)
+                .unwrap(),
+            "/bin/sh"
+        );
+        assert!(launch(Os::Mac, None, Some(""))
+            .env
+            .contains(&("LANG".into(), "en_US.UTF-8".into())));
     }
 
     fn send(key: &str, f: impl FnOnce(&mut Key)) -> KeyAction {
-        send_in(key, Modes { option_is_meta: true, ..Default::default() }, f)
+        send_in(
+            key,
+            Modes {
+                option_is_meta: true,
+                ..Default::default()
+            },
+            f,
+        )
     }
 
     fn send_in(key: &str, modes: Modes, f: impl FnOnce(&mut Key)) -> KeyAction {
-        let mut k = Key { key, ..Default::default() };
+        let mut k = Key {
+            key,
+            ..Default::default()
+        };
         f(&mut k);
         encode_key(&k, modes)
     }
@@ -1246,7 +1575,11 @@ mod tests {
 
     #[test]
     fn full_screen_programs_get_the_cursor_keys_they_ask_for() {
-        let app = Modes { app_cursor: true, alt_screen: true, option_is_meta: true };
+        let app = Modes {
+            app_cursor: true,
+            alt_screen: true,
+            option_is_meta: true,
+        };
         assert_eq!(send_in("up", app, |_| {}), bytes("\x1bOA"));
         assert_eq!(send_in("home", app, |_| {}), bytes("\x1bOH"));
         assert_eq!(send_in("pageup", app, |_| {}), bytes("\x1b[5~"));
@@ -1268,10 +1601,13 @@ mod tests {
     fn control_keys_are_c0_codes() {
         assert_eq!(send("c", |k| k.control = true), bytes("\x03"));
         assert_eq!(send("d", |k| k.control = true), bytes("\x04"));
-        assert_eq!(send("a", |k| {
-            k.control = true;
-            k.shift = true
-        }), bytes("\x01"));
+        assert_eq!(
+            send("a", |k| {
+                k.control = true;
+                k.shift = true
+            }),
+            bytes("\x01")
+        );
         assert_eq!(send("space", |k| k.control = true), bytes("\0"));
         assert_eq!(send("[", |k| k.control = true), bytes("\x1b"));
         assert_eq!(send("-", |k| k.control = true), bytes("\x1f"));
@@ -1280,21 +1616,30 @@ mod tests {
 
     #[test]
     fn option_is_meta() {
-        assert_eq!(send("b", |k| {
-            k.alt = true;
-            k.typed = Some("∫")
-        }), bytes("\x1bb"));
-        assert_eq!(send("b", |k| {
-            k.alt = true;
-            k.shift = true
-        }), bytes("\x1bB"));
+        assert_eq!(
+            send("b", |k| {
+                k.alt = true;
+                k.typed = Some("∫")
+            }),
+            bytes("\x1bb")
+        );
+        assert_eq!(
+            send("b", |k| {
+                k.alt = true;
+                k.shift = true
+            }),
+            bytes("\x1bB")
+        );
         assert_eq!(send(".", |k| k.alt = true), bytes("\x1b."));
         assert_eq!(send("left", |k| k.alt = true), bytes("\x1bb"));
         assert_eq!(send("right", |k| k.alt = true), bytes("\x1bf"));
         assert_eq!(send("backspace", |k| k.alt = true), bytes("\x1b\x7f"));
         assert_eq!(send("up", |k| k.alt = true), bytes("\x1b[1;3A"));
         // Off, ⌥ makes its character through the input method.
-        assert_eq!(send_in("b", Modes::default(), |k| k.alt = true), KeyAction::Pass);
+        assert_eq!(
+            send_in("b", Modes::default(), |k| k.alt = true),
+            KeyAction::Pass
+        );
     }
 
     #[test]
@@ -1309,9 +1654,15 @@ mod tests {
     fn a_paste_is_bracketed_and_cant_close_its_own_brackets() {
         assert_eq!(paste_bytes("a\nb", false), b"a\rb");
         // With no brackets a control character would be a key pressed.
-        assert_eq!(paste_bytes("ls\x03\x1b:q!\x15\x7f\u{9b}\tx", false), b"ls:q!\tx");
+        assert_eq!(
+            paste_bytes("ls\x03\x1b:q!\x15\x7f\u{9b}\tx", false),
+            b"ls:q!\tx"
+        );
         assert_eq!(paste_bytes("ls\r\n", true), b"\x1b[200~ls\r\x1b[201~");
-        assert_eq!(paste_bytes("echo\x1b[201~\nrm -rf ~", true), b"\x1b[200~echo[201~\rrm -rf ~\x1b[201~");
+        assert_eq!(
+            paste_bytes("echo\x1b[201~\nrm -rf ~", true),
+            b"\x1b[200~echo[201~\rrm -rf ~\x1b[201~"
+        );
     }
 
     /// Daybreak's finding 84: inside the brackets a ^\\ (or ^C, ^Z) is still a
@@ -1324,30 +1675,146 @@ mod tests {
             paste_bytes("\u{1c}printf \"TB_%s_RAN\\n\" PASTE\n", true),
             b"\x1b[200~printf \"TB_%s_RAN\\n\" PASTE\r\x1b[201~"
         );
-        let every: String = (0u32..0x20).chain(0x7f..0xa0).filter_map(char::from_u32).collect();
-        assert_eq!(paste_bytes(&format!("a{every}b"), true), b"\x1b[200~a\t\r\rb\x1b[201~");
+        let every: String = (0u32..0x20)
+            .chain(0x7f..0xa0)
+            .filter_map(char::from_u32)
+            .collect();
+        assert_eq!(
+            paste_bytes(&format!("a{every}b"), true),
+            b"\x1b[200~a\t\r\rb\x1b[201~"
+        );
         assert_eq!(paste_bytes(&format!("a{every}b"), false), b"a\t\r\rb");
         // Text that isn't control stays as it is, either way.
-        assert_eq!(paste_bytes("caf\u{e9} \u{65e5}\u{672c} \u{1f43b}", true), "\x1b[200~caf\u{e9} \u{65e5}\u{672c} \u{1f43b}\x1b[201~".as_bytes());
+        assert_eq!(
+            paste_bytes("caf\u{e9} \u{65e5}\u{672c} \u{1f43b}", true),
+            "\x1b[200~caf\u{e9} \u{65e5}\u{672c} \u{1f43b}\x1b[201~".as_bytes()
+        );
     }
 
     #[test]
     fn mouse_reports() {
-        assert_eq!(mouse_report(MouseButton::Left, true, false, 0, 0, false, false, false, true).unwrap(), b"\x1b[<0;1;1M");
-        assert_eq!(mouse_report(MouseButton::Left, false, false, 4, 2, false, false, false, true).unwrap(), b"\x1b[<0;5;3m");
-        assert_eq!(mouse_report(MouseButton::WheelUp, true, false, 0, 0, false, false, true, true).unwrap(), b"\x1b[<80;1;1M");
-        assert_eq!(mouse_report(MouseButton::Left, true, true, 1, 1, false, false, false, true).unwrap(), b"\x1b[<32;2;2M");
-        assert_eq!(mouse_report(MouseButton::Right, true, false, 0, 0, false, false, false, false).unwrap(), vec![0x1b, b'[', b'M', 34, 33, 33]);
-        assert_eq!(mouse_report(MouseButton::Right, false, false, 0, 0, false, false, false, false).unwrap(), vec![0x1b, b'[', b'M', 35, 33, 33]);
-        assert_eq!(mouse_report(MouseButton::Left, true, false, 300, 0, false, false, false, false), None);
+        assert_eq!(
+            mouse_report(
+                MouseButton::Left,
+                true,
+                false,
+                0,
+                0,
+                false,
+                false,
+                false,
+                true
+            )
+            .unwrap(),
+            b"\x1b[<0;1;1M"
+        );
+        assert_eq!(
+            mouse_report(
+                MouseButton::Left,
+                false,
+                false,
+                4,
+                2,
+                false,
+                false,
+                false,
+                true
+            )
+            .unwrap(),
+            b"\x1b[<0;5;3m"
+        );
+        assert_eq!(
+            mouse_report(
+                MouseButton::WheelUp,
+                true,
+                false,
+                0,
+                0,
+                false,
+                false,
+                true,
+                true
+            )
+            .unwrap(),
+            b"\x1b[<80;1;1M"
+        );
+        assert_eq!(
+            mouse_report(
+                MouseButton::Left,
+                true,
+                true,
+                1,
+                1,
+                false,
+                false,
+                false,
+                true
+            )
+            .unwrap(),
+            b"\x1b[<32;2;2M"
+        );
+        assert_eq!(
+            mouse_report(
+                MouseButton::Right,
+                true,
+                false,
+                0,
+                0,
+                false,
+                false,
+                false,
+                false
+            )
+            .unwrap(),
+            vec![0x1b, b'[', b'M', 34, 33, 33]
+        );
+        assert_eq!(
+            mouse_report(
+                MouseButton::Right,
+                false,
+                false,
+                0,
+                0,
+                false,
+                false,
+                false,
+                false
+            )
+            .unwrap(),
+            vec![0x1b, b'[', b'M', 35, 33, 33]
+        );
+        assert_eq!(
+            mouse_report(
+                MouseButton::Left,
+                true,
+                false,
+                300,
+                0,
+                false,
+                false,
+                false,
+                false
+            ),
+            None
+        );
     }
 
     #[test]
     fn only_shell_fences_count() {
         for language in ["sh", "bash", "zsh", "shell", "Bash title=x", "bash{.x}"] {
-            assert_eq!(ShellBlock::from(Some(language), "ls\n").map(|b| b.command), Some("ls".to_owned()), "{language}");
+            assert_eq!(
+                ShellBlock::from(Some(language), "ls\n").map(|b| b.command),
+                Some("ls".to_owned()),
+                "{language}"
+            );
         }
-        for language in [Some("python"), Some("bashful"), Some("console"), Some(""), None] {
+        for language in [
+            Some("python"),
+            Some("bashful"),
+            Some("console"),
+            Some(""),
+            None,
+        ] {
             assert_eq!(ShellBlock::from(language, "ls"), None, "{language:?}");
         }
         assert_eq!(ShellBlock::from(Some("bash"), " \n\n"), None);
@@ -1355,16 +1822,38 @@ mod tests {
 
     #[test]
     fn prompts_come_off_only_when_every_line_has_one() {
-        assert_eq!(ShellBlock::from(Some("sh"), "$ a\n\n$ b\n").unwrap().command, "a\n\nb");
-        assert_eq!(ShellBlock::from(Some("sh"), "$ a\nb").unwrap().command, "$ a\nb");
-        assert_eq!(ShellBlock::from(Some("sh"), "$HOME/x").unwrap().command, "$HOME/x");
+        assert_eq!(
+            ShellBlock::from(Some("sh"), "$ a\n\n$ b\n")
+                .unwrap()
+                .command,
+            "a\n\nb"
+        );
+        assert_eq!(
+            ShellBlock::from(Some("sh"), "$ a\nb").unwrap().command,
+            "$ a\nb"
+        );
+        assert_eq!(
+            ShellBlock::from(Some("sh"), "$HOME/x").unwrap().command,
+            "$HOME/x"
+        );
     }
 
     // Each of these could make what runs differ from what's on screen, or run
     // a line without Return being pressed.
     #[test]
     fn refuses_what_cant_be_typed_safely() {
-        let bad = ["echo hi\u{1b}[201~\nrm -rf ~", "echo\u{07}", "a\rb", "a\u{7f}b", "a\u{9b}201~", "rm\u{200b} x", "echo \u{202e}cod", "a\u{2028}b", "x\u{e000}", "x\u{2066}y"];
+        let bad = [
+            "echo hi\u{1b}[201~\nrm -rf ~",
+            "echo\u{07}",
+            "a\rb",
+            "a\u{7f}b",
+            "a\u{9b}201~",
+            "rm\u{200b} x",
+            "echo \u{202e}cod",
+            "a\u{2028}b",
+            "x\u{e000}",
+            "x\u{2066}y",
+        ];
         for code in bad {
             assert_eq!(ShellBlock::from(Some("bash"), code), None, "{code:?}");
         }
@@ -1405,7 +1894,15 @@ mod tests {
     }
 
     fn put_step(command: &str, front: bool, bracketed: bool, starting: bool, line: Line) -> Step {
-        step(&ShellBlock { command: command.into() }, front, bracketed, starting, &line)
+        step(
+            &ShellBlock {
+                command: command.into(),
+            },
+            front,
+            bracketed,
+            starting,
+            &line,
+        )
     }
 
     #[test]
@@ -1441,9 +1938,24 @@ mod tests {
 
     #[test]
     fn a_different_block_is_copied_while_one_waits_at_the_prompt() {
-        assert_eq!(put_step("ls", true, true, false, Line::Put("npm test".into())), Step::Occupied);
-        assert_eq!(put_step("npm test", true, true, false, Line::Put("npm test".into())), Step::AlreadyThere);
-        assert_eq!(put_step("echo \"a b\"", true, true, false, Line::Put("echo \"ab\"".into())), Step::Occupied);
+        assert_eq!(
+            put_step("ls", true, true, false, Line::Put("npm test".into())),
+            Step::Occupied
+        );
+        assert_eq!(
+            put_step("npm test", true, true, false, Line::Put("npm test".into())),
+            Step::AlreadyThere
+        );
+        assert_eq!(
+            put_step(
+                "echo \"a b\"",
+                true,
+                true,
+                false,
+                Line::Put("echo \"ab\"".into())
+            ),
+            Step::Occupied
+        );
     }
 
     #[test]
@@ -1451,7 +1963,10 @@ mod tests {
         assert!(!paste_runs("echo one"));
         assert!(paste_runs("touch /tmp/x\n"));
         assert!(paste_runs("a\rb"));
-        assert!(paste_runs("echo $(touch /tmp/x)\t"), "a Tab is the Tab key without brackets");
+        assert!(
+            paste_runs("echo $(touch /tmp/x)\t"),
+            "a Tab is the Tab key without brackets"
+        );
         assert!(paste_question("ls\t").1.contains("Tab"));
         assert!(paste_question("ls\n").1.contains("Return"));
         assert_eq!(paste_question("a\nb\n").0, "Paste 2 lines?");
@@ -1490,21 +2005,55 @@ mod tests {
     #[test]
     fn keys_track_whats_on_the_prompt() {
         let put = Line::Put("ls".into());
-        assert_eq!(line_after_key(&put, "enter", false, false, false, false), Line::Empty);
-        assert_eq!(line_after_key(&Line::Edited, "enter", false, false, false, false), Line::Empty);
-        assert_eq!(line_after_key(&Line::Edited, "c", true, false, false, false), Line::Empty);
-        assert_eq!(line_after_key(&Line::Empty, "a", false, false, false, false), Line::Edited);
-        assert_eq!(line_after_key(&put, "a", true, false, false, false), Line::Edited, "Ctrl-A moves the cursor");
-        assert_eq!(line_after_key(&put, "enter", false, false, true, false), Line::Edited);
-        assert_eq!(line_after_key(&put, "up", false, false, false, false), Line::Edited, "the up arrow brings back a command");
-        assert_eq!(line_after_key(&put, "j", false, false, false, true), put, "a shortcut isn't input");
-        assert_eq!(line_after_key(&put, "c", false, false, false, false), Line::Edited, "a plain c is just a c");
+        assert_eq!(
+            line_after_key(&put, "enter", false, false, false, false),
+            Line::Empty
+        );
+        assert_eq!(
+            line_after_key(&Line::Edited, "enter", false, false, false, false),
+            Line::Empty
+        );
+        assert_eq!(
+            line_after_key(&Line::Edited, "c", true, false, false, false),
+            Line::Empty
+        );
+        assert_eq!(
+            line_after_key(&Line::Empty, "a", false, false, false, false),
+            Line::Edited
+        );
+        assert_eq!(
+            line_after_key(&put, "a", true, false, false, false),
+            Line::Edited,
+            "Ctrl-A moves the cursor"
+        );
+        assert_eq!(
+            line_after_key(&put, "enter", false, false, true, false),
+            Line::Edited
+        );
+        assert_eq!(
+            line_after_key(&put, "up", false, false, false, false),
+            Line::Edited,
+            "the up arrow brings back a command"
+        );
+        assert_eq!(
+            line_after_key(&put, "j", false, false, false, true),
+            put,
+            "a shortcut isn't input"
+        );
+        assert_eq!(
+            line_after_key(&put, "c", false, false, false, false),
+            Line::Edited,
+            "a plain c is just a c"
+        );
     }
-
 
     #[test]
     fn the_256_colours_run_from_the_panels_background_to_its_text() {
-        let near = |a: Rgb8, b: Rgb8| (i16::from(a.0) - i16::from(b.0)).abs() <= 1 && (i16::from(a.1) - i16::from(b.1)).abs() <= 1 && (i16::from(a.2) - i16::from(b.2)).abs() <= 1;
+        let near = |a: Rgb8, b: Rgb8| {
+            (i16::from(a.0) - i16::from(b.0)).abs() <= 1
+                && (i16::from(a.1) - i16::from(b.1)).abs() <= 1
+                && (i16::from(a.2) - i16::from(b.2)).abs() <= 1
+        };
         let dark = palette((28, 28, 31), (230, 230, 230));
         assert_eq!(&dark[..16], &ANSI);
         // The cube's corners are the panel's own colours.
@@ -1524,22 +2073,52 @@ mod tests {
     #[test]
     fn a_link_is_a_file_when_its_one() {
         let exists = |p: &str| p == "/w/src/main.rs" || p == "/Users/me/notes.md";
-        assert_eq!(link_target("src/main.rs", "/w", "/Users/me", exists), Some(Link::File("/w/src/main.rs".into())));
-        assert_eq!(link_target("src/main.rs:12:4", "/w", "/Users/me", exists), Some(Link::File("/w/src/main.rs".into())));
-        assert_eq!(link_target("~/notes.md", "/w", "/Users/me", exists), Some(Link::File("/Users/me/notes.md".into())));
-        assert_eq!(link_target("https://example.com/a", "/w", "/Users/me", exists), Some(Link::Url("https://example.com/a".into())));
-        assert_eq!(link_target("file:///w/x.command", "/w", "/Users/me", exists), Some(Link::Url("file:///w/x.command".into())));
-        assert_eq!(link_target("main.swift:12", "/w", "/Users/me", exists), Some(Link::Url("main.swift:12".into())));
-        assert_eq!(link_target("no scheme here", "/w", "/Users/me", exists), None);
+        assert_eq!(
+            link_target("src/main.rs", "/w", "/Users/me", exists),
+            Some(Link::File("/w/src/main.rs".into()))
+        );
+        assert_eq!(
+            link_target("src/main.rs:12:4", "/w", "/Users/me", exists),
+            Some(Link::File("/w/src/main.rs".into()))
+        );
+        assert_eq!(
+            link_target("~/notes.md", "/w", "/Users/me", exists),
+            Some(Link::File("/Users/me/notes.md".into()))
+        );
+        assert_eq!(
+            link_target("https://example.com/a", "/w", "/Users/me", exists),
+            Some(Link::Url("https://example.com/a".into()))
+        );
+        assert_eq!(
+            link_target("file:///w/x.command", "/w", "/Users/me", exists),
+            Some(Link::Url("file:///w/x.command".into()))
+        );
+        assert_eq!(
+            link_target("main.swift:12", "/w", "/Users/me", exists),
+            Some(Link::Url("main.swift:12".into()))
+        );
+        assert_eq!(
+            link_target("no scheme here", "/w", "/Users/me", exists),
+            None
+        );
         assert_eq!(link_target("", "/w", "/Users/me", exists), None);
     }
 
     #[test]
     fn printed_terminal_links_keep_url_punctuation_and_file_positions() {
         let word = |line: &str, at| link_word(&line.chars().collect::<Vec<_>>(), at);
-        assert_eq!(word("see (https://example.com/a(b)).", 12).as_deref(), Some("https://example.com/a(b)"));
-        assert_eq!(word("error: src/main.rs:12:4", 12).as_deref(), Some("src/main.rs:12:4"));
-        assert_eq!(word("雪 https://example.com", 8).as_deref(), Some("https://example.com"));
+        assert_eq!(
+            word("see (https://example.com/a(b)).", 12).as_deref(),
+            Some("https://example.com/a(b)")
+        );
+        assert_eq!(
+            word("error: src/main.rs:12:4", 12).as_deref(),
+            Some("src/main.rs:12:4")
+        );
+        assert_eq!(
+            word("雪 https://example.com", 8).as_deref(),
+            Some("https://example.com")
+        );
         assert_eq!(word("https://example.com foo", 19), None);
         assert_eq!(word("[x]", 0), None);
         assert_eq!(word("()", 1), None);
@@ -1551,7 +2130,11 @@ mod tests {
         assert_eq!(span("open http://localhost:5173/ now", 9), Some(5..27));
         assert_eq!(span("open http://localhost:5173/ now", 2), Some(0..4));
         assert_eq!(span("open http://localhost:5173/ now", 4), None);
-        assert_eq!(span("see https://example.com/a, ok", 6), Some(4..25), "the trailing comma isn't the link's");
+        assert_eq!(
+            span("see https://example.com/a, ok", 6),
+            Some(4..25),
+            "the trailing comma isn't the link's"
+        );
         assert!(underlines("http://localhost:5173/"));
         assert!(underlines("HTTPS://example.com"));
         assert!(!underlines("src/main.rs:12"));
@@ -1574,8 +2157,18 @@ mod tests {
 
     #[test]
     fn a_file_hyperlink_can_name_only_this_exact_machine() {
-        assert_eq!(local_file_url("file://MY-MAC.local/tmp/a%20b.command", "my-mac.local").as_deref(), Some("file:///tmp/a%20b.command"));
-        for uri in ["file://my-mac.local.evil/tmp/a", "file://my-mac/tmp/a", "file://user@my-mac.local/tmp/a", "file://my-mac.local:1/tmp/a", "file://other/tmp/a", "https://my-mac.local/a"] {
+        assert_eq!(
+            local_file_url("file://MY-MAC.local/tmp/a%20b.command", "my-mac.local").as_deref(),
+            Some("file:///tmp/a%20b.command")
+        );
+        for uri in [
+            "file://my-mac.local.evil/tmp/a",
+            "file://my-mac/tmp/a",
+            "file://user@my-mac.local/tmp/a",
+            "file://my-mac.local:1/tmp/a",
+            "file://other/tmp/a",
+            "https://my-mac.local/a",
+        ] {
             assert_eq!(local_file_url(uri, "my-mac.local"), None, "{uri}");
         }
         assert_eq!(local_file_url("file:///tmp/a", ""), None);
@@ -1583,34 +2176,67 @@ mod tests {
 
     #[test]
     fn mac_line_editing_keys() {
-        let cmd = |key: &str, modes: Modes| encode_key(&Key { key, command: true, ..Default::default() }, modes);
-        let shell = Modes { option_is_meta: true, ..Default::default() };
+        let cmd = |key: &str, modes: Modes| {
+            encode_key(
+                &Key {
+                    key,
+                    command: true,
+                    ..Default::default()
+                },
+                modes,
+            )
+        };
+        let shell = Modes {
+            option_is_meta: true,
+            ..Default::default()
+        };
         assert_eq!(cmd("backspace", shell), bytes("\x15"));
         assert_eq!(cmd("left", shell), bytes("\x01"));
         assert_eq!(cmd("right", shell), bytes("\x05"));
-        let vim = Modes { app_cursor: true, alt_screen: true, option_is_meta: true };
+        let vim = Modes {
+            app_cursor: true,
+            alt_screen: true,
+            option_is_meta: true,
+        };
         assert_eq!(cmd("left", vim), bytes("\x1bOH"));
         assert_eq!(cmd("right", vim), bytes("\x1bOF"));
         assert_eq!(cmd("backspace", vim), KeyAction::Pass);
         // The app's own keys stay the app's.
         assert_eq!(cmd("k", shell), KeyAction::Pass);
         assert_eq!(cmd("j", shell), KeyAction::Pass);
-        let shifted = encode_key(&Key { key: "left", command: true, shift: true, ..Default::default() }, shell);
+        let shifted = encode_key(
+            &Key {
+                key: "left",
+                command: true,
+                shift: true,
+                ..Default::default()
+            },
+            shell,
+        );
         assert_eq!(shifted, KeyAction::Pass);
     }
 
     #[test]
     fn line_editing_keys_edit_the_prompt() {
         let put = Line::Put("ls".into());
-        assert_eq!(line_after_key(&put, "backspace", false, false, false, true), Line::Edited);
-        assert_eq!(line_after_key(&put, "left", false, false, false, true), Line::Edited);
+        assert_eq!(
+            line_after_key(&put, "backspace", false, false, false, true),
+            Line::Edited
+        );
+        assert_eq!(
+            line_after_key(&put, "left", false, false, false, true),
+            Line::Edited
+        );
         assert_eq!(line_after_key(&put, "j", false, false, false, true), put);
     }
 
     #[test]
     fn escapes_for_the_shell() {
         assert_eq!(shell_escaped("/Users/me/notes.md"), "/Users/me/notes.md");
-        assert_eq!(shell_escaped("/Users/me/My File (1).txt"), "/Users/me/My\\ File\\ \\(1\\).txt");
+        assert_eq!(
+            shell_escaped("/Users/me/My File (1).txt"),
+            "/Users/me/My\\ File\\ \\(1\\).txt"
+        );
         assert_eq!(shell_escaped("it's $HOME"), "it\\'s\\ \\$HOME");
         assert_eq!(shell_escaped("two\nlines"), "'two\nlines'");
         assert_eq!(shell_escaped("don't\nstop"), "'don'\\''t\nstop'");
@@ -1621,10 +2247,19 @@ mod tests {
 
     #[test]
     fn option_click_moves_the_cursor_along_the_line() {
-        assert_eq!(cursor_moves((5, 2), (8, 2), 80, false), Some(b"\x1b[C\x1b[C\x1b[C".to_vec()));
-        assert_eq!(cursor_moves((5, 2), (3, 2), 80, true), Some(b"\x1bOD\x1bOD".to_vec()));
+        assert_eq!(
+            cursor_moves((5, 2), (8, 2), 80, false),
+            Some(b"\x1b[C\x1b[C\x1b[C".to_vec())
+        );
+        assert_eq!(
+            cursor_moves((5, 2), (3, 2), 80, true),
+            Some(b"\x1bOD\x1bOD".to_vec())
+        );
         // Wrapped onto the next row: the rest of this row, then into the next.
-        assert_eq!(cursor_moves((78, 0), (1, 1), 80, false).map(|b| b.len() / 3), Some(3));
+        assert_eq!(
+            cursor_moves((78, 0), (1, 1), 80, false).map(|b| b.len() / 3),
+            Some(3)
+        );
         assert_eq!(cursor_moves((5, 2), (5, 2), 80, false), None);
         assert_eq!(cursor_moves((0, 0), (0, 100), 80, false), None);
     }
@@ -1651,7 +2286,10 @@ mod tests {
     fn find_takes_words_as_they_are() {
         assert_eq!(find_pattern(""), None);
         assert_eq!(find_pattern("error").as_deref(), Some("(?i)error"));
-        assert_eq!(find_pattern("a.b (c)").as_deref(), Some("(?i)a\\.b \\(c\\)"));
+        assert_eq!(
+            find_pattern("a.b (c)").as_deref(),
+            Some("(?i)a\\.b \\(c\\)")
+        );
         assert_eq!(find_count(Some(2), 12, false), "3 of 12");
         assert_eq!(find_count(None, 0, false), "Not found");
         assert_eq!(find_count(Some(0), 500, true), "1 of 500+");
@@ -1667,7 +2305,10 @@ mod tests {
 
     #[test]
     fn saved_shells_keep_only_plain_text() {
-        let lines: Vec<String> = (0..1200).map(|n| format!("line {n}")).chain(["\x1b[31mred\x07".to_owned(), String::new(), "  ".to_owned()]).collect();
+        let lines: Vec<String> = (0..1200)
+            .map(|n| format!("line {n}"))
+            .chain(["\x1b[31mred\x07".to_owned(), String::new(), "  ".to_owned()])
+            .collect();
         let text = saved_text(&lines);
         assert_eq!(text.lines().count(), SAVED_LINES);
         assert!(text.ends_with("[31mred"));
@@ -1676,7 +2317,10 @@ mod tests {
         assert!(!shown.contains("\x1b]"));
         assert!(shown.contains("--- Restored from Tuesday ---"));
         assert!(restored_bytes("  \n", "x").is_empty());
-        assert_eq!(saved_file_name(&TerminalKey::Thread("../../etc/x".into())), "thread-etcx.json");
+        assert_eq!(
+            saved_file_name(&TerminalKey::Thread("../../etc/x".into())),
+            "thread-etcx.json"
+        );
         assert_eq!(saved_file_name(&TerminalKey::Home), "home.json");
     }
 }

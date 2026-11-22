@@ -34,12 +34,50 @@ pub struct Found {
 /// Folders skipped wherever they are: version control, dependencies, build
 /// output and caches.
 pub const SKIPPED_FOLDERS: &[&str] = &[
-    ".git", ".hg", ".svn", "node_modules", ".build", "build", "dist", "out", ".next", ".nuxt", ".turbo", ".cache", ".parcel-cache", "DerivedData", "Pods", ".venv", "venv", "__pycache__", "target", ".gradle", ".idea", "coverage", ".expo", ".svelte-kit", ".vercel", ".convex",
+    ".git",
+    ".hg",
+    ".svn",
+    "node_modules",
+    ".build",
+    "build",
+    "dist",
+    "out",
+    ".next",
+    ".nuxt",
+    ".turbo",
+    ".cache",
+    ".parcel-cache",
+    "DerivedData",
+    "Pods",
+    ".venv",
+    "venv",
+    "__pycache__",
+    "target",
+    ".gradle",
+    ".idea",
+    "coverage",
+    ".expo",
+    ".svelte-kit",
+    ".vercel",
+    ".convex",
 ];
 
 /// Folders macOS shows as one file (`isPackage`): an app, a bundle. Never
 /// searched inside, as the Finder never opens them.
-const PACKAGES: &[&str] = &["app", "bundle", "framework", "plugin", "kext", "xcassets", "xcodeproj", "xcworkspace", "photoslibrary", "pages", "numbers", "key"];
+const PACKAGES: &[&str] = &[
+    "app",
+    "bundle",
+    "framework",
+    "plugin",
+    "kext",
+    "xcassets",
+    "xcodeproj",
+    "xcworkspace",
+    "photoslibrary",
+    "pages",
+    "numbers",
+    "key",
+];
 
 /// Bigger files aren't read: they're data or generated, and slow.
 pub const MAX_FILE_SIZE: u64 = 1_000_000;
@@ -48,7 +86,10 @@ pub const DEFAULT_LIMIT: usize = 500;
 pub const SHOWN_LENGTH: usize = 160;
 
 pub fn skips_folder(name: &str) -> bool {
-    SKIPPED_FOLDERS.contains(&name) || name.rsplit_once('.').is_some_and(|(stem, ext)| !stem.is_empty() && PACKAGES.contains(&ext.to_ascii_lowercase().as_str()))
+    SKIPPED_FOLDERS.contains(&name)
+        || name.rsplit_once('.').is_some_and(|(stem, ext)| {
+            !stem.is_empty() && PACKAGES.contains(&ext.to_ascii_lowercase().as_str())
+        })
 }
 
 /// The lines of `text` with `query` in them, whatever their case, as (line
@@ -85,7 +126,10 @@ fn find_lower(line: &str, needle: &str) -> Option<usize> {
 /// window around the match (`at`, in characters) with … at the cut ends.
 pub fn shown(line: &str, at: usize) -> String {
     let chars: Vec<char> = line.chars().collect();
-    let leading = chars.iter().take_while(|c| **c == ' ' || **c == '\t').count();
+    let leading = chars
+        .iter()
+        .take_while(|c| **c == ' ' || **c == '\t')
+        .count();
     let trimmed = &chars[leading.min(chars.len())..];
     if at < leading {
         return chars.iter().take(SHOWN_LENGTH).collect();
@@ -122,10 +166,14 @@ pub fn search(root: &str, query: &str, limit: usize, stop: &AtomicBool) -> Found
         if stop.load(Ordering::Relaxed) {
             return found;
         }
-        let Ok(entries) = std::fs::read_dir(&folder) else { continue };
+        let Ok(entries) = std::fs::read_dir(&folder) else {
+            continue;
+        };
         for entry in entries.flatten() {
             // The entry's own kind: a link is a link, not what it points at.
-            let Ok(kind) = entry.file_type() else { continue };
+            let Ok(kind) = entry.file_type() else {
+                continue;
+            };
             let name = entry.file_name().to_string_lossy().into_owned();
             if kind.is_dir() {
                 if !skips_folder(&name) {
@@ -145,7 +193,9 @@ pub fn search(root: &str, query: &str, limit: usize, stop: &AtomicBool) -> Found
         if stop.load(Ordering::Relaxed) {
             return found;
         }
-        let Some(text) = read_text(Path::new(&path)) else { continue };
+        let Some(text) = read_text(Path::new(&path)) else {
+            continue;
+        };
         found.searched += 1;
         let room = limit - found.hits.len();
         for (line, text) in matches(&text, query, room + 1) {
@@ -153,7 +203,11 @@ pub fn search(root: &str, query: &str, limit: usize, stop: &AtomicBool) -> Found
                 found.cut = true;
                 return found;
             }
-            found.hits.push(Hit { path: path.clone(), line, text });
+            found.hits.push(Hit {
+                path: path.clone(),
+                line,
+                text,
+            });
         }
     }
     found
@@ -202,9 +256,21 @@ pub fn summary(found: &Found) -> String {
     match found.hits.len() {
         0 => "No matches".to_owned(),
         n => {
-            let matches = if n == 1 { "1 match".to_owned() } else { format!("{n} matches") };
-            let files = if files == 1 { "1 file".to_owned() } else { format!("{files} files") };
-            let cut = if found.cut { format!(" (the first {n})") } else { String::new() };
+            let matches = if n == 1 {
+                "1 match".to_owned()
+            } else {
+                format!("{n} matches")
+            };
+            let files = if files == 1 {
+                "1 file".to_owned()
+            } else {
+                format!("{files} files")
+            };
+            let cut = if found.cut {
+                format!(" (the first {n})")
+            } else {
+                String::new()
+            };
             format!("{matches} in {files}{cut}")
         }
     }
@@ -219,7 +285,11 @@ mod tests {
 
     impl Folder {
         fn new(name: &str) -> Self {
-            let path = std::env::temp_dir().join(format!("tb-folder-search-{name}-{}-{:?}", std::process::id(), std::thread::current().id()));
+            let path = std::env::temp_dir().join(format!(
+                "tb-folder-search-{name}-{}-{:?}",
+                std::process::id(),
+                std::thread::current().id()
+            ));
             let _ = fs::remove_dir_all(&path);
             fs::create_dir_all(&path).unwrap();
             Folder(path)
@@ -242,9 +312,16 @@ mod tests {
 
     #[test]
     fn matches_lines_whatever_their_case() {
-        let found = matches("one\n  Hello World\nnothing\nhello again", "hello", usize::MAX);
+        let found = matches(
+            "one\n  Hello World\nnothing\nhello again",
+            "hello",
+            usize::MAX,
+        );
         assert_eq!(found.iter().map(|f| f.0).collect::<Vec<_>>(), vec![2, 4]);
-        assert_eq!(found.iter().map(|f| f.1.as_str()).collect::<Vec<_>>(), vec!["Hello World", "hello again"]);
+        assert_eq!(
+            found.iter().map(|f| f.1.as_str()).collect::<Vec<_>>(),
+            vec!["Hello World", "hello again"]
+        );
         assert!(matches("abc", "  ", usize::MAX).is_empty());
     }
 
@@ -271,10 +348,25 @@ mod tests {
         let root = dir.root();
         let found = search(&root, "port", DEFAULT_LIMIT, &AtomicBool::new(false));
         // As `/` everywhere, so the list reads the same on Windows.
-        let mut files: Vec<String> = found.hits.iter().map(|h| relative(&h.path, &root).replace('\\', "/")).collect();
+        let mut files: Vec<String> = found
+            .hits
+            .iter()
+            .map(|h| relative(&h.path, &root).replace('\\', "/"))
+            .collect();
         files.dedup();
-        assert_eq!(files, vec![".github/workflows/ci.yml", "README.md", "src/app.ts"]);
-        assert_eq!(found.hits.iter().filter(|h| h.path.ends_with("app.ts")).map(|h| h.line).collect::<Vec<_>>(), vec![1, 2]);
+        assert_eq!(
+            files,
+            vec![".github/workflows/ci.yml", "README.md", "src/app.ts"]
+        );
+        assert_eq!(
+            found
+                .hits
+                .iter()
+                .filter(|h| h.path.ends_with("app.ts"))
+                .map(|h| h.line)
+                .collect::<Vec<_>>(),
+            vec![1, 2]
+        );
         assert!(!found.cut);
         assert_eq!(summary(&found), "4 matches in 3 files");
     }
@@ -294,7 +386,11 @@ mod tests {
     fn stop_ends_the_search() {
         let dir = Folder::new("stop");
         dir.write("a.txt", b"match");
-        assert!(search(&dir.root(), "match", DEFAULT_LIMIT, &AtomicBool::new(true)).hits.is_empty());
+        assert!(
+            search(&dir.root(), "match", DEFAULT_LIMIT, &AtomicBool::new(true))
+                .hits
+                .is_empty()
+        );
     }
 
     #[test]
@@ -304,7 +400,11 @@ mod tests {
         outside.write("secret.txt", b"match");
         #[cfg(unix)]
         std::os::unix::fs::symlink(&outside.0, dir.0.join("out-there")).unwrap();
-        assert!(search(&dir.root(), "match", DEFAULT_LIMIT, &AtomicBool::new(false)).hits.is_empty());
+        assert!(
+            search(&dir.root(), "match", DEFAULT_LIMIT, &AtomicBool::new(false))
+                .hits
+                .is_empty()
+        );
     }
 
     #[test]

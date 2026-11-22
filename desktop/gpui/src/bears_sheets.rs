@@ -78,16 +78,35 @@ pub(crate) struct BearsSheet {
 }
 
 fn picks(list: impl IntoIterator<Item = (String, String, bool)>) -> Vec<Pick> {
-    list.into_iter().map(|(id, title, on)| Pick { id, title, on, was: on }).collect()
+    list.into_iter()
+        .map(|(id, title, on)| Pick {
+            id,
+            title,
+            on,
+            was: on,
+        })
+        .collect()
 }
 
 impl Threadbear {
     /// Opens one of the panel's sheets.
-    pub(crate) fn open_bears_sheet(&mut self, mode: Mode, window: &mut Window, cx: &mut Context<Self>) {
+    pub(crate) fn open_bears_sheet(
+        &mut self,
+        mode: Mode,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
         if self.bears_panel.archiving {
             return;
         }
-        let bears: Vec<_> = self.bears_panel.bears.clone().unwrap_or_default().into_iter().filter(|b| !b.archived).collect();
+        let bears: Vec<_> = self
+            .bears_panel
+            .bears
+            .clone()
+            .unwrap_or_default()
+            .into_iter()
+            .filter(|b| !b.archived)
+            .collect();
         let live: Vec<&Project> = self.projects.list.iter().filter(|p| !p.archived).collect();
         let tables: Vec<&Project> = live.iter().copied().filter(|p| p.table.is_some()).collect();
         let plain: Vec<&Project> = live.iter().copied().filter(|p| p.table.is_none()).collect();
@@ -95,39 +114,81 @@ impl Threadbear {
             Mode::Seats(k) | Mode::Change(k) => Some(k.clone()),
             _ => None,
         };
-        let bear = key.as_deref().and_then(|k| k.strip_prefix("bear:")).and_then(|id| bears.iter().find(|b| b.id == id).cloned());
-        let table = key.as_deref().and_then(|k| k.strip_prefix("table:")).and_then(|id| self.project(id).cloned());
-        let name = bear.as_ref().map(|b| b.name.clone()).or_else(|| table.as_ref().map(|t| t.title.clone())).unwrap_or_default();
+        let bear = key
+            .as_deref()
+            .and_then(|k| k.strip_prefix("bear:"))
+            .and_then(|id| bears.iter().find(|b| b.id == id).cloned());
+        let table = key
+            .as_deref()
+            .and_then(|k| k.strip_prefix("table:"))
+            .and_then(|id| self.project(id).cloned());
+        let name = bear
+            .as_ref()
+            .map(|b| b.name.clone())
+            .or_else(|| table.as_ref().map(|t| t.title.clone()))
+            .unwrap_or_default();
         if key.is_some() && name.is_empty() {
             return;
         }
         let (mut first, mut second, mut parents, mut parent) = (vec![], vec![], vec![], None);
         match (&mode, &bear, &table) {
             (Mode::Seats(_), Some(b), _) => {
-                first = picks(tables.iter().map(|t| (t.id.clone(), t.title.clone(), t.table.as_ref().is_some_and(|x| x.bears.contains(&b.id)))));
-                second = picks(plain.iter().map(|p| (p.id.clone(), p.title.clone(), b.projects.contains(&p.id))));
+                first = picks(tables.iter().map(|t| {
+                    (
+                        t.id.clone(),
+                        t.title.clone(),
+                        t.table.as_ref().is_some_and(|x| x.bears.contains(&b.id)),
+                    )
+                }));
+                second = picks(
+                    plain
+                        .iter()
+                        .map(|p| (p.id.clone(), p.title.clone(), b.projects.contains(&p.id))),
+                );
             }
             (Mode::Seats(_), _, Some(t)) => {
-                let seated = t.table.as_ref().map(|x| x.bears.clone()).unwrap_or_default();
-                first = picks(bears.iter().map(|b| (b.id.clone(), b.name.clone(), seated.contains(&b.id))));
+                let seated = t
+                    .table
+                    .as_ref()
+                    .map(|x| x.bears.clone())
+                    .unwrap_or_default();
+                first = picks(
+                    bears
+                        .iter()
+                        .map(|b| (b.id.clone(), b.name.clone(), seated.contains(&b.id))),
+                );
                 parent = t.parent_id.clone();
             }
-            (Mode::NewTable, _, _) => first = picks(bears.iter().map(|b| (b.id.clone(), b.name.clone(), false))),
+            (Mode::NewTable, _, _) => {
+                first = picks(bears.iter().map(|b| (b.id.clone(), b.name.clone(), false)))
+            }
             _ => {}
         }
         if matches!(mode, Mode::NewTable | Mode::Seats(_)) && bear.is_none() {
             // A part can't have parts, nor a table be its own.
             let me = table.as_ref().map(|t| t.id.clone());
-            parents = plain.iter().filter(|p| p.parent_id.is_none() && Some(&p.id) != me.as_ref()).map(|p| (p.id.clone(), p.title.clone())).collect();
+            parents = plain
+                .iter()
+                .filter(|p| p.parent_id.is_none() && Some(&p.id) != me.as_ref())
+                .map(|p| (p.id.clone(), p.title.clone()))
+                .collect();
         }
         let client = self.client.clone();
         let app = cx.entity().downgrade();
         let photo_mode = mode.clone();
         let view = cx.new(|cx| {
             let (title_hint, about_hint, text_hint) = match &photo_mode {
-                Mode::NewBear => ("Name, like Researcher", "What it does, in a line", "Its personality and how it works (optional)"),
+                Mode::NewBear => (
+                    "Name, like Researcher",
+                    "What it does, in a line",
+                    "Its personality and how it works (optional)",
+                ),
                 Mode::NewTable => ("Title, like Launch crew", "Its goal (optional)", ""),
-                Mode::Change(_) => ("", "", "What should change? Leave it empty to talk it through in the thread."),
+                Mode::Change(_) => (
+                    "",
+                    "",
+                    "What should change? Leave it empty to talk it through in the thread.",
+                ),
                 Mode::Seats(_) => ("", "", ""),
             };
             BearsSheet {
@@ -137,7 +198,11 @@ impl Threadbear {
                 name: name.clone(),
                 title: cx.new(|cx| InputState::new(window, cx).placeholder(title_hint)),
                 about: cx.new(|cx| InputState::new(window, cx).placeholder(about_hint)),
-                text: cx.new(|cx| TextareaState::new(window, cx).placeholder(text_hint).auto_grow(3, 8)),
+                text: cx.new(|cx| {
+                    TextareaState::new(window, cx)
+                        .placeholder(text_hint)
+                        .auto_grow(3, 8)
+                }),
                 first,
                 second,
                 parents,
@@ -155,7 +220,13 @@ impl Threadbear {
         };
         #[cfg(feature = "automation")]
         OPEN.with(|o| *o.borrow_mut() = Some(view.downgrade()));
-        window.open_dialog(cx, move |dialog, _, _| dialog.w(px(460.)).close_button(false).child(view.clone()).footer(div()));
+        window.open_dialog(cx, move |dialog, _, _| {
+            dialog
+                .w(px(460.))
+                .close_button(false)
+                .child(view.clone())
+                .footer(div())
+        });
         if let Some(focus) = focus {
             window.focus(&focus, cx);
         }
@@ -165,17 +236,39 @@ impl Threadbear {
     /// Change in a Thread: a new thread on the new-thread box's login, model
     /// and mode, told which bear or table and what to change. It opens once
     /// the runner has made it.
-    pub(crate) fn start_bears_change_thread(&mut self, key: &str, ask: &str, window: &mut Window, cx: &mut Context<Self>) {
-        let Some(name) = self.bears_row_name(key) else { return };
+    pub(crate) fn start_bears_change_thread(
+        &mut self,
+        key: &str,
+        ask: &str,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let Some(name) = self.bears_row_name(key) else {
+            return;
+        };
         let folder = self.bears_row_folder(key).unwrap_or_default();
         let prompt = rules::change_prompt(key, &name, &folder, ask);
-        let picks = if self.new_thread.picks.runner.is_some() { threadbear_core::new_thread::NewThreadPicks::default() } else { self.new_thread.picks.clone() };
+        let picks = if self.new_thread.picks.runner.is_some() {
+            threadbear_core::new_thread::NewThreadPicks::default()
+        } else {
+            self.new_thread.picks.clone()
+        };
         let home = std::env::var("HOME").unwrap_or_default();
-        let draft = threadbear_core::new_thread::Draft { logins: &self.logins, picks: &picks, mem: &self.new_thread.prefs.remembered, home: &home, now_ms: crate::now_ms() };
+        let draft = threadbear_core::new_thread::Draft {
+            logins: &self.logins,
+            picks: &picks,
+            mem: &self.new_thread.prefs.remembered,
+            home: &home,
+            now_ms: crate::now_ms(),
+        };
         let mut params = draft.create_params(&prompt, vec![], false);
         params["title"] = json!(format!("Change {name}"));
         let busy = format!("bearsChange/{key}");
-        if !self.begin_note(&busy, &format!("Starting a thread to change {name}\u{2026}"), cx) {
+        if !self.begin_note(
+            &busy,
+            &format!("Starting a thread to change {name}\u{2026}"),
+            cx,
+        ) {
             return;
         }
         let client = self.client.clone();
@@ -183,13 +276,19 @@ impl Threadbear {
             let res = call(client, "threads.create", params).await;
             this.update_in(cx, |t, window, cx| {
                 t.end_note(&busy, cx);
-                match res.map(|v| serde_json::from_value::<threadbear_core::inbox::ThreadSummary>(v["thread"].clone())) {
+                match res.map(|v| {
+                    serde_json::from_value::<threadbear_core::inbox::ThreadSummary>(
+                        v["thread"].clone(),
+                    )
+                }) {
                     Ok(Ok(thread)) if !thread.id.is_empty() => {
                         let id = thread.id.clone();
                         t.threads.insert(id.clone(), std::sync::Arc::new(thread));
                         t.open(id, window, cx);
                     }
-                    Ok(_) => t.show_error("The runner didn't say what thread it made.".to_owned(), cx),
+                    Ok(_) => {
+                        t.show_error("The runner didn't say what thread it made.".to_owned(), cx)
+                    }
                     Err(e) => t.show_error(e.message, cx),
                 }
                 cx.notify();
@@ -201,18 +300,29 @@ impl Threadbear {
 
     /// Set Photo…: a picture from this Mac. A bear's is copied into its
     /// folder; a table's becomes its project icon.
-    pub(crate) fn choose_bears_photo(&mut self, key: &str, window: &mut Window, cx: &mut Context<Self>) {
+    pub(crate) fn choose_bears_photo(
+        &mut self,
+        key: &str,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
         let picked = crate::picture_picker::choose(window, "Use as Photo", cx);
         let key = key.to_owned();
         cx.spawn_in(window, async move |this, cx| {
             let Some(path) = picked.await else { return };
-            this.update(cx, |t, cx| t.set_bears_photo(&key, Some(path), cx)).ok();
+            this.update(cx, |t, cx| t.set_bears_photo(&key, Some(path), cx))
+                .ok();
         })
         .detach();
     }
 
     /// A photo on, or with none, off (a table goes back to its people icon).
-    pub(crate) fn set_bears_photo(&mut self, key: &str, path: Option<PathBuf>, cx: &mut Context<Self>) {
+    pub(crate) fn set_bears_photo(
+        &mut self,
+        key: &str,
+        path: Option<PathBuf>,
+        cx: &mut Context<Self>,
+    ) {
         if let Some(id) = key.strip_prefix("table:") {
             let mut params = json!({ "projectId": id });
             match &path {
@@ -239,15 +349,27 @@ impl Threadbear {
             .detach();
             return;
         }
-        let Some(id) = key.strip_prefix("bear:").map(str::to_owned) else { return };
-        let Some(folder) = self.bears_row_folder(key) else { return };
-        let task = cx.background_executor().spawn(async move { place_photo(&folder, path.as_deref()) });
+        let Some(id) = key.strip_prefix("bear:").map(str::to_owned) else {
+            return;
+        };
+        let Some(folder) = self.bears_row_folder(key) else {
+            return;
+        };
+        let task = cx
+            .background_executor()
+            .spawn(async move { place_photo(&folder, path.as_deref()) });
         cx.spawn(async move |this, cx| {
             let res = task.await;
             this.update(cx, |t, cx| {
                 match res {
                     Ok(photo) => {
-                        if let Some(b) = t.bears_panel.bears.iter_mut().flatten().find(|b| b.id == id) {
+                        if let Some(b) = t
+                            .bears_panel
+                            .bears
+                            .iter_mut()
+                            .flatten()
+                            .find(|b| b.id == id)
+                        {
                             b.photo = photo;
                         }
                     }
@@ -262,9 +384,16 @@ impl Threadbear {
 
     pub(crate) fn has_bears_photo(&self, key: &str) -> bool {
         if let Some(id) = key.strip_prefix("bear:") {
-            return self.bears_panel.bears.iter().flatten().any(|b| b.id == id && b.photo.is_some());
+            return self
+                .bears_panel
+                .bears
+                .iter()
+                .flatten()
+                .any(|b| b.id == id && b.photo.is_some());
         }
-        key.strip_prefix("table:").and_then(|id| self.project(id)).is_some_and(|p| p.icon.as_ref().is_some_and(|i| i.image_path.is_some()))
+        key.strip_prefix("table:")
+            .and_then(|id| self.project(id))
+            .is_some_and(|p| p.icon.as_ref().is_some_and(|i| i.image_path.is_some()))
     }
 }
 
@@ -275,18 +404,25 @@ fn place_photo(folder: &str, source: Option<&Path>) -> Result<Option<PathBuf>, S
     let new = match source {
         Some(source) => {
             let name = rules::photo_name(source, crate::now_ms() as i64).ok_or("That isn't a picture Threadbear can use as a photo. Pick a PNG, JPEG, WebP or GIF.")?;
-            let meta = std::fs::metadata(source).map_err(|e| format!("Couldn't read that picture: {e}"))?;
+            let meta = std::fs::metadata(source)
+                .map_err(|e| format!("Couldn't read that picture: {e}"))?;
             if !meta.is_file() || meta.len() > rules::PHOTO_LIMIT {
                 return Err("That picture is too big for a photo. Pick one under 20 MB.".to_owned());
             }
             let to = dir.join(&name);
-            std::fs::copy(source, &to).map_err(|e| format!("Couldn't copy the photo into the bear's folder: {e}"))?;
+            std::fs::copy(source, &to)
+                .map_err(|e| format!("Couldn't copy the photo into the bear's folder: {e}"))?;
             Some(name)
         }
         None => None,
     };
-    for entry in std::fs::read_dir(dir).map_err(|e| format!("Couldn't open the bear's folder: {e}"))?.flatten() {
-        let Some(name) = entry.file_name().to_str().map(str::to_owned) else { continue };
+    for entry in std::fs::read_dir(dir)
+        .map_err(|e| format!("Couldn't open the bear's folder: {e}"))?
+        .flatten()
+    {
+        let Some(name) = entry.file_name().to_str().map(str::to_owned) else {
+            continue;
+        };
         if rules::is_photo_name(&name) && Some(&name) != new.as_ref() {
             let _ = std::fs::remove_file(entry.path());
         }
@@ -303,7 +439,9 @@ impl BearsSheet {
         match &self.mode {
             Mode::NewBear => "New Bear".to_owned(),
             Mode::NewTable => "New Table".to_owned(),
-            Mode::Seats(k) if k.starts_with("bear:") => format!("{}'s tables and projects", self.name),
+            Mode::Seats(k) if k.starts_with("bear:") => {
+                format!("{}'s tables and projects", self.name)
+            }
             Mode::Seats(_) => format!("Who sits at {}", self.name),
             Mode::Change(_) => format!("Change {}", self.name),
         }
@@ -329,7 +467,9 @@ impl BearsSheet {
     }
 
     fn can_go(&self, cx: &App) -> bool {
-        !self.saving && (!matches!(self.mode, Mode::NewBear | Mode::NewTable) || !self.title.read(cx).value().trim().is_empty())
+        !self.saving
+            && (!matches!(self.mode, Mode::NewBear | Mode::NewTable)
+                || !self.title.read(cx).value().trim().is_empty())
     }
 
     fn choose_photo(&mut self, window: &mut Window, cx: &mut Context<Self>) {
@@ -361,7 +501,11 @@ impl BearsSheet {
         if let Mode::Change(key) = &self.mode {
             let key = key.clone();
             window.close_dialog(cx);
-            self.app.update(cx, |a, cx| a.start_bears_change_thread(&key, &text, window, cx)).ok();
+            self.app
+                .update(cx, |a, cx| {
+                    a.start_bears_change_thread(&key, &text, window, cx)
+                })
+                .ok();
             return;
         }
         let calls = self.calls(&title, &about, &text);
@@ -402,7 +546,12 @@ impl BearsSheet {
                         match (&mode, photo) {
                             (Mode::NewBear, Some(photo)) => {
                                 if let Some(id) = made["bear"]["id"].as_str() {
-                                    a.pending_bear_photo(id, made["bear"]["folder"].as_str().unwrap_or_default(), photo, cx);
+                                    a.pending_bear_photo(
+                                        id,
+                                        made["bear"]["folder"].as_str().unwrap_or_default(),
+                                        photo,
+                                        cx,
+                                    );
                                 }
                             }
                             (Mode::NewTable, Some(photo)) => {
@@ -413,8 +562,14 @@ impl BearsSheet {
                             _ => {}
                         }
                         let done = match &mode {
-                            Mode::NewBear => format!("Made {}", made["bear"]["name"].as_str().unwrap_or("the bear")),
-                            Mode::NewTable => format!("Made {}", made["table"]["title"].as_str().unwrap_or("the table")),
+                            Mode::NewBear => format!(
+                                "Made {}",
+                                made["bear"]["name"].as_str().unwrap_or("the bear")
+                            ),
+                            Mode::NewTable => format!(
+                                "Made {}",
+                                made["table"]["title"].as_str().unwrap_or("the table")
+                            ),
                             _ => "Saved".to_owned(),
                         };
                         a.flash_done(&done, cx);
@@ -439,9 +594,24 @@ impl BearsSheet {
     /// The runner calls the sheet makes, in order. For a new one, the first
     /// call's answer is what was made.
     fn calls(&self, title: &str, about: &str, text: &str) -> Vec<(&'static str, Value)> {
-        let on = |list: &[Pick]| list.iter().filter(|p| p.on).map(|p| p.id.clone()).collect::<Vec<_>>();
-        let added = |list: &[Pick]| list.iter().filter(|p| p.on && !p.was).map(|p| p.id.clone()).collect::<Vec<_>>();
-        let removed = |list: &[Pick]| list.iter().filter(|p| !p.on && p.was).map(|p| p.id.clone()).collect::<Vec<_>>();
+        let on = |list: &[Pick]| {
+            list.iter()
+                .filter(|p| p.on)
+                .map(|p| p.id.clone())
+                .collect::<Vec<_>>()
+        };
+        let added = |list: &[Pick]| {
+            list.iter()
+                .filter(|p| p.on && !p.was)
+                .map(|p| p.id.clone())
+                .collect::<Vec<_>>()
+        };
+        let removed = |list: &[Pick]| {
+            list.iter()
+                .filter(|p| !p.on && p.was)
+                .map(|p| p.id.clone())
+                .collect::<Vec<_>>()
+        };
         match &self.mode {
             Mode::NewBear => {
                 let mut params = json!({ "name": title });
@@ -474,12 +644,18 @@ impl BearsSheet {
                     }
                     let (add, remove) = (added(&self.second), removed(&self.second));
                     if !add.is_empty() || !remove.is_empty() {
-                        calls.push(("bears.setProjects", json!({ "bear": bear, "add": add, "remove": remove })));
+                        calls.push((
+                            "bears.setProjects",
+                            json!({ "bear": bear, "add": add, "remove": remove }),
+                        ));
                     }
                 } else if let Some(table) = key.strip_prefix("table:") {
                     let (add, remove) = (added(&self.first), removed(&self.first));
                     if !add.is_empty() || !remove.is_empty() {
-                        calls.push(("tables.seat", json!({ "table": table, "add": add, "remove": remove })));
+                        calls.push((
+                            "tables.seat",
+                            json!({ "table": table, "add": add, "remove": remove }),
+                        ));
                     }
                     if self.parent != self.parent_was {
                         calls.push(("projects.update", json!({ "projectId": table, "parentId": self.parent.clone().unwrap_or_default() })));
@@ -491,36 +667,75 @@ impl BearsSheet {
         }
     }
 
-    fn checklist(&self, which: usize, heading: &'static str, empty: &'static str, cx: &mut Context<Self>) -> AnyElement {
-        let list = if which == 0 { &self.first } else { &self.second };
-        let mut col = v_flex().gap(px(4.)).child(div().text_size(px(size::LABEL)).font_weight(FontWeight::SEMIBOLD).child(heading));
+    fn checklist(
+        &self,
+        which: usize,
+        heading: &'static str,
+        empty: &'static str,
+        cx: &mut Context<Self>,
+    ) -> AnyElement {
+        let list = if which == 0 {
+            &self.first
+        } else {
+            &self.second
+        };
+        let mut col = v_flex().gap(px(4.)).child(
+            div()
+                .text_size(px(size::LABEL))
+                .font_weight(FontWeight::SEMIBOLD)
+                .child(heading),
+        );
         if list.is_empty() {
-            col = col.child(div().text_size(px(size::LABEL)).text_color(style::secondary_text(cx)).child(empty));
+            col = col.child(
+                div()
+                    .text_size(px(size::LABEL))
+                    .text_color(style::secondary_text(cx))
+                    .child(empty),
+            );
         }
-        let mut boxes = v_flex().gap(px(4.)).max_h(px(160.)).id(SharedString::from(format!("bears-sheet-list-{which}"))).overflow_y_scroll();
+        let mut boxes = v_flex()
+            .gap(px(4.))
+            .max_h(px(160.))
+            .id(SharedString::from(format!("bears-sheet-list-{which}")))
+            .overflow_y_scroll();
         for (i, pick) in list.iter().enumerate() {
             boxes = boxes.child(
-                Checkbox::new(SharedString::from(format!("bears-sheet-pick-{which}-{}", pick.id)))
-                    .checked(pick.on)
-                    .label(pick.title.clone())
-                    .small()
-                    .disabled(self.saving)
-                    .on_click(cx.listener(move |s, on: &bool, _, cx| {
-                        let list = if which == 0 { &mut s.first } else { &mut s.second };
-                        if let Some(p) = list.get_mut(i) {
-                            p.on = *on;
-                        }
-                        cx.notify();
-                    })),
+                Checkbox::new(SharedString::from(format!(
+                    "bears-sheet-pick-{which}-{}",
+                    pick.id
+                )))
+                .checked(pick.on)
+                .label(pick.title.clone())
+                .small()
+                .disabled(self.saving)
+                .on_click(cx.listener(move |s, on: &bool, _, cx| {
+                    let list = if which == 0 {
+                        &mut s.first
+                    } else {
+                        &mut s.second
+                    };
+                    if let Some(p) = list.get_mut(i) {
+                        p.on = *on;
+                    }
+                    cx.notify();
+                })),
             );
         }
         col.child(boxes).into_any_element()
     }
 
     fn parent_menu(&self, cx: &mut Context<Self>) -> AnyElement {
-        let current = self.parent.as_ref().and_then(|id| self.parents.iter().find(|(p, _)| p == id)).map_or_else(|| "None".to_owned(), |(_, t)| t.clone());
+        let current = self
+            .parent
+            .as_ref()
+            .and_then(|id| self.parents.iter().find(|(p, _)| p == id))
+            .map_or_else(|| "None".to_owned(), |(_, t)| t.clone());
         let mut choices: Vec<(Option<String>, String)> = vec![(None, "None".to_owned())];
-        choices.extend(self.parents.iter().map(|(id, t)| (Some(id.clone()), t.clone())));
+        choices.extend(
+            self.parents
+                .iter()
+                .map(|(id, t)| (Some(id.clone()), t.clone())),
+        );
         let picked = self.parent.clone();
         let me = cx.entity().downgrade();
         let button = Button::new("bears-sheet-parent")
@@ -534,34 +749,89 @@ impl BearsSheet {
                 let mut menu = menu;
                 for (id, title) in &choices {
                     let (id, me) = (id.clone(), me.clone());
-                    menu = menu.item(PopupMenuItem::new(title.clone()).checked(id == picked).on_click(move |_, _, cx| {
-                        me.update(cx, |s, cx| {
-                            s.parent = id.clone();
-                            cx.notify();
-                        })
-                        .ok();
-                    }));
+                    menu = menu.item(
+                        PopupMenuItem::new(title.clone())
+                            .checked(id == picked)
+                            .on_click(move |_, _, cx| {
+                                me.update(cx, |s, cx| {
+                                    s.parent = id.clone();
+                                    cx.notify();
+                                })
+                                .ok();
+                            }),
+                    );
                 }
                 menu
             });
-        h_flex().gap(px(10.)).items_center().child(div().text_size(px(size::LABEL)).font_weight(FontWeight::SEMIBOLD).child("Part of project")).child(button).into_any_element()
+        h_flex()
+            .gap(px(10.))
+            .items_center()
+            .child(
+                div()
+                    .text_size(px(size::LABEL))
+                    .font_weight(FontWeight::SEMIBOLD)
+                    .child("Part of project"),
+            )
+            .child(button)
+            .into_any_element()
     }
 
     fn photo_row(&self, cx: &mut Context<Self>) -> AnyElement {
-        let name = self.photo.as_ref().and_then(|p| p.file_name()).map(|n| n.to_string_lossy().into_owned());
-        let mut row = h_flex().gap(px(10.)).items_center().child(div().text_size(px(size::LABEL)).font_weight(FontWeight::SEMIBOLD).child("Photo"));
+        let name = self
+            .photo
+            .as_ref()
+            .and_then(|p| p.file_name())
+            .map(|n| n.to_string_lossy().into_owned());
+        let mut row = h_flex().gap(px(10.)).items_center().child(
+            div()
+                .text_size(px(size::LABEL))
+                .font_weight(FontWeight::SEMIBOLD)
+                .child("Photo"),
+        );
         if let Some(path) = &self.photo {
-            row = row.child(img(path.clone()).size(px(28.)).rounded(px(6.)).object_fit(ObjectFit::Cover));
+            row = row.child(
+                img(path.clone())
+                    .size(px(28.))
+                    .rounded(px(6.))
+                    .object_fit(ObjectFit::Cover),
+            );
         }
-        row.child(div().flex_1().min_w_0().truncate().text_size(px(size::LABEL)).text_color(style::secondary_text(cx)).child(name.unwrap_or_else(|| "None yet".to_owned())))
-            .child(Button::new("bears-sheet-photo").label(if self.photo.is_some() { "Replace\u{2026}" } else { "Choose\u{2026}" }).small().outline().disabled(self.saving).tooltip("Pick a PNG, JPEG, WebP or GIF from your Mac").on_click(cx.listener(|s, _, window, cx| s.choose_photo(window, cx))))
-            .when(self.photo.is_some(), |r| {
-                r.child(Button::new("bears-sheet-photo-clear").label("Remove").small().ghost().disabled(self.saving).on_click(cx.listener(|s, _, _, cx| {
-                    s.photo = None;
-                    cx.notify();
-                })))
-            })
-            .into_any_element()
+        row.child(
+            div()
+                .flex_1()
+                .min_w_0()
+                .truncate()
+                .text_size(px(size::LABEL))
+                .text_color(style::secondary_text(cx))
+                .child(name.unwrap_or_else(|| "None yet".to_owned())),
+        )
+        .child(
+            Button::new("bears-sheet-photo")
+                .label(if self.photo.is_some() {
+                    "Replace\u{2026}"
+                } else {
+                    "Choose\u{2026}"
+                })
+                .small()
+                .outline()
+                .disabled(self.saving)
+                .tooltip("Pick a PNG, JPEG, WebP or GIF from your Mac")
+                .on_click(cx.listener(|s, _, window, cx| s.choose_photo(window, cx))),
+        )
+        .when(self.photo.is_some(), |r| {
+            r.child(
+                Button::new("bears-sheet-photo-clear")
+                    .label("Remove")
+                    .small()
+                    .ghost()
+                    .disabled(self.saving)
+                    .on_click(cx.listener(|s, _, _, cx| {
+                        s.photo = None;
+                        cx.notify();
+                    })),
+            )
+        })
+        .into_any_element()
     }
 }
 
@@ -570,59 +840,146 @@ impl Render for BearsSheet {
         let mut body = v_flex()
             .id("bears-sheet")
             .gap(px(12.))
-            .child(div().text_size(px(15.)).font_weight(FontWeight::SEMIBOLD).child(self.heading()))
-            .child(div().text_size(px(size::LABEL)).text_color(style::secondary_text(cx)).child(self.blurb()));
+            .child(
+                div()
+                    .text_size(px(15.))
+                    .font_weight(FontWeight::SEMIBOLD)
+                    .child(self.heading()),
+            )
+            .child(
+                div()
+                    .text_size(px(size::LABEL))
+                    .text_color(style::secondary_text(cx))
+                    .child(self.blurb()),
+            );
         match self.mode.clone() {
             Mode::NewBear => {
                 body = body
-                    .child(div().id("bears-sheet-name").tip("Its name, as you'd @mention it").child(Input::new(&self.title).small()))
-                    .child(div().id("bears-sheet-does").tip("Shows under its name in the panel").child(Input::new(&self.about).small()))
+                    .child(
+                        div()
+                            .id("bears-sheet-name")
+                            .tip("Its name, as you'd @mention it")
+                            .child(Input::new(&self.title).small()),
+                    )
+                    .child(
+                        div()
+                            .id("bears-sheet-does")
+                            .tip("Shows under its name in the panel")
+                            .child(Input::new(&self.about).small()),
+                    )
                     .child(Textarea::new(&self.text))
                     .child(self.photo_row(cx));
             }
             Mode::NewTable => {
                 body = body
-                    .child(div().id("bears-sheet-title").tip("The table's name").child(Input::new(&self.title).small()))
-                    .child(div().id("bears-sheet-goal").tip("What the table is for. It goes in the project's goals").child(Input::new(&self.about).small()))
-                    .child(self.checklist(0, "Bears at the table", "No bears yet. Make one first with New in the Bears list.", cx))
+                    .child(
+                        div()
+                            .id("bears-sheet-title")
+                            .tip("The table's name")
+                            .child(Input::new(&self.title).small()),
+                    )
+                    .child(
+                        div()
+                            .id("bears-sheet-goal")
+                            .tip("What the table is for. It goes in the project's goals")
+                            .child(Input::new(&self.about).small()),
+                    )
+                    .child(self.checklist(
+                        0,
+                        "Bears at the table",
+                        "No bears yet. Make one first with New in the Bears list.",
+                        cx,
+                    ))
                     .child(self.parent_menu(cx))
                     .child(self.photo_row(cx));
             }
             Mode::Seats(key) if key.starts_with("bear:") => {
                 body = body
-                    .child(self.checklist(0, "Tables", "No tables yet. Make one with New in the Tables list.", cx))
-                    .child(self.checklist(1, "Projects its new threads join", "No projects yet.", cx));
+                    .child(self.checklist(
+                        0,
+                        "Tables",
+                        "No tables yet. Make one with New in the Tables list.",
+                        cx,
+                    ))
+                    .child(self.checklist(
+                        1,
+                        "Projects its new threads join",
+                        "No projects yet.",
+                        cx,
+                    ));
             }
             Mode::Seats(_) => {
-                body = body.child(self.checklist(0, "Bears", "No bears yet.", cx)).child(self.parent_menu(cx));
+                body = body
+                    .child(self.checklist(0, "Bears", "No bears yet.", cx))
+                    .child(self.parent_menu(cx));
             }
             Mode::Change(_) => body = body.child(Textarea::new(&self.text)),
         }
         let can = self.can_go(cx);
-        body.when_some(self.error.clone(), |b, e| b.child(div().text_size(px(size::LABEL)).text_color(style::failed(cx)).child(e)))
-            .child(
-                h_flex()
-                    .gap(px(8.))
-                    .items_center()
-                    .when(self.saving, |s| s.child(Spinner::new().color(style::quiet_text(cx)).with_size(px(12.))))
-                    .child(div().flex_1())
-                    .child(Button::new("bears-sheet-cancel").label("Cancel").small().outline().on_click(cx.listener(|s, _, window, cx| s.close(window, cx))))
-                    .child(Button::new("bears-sheet-go").label(self.primary()).small().primary().disabled(!can).on_click(cx.listener(|s, _, window, cx| s.go(window, cx)))),
+        body.when_some(self.error.clone(), |b, e| {
+            b.child(
+                div()
+                    .text_size(px(size::LABEL))
+                    .text_color(style::failed(cx))
+                    .child(e),
             )
+        })
+        .child(
+            h_flex()
+                .gap(px(8.))
+                .items_center()
+                .when(self.saving, |s| {
+                    s.child(
+                        Spinner::new()
+                            .color(style::quiet_text(cx))
+                            .with_size(px(12.)),
+                    )
+                })
+                .child(div().flex_1())
+                .child(
+                    Button::new("bears-sheet-cancel")
+                        .label("Cancel")
+                        .small()
+                        .outline()
+                        .on_click(cx.listener(|s, _, window, cx| s.close(window, cx))),
+                )
+                .child(
+                    Button::new("bears-sheet-go")
+                        .label(self.primary())
+                        .small()
+                        .primary()
+                        .disabled(!can)
+                        .on_click(cx.listener(|s, _, window, cx| s.go(window, cx))),
+                ),
+        )
     }
 }
 
 impl Threadbear {
     /// A new bear's photo, copied in once the runner has made its folder.
-    fn pending_bear_photo(&mut self, id: &str, folder: &str, photo: PathBuf, cx: &mut Context<Self>) {
+    fn pending_bear_photo(
+        &mut self,
+        id: &str,
+        folder: &str,
+        photo: PathBuf,
+        cx: &mut Context<Self>,
+    ) {
         let (id, folder) = (id.to_owned(), folder.to_owned());
-        let task = cx.background_executor().spawn(async move { place_photo(&folder, Some(&photo)) });
+        let task = cx
+            .background_executor()
+            .spawn(async move { place_photo(&folder, Some(&photo)) });
         cx.spawn(async move |this, cx| {
             let res = task.await;
             this.update(cx, |t, cx| {
                 match res {
                     Ok(photo) => {
-                        if let Some(b) = t.bears_panel.bears.iter_mut().flatten().find(|b| b.id == id) {
+                        if let Some(b) = t
+                            .bears_panel
+                            .bears
+                            .iter_mut()
+                            .flatten()
+                            .find(|b| b.id == id)
+                        {
                             b.photo = photo;
                         }
                         t.refresh_bears_panel(true, cx);
@@ -652,7 +1009,10 @@ thread_local! {
 /// gives back what it holds.
 #[cfg(feature = "automation")]
 fn drive(cmd: &Value, window: &mut Window, cx: &mut App) -> Result<Value, String> {
-    let sheet = OPEN.with(|o| o.borrow().clone()).and_then(|w| w.upgrade()).ok_or("no bears sheet open")?;
+    let sheet = OPEN
+        .with(|o| o.borrow().clone())
+        .and_then(|w| w.upgrade())
+        .ok_or("no bears sheet open")?;
     sheet.update(cx, |s, cx| {
         for (k, field) in [("title", s.title.clone()), ("about", s.about.clone())] {
             if let Some(v) = cmd["fill"][k].as_str() {
@@ -660,10 +1020,21 @@ fn drive(cmd: &Value, window: &mut Window, cx: &mut App) -> Result<Value, String
             }
         }
         if let Some(v) = cmd["fill"]["text"].as_str() {
-            s.text.update(cx, |f, cx| f.set_value(v.to_owned(), window, cx));
+            s.text
+                .update(cx, |f, cx| f.set_value(v.to_owned(), window, cx));
         }
-        for id in cmd["tick"].as_array().into_iter().flatten().filter_map(Value::as_str) {
-            for p in s.first.iter_mut().chain(s.second.iter_mut()).filter(|p| p.id == id) {
+        for id in cmd["tick"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .filter_map(Value::as_str)
+        {
+            for p in s
+                .first
+                .iter_mut()
+                .chain(s.second.iter_mut())
+                .filter(|p| p.id == id)
+            {
                 p.on = !p.on;
             }
         }
@@ -679,13 +1050,32 @@ fn drive(cmd: &Value, window: &mut Window, cx: &mut App) -> Result<Value, String
         cx.notify();
     });
     let s = sheet.read(cx);
-    let list = |l: &[Pick]| l.iter().map(|p| json!({ "id": p.id, "title": p.title, "on": p.on })).collect::<Vec<_>>();
-    Ok(json!({ "mode": format!("{:?}", s.mode), "heading": s.heading(), "first": list(&s.first), "second": list(&s.second), "parents": s.parents, "parent": s.parent, "saving": s.saving, "error": s.error }))
+    let list = |l: &[Pick]| {
+        l.iter()
+            .map(|p| json!({ "id": p.id, "title": p.title, "on": p.on }))
+            .collect::<Vec<_>>()
+    };
+    Ok(
+        json!({ "mode": format!("{:?}", s.mode), "heading": s.heading(), "first": list(&s.first), "second": list(&s.second), "parents": s.parents, "parent": s.parent, "saving": s.saving, "error": s.error }),
+    )
 }
 
 #[cfg(feature = "automation")]
-pub(crate) fn automation(app: &Entity<Threadbear>, cmd: &Value, window: &mut Window, cx: &mut App) -> Result<Value, String> {
-    if cmd.get("fill").is_some() || cmd.get("tick").is_some() || cmd.get("go").is_some() || cmd.get("parent").is_some() || cmd["sheet"].as_bool() == Some(true) || (cmd.get("photo").is_some() && cmd.get("key").is_none() && cmd["photo"].as_str().is_some_and(|p| p.starts_with('/'))) {
+pub(crate) fn automation(
+    app: &Entity<Threadbear>,
+    cmd: &Value,
+    window: &mut Window,
+    cx: &mut App,
+) -> Result<Value, String> {
+    if cmd.get("fill").is_some()
+        || cmd.get("tick").is_some()
+        || cmd.get("go").is_some()
+        || cmd.get("parent").is_some()
+        || cmd["sheet"].as_bool() == Some(true)
+        || (cmd.get("photo").is_some()
+            && cmd.get("key").is_none()
+            && cmd["photo"].as_str().is_some_and(|p| p.starts_with('/')))
+    {
         return drive(cmd, window, cx);
     }
     if let Some(key) = cmd["photo"].as_str() {
@@ -695,7 +1085,9 @@ pub(crate) fn automation(app: &Entity<Threadbear>, cmd: &Value, window: &mut Win
     }
     if let (Some(key), Some(text)) = (cmd["change"].as_str(), cmd["text"].as_str()) {
         let (key, text) = (key.to_owned(), text.to_owned());
-        app.update(cx, |t, cx| t.start_bears_change_thread(&key, &text, window, cx));
+        app.update(cx, |t, cx| {
+            t.start_bears_change_thread(&key, &text, window, cx)
+        });
         return Ok(json!("ok"));
     }
     let key = cmd["key"].as_str().unwrap_or_default().to_owned();
@@ -704,7 +1096,11 @@ pub(crate) fn automation(app: &Entity<Threadbear>, cmd: &Value, window: &mut Win
         Some("newTable") => Mode::NewTable,
         Some("seats") => Mode::Seats(key),
         Some("change") => Mode::Change(key),
-        other => return Err(format!("open must be newBear, newTable, seats or change, not {other:?}")),
+        other => {
+            return Err(format!(
+                "open must be newBear, newTable, seats or change, not {other:?}"
+            ))
+        }
     };
     app.update(cx, |t, cx| t.open_bears_sheet(mode, window, cx));
     Ok(json!("ok sheet open"))

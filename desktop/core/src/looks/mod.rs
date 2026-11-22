@@ -139,7 +139,10 @@ impl BackdropFocus {
     pub const BOTTOM: BackdropFocus = BackdropFocus { x: 0.5, y: 1. };
 
     pub fn new(x: f64, y: f64) -> BackdropFocus {
-        BackdropFocus { x: Self::clamp(x), y: Self::clamp(y) }
+        BackdropFocus {
+            x: Self::clamp(x),
+            y: Self::clamp(y),
+        }
     }
 
     fn clamp(v: f64) -> f64 {
@@ -152,7 +155,10 @@ impl BackdropFocus {
 
     /// Missing parts are the bottom centre's.
     pub fn decode(v: &Value) -> BackdropFocus {
-        BackdropFocus::new(v["x"].as_f64().unwrap_or(0.5), v["y"].as_f64().unwrap_or(1.))
+        BackdropFocus::new(
+            v["x"].as_f64().unwrap_or(0.5),
+            v["y"].as_f64().unwrap_or(1.),
+        )
     }
 
     pub fn to_value(self) -> Value {
@@ -176,13 +182,26 @@ impl BackdropFocus {
 
     /// The focus after dragging the photo by `by` (in the space's points)
     /// from `start`: the photo follows the pointer, and stops at its edges.
-    pub fn dragged(start: BackdropFocus, by: (f32, f32), image: (f32, f32), space: (f32, f32)) -> BackdropFocus {
+    pub fn dragged(
+        start: BackdropFocus,
+        by: (f32, f32),
+        image: (f32, f32),
+        space: (f32, f32),
+    ) -> BackdropFocus {
         let (_, _, w, h) = start.frame(image, space);
         let spare_x = w - space.0;
         let spare_y = h - space.1;
         BackdropFocus::new(
-            if spare_x > 0.5 { start.x - f64::from(by.0 / spare_x) } else { start.x },
-            if spare_y > 0.5 { start.y - f64::from(by.1 / spare_y) } else { start.y },
+            if spare_x > 0.5 {
+                start.x - f64::from(by.0 / spare_x)
+            } else {
+                start.x
+            },
+            if spare_y > 0.5 {
+                start.y - f64::from(by.1 / spare_y)
+            } else {
+                start.y
+            },
         )
     }
 }
@@ -208,17 +227,34 @@ pub struct PictureParts {
 
 impl PictureParts {
     fn standard(picture: Picture, size: PictureSize) -> PictureParts {
-        PictureParts { picture, picture_file: None, picture_size: size, background: None, background_dim: 0.55, background_focus: BackdropFocus::BOTTOM }
+        PictureParts {
+            picture,
+            picture_file: None,
+            picture_size: size,
+            background: None,
+            background_dim: 0.55,
+            background_focus: BackdropFocus::BOTTOM,
+        }
     }
 
     fn decode(v: &Value, picture: Picture, size: PictureSize) -> PictureParts {
         PictureParts {
-            picture: v["picture"].as_str().and_then(Picture::from_raw).unwrap_or(picture),
+            picture: v["picture"]
+                .as_str()
+                .and_then(Picture::from_raw)
+                .unwrap_or(picture),
             picture_file: v["pictureFile"].as_str().map(str::to_owned),
-            picture_size: v["pictureSize"].as_str().and_then(PictureSize::from_raw).unwrap_or(size),
+            picture_size: v["pictureSize"]
+                .as_str()
+                .and_then(PictureSize::from_raw)
+                .unwrap_or(size),
             background: v["background"].as_str().map(str::to_owned),
             background_dim: v["backgroundDim"].as_f64().unwrap_or(0.55).clamp(0., 1.),
-            background_focus: if v["backgroundFocus"].is_object() { BackdropFocus::decode(&v["backgroundFocus"]) } else { BackdropFocus::BOTTOM },
+            background_focus: if v["backgroundFocus"].is_object() {
+                BackdropFocus::decode(&v["backgroundFocus"])
+            } else {
+                BackdropFocus::BOTTOM
+            },
         }
     }
 
@@ -237,7 +273,8 @@ impl PictureParts {
 
     /// The picture shows: not none, and your own needs a file.
     fn has_picture(&self) -> bool {
-        self.picture != Picture::None && (self.picture != Picture::Own || self.picture_file.is_some())
+        self.picture != Picture::None
+            && (self.picture != Picture::Own || self.picture_file.is_some())
     }
 }
 
@@ -343,19 +380,31 @@ fn decode_places<B: Block>(v: &Value) -> BTreeMap<B, Place> {
 }
 
 fn decode_set<B: Block>(v: &Value) -> BTreeSet<B> {
-    v.as_array().into_iter().flatten().filter_map(|b| B::from_raw(b.as_str()?)).collect()
+    v.as_array()
+        .into_iter()
+        .flatten()
+        .filter_map(|b| B::from_raw(b.as_str()?))
+        .collect()
 }
 
 fn decode_strings(v: &Value) -> BTreeSet<String> {
     // Swift decodes the whole array or nothing.
     match v.as_array() {
-        Some(list) if list.iter().all(Value::is_string) => list.iter().filter_map(|s| s.as_str().map(str::to_owned)).collect(),
+        Some(list) if list.iter().all(Value::is_string) => list
+            .iter()
+            .filter_map(|s| s.as_str().map(str::to_owned))
+            .collect(),
         _ => BTreeSet::new(),
     }
 }
 
 fn places_value<B: Block>(places: &BTreeMap<B, Place>) -> Value {
-    Value::Object(places.iter().map(|(b, p)| (b.raw().to_owned(), json!(p.raw()))).collect())
+    Value::Object(
+        places
+            .iter()
+            .map(|(b, p)| (b.raw().to_owned(), json!(p.raw())))
+            .collect(),
+    )
 }
 
 fn set_value<B: Block>(set: &BTreeSet<B>) -> Value {
@@ -365,7 +414,16 @@ fn set_value<B: Block>(set: &BTreeSet<B>) -> Value {
 }
 
 fn layout_of<B: Block>(place: impl Fn(B) -> Place, shows: impl Fn(B) -> bool) -> Vec<B> {
-    Place::ALL.into_iter().flat_map(|p| B::ALL.iter().copied().filter(|&b| place(b) == p && shows(b)).collect::<Vec<_>>()).collect()
+    Place::ALL
+        .into_iter()
+        .flat_map(|p| {
+            B::ALL
+                .iter()
+                .copied()
+                .filter(|&b| place(b) == p && shows(b))
+                .collect::<Vec<_>>()
+        })
+        .collect()
 }
 
 fn set_shown_in<B: Ord>(set: &mut BTreeSet<B>, shown: bool, part: B) {
@@ -606,7 +664,12 @@ pub struct ScheduledLook {
 
 impl Default for ScheduledLook {
     fn default() -> Self {
-        ScheduledLook { pic: PictureParts::standard(Picture::Bear, PictureSize::Medium), places: BTreeMap::new(), hidden: BTreeSet::new(), hidden_numbers: BTreeSet::new() }
+        ScheduledLook {
+            pic: PictureParts::standard(Picture::Bear, PictureSize::Medium),
+            places: BTreeMap::new(),
+            hidden: BTreeSet::new(),
+            hidden_numbers: BTreeSet::new(),
+        }
     }
 }
 
@@ -635,7 +698,10 @@ impl ScheduledLook {
     }
 
     pub fn place(&self, block: ScheduledBlock) -> Place {
-        self.places.get(&block).copied().unwrap_or(Self::default_place(block))
+        self.places
+            .get(&block)
+            .copied()
+            .unwrap_or(Self::default_place(block))
     }
 
     /// Moving a part back to where it starts isn't kept as a change, so the
@@ -650,7 +716,8 @@ impl ScheduledLook {
 
     /// Shown, as the user set it. Your picture also needs a file.
     pub fn shows(&self, block: ScheduledBlock) -> bool {
-        !self.hidden.contains(&block) && (block != ScheduledBlock::Picture || self.pic.has_picture())
+        !self.hidden.contains(&block)
+            && (block != ScheduledBlock::Picture || self.pic.has_picture())
     }
 
     pub fn set_shown(&mut self, shown: bool, block: ScheduledBlock) {
@@ -695,7 +762,12 @@ pub struct ProjectsLook {
 
 impl Default for ProjectsLook {
     fn default() -> Self {
-        ProjectsLook { pic: PictureParts::standard(Picture::None, PictureSize::Small), places: BTreeMap::new(), hidden: BTreeSet::new(), hidden_card_parts: BTreeSet::new() }
+        ProjectsLook {
+            pic: PictureParts::standard(Picture::None, PictureSize::Small),
+            places: BTreeMap::new(),
+            hidden: BTreeSet::new(),
+            hidden_card_parts: BTreeSet::new(),
+        }
     }
 }
 
@@ -726,7 +798,10 @@ impl ProjectsLook {
     }
 
     pub fn place(&self, block: ProjectsBlock) -> Place {
-        self.places.get(&block).copied().unwrap_or(Self::default_place(block))
+        self.places
+            .get(&block)
+            .copied()
+            .unwrap_or(Self::default_place(block))
     }
 
     pub fn set_place(&mut self, place: Place, block: ProjectsBlock) {
@@ -740,7 +815,9 @@ impl ProjectsLook {
     /// Shown, as the user set it. The picture is only ever your own, so it
     /// needs a file.
     pub fn shows(&self, block: ProjectsBlock) -> bool {
-        !self.hidden.contains(&block) && (block != ProjectsBlock::Picture || (self.pic.picture == Picture::Own && self.pic.picture_file.is_some()))
+        !self.hidden.contains(&block)
+            && (block != ProjectsBlock::Picture
+                || (self.pic.picture == Picture::Own && self.pic.picture_file.is_some()))
     }
 
     pub fn set_shown(&mut self, shown: bool, block: ProjectsBlock) {
@@ -765,7 +842,12 @@ impl ProjectsLook {
         if !Self::PICTURES.contains(&pic.picture) {
             pic.picture = Picture::None;
         }
-        ProjectsLook { pic, places: decode_places(&v["places"]), hidden: decode_set(&v["hidden"]), hidden_card_parts: decode_set(&v["hiddenCardParts"]) }
+        ProjectsLook {
+            pic,
+            places: decode_places(&v["places"]),
+            hidden: decode_set(&v["hidden"]),
+            hidden_card_parts: decode_set(&v["hiddenCardParts"]),
+        }
     }
 
     pub fn to_value(&self) -> Value {
@@ -808,7 +890,11 @@ impl Greeting {
     /// The first word of the account's full name ("Wayne Sutton" is Wayne),
     /// what the greeting suggests before you type one.
     pub fn first_name(full_name: &str) -> String {
-        full_name.split_whitespace().next().unwrap_or_default().to_owned()
+        full_name
+            .split_whitespace()
+            .next()
+            .unwrap_or_default()
+            .to_owned()
     }
 }
 
@@ -820,7 +906,11 @@ pub fn github_user_clean(typed: &str) -> String {
     if let Some(at) = name.to_ascii_lowercase().find("github.com/") {
         name = name[at + "github.com/".len()..].to_owned();
     }
-    name = name.split('/').find(|s| !s.is_empty()).unwrap_or_default().to_owned();
+    name = name
+        .split('/')
+        .find(|s| !s.is_empty())
+        .unwrap_or_default()
+        .to_owned();
     if let Some(rest) = name.strip_prefix('@') {
         name = rest.to_owned();
     }
@@ -843,23 +933,34 @@ mod tests {
     use LibrarianBlock as B;
 
     fn load(json: &str) -> LibrarianLook {
-        serde_json::from_str::<Value>(json).map(|v| LibrarianLook::decode(&v)).unwrap_or_default()
+        serde_json::from_str::<Value>(json)
+            .map(|v| LibrarianLook::decode(&v))
+            .unwrap_or_default()
     }
 
     #[test]
     fn standard_look_is_the_page_as_it_was() {
         let look = LibrarianLook::default();
         // GitHub stays off until there's a user name.
-        assert_eq!(look.layout(), vec![B::Picture, B::About, B::Numbers, B::Settings]);
+        assert_eq!(
+            look.layout(),
+            vec![B::Picture, B::About, B::Numbers, B::Settings]
+        );
         assert!(look.is_standard());
     }
 
     #[test]
     fn parts_move_between_places_and_keep_their_order_within() {
-        let mut look = LibrarianLook { github_user: "waynesutton".into(), ..Default::default() };
+        let mut look = LibrarianLook {
+            github_user: "waynesutton".into(),
+            ..Default::default()
+        };
         look.set_place(Place::Bottom, B::Picture);
         look.set_place(Place::Top, B::Github);
-        assert_eq!(look.layout(), vec![B::About, B::Github, B::Numbers, B::Picture, B::Settings]);
+        assert_eq!(
+            look.layout(),
+            vec![B::About, B::Github, B::Numbers, B::Picture, B::Settings]
+        );
         // Moving back to where it starts isn't stored as a change.
         look.set_place(Place::Top, B::Picture);
         look.set_place(Place::Middle, B::Github);
@@ -878,7 +979,10 @@ mod tests {
         look.pic.picture_file = Some("picture.png".into());
         assert!(look.shows(B::Picture));
         look.set_shown(true, B::Numbers);
-        assert_eq!(look.layout(), vec![B::Picture, B::About, B::Numbers, B::Settings]);
+        assert_eq!(
+            look.layout(),
+            vec![B::Picture, B::About, B::Numbers, B::Settings]
+        );
     }
 
     #[test]
@@ -896,28 +1000,69 @@ mod tests {
         look.github_user = "octocat".into();
         assert_eq!(LibrarianLook::decode(&look.to_value()), look);
 
-        let loaded = load(r#"{"picture":"hologram","places":{"numbers":"top","rocket":"top","about":"sideways"},"hidden":["github","rocket"],"backgroundDim":7,"newThing":1}"#);
+        let loaded = load(
+            r#"{"picture":"hologram","places":{"numbers":"top","rocket":"top","about":"sideways"},"hidden":["github","rocket"],"backgroundDim":7,"newThing":1}"#,
+        );
         assert_eq!(loaded.pic.picture, Picture::Bear);
         assert_eq!(loaded.place(B::Numbers), Place::Top);
         assert_eq!(loaded.place(B::About), Place::Top);
         assert_eq!(loaded.hidden, [B::Github].into());
         assert_eq!(loaded.pic.background_dim, 1.);
-        assert_eq!(loaded.pic.background_focus, BackdropFocus::BOTTOM, "a look saved before photos could move keeps them on the bottom");
-        assert!(loaded.profile_button, "a look saved before the View profile page button has it on");
-        let no_button = LibrarianLook { profile_button: false, ..Default::default() };
+        assert_eq!(
+            loaded.pic.background_focus,
+            BackdropFocus::BOTTOM,
+            "a look saved before photos could move keeps them on the bottom"
+        );
+        assert!(
+            loaded.profile_button,
+            "a look saved before the View profile page button has it on"
+        );
+        let no_button = LibrarianLook {
+            profile_button: false,
+            ..Default::default()
+        };
         assert!(!LibrarianLook::decode(&no_button.to_value()).profile_button);
-        assert_eq!(load(r#"{"backgroundFocus":{"x":-3,"y":9}}"#).pic.background_focus, BackdropFocus::new(0., 1.));
+        assert_eq!(
+            load(r#"{"backgroundFocus":{"x":-3,"y":9}}"#)
+                .pic
+                .background_focus,
+            BackdropFocus::new(0., 1.)
+        );
         assert_eq!(load("nonsense"), LibrarianLook::default());
-        assert_eq!(LibrarianLook::decode(&Value::Null), LibrarianLook::default());
+        assert_eq!(
+            LibrarianLook::decode(&Value::Null),
+            LibrarianLook::default()
+        );
     }
 
     #[test]
     fn saves_in_the_swift_apps_shape() {
         let v = LibrarianLook::default().to_value();
-        for key in ["picture", "pictureSize", "backgroundDim", "backgroundFocus", "places", "hidden", "hiddenNumbers", "githubUser", "greetingShown", "greetingName", "greetingClock", "quoteShown", "quoteDay", "quoteSkips", "activityShown", "profileButton", "hiddenAbout"] {
+        for key in [
+            "picture",
+            "pictureSize",
+            "backgroundDim",
+            "backgroundFocus",
+            "places",
+            "hidden",
+            "hiddenNumbers",
+            "githubUser",
+            "greetingShown",
+            "greetingName",
+            "greetingClock",
+            "quoteShown",
+            "quoteDay",
+            "quoteSkips",
+            "activityShown",
+            "profileButton",
+            "hiddenAbout",
+        ] {
             assert!(v.get(key).is_some(), "{key}");
         }
-        assert!(v.get("pictureFile").is_none() && v.get("background").is_none(), "nil fields are left out, as encodeIfPresent does");
+        assert!(
+            v.get("pictureFile").is_none() && v.get("background").is_none(),
+            "nil fields are left out, as encodeIfPresent does"
+        );
         assert_eq!(v["backgroundFocus"], json!({ "x": 0.5, "y": 1.0 }));
     }
 
@@ -941,18 +1086,27 @@ mod tests {
     fn dragging_moves_the_photo_with_the_pointer_and_stops_at_its_edges() {
         let photo = (400., 300.);
         let wide = (1000., 500.); // 250 points spare down
-        // Dragging down shows more of the top: the photo moves down.
+                                  // Dragging down shows more of the top: the photo moves down.
         let down = BackdropFocus::dragged(BackdropFocus::BOTTOM, (0., 125.), photo, wide);
         assert!((down.y - 0.5).abs() < 0.0001);
         assert_eq!(down.x, 0.5, "no spare width, so it can't move across");
-        assert_eq!(BackdropFocus::dragged(BackdropFocus::BOTTOM, (0., 9999.), photo, wide).y, 0.);
-        assert_eq!(BackdropFocus::dragged(BackdropFocus::BOTTOM, (0., -50.), photo, wide).y, 1.);
+        assert_eq!(
+            BackdropFocus::dragged(BackdropFocus::BOTTOM, (0., 9999.), photo, wide).y,
+            0.
+        );
+        assert_eq!(
+            BackdropFocus::dragged(BackdropFocus::BOTTOM, (0., -50.), photo, wide).y,
+            1.
+        );
     }
 
     #[test]
     fn github_user_names() {
         assert_eq!(github_user_clean(" @waynesutton "), "waynesutton");
-        assert_eq!(github_user_clean("https://github.com/mikecann/threadbear"), "mikecann");
+        assert_eq!(
+            github_user_clean("https://github.com/mikecann/threadbear"),
+            "mikecann"
+        );
         assert_eq!(github_user_clean("a-b"), "a-b");
         assert_eq!(github_user_clean("a--b"), "");
         assert_eq!(github_user_clean("-ab"), "");
@@ -978,7 +1132,10 @@ mod tests {
     #[test]
     fn greeting_and_title_parts_are_off_or_on_by_themselves() {
         let mut look = LibrarianLook::default();
-        assert!(!look.shows(B::Greeting), "a look saved before the greeting doesn't grow one");
+        assert!(
+            !look.shows(B::Greeting),
+            "a look saved before the greeting doesn't grow one"
+        );
         look.set_shown(true, B::Greeting);
         assert_eq!(look.layout().first(), Some(&B::Greeting));
         look.set_part_shown(false, AboutPart::Title);
@@ -1000,11 +1157,18 @@ mod tests {
         let mut look = LibrarianLook::default();
         assert!(!look.shows(B::Quote), "off until turned on");
         look.set_shown(true, B::Quote);
-        assert_eq!(look.layout(), vec![B::Picture, B::About, B::Quote, B::Numbers, B::Settings]);
+        assert_eq!(
+            look.layout(),
+            vec![B::Picture, B::About, B::Quote, B::Numbers, B::Settings]
+        );
         look.skip_quote("2026-11-09");
         look.skip_quote("2026-11-09");
         assert_eq!(look.quote_skips_on("2026-11-09"), 2);
-        assert_eq!(look.quote_skips_on("2026-11-10"), 0, "a new day starts again");
+        assert_eq!(
+            look.quote_skips_on("2026-11-10"),
+            0,
+            "a new day starts again"
+        );
         look.skip_quote("2026-11-10");
         assert_eq!(look.quote_skips_on("2026-11-10"), 1);
         assert_eq!(LibrarianLook::decode(&look.to_value()), look);
@@ -1015,14 +1179,26 @@ mod tests {
         let mut look = LibrarianLook::default();
         assert!(!look.shows(B::Activity));
         look.set_shown(true, B::Activity);
-        assert_eq!(look.layout(), vec![B::Picture, B::About, B::Numbers, B::Activity, B::Settings]);
+        assert_eq!(
+            look.layout(),
+            vec![B::Picture, B::About, B::Numbers, B::Activity, B::Settings]
+        );
         // With the numbers wherever they go, until moved on its own.
         look.set_place(Place::Bottom, B::Numbers);
-        assert_eq!(look.layout(), vec![B::Picture, B::About, B::Numbers, B::Activity, B::Settings]);
+        assert_eq!(
+            look.layout(),
+            vec![B::Picture, B::About, B::Numbers, B::Activity, B::Settings]
+        );
         look.set_place(Place::Top, B::Activity);
-        assert_eq!(look.layout(), vec![B::Picture, B::About, B::Activity, B::Numbers, B::Settings]);
+        assert_eq!(
+            look.layout(),
+            vec![B::Picture, B::About, B::Activity, B::Numbers, B::Settings]
+        );
         // Numbers went to the bottom, so GitHub (middle) is between them.
-        assert_eq!(profile::card_order(&look), vec!["activity", "github", "numbers", "projects"]);
+        assert_eq!(
+            profile::card_order(&look),
+            vec!["activity", "github", "numbers", "projects"]
+        );
         let back = LibrarianLook::decode(&look.to_value());
         assert_eq!(back, look);
         assert!(back.activity_shown);
@@ -1035,7 +1211,10 @@ mod tests {
         let mut look = ScheduledLook::default();
         assert_eq!(look.layout(), vec![S::Picture, S::About, S::Numbers]);
         assert!(look.is_standard());
-        assert!(S::ALL.iter().all(|&b| look.place(b) == Place::Top), "all at the top, as the page ships");
+        assert!(
+            S::ALL.iter().all(|&b| look.place(b) == Place::Top),
+            "all at the top, as the page ships"
+        );
         look.set_place(Place::Bottom, S::Picture);
         assert_eq!(look.layout(), vec![S::About, S::Numbers, S::Picture]);
         look.set_place(Place::Middle, S::About);
@@ -1053,7 +1232,10 @@ mod tests {
         look.pic.picture_file = Some("picture.png".into());
         look.set_shown(false, S::Picture);
         look.show_picture();
-        assert!(look.shows(S::Picture), "choosing a picture puts it back on the page");
+        assert!(
+            look.shows(S::Picture),
+            "choosing a picture puts it back on the page"
+        );
     }
 
     #[test]
@@ -1078,16 +1260,26 @@ mod tests {
         assert_eq!(loaded.place(S::About), Place::Top);
         assert_eq!(loaded.hidden, [S::Picture].into());
         assert_eq!(loaded.pic.background_dim, 0.);
-        assert_eq!(ScheduledLook::decode(&Value::Null), ScheduledLook::default());
+        assert_eq!(
+            ScheduledLook::decode(&Value::Null),
+            ScheduledLook::default()
+        );
     }
 
     #[test]
     fn projects_look() {
         use ProjectsBlock as P;
         let mut look = ProjectsLook::default();
-        assert_eq!(look.pic.picture, Picture::None, "the page has no picture as it ships");
+        assert_eq!(
+            look.pic.picture,
+            Picture::None,
+            "the page has no picture as it ships"
+        );
         assert_eq!(look.layout(), vec![P::Header, P::Cards]);
-        assert!(CardPart::ALL.iter().all(|&c| look.shows_card(c)), "every card part shows");
+        assert!(
+            CardPart::ALL.iter().all(|&c| look.shows_card(c)),
+            "every card part shows"
+        );
         assert!(look.is_standard());
         look.set_place(Place::Bottom, P::Header);
         assert_eq!(look.layout(), vec![P::Cards, P::Header]);
@@ -1103,14 +1295,20 @@ mod tests {
         assert_eq!(look.layout(), vec![P::Picture, P::Header, P::Cards]);
         look.set_shown(false, P::Picture);
         look.show_picture();
-        assert!(look.shows(P::Picture), "choosing a picture puts it back on the page");
+        assert!(
+            look.shows(P::Picture),
+            "choosing a picture puts it back on the page"
+        );
         look.pic.picture = Picture::Bear;
         assert!(!look.shows(P::Picture), "there's no bear on this page");
 
         let mut cards = ProjectsLook::default();
         cards.set_card_shown(false, CardPart::Art);
         cards.set_card_shown(false, CardPart::State);
-        assert_eq!(cards.hidden_card_parts, [CardPart::Art, CardPart::State].into());
+        assert_eq!(
+            cards.hidden_card_parts,
+            [CardPart::Art, CardPart::State].into()
+        );
         assert!(!cards.is_standard());
         cards.set_card_shown(true, CardPart::Art);
         cards.set_card_shown(true, CardPart::State);
@@ -1134,12 +1332,19 @@ mod tests {
 
         let v: Value = serde_json::from_str(r#"{"picture":"bear","places":{"cards":"middle","rocket":"top","header":"sideways"},"hidden":["picture","numbers"],"hiddenCardParts":["art","sparkles"],"backgroundDim":9,"newThing":1}"#).unwrap();
         let loaded = ProjectsLook::decode(&v);
-        assert_eq!(loaded.pic.picture, Picture::None, "a bear from another build is none here");
+        assert_eq!(
+            loaded.pic.picture,
+            Picture::None,
+            "a bear from another build is none here"
+        );
         assert_eq!(loaded.place(P::Cards), Place::Middle);
         assert_eq!(loaded.place(P::Header), Place::Top);
         assert_eq!(loaded.hidden, [P::Picture].into());
         assert_eq!(loaded.hidden_card_parts, [CardPart::Art].into());
         assert_eq!(loaded.pic.background_dim, 1.);
-        assert_eq!(ProjectsLook::decode(&json!("nonsense")), ProjectsLook::default());
+        assert_eq!(
+            ProjectsLook::decode(&json!("nonsense")),
+            ProjectsLook::default()
+        );
     }
 }

@@ -11,7 +11,10 @@
 /// (Wayne, 7 Nov 2026: falling back to Full access raised it).
 pub fn next(permission: &str, put_back: Option<&str>) -> String {
     if permission == "plan" {
-        put_back.filter(|m| *m != "plan").unwrap_or("ask").to_owned()
+        put_back
+            .filter(|m| *m != "plan")
+            .unwrap_or("ask")
+            .to_owned()
     } else {
         "plan".to_owned()
     }
@@ -24,7 +27,11 @@ mod tests {
     #[test]
     fn shift_tab_turns_plan_first_on_then_puts_the_access_back() {
         assert_eq!(next("full", None), "plan");
-        assert_eq!(next("plan", Some("full")), "full", "the access it had comes back");
+        assert_eq!(
+            next("plan", Some("full")),
+            "full",
+            "the access it had comes back"
+        );
         assert_eq!(next("auto", None), "plan");
     }
 

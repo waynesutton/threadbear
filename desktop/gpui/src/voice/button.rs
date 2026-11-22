@@ -7,10 +7,10 @@ use super::keys::DictationPhase;
 use super::mode::{Phase, NEW_THREAD};
 use crate::a11y::A11yRole as _;
 use crate::app::Threadbear;
-use gpui_kit::base::TestSupportExt as _;
 use crate::style;
 use crate::style::px;
 use crate::tips::Tip as _;
+use gpui_kit::base::TestSupportExt as _;
 use gpui_kit::component::{h_flex, ActiveTheme as _, Icon, Sizable as _};
 use gpui_kit::prelude::*;
 use gpui_kit::*;
@@ -22,7 +22,12 @@ fn red() -> Hsla {
 
 /// The send button with Voice's to its left, while Voice is on for this Mac.
 /// `thread` is None for the new-thread page, where the first words start one.
-pub(crate) fn beside_send(send: AnyElement, thread: Option<&str>, app: &WeakEntity<Threadbear>, cx: &mut App) -> AnyElement {
+pub(crate) fn beside_send(
+    send: AnyElement,
+    thread: Option<&str>,
+    app: &WeakEntity<Threadbear>,
+    cx: &mut App,
+) -> AnyElement {
     let voice = super::get(app, cx);
     if !voice.read(cx).available(cx) {
         return send;
@@ -35,11 +40,24 @@ pub(crate) fn beside_send(send: AnyElement, thread: Option<&str>, app: &WeakEnti
     let failure = v.mode.failure_for(&thread).map(str::to_owned);
     let icon = v.prefs.icon();
     let side = px(style::size::SEND_BUTTON);
-    let circle = div().id("composer-voice").flex().flex_none().items_center().justify_center().size(side).rounded_full().cursor_pointer();
+    let circle = div()
+        .id("composer-voice")
+        .flex()
+        .flex_none()
+        .items_center()
+        .justify_center()
+        .size(side)
+        .rounded_full()
+        .cursor_pointer();
     let face = if on {
         circle.bg(red()).child(bars(level, busy, side * 0.5))
     } else {
-        circle.bg(style::primary_opacity(cx, 0.1)).child(Icon::default().data(icon.svg().as_bytes()).with_size(side * 0.54).text_color(style::secondary_text(cx)))
+        circle.bg(style::primary_opacity(cx, 0.1)).child(
+            Icon::default()
+                .data(icon.svg().as_bytes())
+                .with_size(side * 0.54)
+                .text_color(style::secondary_text(cx)),
+        )
     };
     let (toggle, dismiss) = (voice.clone(), voice.clone());
     let id = thread.clone();
@@ -47,7 +65,11 @@ pub(crate) fn beside_send(send: AnyElement, thread: Option<&str>, app: &WeakEnti
         .test_support()
         .role(Role::Button)
         .aria_label(if on { "End voice" } else { "Start voice" })
-        .tip(if on { "End voice" } else { "Talk with this thread out loud" })
+        .tip(if on {
+            "End voice"
+        } else {
+            "Talk with this thread out loud"
+        })
         .on_click(move |_, _, cx| toggle.update(cx, |v, cx| v.toggle_mode(&id, cx)));
     let bubble = failure.map(|message| {
         div()
@@ -71,7 +93,12 @@ pub(crate) fn beside_send(send: AnyElement, thread: Option<&str>, app: &WeakEnti
             .tip("Close")
             .on_click(move |_, _, cx| dismiss.update(cx, |v, cx| v.dismiss_mode_failure(cx)))
     });
-    h_flex().gap(px(6.)).items_center().child(div().relative().child(button).children(bubble)).child(send).into_any_element()
+    h_flex()
+        .gap(px(6.))
+        .items_center()
+        .child(div().relative().child(button).children(bubble))
+        .child(send)
+        .into_any_element()
 }
 
 /// Five bars: following the sound level while someone talks, gently
@@ -79,13 +106,32 @@ pub(crate) fn beside_send(send: AnyElement, thread: Option<&str>, app: &WeakEnti
 fn bars(level: f32, busy: bool, size: Pixels) -> AnyElement {
     const SHAPE: [f32; 5] = [0.45, 0.75, 1.0, 0.75, 0.45];
     let width = size * 0.12;
-    let row = move |heights: [f32; 5]| h_flex().h(size).gap(size * 0.1).items_center().children(heights.into_iter().map(move |h| div().w(width).h(size * h).rounded_full().bg(gpui_kit::white())));
+    let row = move |heights: [f32; 5]| {
+        h_flex()
+            .h(size)
+            .gap(size * 0.1)
+            .items_center()
+            .children(heights.into_iter().map(move |h| {
+                div()
+                    .w(width)
+                    .h(size * h)
+                    .rounded_full()
+                    .bg(gpui_kit::white())
+            }))
+    };
     if busy && level < 0.05 {
         return row([0.3; 5])
-            .with_animation("voice-pulse", Animation::new(Duration::from_millis(1600)).repeat(), move |_, t| {
-                let heights = std::array::from_fn(|i| 0.3 + 0.25 * (0.5 - 0.5 * ((t + i as f32 * 0.125) * std::f32::consts::TAU).cos()));
-                row(heights)
-            })
+            .with_animation(
+                "voice-pulse",
+                Animation::new(Duration::from_millis(1600)).repeat(),
+                move |_, t| {
+                    let heights = std::array::from_fn(|i| {
+                        0.3 + 0.25
+                            * (0.5 - 0.5 * ((t + i as f32 * 0.125) * std::f32::consts::TAU).cos())
+                    });
+                    row(heights)
+                },
+            )
             .into_any_element();
     }
     row(SHAPE.map(|s| (s * (0.25 + level)).clamp(0.2, 1.0))).into_any_element()
@@ -105,13 +151,28 @@ pub(crate) fn pill(thread: Option<&str>, cx: &mut App) -> Option<AnyElement> {
         let line = match &d.phase {
             DictationPhase::Off => String::new(),
             DictationPhase::Starting(status) => status.clone(),
-            DictationPhase::Finishing => if d.mode == threadbear_core::voice_keys::KeyMode::Command { "Sending…" } else { "Typing it in…" }.to_owned(),
+            DictationPhase::Finishing => if d.mode == threadbear_core::voice_keys::KeyMode::Command
+            {
+                "Sending…"
+            } else {
+                "Typing it in…"
+            }
+            .to_owned(),
             DictationPhase::Failed(message) => message.clone(),
             // The end of what he's saying, where it's growing.
             DictationPhase::Hearing(words) => tail(words, 70),
             DictationPhase::Listening => keys.listening_line(d.mode),
         };
-        (line, matches!(d.phase, DictationPhase::Failed(_)), matches!(d.phase, DictationPhase::Hearing(_)), matches!(d.phase, DictationPhase::Starting(_) | DictationPhase::Finishing), d.level)
+        (
+            line,
+            matches!(d.phase, DictationPhase::Failed(_)),
+            matches!(d.phase, DictationPhase::Hearing(_)),
+            matches!(
+                d.phase,
+                DictationPhase::Starting(_) | DictationPhase::Finishing
+            ),
+            d.level,
+        )
     } else if v.mode.is_on_for(thread.unwrap_or(NEW_THREAD)) {
         let line = match &v.mode.phase {
             Phase::Starting(status) => status.clone(),
@@ -121,12 +182,35 @@ pub(crate) fn pill(thread: Option<&str>, cx: &mut App) -> Option<AnyElement> {
             Phase::Speaking => "Reading the reply. Talk to stop it.".to_owned(),
             Phase::Off | Phase::Failed(_) => return None,
         };
-        (line, false, matches!(v.mode.phase, Phase::Hearing(_)), v.mode.busy(), v.mode.level)
+        (
+            line,
+            false,
+            matches!(v.mode.phase, Phase::Hearing(_)),
+            v.mode.busy(),
+            v.mode.level,
+        )
     } else {
         return None;
     };
-    let dot = div().flex().flex_none().items_center().justify_center().size(px(24.)).rounded_full().bg(if failed { rgb(0xff9500).into() } else { red() });
-    let dot = if failed { dot.child(div().text_size(px(12.)).font_weight(FontWeight::BOLD).text_color(gpui_kit::white()).child("!")) } else { dot.child(bars(level, busy, px(12.))) };
+    let dot = div()
+        .flex()
+        .flex_none()
+        .items_center()
+        .justify_center()
+        .size(px(24.))
+        .rounded_full()
+        .bg(if failed { rgb(0xff9500).into() } else { red() });
+    let dot = if failed {
+        dot.child(
+            div()
+                .text_size(px(12.))
+                .font_weight(FontWeight::BOLD)
+                .text_color(gpui_kit::white())
+                .child("!"),
+        )
+    } else {
+        dot.child(bars(level, busy, px(12.)))
+    };
     Some(
         div()
             .absolute()
@@ -151,7 +235,18 @@ pub(crate) fn pill(thread: Option<&str>, cx: &mut App) -> Option<AnyElement> {
                     .border_color(style::hairline(cx))
                     .shadow_md()
                     .child(dot)
-                    .child(div().min_w_0().truncate().text_size(px(12.)).text_color(if heard { cx.theme().foreground } else { style::secondary_text(cx) }).child(line)),
+                    .child(
+                        div()
+                            .min_w_0()
+                            .truncate()
+                            .text_size(px(12.))
+                            .text_color(if heard {
+                                cx.theme().foreground
+                            } else {
+                                style::secondary_text(cx)
+                            })
+                            .child(line),
+                    ),
             )
             .into_any_element(),
     )

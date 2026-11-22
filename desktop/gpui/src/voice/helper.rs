@@ -23,7 +23,9 @@ pub(crate) fn built_in() -> bool {
 }
 
 pub(crate) fn folder() -> PathBuf {
-    let home = std::env::var_os("HOME").map(PathBuf::from).unwrap_or_default();
+    let home = std::env::var_os("HOME")
+        .map(PathBuf::from)
+        .unwrap_or_default();
     home.join("Library/Application Support/Threadbear/voice")
 }
 
@@ -34,12 +36,21 @@ pub(crate) struct Helper {
 
 impl Helper {
     /// Starts it, with what it says arriving on the channel a line at a time.
-    pub(crate) fn start() -> Result<(Helper, futures::channel::mpsc::UnboundedReceiver<Value>), String> {
+    pub(crate) fn start(
+    ) -> Result<(Helper, futures::channel::mpsc::UnboundedReceiver<Value>), String> {
         if !built_in() {
-            return Err("This build of Threadbear has no Voice (it was built without the macOS 26 SDK).".to_owned());
+            return Err(
+                "This build of Threadbear has no Voice (it was built without the macOS 26 SDK)."
+                    .to_owned(),
+            );
         }
         let path = Self::write_out()?;
-        let mut child = Command::new(&path).stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::null()).spawn().map_err(|e| format!("Voice's helper didn't start: {e}"))?;
+        let mut child = Command::new(&path)
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::null())
+            .spawn()
+            .map_err(|e| format!("Voice's helper didn't start: {e}"))?;
         let stdin = child.stdin.take().ok_or("Voice's helper has no input")?;
         let stdout = child.stdout.take().ok_or("Voice's helper has no output")?;
         let (tx, rx) = futures::channel::mpsc::unbounded();
@@ -72,7 +83,8 @@ impl Helper {
             return Ok(path);
         }
         // This user's only, and runnable by them alone.
-        threadbear_core::private_file::write_with_mode(&path, HELPER, 0o700).map_err(|e| format!("Couldn't write Voice's helper: {e}"))?;
+        threadbear_core::private_file::write_with_mode(&path, HELPER, 0o700)
+            .map_err(|e| format!("Couldn't write Voice's helper: {e}"))?;
         // Older builds' helpers: nothing runs them any more.
         if let Ok(entries) = std::fs::read_dir(folder()) {
             for entry in entries.flatten() {
@@ -90,7 +102,10 @@ impl Helper {
     pub(crate) fn send(&mut self, command: &Value) -> bool {
         let mut line = command.to_string();
         line.push('\n');
-        self.stdin.write_all(line.as_bytes()).and_then(|_| self.stdin.flush()).is_ok()
+        self.stdin
+            .write_all(line.as_bytes())
+            .and_then(|_| self.stdin.flush())
+            .is_ok()
     }
 }
 

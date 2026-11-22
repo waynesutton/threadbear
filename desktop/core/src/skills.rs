@@ -10,7 +10,10 @@ pub const EXPERIMENT: &str = "skillsStore";
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Source {
-    GitHub { repo: String, path: Option<String> },
+    GitHub {
+        repo: String,
+        path: Option<String>,
+    },
     Builtin,
     /// Written in the app (New Skill): its SKILL.md is his, and Edit changes it.
     Custom,
@@ -40,12 +43,22 @@ impl Skill {
         let source = match v["source"]["kind"].as_str() {
             Some("github") => Source::GitHub {
                 repo: v["source"]["repo"].as_str().unwrap_or("").to_owned(),
-                path: v["source"]["path"].as_str().filter(|p| !p.is_empty()).map(str::to_owned),
+                path: v["source"]["path"]
+                    .as_str()
+                    .filter(|p| !p.is_empty())
+                    .map(str::to_owned),
             },
             Some("custom") => Source::Custom,
             _ => Source::Builtin,
         };
-        Some(Skill { name, description: text("description"), always: v["always"].as_bool() != Some(false), source, commit: text("commit"), dir: text("dir") })
+        Some(Skill {
+            name,
+            description: text("description"),
+            always: v["always"].as_bool() != Some(false),
+            source,
+            commit: text("commit"),
+            dir: text("dir"),
+        })
     }
 
     pub fn is_custom(&self) -> bool {
@@ -58,8 +71,17 @@ impl Skill {
             Source::Builtin => "Comes with Threadbear".into(),
             Source::Custom => "Written in Threadbear".into(),
             Source::GitHub { repo, path } => {
-                let place = [Some(repo.as_str()), path.as_deref()].into_iter().flatten().filter(|s| !s.is_empty()).collect::<Vec<_>>().join("/");
-                let at = if self.commit.chars().count() >= 7 { format!(" at {}", &self.commit[..7]) } else { String::new() };
+                let place = [Some(repo.as_str()), path.as_deref()]
+                    .into_iter()
+                    .flatten()
+                    .filter(|s| !s.is_empty())
+                    .collect::<Vec<_>>()
+                    .join("/");
+                let at = if self.commit.chars().count() >= 7 {
+                    format!(" at {}", &self.commit[..7])
+                } else {
+                    String::new()
+                };
                 format!("{}{at}", if place.is_empty() { "GitHub" } else { &place })
             }
         }
@@ -67,7 +89,9 @@ impl Skill {
 
     /// Its GitHub page at the pinned commit; none for a built-in or his own.
     pub fn source_url(&self) -> Option<String> {
-        let Source::GitHub { repo, path } = &self.source else { return None };
+        let Source::GitHub { repo, path } = &self.source else {
+            return None;
+        };
         if repo.is_empty() {
             return None;
         }
@@ -81,17 +105,25 @@ impl Skill {
 impl Suggested {
     pub fn decode(v: &Value) -> Option<Suggested> {
         let id = v["id"].as_str().filter(|n| !n.is_empty())?.to_owned();
-        Some(Suggested { name: v["name"].as_str().unwrap_or(&id).to_owned(), description: v["description"].as_str().unwrap_or("").to_owned(), id })
+        Some(Suggested {
+            name: v["name"].as_str().unwrap_or(&id).to_owned(),
+            description: v["description"].as_str().unwrap_or("").to_owned(),
+            id,
+        })
     }
 }
 
 /// `skills.list`'s and `skills.updated`'s `skills`.
 pub fn decode_list(v: &Value) -> Vec<Skill> {
-    v.as_array().map(|a| a.iter().filter_map(Skill::decode).collect()).unwrap_or_default()
+    v.as_array()
+        .map(|a| a.iter().filter_map(Skill::decode).collect())
+        .unwrap_or_default()
 }
 
 pub fn decode_suggested(v: &Value) -> Vec<Suggested> {
-    v.as_array().map(|a| a.iter().filter_map(Suggested::decode).collect()).unwrap_or_default()
+    v.as_array()
+        .map(|a| a.iter().filter_map(Suggested::decode).collect())
+        .unwrap_or_default()
 }
 
 /// What a typed name saves as (the runner's rule): lower case, letters,
@@ -130,8 +162,14 @@ mod tests {
             { "description": "no name" },
         ]));
         assert_eq!(list.len(), 3);
-        assert_eq!(list[0].source_line(), "mikecann/pele/skills/pele at 0123456");
-        assert_eq!(list[0].source_url().as_deref(), Some("https://github.com/mikecann/pele/tree/0123456789abcdef/skills/pele"));
+        assert_eq!(
+            list[0].source_line(),
+            "mikecann/pele/skills/pele at 0123456"
+        );
+        assert_eq!(
+            list[0].source_url().as_deref(),
+            Some("https://github.com/mikecann/pele/tree/0123456789abcdef/skills/pele")
+        );
         assert!(list[1].is_custom() && !list[1].always);
         assert_eq!(list[1].source_line(), "Written in Threadbear");
         assert_eq!(list[1].source_url(), None);
@@ -156,7 +194,16 @@ mod tests {
 
     #[test]
     fn suggestions_keep_their_id() {
-        let s = decode_suggested(&json!([{ "id": "anatomy", "name": "anatomy", "description": "Figures" }, { "name": "no id" }]));
-        assert_eq!(s, vec![Suggested { id: "anatomy".into(), name: "anatomy".into(), description: "Figures".into() }]);
+        let s = decode_suggested(
+            &json!([{ "id": "anatomy", "name": "anatomy", "description": "Figures" }, { "name": "no id" }]),
+        );
+        assert_eq!(
+            s,
+            vec![Suggested {
+                id: "anatomy".into(),
+                name: "anatomy".into(),
+                description: "Figures".into()
+            }]
+        );
     }
 }

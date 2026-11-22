@@ -11,17 +11,35 @@ use std::collections::BTreeMap;
 /// One year of threads started, by local calendar day (`threads` holds each
 /// thread's local creation day and its folder). Threads in a private folder
 /// aren't counted, as on the profile page. `home` expands a `~`.
-pub fn thread_activity(year: i32, threads: &[(NaiveDate, String)], private_folders: &[String], home: &str) -> GitHubContributions {
+pub fn thread_activity(
+    year: i32,
+    threads: &[(NaiveDate, String)],
+    private_folders: &[String],
+    home: &str,
+) -> GitHubContributions {
     let mut counts: BTreeMap<String, i64> = BTreeMap::new();
     for (day, cwd) in threads {
         if day.year() != year || is_private(cwd, private_folders, home) {
             continue;
         }
-        *counts.entry(day.format("%Y-%m-%d").to_string()).or_default() += 1;
+        *counts
+            .entry(day.format("%Y-%m-%d").to_string())
+            .or_default() += 1;
     }
     let most = counts.values().copied().max().unwrap_or(0);
-    let days = counts.iter().map(|(date, &count)| ContributionDay { date: date.clone(), count, level: level(count, most) }).collect();
-    GitHubContributions { year, total: counts.values().sum(), days }
+    let days = counts
+        .iter()
+        .map(|(date, &count)| ContributionDay {
+            date: date.clone(),
+            count,
+            level: level(count, most),
+        })
+        .collect();
+    GitHubContributions {
+        year,
+        total: counts.values().sum(),
+        days,
+    }
 }
 
 /// 0 for none, then 1 to 4 by quarters of the busiest day, so a quiet year
@@ -47,7 +65,11 @@ pub fn is_private(cwd: &str, folders: &[String], home: &str) -> bool {
         if p.is_empty() {
             return false;
         }
-        let under = if p.ends_with('/') { p.clone() } else { format!("{p}/") };
+        let under = if p.ends_with('/') {
+            p.clone()
+        } else {
+            format!("{p}/")
+        };
         at == p || at.starts_with(&under)
     })
 }
@@ -104,7 +126,13 @@ mod tests {
         let year = thread_activity(2026, &threads, &["/Users/w/secret".to_owned()], "/Users/w");
         assert_eq!(year.year, 2026);
         assert_eq!(year.total, 3);
-        assert_eq!(year.days.iter().map(|d| (d.date.as_str(), d.count, d.level)).collect::<Vec<_>>(), [("2026-11-04", 2, 4), ("2026-11-05", 1, 2)]);
+        assert_eq!(
+            year.days
+                .iter()
+                .map(|d| (d.date.as_str(), d.count, d.level))
+                .collect::<Vec<_>>(),
+            [("2026-11-04", 2, 4), ("2026-11-05", 1, 2)]
+        );
         // Drawn by the same calendar as GitHub's: every day of the year.
         assert_eq!(year.weeks().iter().flatten().flatten().count(), 365);
     }
@@ -131,6 +159,9 @@ mod tests {
     #[test]
     fn first_years() {
         assert_eq!(first_year(&[]), None);
-        assert_eq!(first_year(&[day("2026-03-01"), day("2025-06-01")]), Some(2025));
+        assert_eq!(
+            first_year(&[day("2026-03-01"), day("2025-06-01")]),
+            Some(2025)
+        );
     }
 }

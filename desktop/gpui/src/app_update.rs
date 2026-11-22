@@ -97,7 +97,9 @@ fn install_dir() -> PathBuf {
 }
 
 fn beside(name: &str) -> PathBuf {
-    install_dir().parent().map_or_else(|| PathBuf::from(name), |dir| dir.join(name))
+    install_dir()
+        .parent()
+        .map_or_else(|| PathBuf::from(name), |dir| dir.join(name))
 }
 
 fn next_dir() -> PathBuf {
@@ -118,7 +120,9 @@ fn staged_build() -> Option<BuildInfo> {
 /// staged before bundles said where they were built (Daybreak 108).
 /// False when one that isn't trusted is still there: nothing goes in then.
 fn drop_untrusted_staged() -> bool {
-    let runner_json = threadbear_client::config::RunnerConfig::from_env().home.join("runner.json");
+    let runner_json = threadbear_client::config::RunnerConfig::from_env()
+        .home
+        .join("runner.json");
     match rules::drop_untrusted_staged(&next_dir(), &runner_json) {
         Ok(None) => true,
         Ok(Some(why)) => {
@@ -143,13 +147,19 @@ fn swapping_note() -> PathBuf {
 
 /// The update build's output, for Show the Log.
 pub(crate) fn log_path() -> PathBuf {
-    installed::home_dir().join("Library").join("Logs").join("threadbear-desktop-update.log")
+    installed::home_dir()
+        .join("Library")
+        .join("Logs")
+        .join("threadbear-desktop-update.log")
 }
 
 /// The script in the running bundle, so the app runs the copy it was built with.
 fn script() -> Option<PathBuf> {
     let exe = std::env::current_exe().ok()?;
-    let script = threadbear_core::app_update::bundle_of(&exe)?.join("Contents").join("Resources").join("stage-update.sh");
+    let script = threadbear_core::app_update::bundle_of(&exe)?
+        .join("Contents")
+        .join("Resources")
+        .join("stage-update.sh");
     script.exists().then_some(script)
 }
 
@@ -169,7 +179,13 @@ pub(crate) fn apply_staged_at_launch() -> bool {
     if !drop_untrusted_staged() {
         return false;
     }
-    match rules::apply_staged(&install_dir(), &next_dir(), &old_dir(), &swapping_note(), launch.build.as_ref()) {
+    match rules::apply_staged(
+        &install_dir(),
+        &next_dir(),
+        &old_dir(),
+        &swapping_note(),
+        launch.build.as_ref(),
+    ) {
         Ok(Some(staged)) => {
             note(&format!("swapped in {} at launch", staged.short));
             relaunch_after_exit(&install_dir(), false);
@@ -189,8 +205,14 @@ pub(crate) fn apply_staged_at_launch() -> bool {
 /// one (docs/protocol.md, "App restarts"). Any other launch sends none.
 pub(crate) fn announce_build() {
     let launch = installed::launch();
-    if let Some(build) = launch.build.as_ref().filter(|b| launch.installed && !b.app_tree.is_empty()) {
-        threadbear_client::runner::set_hello_build(json!({ "commit": build.commit, "short": build.short, "tree": build.app_tree }));
+    if let Some(build) = launch
+        .build
+        .as_ref()
+        .filter(|b| launch.installed && !b.app_tree.is_empty())
+    {
+        threadbear_client::runner::set_hello_build(
+            json!({ "commit": build.commit, "short": build.short, "tree": build.app_tree }),
+        );
     }
 }
 
@@ -214,8 +236,19 @@ fn relaunch_after_exit(bundle: &Path, in_background: bool) {
         open.extend(["--env".into(), pair]);
     }
     open.push(bundle.into());
-    let wait = format!("while /bin/kill -0 {} 2>/dev/null; do /bin/sleep 0.2; done; exec /usr/bin/open \"$@\"", std::process::id());
-    let started = Command::new("/bin/sh").arg("-c").arg(wait).arg("sh").args(open).stdin(Stdio::null()).stdout(Stdio::null()).stderr(Stdio::null()).spawn();
+    let wait = format!(
+        "while /bin/kill -0 {} 2>/dev/null; do /bin/sleep 0.2; done; exec /usr/bin/open \"$@\"",
+        std::process::id()
+    );
+    let started = Command::new("/bin/sh")
+        .arg("-c")
+        .arg(wait)
+        .arg("sh")
+        .args(open)
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .spawn();
     if let Err(e) = started {
         note(&format!("couldn't start the relaunch: {e}"));
     }
@@ -226,7 +259,12 @@ fn relaunch_after_exit(bundle: &Path, in_background: bool) {
 pub(crate) fn settings_to_pass_on() -> Vec<(String, std::ffi::OsString)> {
     let mut settings: Vec<(String, std::ffi::OsString)> = std::env::vars_os()
         .filter_map(|(key, value)| Some((key.into_string().ok()?, value)))
-        .filter(|(key, _)| (key.starts_with("THREADBEAR_") || key.starts_with("THREADBARE_")) && !["_THREAD_ID", "_THREAD_KEY", "_AUTOMATION"].iter().any(|s| key.ends_with(s)))
+        .filter(|(key, _)| {
+            (key.starts_with("THREADBEAR_") || key.starts_with("THREADBARE_"))
+                && !["_THREAD_ID", "_THREAD_KEY", "_AUTOMATION"]
+                    .iter()
+                    .any(|s| key.ends_with(s))
+        })
         .collect();
     settings.sort();
     settings
@@ -246,11 +284,19 @@ fn followable() -> Result<BuildInfo, String> {
     }
     // Its build.json and the update script came with desktop/scripts/
     // make-bundle.sh: an app installed before then has neither.
-    const REINSTALL: &str = "it was installed before it could. Install it again with desktop/scripts/install-app.sh";
-    let info = launch.build.clone().filter(|b| !b.app_tree.is_empty()).ok_or(REINSTALL)?;
+    const REINSTALL: &str =
+        "it was installed before it could. Install it again with desktop/scripts/install-app.sh";
+    let info = launch
+        .build
+        .clone()
+        .filter(|b| !b.app_tree.is_empty())
+        .ok_or(REINSTALL)?;
     script().ok_or(REINSTALL)?;
     if !Path::new(&info.checkout).join(".git").exists() {
-        return Err(format!("the checkout it was installed from, {}, is gone", info.checkout));
+        return Err(format!(
+            "the checkout it was installed from, {}, is gone",
+            info.checkout
+        ));
     }
     if let Some(e) = LAUNCH_SWAP_FAILED.get() {
         return Err(format!("its new version couldn't go in ({e})"));
@@ -260,26 +306,47 @@ fn followable() -> Result<BuildInfo, String> {
 
 /// Main's tree in the checkout, or none if git can't say.
 fn main_tree(checkout: &str) -> Option<String> {
-    let out = Command::new("/usr/bin/git").args(rules::rev_parse_arguments(checkout)).stdin(Stdio::null()).output().ok()?;
+    let out = Command::new("/usr/bin/git")
+        .args(rules::rev_parse_arguments(checkout))
+        .stdin(Stdio::null())
+        .output()
+        .ok()?;
     if !out.status.success() {
-        note(&format!("git rev-parse main:desktop failed in {checkout}: {}", String::from_utf8_lossy(&out.stderr).trim()));
+        note(&format!(
+            "git rev-parse main:desktop failed in {checkout}: {}",
+            String::from_utf8_lossy(&out.stderr).trim()
+        ));
         return None;
     }
-    Some(rules::tree_from_rev_parse(&String::from_utf8_lossy(&out.stdout))).filter(|t| !t.is_empty())
+    Some(rules::tree_from_rev_parse(&String::from_utf8_lossy(
+        &out.stdout,
+    )))
+    .filter(|t| !t.is_empty())
 }
 
 /// How long ago main last moved, from its reflog, or none if git can't say.
 fn main_moved_ago(checkout: &str) -> Option<Duration> {
-    let out = Command::new("/usr/bin/git").args(rules::reflog_arguments(checkout)).stdin(Stdio::null()).stderr(Stdio::null()).output().ok()?;
+    let out = Command::new("/usr/bin/git")
+        .args(rules::reflog_arguments(checkout))
+        .stdin(Stdio::null())
+        .stderr(Stdio::null())
+        .output()
+        .ok()?;
     let at = rules::moved_at_from_reflog(&String::from_utf8_lossy(&out.stdout))?;
-    let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).ok()?;
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .ok()?;
     now.checked_sub(Duration::from_secs(at))
 }
 
 /// How long the staged bundle has been waiting to go in: since it was moved
 /// into place, so a relaunch doesn't start the count again.
 fn staged_waited() -> Option<Duration> {
-    std::fs::metadata(next_dir()).and_then(|m| m.modified()).ok()?.elapsed().ok()
+    std::fs::metadata(next_dir())
+        .and_then(|m| m.modified())
+        .ok()?
+        .elapsed()
+        .ok()
 }
 
 fn open_log() -> Option<std::fs::File> {
@@ -318,11 +385,17 @@ pub(crate) struct WindowsNow {
 
 pub(crate) fn windows_now(main: AnyWindowHandle, cx: &mut App) -> WindowsNow {
     use gpui_kit::component::WindowExt as _;
-    let mut now = WindowsNow { held: native_panel_up(), other_window_input: false };
+    let mut now = WindowsNow {
+        held: native_panel_up(),
+        other_window_input: false,
+    };
     for handle in cx.windows() {
         let looked = handle.update(cx, |_, window, cx| {
             // The kit's menus take the keys while they're open.
-            let menu = window.context_stack().iter().any(|c| c.contains("PopupMenu"));
+            let menu = window
+                .context_stack()
+                .iter()
+                .any(|c| c.contains("PopupMenu"));
             let held = menu || window.has_active_prompt();
             // A window without the kit's root (About, the dock's drag outline)
             // has no dialogs, sheets or inputs to ask about, and asking
@@ -331,7 +404,10 @@ pub(crate) fn windows_now(main: AnyWindowHandle, cx: &mut App) -> WindowsNow {
                 return (held, false);
             }
             let held = held || window.has_active_dialog(cx) || window.has_active_sheet(cx);
-            (held, window.is_window_active() && window.has_focused_input(cx))
+            (
+                held,
+                window.is_window_active() && window.has_focused_input(cx),
+            )
         });
         // A window being drawn right now can't be read: count it as busy.
         let (held, typing) = looked.unwrap_or((true, false));
@@ -348,9 +424,14 @@ fn native_panel_up() -> bool {
     use objc2::runtime::NSObjectProtocol as _;
     use objc2::{ClassType as _, MainThreadMarker};
     use objc2_app_kit::{NSApplication, NSPanel};
-    let Some(mtm) = MainThreadMarker::new() else { return false };
+    let Some(mtm) = MainThreadMarker::new() else {
+        return false;
+    };
     let app = NSApplication::sharedApplication(mtm);
-    app.modalWindow().is_some() || app.keyWindow().is_some_and(|w| w.isKindOfClass(NSPanel::class()))
+    app.modalWindow().is_some()
+        || app
+            .keyWindow()
+            .is_some_and(|w| w.isKindOfClass(NSPanel::class()))
 }
 
 #[cfg(not(target_os = "macos"))]
@@ -363,7 +444,9 @@ fn native_panel_up() -> bool {
 /// or an alert takes the keys, though the app's still in front under it.
 #[cfg(target_os = "macos")]
 fn app_active() -> bool {
-    let Some(mtm) = objc2::MainThreadMarker::new() else { return true };
+    let Some(mtm) = objc2::MainThreadMarker::new() else {
+        return true;
+    };
     objc2_app_kit::NSApplication::sharedApplication(mtm).isActive()
 }
 
@@ -383,15 +466,27 @@ pub(crate) fn idle_seconds() -> f64 {
 #[cfg(windows)]
 pub(crate) fn idle_seconds() -> f64 {
     #[repr(C)]
-    struct LastInput { size: u32, tick: u32 }
+    struct LastInput {
+        size: u32,
+        tick: u32,
+    }
     #[link(name = "user32")]
-    extern "system" { fn GetLastInputInfo(info: *mut LastInput) -> i32; }
+    extern "system" {
+        fn GetLastInputInfo(info: *mut LastInput) -> i32;
+    }
     #[link(name = "kernel32")]
-    extern "system" { fn GetTickCount() -> u32; }
-    let mut info = LastInput { size: std::mem::size_of::<LastInput>() as u32, tick: 0 };
+    extern "system" {
+        fn GetTickCount() -> u32;
+    }
+    let mut info = LastInput {
+        size: std::mem::size_of::<LastInput>() as u32,
+        tick: 0,
+    };
     // Both clocks use the same wrapping millisecond counter. A failed query
     // counts as active, so an update cannot interrupt input we couldn't read.
-    if unsafe { GetLastInputInfo(&mut info) } == 0 { return 0.; }
+    if unsafe { GetLastInputInfo(&mut info) } == 0 {
+        return 0.;
+    }
     unsafe { GetTickCount() }.wrapping_sub(info.tick) as f64 / 1000.
 }
 
@@ -422,7 +517,10 @@ impl Threadbear {
             }
         };
         self.updater.staged = staged_build();
-        note(&format!("running {} from {}; following main", info.short, info.checkout));
+        note(&format!(
+            "running {} from {}; following main",
+            info.short, info.checkout
+        ));
         let checkout = info.checkout.clone();
         self.updater.running = Some(info);
         let looks = cx.spawn(async move |this, cx| {
@@ -440,9 +538,17 @@ impl Threadbear {
         // ref is written in refs/heads, or packed into the git folder.
         let git = Path::new(&checkout).join(".git");
         if git.is_dir() {
-            let mut watch = crate::file_watch::FolderWatch::new(cx, |this: &mut Threadbear, _, _, cx| this.check_for_update_soon(cx));
+            let mut watch =
+                crate::file_watch::FolderWatch::new(cx, |this: &mut Threadbear, _, _, cx| {
+                    this.check_for_update_soon(cx)
+                });
             if let Some(w) = watch.as_mut() {
-                w.set(&[git.join("refs").join("heads"), git].iter().map(|p| p.to_string_lossy().into_owned()).collect());
+                w.set(
+                    &[git.join("refs").join("heads"), git]
+                        .iter()
+                        .map(|p| p.to_string_lossy().into_owned())
+                        .collect(),
+                );
             }
             self.updater.watch = watch;
         }
@@ -457,7 +563,10 @@ impl Threadbear {
             // a window's dialogs and focus are read through its root, which
             // reads the app back.
             let windows = cx.update(|cx| windows_now(main, cx));
-            if this.update(cx, |t, cx| t.consider_auto_restart(windows, cx)).is_err() {
+            if this
+                .update(cx, |t, cx| t.consider_auto_restart(windows, cx))
+                .is_err()
+            {
                 break;
             }
         })
@@ -475,13 +584,20 @@ impl Threadbear {
     /// Reads main's desktop/ tree, including during a build, and waits for
     /// nearby landings to settle before requesting another.
     pub(crate) fn check_for_update(&mut self, cx: &mut Context<Self>) {
-        let Some(running) = self.updater.running.clone() else { return };
+        let Some(running) = self.updater.running.clone() else {
+            return;
+        };
         if self.updater.preview || self.updater.restarting {
             return;
         }
         // followMain: false in runner.json stops the runner rebuilding, and
         // the app too (on-your-mac.md promises both). Only an explicit false.
-        if self.runner_settings.as_ref().and_then(|s| s["followMain"].as_bool()) == Some(false) {
+        if self
+            .runner_settings
+            .as_ref()
+            .and_then(|s| s["followMain"].as_bool())
+            == Some(false)
+        {
             self.updater.settling = false;
             return;
         }
@@ -543,13 +659,26 @@ impl Threadbear {
             return;
         }
         let Some(script) = script() else { return };
-        let (program, arguments) = rules::build_command(&script.to_string_lossy(), &checkout, &next_dir().to_string_lossy());
+        let (program, arguments) = rules::build_command(
+            &script.to_string_lossy(),
+            &checkout,
+            &next_dir().to_string_lossy(),
+        );
         let log = open_log();
-        let (out, err) = match log.as_ref().and_then(|l| Some((l.try_clone().ok()?, l.try_clone().ok()?))) {
+        let (out, err) = match log
+            .as_ref()
+            .and_then(|l| Some((l.try_clone().ok()?, l.try_clone().ok()?)))
+        {
             Some((a, b)) => (Stdio::from(a), Stdio::from(b)),
             None => (Stdio::null(), Stdio::null()),
         };
-        let child = Command::new(program).args(arguments).current_dir(installed::home_dir()).stdin(Stdio::null()).stdout(out).stderr(err).spawn();
+        let child = Command::new(program)
+            .args(arguments)
+            .current_dir(installed::home_dir())
+            .stdin(Stdio::null())
+            .stdout(out)
+            .stderr(err)
+            .spawn();
         let mut child = match child {
             Ok(child) => child,
             Err(e) => {
@@ -557,13 +686,20 @@ impl Threadbear {
                 return;
             }
         };
-        note(&format!("building main (desktop/ {})", &tree[..tree.len().min(12)]));
+        note(&format!(
+            "building main (desktop/ {})",
+            &tree[..tree.len().min(12)]
+        ));
         self.updater.building = Some(tree.clone());
         self.updater.build_pid = Some(child.id());
         self.updater.waiting_for_host = false;
         cx.spawn(async move |this, cx| {
-            let status = cx.background_executor().spawn(async move { child.wait().ok().and_then(|s| s.code()) }).await;
-            this.update(cx, |t, cx| t.update_build_finished(tree, status, cx)).ok();
+            let status = cx
+                .background_executor()
+                .spawn(async move { child.wait().ok().and_then(|s| s.code()) })
+                .await;
+            this.update(cx, |t, cx| t.update_build_finished(tree, status, cx))
+                .ok();
         })
         .detach();
         cx.notify();
@@ -580,7 +716,10 @@ impl Threadbear {
         match status {
             Some(0) => match staged_build() {
                 Some(info) => {
-                    note(&format!("{} is staged; it goes in when the app quits or is opened again", info.short));
+                    note(&format!(
+                        "{} is staged; it goes in when the app quits or is opened again",
+                        info.short
+                    ));
                     self.updater.staged = Some(info);
                     self.updater.failed = None;
                     // The next of the once-a-second looks weighs restarting
@@ -597,7 +736,9 @@ impl Threadbear {
             Some(3) => {}
             _ => {
                 // Not tried again until main moves on or the app is opened again.
-                note(&format!("the update build failed ({status:?}); not tried again until main moves on"));
+                note(&format!(
+                    "the update build failed ({status:?}); not tried again until main moves on"
+                ));
                 self.updater.failed = Some(tree);
             }
         }
@@ -621,19 +762,32 @@ impl Threadbear {
         // Mike, 19 Nov, "just restart and put the text back in the box". Not
         // the new-thread page's, whose folder and account picks aren't kept,
         // nor anything while the drafts file can't be written.
-        self.boxes_hold(cx) || self.schedule_editor.is_some() || self.instructions_draft.is_some() || self.tasks_have_draft(cx) || crate::unsent::any(cx)
+        self.boxes_hold(cx)
+            || self.schedule_editor.is_some()
+            || self.instructions_draft.is_some()
+            || self.tasks_have_draft(cx)
+            || crate::unsent::any(cx)
     }
 
     /// The live threads' boxes (a deleted thread's composer can't be got
     /// back to, so it holds nothing): `has_unsent_words`, and a handover's
     /// go, as the old window takes typing while the new copy loads.
-    fn live_composers<'a>(&'a self) -> impl Iterator<Item = (&'a String, &'a Entity<crate::composer::Composer>)> + 'a {
-        self.composers.iter().filter(|(id, _)| self.threads.contains_key(*id))
+    fn live_composers<'a>(
+        &'a self,
+    ) -> impl Iterator<Item = (&'a String, &'a Entity<crate::composer::Composer>)> + 'a {
+        self.composers
+            .iter()
+            .filter(|(id, _)| self.threads.contains_key(*id))
     }
 
     fn boxes_hold(&self, cx: &App) -> bool {
-        self.live_composers().any(|(_, c)| c.read(cx).restart_hold(cx).is_some())
-            || self.new_thread.composer.as_ref().is_some_and(|c| c.read(cx).holds_anything(cx) || c.read(cx).copying_picture(cx))
+        self.live_composers()
+            .any(|(_, c)| c.read(cx).restart_hold(cx).is_some())
+            || self
+                .new_thread
+                .composer
+                .as_ref()
+                .is_some_and(|c| c.read(cx).holds_anything(cx) || c.read(cx).copying_picture(cx))
             || (self.drafts.failed && self.live_composers().any(|(_, c)| c.read(cx).has_draft(cx)))
     }
 
@@ -663,11 +817,17 @@ impl Threadbear {
     /// holds it named, as that's the one he can't see, and its id for the
     /// panel's button that opens it.
     fn restart_hold(&self, windows: WindowsNow, cx: &App) -> (String, Option<String>) {
-        if let Some((id, why)) = self.live_composers().find_map(|(id, c)| c.read(cx).restart_hold(cx).map(|why| (id, why))) {
+        if let Some((id, why)) = self
+            .live_composers()
+            .find_map(|(id, c)| c.read(cx).restart_hold(cx).map(|why| (id, why)))
+        {
             return (why.replace("{t}", &self.thread_title(id)), Some(id.clone()));
         }
         if self.drafts.failed {
-            if let Some((id, _)) = self.live_composers().find(|(_, c)| c.read(cx).has_draft(cx)) {
+            if let Some((id, _)) = self
+                .live_composers()
+                .find(|(_, c)| c.read(cx).has_draft(cx))
+            {
                 return (format!("the message box in “{}” is sent or cleared, as the drafts couldn't be saved", self.thread_title(id)), Some(id.clone()));
             }
         }
@@ -676,7 +836,10 @@ impl Threadbear {
                 Some(id) => format!("{field} in “{}”", self.thread_title(id)),
                 None => field,
             };
-            return (format!("what you're typing in {field} is sent, saved or cleared"), thread);
+            return (
+                format!("what you're typing in {field} is sent, saved or cleared"),
+                thread,
+            );
         }
         (self.restart_hold_elsewhere(windows, cx), None)
     }
@@ -684,7 +847,12 @@ impl Threadbear {
     /// `restart_hold` for the holds that aren't on a thread.
     fn restart_hold_elsewhere(&self, windows: WindowsNow, cx: &App) -> String {
         let s = |text: &str| text.to_owned();
-        if self.new_thread.composer.as_ref().is_some_and(|c| c.read(cx).holds_anything(cx) || c.read(cx).copying_picture(cx)) {
+        if self
+            .new_thread
+            .composer
+            .as_ref()
+            .is_some_and(|c| c.read(cx).holds_anything(cx) || c.read(cx).copying_picture(cx))
+        {
             return s("the new thread's message box is sent or cleared");
         }
         if self.schedule_editor.is_some() {
@@ -702,7 +870,11 @@ impl Threadbear {
         if crate::web_panels::holds_a_restart(cx) {
             return s("a panel's page has been left alone for a minute");
         }
-        if cx.has_active_drag() || crate::reply_links::left_held() || self.swipe_nav.under_way() || self.sidebar.gestures.under_way() {
+        if cx.has_active_drag()
+            || crate::reply_links::left_held()
+            || self.swipe_nav.under_way()
+            || self.sidebar.gestures.under_way()
+        {
             return s("the drag or swipe ends");
         }
         if windows.other_window_input {
@@ -734,7 +906,11 @@ impl Threadbear {
     pub(crate) fn restart_moment(&self, windows: WindowsNow, cx: &App) -> rules::RestartMoment {
         rules::RestartMoment {
             staged: self.updater.staged.is_some(),
-            loaded: self.sidebar.loaded && matches!(self.status, threadbear_client::runner::Status::Connected { .. }),
+            loaded: self.sidebar.loaded
+                && matches!(
+                    self.status,
+                    threadbear_client::runner::Status::Connected { .. }
+                ),
             has_drafts: self.has_unsent_words(cx),
             held: windows.held || self.under_way(cx),
             other_window_input: windows.other_window_input,
@@ -779,7 +955,11 @@ impl Threadbear {
             cx.notify();
         }
         if !self.updater.preview && rules::should_auto_restart(&moment) {
-            note(if moment.active { "restarting into the staged build: nothing typed that would be lost, and no input for five seconds" } else { "restarting into the staged build: nothing typed that would be lost, and the app isn't in front" });
+            note(if moment.active {
+                "restarting into the staged build: nothing typed that would be lost, and no input for five seconds"
+            } else {
+                "restarting into the staged build: nothing typed that would be lost, and the app isn't in front"
+            });
             // In front it comes back in front; behind, it stays behind.
             self.updater.auto_restart = true;
             self.restart_for_update(!moment.active, cx);
@@ -790,7 +970,8 @@ impl Threadbear {
     /// app again. Only the installed app: a scripted one showing a made-up
     /// update would otherwise quit and open Mike's.
     pub(crate) fn restart_to_update(&mut self, cx: &mut Context<Self>) {
-        if self.updater.staged.is_some() && self.updater.running.is_some() && !self.updater.preview {
+        if self.updater.staged.is_some() && self.updater.running.is_some() && !self.updater.preview
+        {
             self.restart_for_update(false, cx);
         }
     }
@@ -817,13 +998,22 @@ impl Threadbear {
         self.settings.save();
         cx.spawn(async move |this, cx| {
             this.update(cx, |t, cx| {
-                let spot = t.main_window.update(cx, |_, window, _| crate::handover::outgoing_spot(window)).ok().flatten();
+                let spot = t
+                    .main_window
+                    .update(cx, |_, window, _| crate::handover::outgoing_spot(window))
+                    .ok()
+                    .flatten();
                 match spot {
                     // The same bundle as a second copy, which takes over.
-                    Some(spot) => t.hand_over(install_dir(), spot, |_, cx| {
-                        relaunch_after_exit(&install_dir(), false);
-                        cx.quit();
-                    }, cx),
+                    Some(spot) => t.hand_over(
+                        install_dir(),
+                        spot,
+                        |_, cx| {
+                            relaunch_after_exit(&install_dir(), false);
+                            cx.quit();
+                        },
+                        cx,
+                    ),
                     None => {
                         relaunch_after_exit(&install_dir(), false);
                         cx.quit();
@@ -847,7 +1037,8 @@ impl Threadbear {
         // Next tick, outside whatever's being drawn or dispatched, so the
         // window can be asked where it is.
         cx.spawn(async move |this, cx| {
-            this.update(cx, |t, cx| t.hand_over_or_relaunch(in_background, cx)).ok();
+            this.update(cx, |t, cx| t.hand_over_or_relaunch(in_background, cx))
+                .ok();
         })
         .detach();
     }
@@ -858,17 +1049,31 @@ impl Threadbear {
     /// can't start, the old way: quit, and open the app again.
     fn hand_over_or_relaunch(&mut self, in_background: bool, cx: &mut Context<Self>) {
         let main = self.main_window;
-        let spot = main.update(cx, |_, window, _| crate::handover::outgoing_spot(window)).ok().flatten();
+        let spot = main
+            .update(cx, |_, window, _| crate::handover::outgoing_spot(window))
+            .ok()
+            .flatten();
         if let Some(spot) = spot {
             if drop_untrusted_staged() {
-                match rules::apply_staged(&install_dir(), &next_dir(), &old_dir(), &swapping_note(), self.updater.running.as_ref()) {
+                match rules::apply_staged(
+                    &install_dir(),
+                    &next_dir(),
+                    &old_dir(),
+                    &swapping_note(),
+                    self.updater.running.as_ref(),
+                ) {
                     Ok(Some(staged)) => {
                         note(&format!("swapped in {} to hand over to", staged.short));
                         self.updater.staged = None;
-                        self.hand_over(install_dir(), spot, move |_, cx| {
-                            relaunch_after_exit(&install_dir(), in_background);
-                            cx.quit();
-                        }, cx);
+                        self.hand_over(
+                            install_dir(),
+                            spot,
+                            move |_, cx| {
+                                relaunch_after_exit(&install_dir(), in_background);
+                                cx.quit();
+                            },
+                            cx,
+                        );
                         return;
                     }
                     Ok(None) => {}
@@ -882,13 +1087,17 @@ impl Threadbear {
 
     /// Where each thread open in a pane is scrolled to now, the ones at
     /// their end too.
-    pub(crate) fn live_scroll_memories(&self, cx: &App) -> Vec<(String, crate::rows::ScrollMemory)> {
+    pub(crate) fn live_scroll_memories(
+        &self,
+        cx: &App,
+    ) -> Vec<(String, crate::rows::ScrollMemory)> {
         self.threads
             .keys()
             .filter_map(|id| {
                 let pane = self.pane_for(id, cx)?;
                 let pane = pane.read(cx);
-                pane.is_loaded().then(|| (id.clone(), pane.capture_memory(cx)))
+                pane.is_loaded()
+                    .then(|| (id.clone(), pane.capture_memory(cx)))
             })
             .collect()
     }
@@ -899,7 +1108,15 @@ impl Threadbear {
     /// doesn't carry (`boxes_hold`); and nothing for a Restart to Update he
     /// chose, which never waited for these.
     pub(crate) fn handover_held(&self, windows: WindowsNow, cx: &App) -> bool {
-        self.updater.auto_restart && (windows.held || windows.other_window_input || self.boxes_hold(cx) || self.under_way(cx) || self.schedule_editor.is_some() || self.instructions_draft.is_some() || self.tasks_have_draft(cx) || crate::unsent::any(cx))
+        self.updater.auto_restart
+            && (windows.held
+                || windows.other_window_input
+                || self.boxes_hold(cx)
+                || self.under_way(cx)
+                || self.schedule_editor.is_some()
+                || self.instructions_draft.is_some()
+                || self.tasks_have_draft(cx)
+                || crate::unsent::any(cx))
     }
 
     /// What a restart leaves for the next launch: the list and the thread
@@ -918,7 +1135,8 @@ impl Threadbear {
         // Only the installed app, following main for real: a scripted or
         // debug app showing a made-up update (`preview_update`) must never
         // swap or delete what's at the install place (Codex's review, 12 Nov).
-        if self.updater.running.is_none() || self.updater.preview || !installed::launch().installed {
+        if self.updater.running.is_none() || self.updater.preview || !installed::launch().installed
+        {
             return;
         }
         #[cfg(unix)]
@@ -929,7 +1147,13 @@ impl Threadbear {
         if !drop_untrusted_staged() {
             return;
         }
-        match rules::apply_staged(&install_dir(), &next_dir(), &old_dir(), &swapping_note(), self.updater.running.as_ref()) {
+        match rules::apply_staged(
+            &install_dir(),
+            &next_dir(),
+            &old_dir(),
+            &swapping_note(),
+            self.updater.running.as_ref(),
+        ) {
             Ok(Some(staged)) => note(&format!("swapped in {} at quit", staged.short)),
             Ok(None) => {}
             Err(e) => note(&e),
@@ -940,12 +1164,18 @@ impl Threadbear {
     /// that were showing, the thread once the list is in (`pending_restore`),
     /// without bringing the window in front.
     pub(crate) fn restore_after_update(&mut self, cx: &mut Context<Self>) {
-        let Some(saved) = self.settings.saved.update_restore.take() else { return };
+        let Some(saved) = self.settings.saved.update_restore.take() else {
+            return;
+        };
         self.save_settings_soon(cx);
         // Where each thread was scrolled to, before any of them opens: the
         // pane looks there as it loads (`restore_memory`).
         crate::rows::recall_scroll_memories(&saved["scroll"]);
-        self.restore_place(saved["mode"].as_str().unwrap_or("inbox"), saved["selection"].as_str().unwrap_or(""), cx);
+        self.restore_place(
+            saved["mode"].as_str().unwrap_or("inbox"),
+            saved["selection"].as_str().unwrap_or(""),
+            cx,
+        );
     }
 
     /// Puts the list and the thread back. Only what differs is changed, so a
@@ -978,13 +1208,22 @@ impl Threadbear {
             running: u.running.as_ref().map(|b| b.short.clone()),
             staged: u.staged.as_ref().map(|b| b.short.clone()),
             building: u.building.is_some(),
-            settling: u.settling && self.runner_settings.as_ref().and_then(|s| s["followMain"].as_bool()) != Some(false),
+            settling: u.settling
+                && self
+                    .runner_settings
+                    .as_ref()
+                    .and_then(|s| s["followMain"].as_bool())
+                    != Some(false),
             failed: u.failed.is_some() && u.staged.is_none(),
             waiting: u.waiting_for_host && u.staged.is_none() && u.building.is_none(),
             // Only the installed app's reasons: every other launch is meant
             // not to. No builder is only ever set by an installed app's build
             // (or a scripted app's made-up update).
-            not_following: u.disabled.clone().filter(|_| installed::launch().installed).or_else(|| u.no_builder.then(|| NO_BUILDER.to_owned())),
+            not_following: u
+                .disabled
+                .clone()
+                .filter(|_| installed::launch().installed)
+                .or_else(|| u.no_builder.then(|| NO_BUILDER.to_owned())),
             wait: u.wait.clone().filter(|_| u.staged.is_some()),
         }
     }
@@ -994,7 +1233,13 @@ impl Threadbear {
     /// the Swift app's `previewUpdate`. Only scripts reach it, through the
     /// Updates panel's `updates` command.
     pub(crate) fn preview_update(&mut self, state: &str, cx: &mut Context<Self>) {
-        let build = |short: &str| BuildInfo { commit: short.into(), short: short.into(), app_tree: short.into(), configuration: "debug".into(), ..Default::default() };
+        let build = |short: &str| BuildInfo {
+            commit: short.into(),
+            short: short.into(),
+            app_tree: short.into(),
+            configuration: "debug".into(),
+            ..Default::default()
+        };
         let u = &mut self.updater;
         u.preview = true;
         u.running = Some(build("abc1234"));

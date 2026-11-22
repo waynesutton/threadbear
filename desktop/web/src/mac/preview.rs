@@ -6,7 +6,9 @@
 // here or cancelled.
 use super::panel::Shared;
 use crate::panel_rules::Event;
-use crate::preview_rules::{asked, may_browse, may_request, opens_in_browser, own_path, policy, PreviewSite};
+use crate::preview_rules::{
+    asked, may_browse, may_request, opens_in_browser, own_path, policy, PreviewSite,
+};
 use cef::*;
 use std::os::raw::c_int;
 use std::sync::{Arc, Mutex};

@@ -27,11 +27,23 @@ mod package;
 
 /// A bounded, private copy of an iWork package, rooted at the gate's open
 /// directory descriptor. Nested links and special files are refused.
-pub fn snapshot_package(from: &std::fs::File, folder: &Path, name: &str, limit: u64) -> std::io::Result<PathBuf> {
+pub fn snapshot_package(
+    from: &std::fs::File,
+    folder: &Path,
+    name: &str,
+    limit: u64,
+) -> std::io::Result<PathBuf> {
     #[cfg(any(target_os = "macos", target_os = "linux"))]
-    { package::snapshot(from, folder, name, limit) }
+    {
+        package::snapshot(from, folder, name, limit)
+    }
     #[cfg(not(any(target_os = "macos", target_os = "linux")))]
-    { let _ = (from, folder, name, limit); Err(std::io::Error::other("Package previews aren't available here")) }
+    {
+        let _ = (from, folder, name, limit);
+        Err(std::io::Error::other(
+            "Package previews aren't available here",
+        ))
+    }
 }
 
 /// Writes `data` as `path`, readable and writable by this user only.
@@ -42,17 +54,20 @@ pub fn write(path: &Path, data: &[u8]) -> std::io::Result<()> {
 /// Creates a private complete file only when no file already has its name.
 /// Returns false without changing an existing file or following its symlink.
 pub fn write_if_absent(path: &Path, data: &[u8]) -> std::io::Result<bool> {
-    let dir=path.parent().filter(|p|!p.as_os_str().is_empty()).unwrap_or_else(||Path::new("."));
+    let dir = path
+        .parent()
+        .filter(|p| !p.as_os_str().is_empty())
+        .unwrap_or_else(|| Path::new("."));
     make_dir(dir)?;
-    let (mut file,temp)=new_file(dir,path,0o600)?;
-    let written=file.write_all(data).and_then(|()|file.sync_all());
+    let (mut file, temp) = new_file(dir, path, 0o600)?;
+    let written = file.write_all(data).and_then(|()| file.sync_all());
     drop(file);
-    let result=written.and_then(|()| std::fs::hard_link(&temp,path));
-    let _=std::fs::remove_file(&temp);
+    let result = written.and_then(|()| std::fs::hard_link(&temp, path));
+    let _ = std::fs::remove_file(&temp);
     match result {
-        Ok(())=>Ok(true),
-        Err(e) if e.kind()==std::io::ErrorKind::AlreadyExists=>Ok(false),
-        Err(e)=>Err(e),
+        Ok(()) => Ok(true),
+        Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => Ok(false),
+        Err(e) => Err(e),
     }
 }
 
@@ -93,7 +108,10 @@ pub fn append(path: &Path) -> std::io::Result<std::fs::File> {
     };
     make_dir(&dir)?;
     if std::fs::symlink_metadata(path).is_ok_and(|m| m.file_type().is_symlink()) {
-        return Err(std::io::Error::new(std::io::ErrorKind::InvalidInput, format!("{} is a symlink", path.display())));
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidInput,
+            format!("{} is a symlink", path.display()),
+        ));
     }
     let mut options = std::fs::OpenOptions::new();
     options.append(true).create(true);
@@ -112,7 +130,10 @@ pub fn append(path: &Path) -> std::io::Result<std::fs::File> {
         use std::os::unix::fs::PermissionsExt as _;
         let meta = file.metadata()?;
         if !meta.is_file() {
-            return Err(std::io::Error::new(std::io::ErrorKind::InvalidInput, format!("{} isn't a file", path.display())));
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidInput,
+                format!("{} isn't a file", path.display()),
+            ));
         }
         if meta.permissions().mode() & 0o077 != 0 {
             file.set_permissions(std::fs::Permissions::from_mode(0o600))?;
@@ -129,8 +150,19 @@ pub fn append(path: &Path) -> std::io::Result<std::fs::File> {
 /// one, which is instant whatever the size; elsewhere the bytes are copied,
 /// and only up to `copy_limit`. Copies older than a day there are cleared
 /// out first.
-pub fn snapshot(from: &std::fs::File, folder: &Path, name: &str, copy_limit: u64) -> std::io::Result<PathBuf> {
-    let name = Path::new(name).file_name().filter(|n| !n.is_empty()).ok_or_else(|| std::io::Error::new(std::io::ErrorKind::InvalidInput, "no name to give the copy"))?.to_owned();
+pub fn snapshot(
+    from: &std::fs::File,
+    folder: &Path,
+    name: &str,
+    copy_limit: u64,
+) -> std::io::Result<PathBuf> {
+    let name = Path::new(name)
+        .file_name()
+        .filter(|n| !n.is_empty())
+        .ok_or_else(|| {
+            std::io::Error::new(std::io::ErrorKind::InvalidInput, "no name to give the copy")
+        })?
+        .to_owned();
     make_dir(folder)?;
     // The folder itself, not a link someone put there first to a folder of
     // theirs, and this user's only.
@@ -140,7 +172,10 @@ pub fn snapshot(from: &std::fs::File, folder: &Path, name: &str, copy_limit: u64
     #[cfg(not(unix))]
     let shared = false;
     if !meta.is_dir() || shared {
-        return Err(std::io::Error::new(std::io::ErrorKind::InvalidInput, format!("{} isn't a folder of this user's own", folder.display())));
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidInput,
+            format!("{} isn't a folder of this user's own", folder.display()),
+        ));
     }
     clear_old(folder, std::time::Duration::from_secs(24 * 60 * 60));
     let dir = new_dir(folder)?;
@@ -148,13 +183,19 @@ pub fn snapshot(from: &std::fs::File, folder: &Path, name: &str, copy_limit: u64
     #[cfg(target_os = "macos")]
     match clone_file(from, &path) {
         Ok(true) => return Ok(path),
-        Ok(false) => {},
-        Err(error) => { let _ = std::fs::remove_dir_all(&dir); return Err(error); }
+        Ok(false) => {}
+        Err(error) => {
+            let _ = std::fs::remove_dir_all(&dir);
+            return Err(error);
+        }
     }
     let len = from.metadata()?.len();
     if len > copy_limit {
         let _ = std::fs::remove_dir(&dir);
-        return Err(std::io::Error::new(std::io::ErrorKind::FileTooLarge, "too big to copy"));
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::FileTooLarge,
+            "too big to copy",
+        ));
     }
     let (mut file, temp) = new_file(&dir, &path, 0o600)?;
     // Not synced: it's a hand-over, read straight away, not kept.
@@ -178,15 +219,22 @@ fn clone_file(from: &std::fs::File, path: &Path) -> std::io::Result<bool> {
     use std::os::unix::{ffi::OsStrExt as _, fs::PermissionsExt as _};
     // System flags can't be cleared by this user. Don't inherit one that
     // could prevent deleting our copy; the bounded copy doesn't keep flags.
-    if from.metadata()?.st_flags() & libc::SF_SETTABLE != 0 { return Ok(false); }
-    let target = std::ffi::CString::new(path.as_os_str().as_bytes()).map_err(std::io::Error::other)?;
-    if unsafe { libc::fclonefileat(from.as_raw_fd(), libc::AT_FDCWD, target.as_ptr(), 0) } != 0 { return Ok(false); }
+    if from.metadata()?.st_flags() & libc::SF_SETTABLE != 0 {
+        return Ok(false);
+    }
+    let target =
+        std::ffi::CString::new(path.as_os_str().as_bytes()).map_err(std::io::Error::other)?;
+    if unsafe { libc::fclonefileat(from.as_raw_fd(), libc::AT_FDCWD, target.as_ptr(), 0) } != 0 {
+        return Ok(false);
+    }
     // Finder's Locked bit is cloned too. Clear only user lock/append bits
     // on our copy, keeping UF_COMPRESSED and the other flags intact. The
     // original stays Locked; drag exports can still take an instant clone.
     let flags = std::fs::metadata(path)?.st_flags();
     let unlocked = flags & !(libc::UF_IMMUTABLE | libc::UF_APPEND);
-    if unlocked != flags && unsafe { libc::lchflags(target.as_ptr(), unlocked) } != 0 { return Err(std::io::Error::last_os_error()); }
+    if unlocked != flags && unsafe { libc::lchflags(target.as_ptr(), unlocked) } != 0 {
+        return Err(std::io::Error::last_os_error());
+    }
     std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o400))?;
     Ok(true)
 }
@@ -212,7 +260,10 @@ fn copy_all(from: &std::fs::File, to: &mut std::fs::File, len: u64) -> std::io::
         #[cfg(windows)]
         let got = std::os::windows::fs::FileExt::seek_read(from, &mut buf[..want], at)?;
         if got == 0 {
-            return Err(std::io::Error::new(std::io::ErrorKind::UnexpectedEof, "the file got shorter while it was copied"));
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::UnexpectedEof,
+                "the file got shorter while it was copied",
+            ));
         }
         to.write_all(&buf[..got])?;
         at += got as u64;
@@ -226,8 +277,14 @@ fn new_dir(folder: &Path) -> std::io::Result<PathBuf> {
     static COUNT: AtomicU64 = AtomicU64::new(0);
     let mut last = None;
     for _ in 0..16 {
-        let nanos = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.as_nanos());
-        let dir = folder.join(format!("{}-{nanos:x}-{}", std::process::id(), COUNT.fetch_add(1, Ordering::Relaxed)));
+        let nanos = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map_or(0, |d| d.as_nanos());
+        let dir = folder.join(format!(
+            "{}-{nanos:x}-{}",
+            std::process::id(),
+            COUNT.fetch_add(1, Ordering::Relaxed)
+        ));
         let mut builder = std::fs::DirBuilder::new();
         #[cfg(unix)]
         std::os::unix::fs::DirBuilderExt::mode(&mut builder, 0o700);
@@ -245,14 +302,20 @@ fn new_dir(folder: &Path) -> std::io::Result<PathBuf> {
 /// `new_dir` gives, never a link (an entry's metadata here doesn't follow
 /// one), and `remove_dir_all` doesn't follow one swapped in partway either.
 fn clear_old(folder: &Path, age: std::time::Duration) {
-    let Ok(entries) = std::fs::read_dir(folder) else { return };
+    let Ok(entries) = std::fs::read_dir(folder) else {
+        return;
+    };
     let now = std::time::SystemTime::now();
     for entry in entries.flatten() {
         if !is_snapshot_name(&entry.file_name().to_string_lossy()) {
             continue;
         }
         let Ok(meta) = entry.metadata() else { continue };
-        let old = meta.modified().ok().and_then(|m| now.duration_since(m).ok()).is_some_and(|d| d > age);
+        let old = meta
+            .modified()
+            .ok()
+            .and_then(|m| now.duration_since(m).ok())
+            .is_some_and(|d| d > age);
         if old && meta.is_dir() && !meta.file_type().is_symlink() {
             let _ = std::fs::remove_dir_all(entry.path());
         }
@@ -289,11 +352,19 @@ fn make_dir(dir: &Path) -> std::io::Result<()> {
 fn new_file(dir: &Path, path: &Path, mode: u32) -> std::io::Result<(std::fs::File, PathBuf)> {
     use std::sync::atomic::{AtomicU64, Ordering};
     static COUNT: AtomicU64 = AtomicU64::new(0);
-    let name = path.file_name().map_or_else(|| "file".into(), |n| n.to_string_lossy().into_owned());
+    let name = path
+        .file_name()
+        .map_or_else(|| "file".into(), |n| n.to_string_lossy().into_owned());
     let mut last = None;
     for _ in 0..16 {
-        let nanos = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.as_nanos());
-        let temp = dir.join(format!(".{name}.{}-{nanos:x}-{}.tmp", std::process::id(), COUNT.fetch_add(1, Ordering::Relaxed)));
+        let nanos = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map_or(0, |d| d.as_nanos());
+        let temp = dir.join(format!(
+            ".{name}.{}-{nanos:x}-{}.tmp",
+            std::process::id(),
+            COUNT.fetch_add(1, Ordering::Relaxed)
+        ));
         let mut options = std::fs::OpenOptions::new();
         options.write(true).create_new(true);
         #[cfg(unix)]
@@ -317,7 +388,8 @@ mod tests {
     use std::sync::Arc;
 
     fn scratch(name: &str) -> PathBuf {
-        let dir = std::env::temp_dir().join(format!("tb-private-file-{name}-{}", std::process::id()));
+        let dir =
+            std::env::temp_dir().join(format!("tb-private-file-{name}-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
         // As a runner home can be: listable and openable by everyone.
@@ -326,21 +398,27 @@ mod tests {
     }
 
     fn mode(path: &Path) -> u32 {
-        std::fs::symlink_metadata(path).unwrap().permissions().mode() & 0o777
+        std::fs::symlink_metadata(path)
+            .unwrap()
+            .permissions()
+            .mode()
+            & 0o777
     }
 
     #[test]
     fn a_write_once_file_is_private_and_never_replaced() {
-        let dir=scratch("write-once");let path=dir.join("CLAUDE.md");
-        assert!(write_if_absent(&path,b"original").unwrap());
-        assert_eq!(mode(&path),0o600);
-        assert!(!write_if_absent(&path,b"replacement").unwrap());
-        assert_eq!(std::fs::read(&path).unwrap(),b"original");
+        let dir = scratch("write-once");
+        let path = dir.join("CLAUDE.md");
+        assert!(write_if_absent(&path, b"original").unwrap());
+        assert_eq!(mode(&path), 0o600);
+        assert!(!write_if_absent(&path, b"replacement").unwrap());
+        assert_eq!(std::fs::read(&path).unwrap(), b"original");
         std::fs::remove_file(&path).unwrap();
-        let target=dir.join("user-file");write(&target,b"keep").unwrap();
-        std::os::unix::fs::symlink(&target,&path).unwrap();
-        assert!(!write_if_absent(&path,b"replacement").unwrap());
-        assert_eq!(std::fs::read(&target).unwrap(),b"keep");
+        let target = dir.join("user-file");
+        write(&target, b"keep").unwrap();
+        std::os::unix::fs::symlink(&target, &path).unwrap();
+        assert!(!write_if_absent(&path, b"replacement").unwrap());
+        assert_eq!(std::fs::read(&target).unwrap(), b"keep");
         std::fs::remove_dir_all(dir).unwrap();
     }
 
@@ -377,7 +455,10 @@ mod tests {
         let dir = scratch("whole");
         let path = dir.join("desktop-drafts.json");
         write(&path, b"{\"t\":{\"text\":\"secret\"}}").unwrap();
-        assert_eq!(std::fs::read(&path).unwrap(), b"{\"t\":{\"text\":\"secret\"}}");
+        assert_eq!(
+            std::fs::read(&path).unwrap(),
+            b"{\"t\":{\"text\":\"secret\"}}"
+        );
         assert_eq!(mode(&path), 0o600);
         // An older file someone made readable is replaced, not written into.
         std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o644)).unwrap();
@@ -387,7 +468,11 @@ mod tests {
         // Nothing left behind.
         assert_eq!(std::fs::read_dir(&dir).unwrap().count(), 1);
         write_with_mode(&dir.join("sign-in.sh"), b"#!/bin/sh\n", 0o755).unwrap();
-        assert_eq!(mode(&dir.join("sign-in.sh")), 0o700, "never group or other bits");
+        assert_eq!(
+            mode(&dir.join("sign-in.sh")),
+            0o700,
+            "never group or other bits"
+        );
         std::fs::remove_dir_all(&dir).unwrap();
     }
 
@@ -412,7 +497,10 @@ mod tests {
         std::fs::remove_file(&original).unwrap();
         std::os::unix::fs::symlink("/etc/hosts", &original).unwrap();
         assert_eq!(std::fs::read(&copy).unwrap(), b"the film that was checked");
-        assert!(!std::fs::symlink_metadata(&copy).unwrap().file_type().is_symlink());
+        assert!(!std::fs::symlink_metadata(&copy)
+            .unwrap()
+            .file_type()
+            .is_symlink());
         // Each copy has a folder of its own, and a name can't climb out.
         let again = snapshot(&held, &folder, "../../escape.mp4", 1 << 20).unwrap();
         assert_ne!(again.parent(), copy.parent());
@@ -445,9 +533,13 @@ mod tests {
         std::fs::write(project.join("notes.txt"), b"keep").unwrap();
         let stale = own.join("123-abc-0");
         std::fs::create_dir(&stale).unwrap();
-        let day_ago = std::time::SystemTime::now() - std::time::Duration::from_secs(2 * 24 * 60 * 60);
+        let day_ago =
+            std::time::SystemTime::now() - std::time::Duration::from_secs(2 * 24 * 60 * 60);
         for old in [&project, &stale] {
-            std::fs::File::open(old).unwrap().set_modified(day_ago).unwrap();
+            std::fs::File::open(old)
+                .unwrap()
+                .set_modified(day_ago)
+                .unwrap();
         }
         snapshot(&held, &own, "hero.mp4", 1 << 20).unwrap();
         assert!(project.join("notes.txt").exists());
@@ -530,10 +622,14 @@ mod tests {
             std::fs::rename(&temp, path).unwrap();
         });
         if caught_old == 0 {
-            eprintln!("the old way wasn't caught here (a strict umask?), so only today's is checked");
+            eprintln!(
+                "the old way wasn't caught here (a strict umask?), so only today's is checked"
+            );
         }
         let new = scratch("race-new");
-        let caught_new = watch(new.clone(), 1000, |path, i| write(path, format!("secret {i}").as_bytes()).unwrap());
+        let caught_new = watch(new.clone(), 1000, |path, i| {
+            write(path, format!("secret {i}").as_bytes()).unwrap()
+        });
         assert_eq!(caught_new, 0, "a temp file was readable by others");
         let _ = std::fs::remove_dir_all(&old);
         let _ = std::fs::remove_dir_all(&new);

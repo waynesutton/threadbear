@@ -4,10 +4,18 @@
 use chrono::{Datelike, Duration, NaiveDate, NaiveTime, Weekday};
 
 /// The priorities, most pressing first, with their menu names.
-pub const PRIORITIES: [(&str, &str); 4] = [("urgent", "Urgent"), ("high", "High"), ("normal", "Normal"), ("low", "Low")];
+pub const PRIORITIES: [(&str, &str); 4] = [
+    ("urgent", "Urgent"),
+    ("high", "High"),
+    ("normal", "Normal"),
+    ("low", "Low"),
+];
 
 pub fn priority_name(priority: Option<&str>) -> &'static str {
-    PRIORITIES.iter().find(|(id, _)| Some(*id) == priority).map_or("No priority", |(_, name)| name)
+    PRIORITIES
+        .iter()
+        .find(|(id, _)| Some(*id) == priority)
+        .map_or("No priority", |(_, name)| name)
 }
 
 /// How many of the three bars are filled: High 3, Normal 2, Low 1.
@@ -22,7 +30,9 @@ pub fn priority_bars(priority: &str) -> usize {
 
 /// A due time, HH:MM on the 24-hour clock in the Macs' own time zone (API 88).
 pub fn parse_time(time: &str) -> Option<NaiveTime> {
-    if time.len() != 5 { return None; }
+    if time.len() != 5 {
+        return None;
+    }
     NaiveTime::parse_from_str(time, "%H:%M").ok()
 }
 pub fn format_time(time: NaiveTime) -> String {
@@ -30,7 +40,11 @@ pub fn format_time(time: NaiveTime) -> String {
 }
 /// "9:30 AM", or "09:30" on a 24-hour clock.
 pub fn time_label(time: NaiveTime, twenty_four: bool) -> String {
-    if twenty_four { time.format("%H:%M").to_string() } else { time.format("%-I:%M %p").to_string() }
+    if twenty_four {
+        time.format("%H:%M").to_string()
+    } else {
+        time.format("%-I:%M %p").to_string()
+    }
 }
 
 pub fn parse(day: &str) -> Option<NaiveDate> {
@@ -59,7 +73,9 @@ pub fn quick_picks(today: NaiveDate) -> Vec<(&'static str, NaiveDate)> {
 
 /// A month's days as weeks from Monday, with None before the 1st and after the last.
 pub fn month_grid(year: i32, month: u32) -> Vec<[Option<NaiveDate>; 7]> {
-    let Some(first) = NaiveDate::from_ymd_opt(year, month, 1) else { return vec![] };
+    let Some(first) = NaiveDate::from_ymd_opt(year, month, 1) else {
+        return vec![];
+    };
     let lead = first.weekday().num_days_from_monday() as usize;
     let mut weeks = Vec::new();
     let mut week = [None; 7];
@@ -88,7 +104,9 @@ pub fn shift_month(year: i32, month: u32, step: i32) -> (i32, u32) {
 }
 
 pub fn month_title(year: i32, month: u32) -> String {
-    NaiveDate::from_ymd_opt(year, month, 1).map(|d| d.format("%B %Y").to_string()).unwrap_or_default()
+    NaiveDate::from_ymd_opt(year, month, 1)
+        .map(|d| d.format("%B %Y").to_string())
+        .unwrap_or_default()
 }
 
 pub const WEEKDAYS: [&str; 7] = ["Mo", "Tu", "We", "Th", "Fr", "Sa", "Su"];
@@ -138,14 +156,20 @@ pub struct DueTask {
 }
 
 fn priority_rank(priority: Option<&str>) -> usize {
-    PRIORITIES.iter().position(|(id, _)| Some(*id) == priority).unwrap_or(PRIORITIES.len())
+    PRIORITIES
+        .iter()
+        .position(|(id, _)| Some(*id) == priority)
+        .unwrap_or(PRIORITIES.len())
 }
 
 /// The tasks from `tasks.list` that have a due date and aren't done, soonest
 /// first, then the most pressing, then by title. A day that doesn't parse
 /// is left out rather than guessed at.
 pub fn due_tasks(items: &[serde_json::Value]) -> Vec<DueTask> {
-    let titles: std::collections::HashMap<&str, &str> = items.iter().filter_map(|t| Some((t["id"].as_str()?, t["title"].as_str().unwrap_or("")))).collect();
+    let titles: std::collections::HashMap<&str, &str> = items
+        .iter()
+        .filter_map(|t| Some((t["id"].as_str()?, t["title"].as_str().unwrap_or(""))))
+        .collect();
     let mut out: Vec<DueTask> = items
         .iter()
         .filter_map(|t| {
@@ -154,7 +178,10 @@ pub fn due_tasks(items: &[serde_json::Value]) -> Vec<DueTask> {
                 return None;
             }
             let due = parse(t["dueDate"].as_str()?)?;
-            let parent_title = t["parentId"].as_str().and_then(|p| titles.get(p)).map(|s| s.to_string());
+            let parent_title = t["parentId"]
+                .as_str()
+                .and_then(|p| titles.get(p))
+                .map(|s| s.to_string());
             Some(DueTask {
                 id: t["id"].as_str()?.to_string(),
                 title: t["title"].as_str().unwrap_or("").to_string(),
@@ -166,7 +193,12 @@ pub fn due_tasks(items: &[serde_json::Value]) -> Vec<DueTask> {
             })
         })
         .collect();
-    out.sort_by(|a, b| a.due.cmp(&b.due).then(priority_rank(a.priority.as_deref()).cmp(&priority_rank(b.priority.as_deref()))).then_with(|| a.title.to_lowercase().cmp(&b.title.to_lowercase())));
+    out.sort_by(|a, b| {
+        a.due
+            .cmp(&b.due)
+            .then(priority_rank(a.priority.as_deref()).cmp(&priority_rank(b.priority.as_deref())))
+            .then_with(|| a.title.to_lowercase().cmp(&b.title.to_lowercase()))
+    });
     out
 }
 
@@ -196,9 +228,33 @@ pub fn due_stats(tasks: &[DueTask], today: NaiveDate) -> Vec<crate::home::HomeSt
     let now = tasks.iter().filter(|t| t.due == today).count();
     let overdue = tasks.iter().filter(|t| t.due < today).count();
     vec![
-        HomeStat::new(tasks.len(), if tasks.len() == 1 { "Task due" } else { "Tasks due" }, "Tasks with a due date that aren't done yet"),
-        HomeStat::new(now, if now == 1 { "Task due today" } else { "Tasks due today" }, "Tasks whose due date is today"),
-        HomeStat::new(overdue, if overdue == 1 { "Task overdue" } else { "Tasks overdue" }, "Tasks whose due date has passed and aren't done"),
+        HomeStat::new(
+            tasks.len(),
+            if tasks.len() == 1 {
+                "Task due"
+            } else {
+                "Tasks due"
+            },
+            "Tasks with a due date that aren't done yet",
+        ),
+        HomeStat::new(
+            now,
+            if now == 1 {
+                "Task due today"
+            } else {
+                "Tasks due today"
+            },
+            "Tasks whose due date is today",
+        ),
+        HomeStat::new(
+            overdue,
+            if overdue == 1 {
+                "Task overdue"
+            } else {
+                "Tasks overdue"
+            },
+            "Tasks whose due date has passed and aren't done",
+        ),
     ]
 }
 
@@ -262,14 +318,39 @@ mod tests {
         assert_eq!(due[1].status, "doing");
         assert_eq!(due_now_count(&due, d("2026-11-17")), 3);
         assert_eq!(due_now_count(&due, d("2026-11-16")), 0);
-        assert_eq!(due_summary(&due, d("2026-11-17")).as_deref(), Some("3 tasks due today"));
-        assert_eq!(due_summary(&due, d("2026-11-18")).as_deref(), Some("3 tasks overdue"));
-        assert_eq!(due_summary(&due, d("2026-11-30")).as_deref(), Some("3 tasks overdue, 1 due today"));
-        assert_eq!(due_summary(&due[3..], d("2026-12-01")).as_deref(), Some("1 task overdue"));
+        assert_eq!(
+            due_summary(&due, d("2026-11-17")).as_deref(),
+            Some("3 tasks due today")
+        );
+        assert_eq!(
+            due_summary(&due, d("2026-11-18")).as_deref(),
+            Some("3 tasks overdue")
+        );
+        assert_eq!(
+            due_summary(&due, d("2026-11-30")).as_deref(),
+            Some("3 tasks overdue, 1 due today")
+        );
+        assert_eq!(
+            due_summary(&due[3..], d("2026-12-01")).as_deref(),
+            Some("1 task overdue")
+        );
         assert_eq!(due_summary(&due, d("2026-11-01")), None);
-        let tiles: Vec<(String, String)> = due_stats(&due, d("2026-11-17")).into_iter().map(|s| (s.value, s.label)).collect();
-        assert_eq!(tiles, [("4".into(), "Tasks due".into()), ("3".into(), "Tasks due today".into()), ("0".into(), "Tasks overdue".into())]);
-        assert_eq!(due_stats(&due[3..], d("2026-12-01"))[2].label, "Task overdue");
+        let tiles: Vec<(String, String)> = due_stats(&due, d("2026-11-17"))
+            .into_iter()
+            .map(|s| (s.value, s.label))
+            .collect();
+        assert_eq!(
+            tiles,
+            [
+                ("4".into(), "Tasks due".into()),
+                ("3".into(), "Tasks due today".into()),
+                ("0".into(), "Tasks overdue".into())
+            ]
+        );
+        assert_eq!(
+            due_stats(&due[3..], d("2026-12-01"))[2].label,
+            "Task overdue"
+        );
     }
 
     #[test]

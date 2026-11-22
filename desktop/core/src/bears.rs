@@ -46,12 +46,20 @@ impl ThreadBear {
     /// or the app has no drawing of it): a crown for the head bear, a paw
     /// for any other.
     pub fn fallback_symbol(&self) -> &'static str {
-        if self.is_head() { "crown.fill" } else { "pawprint.fill" }
+        if self.is_head() {
+            "crown.fill"
+        } else {
+            "pawprint.fill"
+        }
     }
 
     /// The tile's tooltip: "Writer", or "Head Bear, the head bear".
     pub fn tip(&self) -> String {
-        if self.is_head() { format!("{}, the head bear", self.name) } else { self.name.clone() }
+        if self.is_head() {
+            format!("{}, the head bear", self.name)
+        } else {
+            self.name.clone()
+        }
     }
 }
 
@@ -107,7 +115,13 @@ pub struct BearEntry {
 impl BearEntry {
     /// The same bear as a thread's tile draws it.
     pub fn tile(&self) -> ThreadBear {
-        ThreadBear { id: self.id.clone(), name: self.name.clone(), icon: self.icon.clone(), color: self.color.clone(), head: self.head.then_some(true) }
+        ThreadBear {
+            id: self.id.clone(),
+            name: self.name.clone(),
+            icon: self.icon.clone(),
+            color: self.color.clone(),
+            head: self.head.then_some(true),
+        }
     }
 }
 
@@ -124,7 +138,14 @@ pub fn decode_list(v: &Value) -> Vec<BearEntry> {
         .flatten()
         .filter(|b| b["archived"].as_bool() != Some(true))
         .filter_map(|b| {
-            Some(BearEntry { id: text(b, "id")?, name: text(b, "name")?, does: text(b, "does"), icon: text(b, "icon"), color: text(b, "color"), head: b["head"].as_bool() == Some(true) })
+            Some(BearEntry {
+                id: text(b, "id")?,
+                name: text(b, "name")?,
+                does: text(b, "does"),
+                icon: text(b, "icon"),
+                color: text(b, "color"),
+                head: b["head"].as_bool() == Some(true),
+            })
         })
         .collect()
 }
@@ -137,7 +158,9 @@ pub fn matches(query: &str, bears: &[BearEntry]) -> Vec<BearEntry> {
     let q = query.to_lowercase();
     let mut sorted: Vec<&BearEntry> = bears.iter().collect();
     sorted.sort_by(|a, b| (!a.head, &a.name).cmp(&(!b.head, &b.name)));
-    let starts = sorted.iter().filter(|b| b.name.to_lowercase().starts_with(&q));
+    let starts = sorted
+        .iter()
+        .filter(|b| b.name.to_lowercase().starts_with(&q));
     let words = sorted.iter().filter(|b| {
         let name = b.name.to_lowercase();
         !name.starts_with(&q) && name.split(' ').any(|w| w.starts_with(&q))
@@ -161,7 +184,11 @@ pub fn token(text: &str, cursor: usize) -> Option<Range<usize>> {
         }
         start = i;
     }
-    let at = before[..start].char_indices().next_back().filter(|(_, c)| *c == '@').map(|(i, _)| i)?;
+    let at = before[..start]
+        .char_indices()
+        .next_back()
+        .filter(|(_, c)| *c == '@')
+        .map(|(i, _)| i)?;
     if let Some(prev) = text[..at].chars().next_back() {
         if !matches!(prev, ' ' | '\n' | '\t' | '(') {
             return None;
@@ -231,8 +258,17 @@ impl Table {
     /// won't read.
     pub fn decode(v: &Value) -> Option<Table> {
         let o = v.as_object()?;
-        let bears = o.get("bears").and_then(Value::as_array).into_iter().flatten().filter_map(|b| b.as_str().map(str::to_owned)).collect();
-        let max_turns = o.get("maxTurns").and_then(|n| n.as_u64().or_else(|| n.as_f64().map(|f| f as u64))).map(|n| n as u32);
+        let bears = o
+            .get("bears")
+            .and_then(Value::as_array)
+            .into_iter()
+            .flatten()
+            .filter_map(|b| b.as_str().map(str::to_owned))
+            .collect();
+        let max_turns = o
+            .get("maxTurns")
+            .and_then(|n| n.as_u64().or_else(|| n.as_f64().map(|f| f as u64)))
+            .map(|n| n as u32);
         Some(Table { bears, max_turns })
     }
 }
@@ -253,8 +289,22 @@ pub fn seats(table: &Table, bears: &[BearEntry]) -> Vec<Seat> {
         .bears
         .iter()
         .map(|id| match bears.iter().find(|b| &b.id == id) {
-            Some(b) => Seat { tile: b.tile(), name: b.name.clone(), does: b.does.clone(), tip: format!("{} sits at this table", b.name) },
-            None => Seat { tile: ThreadBear { id: id.clone(), name: id.clone(), ..Default::default() }, name: id.clone(), does: None, tip: "A bear this Mac doesn't list now".to_owned() },
+            Some(b) => Seat {
+                tile: b.tile(),
+                name: b.name.clone(),
+                does: b.does.clone(),
+                tip: format!("{} sits at this table", b.name),
+            },
+            None => Seat {
+                tile: ThreadBear {
+                    id: id.clone(),
+                    name: id.clone(),
+                    ..Default::default()
+                },
+                name: id.clone(),
+                does: None,
+                tip: "A bear this Mac doesn't list now".to_owned(),
+            },
         })
         .collect()
 }
@@ -268,7 +318,12 @@ mod tests {
     use serde_json::json;
 
     fn bear(id: &str, name: &str, head: bool) -> BearEntry {
-        BearEntry { id: id.into(), name: name.into(), head, ..Default::default() }
+        BearEntry {
+            id: id.into(),
+            name: name.into(),
+            head,
+            ..Default::default()
+        }
     }
 
     #[test]
@@ -278,16 +333,30 @@ mod tests {
         assert_eq!(rgb("3E8ED0"), None);
         assert_eq!(rgb("#12345"), None);
         assert_eq!(rgb("#zzzzzz"), None);
-        let b = ThreadBear { id: "w".into(), name: "Writer".into(), color: Some("blue".into()), ..Default::default() };
+        let b = ThreadBear {
+            id: "w".into(),
+            name: "Writer".into(),
+            color: Some("blue".into()),
+            ..Default::default()
+        };
         assert_eq!(b.rgb(), FUR);
     }
 
     #[test]
     fn the_head_bear_gets_a_crown_and_says_so() {
-        let head = ThreadBear { id: "h".into(), name: "Head Bear".into(), head: Some(true), ..Default::default() };
+        let head = ThreadBear {
+            id: "h".into(),
+            name: "Head Bear".into(),
+            head: Some(true),
+            ..Default::default()
+        };
         assert_eq!(head.fallback_symbol(), "crown.fill");
         assert_eq!(head.tip(), "Head Bear, the head bear");
-        let writer = ThreadBear { id: "w".into(), name: "Writer".into(), ..Default::default() };
+        let writer = ThreadBear {
+            id: "w".into(),
+            name: "Writer".into(),
+            ..Default::default()
+        };
         assert_eq!(writer.fallback_symbol(), "pawprint.fill");
         assert_eq!(writer.tip(), "Writer");
     }
@@ -296,18 +365,27 @@ mod tests {
     fn a_summary_reads_its_bear_and_a_bad_one_reads_as_none() {
         let t: crate::inbox::ThreadSummary = serde_json::from_value(json!({ "id": "t1", "bear": { "id": "w", "name": "Writer", "icon": "pencil", "color": "#3E8ED0" } })).unwrap();
         assert_eq!(t.bear.as_ref().map(|b| b.name.as_str()), Some("Writer"));
-        let t: crate::inbox::ThreadSummary = serde_json::from_value(json!({ "id": "t1", "bear": "nonsense" })).unwrap();
+        let t: crate::inbox::ThreadSummary =
+            serde_json::from_value(json!({ "id": "t1", "bear": "nonsense" })).unwrap();
         assert_eq!(t.bear, None);
     }
 
     #[test]
     fn the_current_colour_is_ticked_whatever_its_case() {
-        let mut b = ThreadBear { id: "w".into(), name: "Writer".into(), color: Some("#3e8ed0".into()), ..Default::default() };
+        let mut b = ThreadBear {
+            id: "w".into(),
+            name: "Writer".into(),
+            color: Some("#3e8ed0".into()),
+            ..Default::default()
+        };
         assert!(is_current(&b, Some("#3E8ED0")));
         assert!(!is_current(&b, None));
         b.color = None;
         assert!(is_current(&b, None));
-        assert_eq!(colour_tip(&b, "Moss", Some("#5E9B4F")), "Colour Writer's tile moss");
+        assert_eq!(
+            colour_tip(&b, "Moss", Some("#5E9B4F")),
+            "Colour Writer's tile moss"
+        );
         assert_eq!(colour_tip(&b, "Fur", None), "Writer's own fur colour");
     }
 
@@ -315,16 +393,35 @@ mod tests {
     fn the_list_leaves_out_archived_bears_and_is_empty_while_off() {
         let v = json!({ "on": true, "bears": [{ "id": "w", "name": "Writer", "does": "Drafts" }, { "id": "o", "name": "Old", "archived": true }, { "name": "No id" }] });
         let list = decode_list(&v);
-        assert_eq!(list.iter().map(|b| b.name.as_str()).collect::<Vec<_>>(), ["Writer"]);
+        assert_eq!(
+            list.iter().map(|b| b.name.as_str()).collect::<Vec<_>>(),
+            ["Writer"]
+        );
         assert_eq!(list[0].does.as_deref(), Some("Drafts"));
-        assert!(decode_list(&json!({ "on": false, "bears": [{ "id": "w", "name": "Writer" }] })).is_empty());
+        assert!(
+            decode_list(&json!({ "on": false, "bears": [{ "id": "w", "name": "Writer" }] }))
+                .is_empty()
+        );
     }
 
     #[test]
     fn names_starting_with_it_come_first_the_head_bear_leading() {
-        let bears = [bear("w", "Writer", false), bear("h", "Head Bear", true), bear("b", "Bear Wrangler", false), bear("hw", "Hardware", false)];
-        let names = |q: &str| matches(q, &bears).into_iter().map(|b| b.name).collect::<Vec<_>>();
-        assert_eq!(names(""), ["Head Bear", "Bear Wrangler", "Hardware", "Writer"]);
+        let bears = [
+            bear("w", "Writer", false),
+            bear("h", "Head Bear", true),
+            bear("b", "Bear Wrangler", false),
+            bear("hw", "Hardware", false),
+        ];
+        let names = |q: &str| {
+            matches(q, &bears)
+                .into_iter()
+                .map(|b| b.name)
+                .collect::<Vec<_>>()
+        };
+        assert_eq!(
+            names(""),
+            ["Head Bear", "Bear Wrangler", "Hardware", "Writer"]
+        );
         assert_eq!(names("h"), ["Head Bear", "Hardware"]);
         assert_eq!(names("wr"), ["Writer", "Bear Wrangler"]);
         assert_eq!(names("bear"), ["Bear Wrangler", "Head Bear"]);
@@ -382,8 +479,14 @@ mod tests {
         let table = Table::decode(&json!({ "bears": ["h", "gone"], "maxTurns": 4 })).unwrap();
         assert_eq!(table.max_turns, Some(4));
         assert!(Table::decode(&json!("nonsense")).is_none());
-        let seats = seats(&table, &[bear("w", "Writer", false), bear("h", "Head Bear", true)]);
-        assert_eq!(seats.iter().map(|s| s.name.as_str()).collect::<Vec<_>>(), ["Head Bear", "gone"]);
+        let seats = seats(
+            &table,
+            &[bear("w", "Writer", false), bear("h", "Head Bear", true)],
+        );
+        assert_eq!(
+            seats.iter().map(|s| s.name.as_str()).collect::<Vec<_>>(),
+            ["Head Bear", "gone"]
+        );
         assert_eq!(seats[0].tip, "Head Bear sits at this table");
         assert_eq!(seats[1].tip, "A bear this Mac doesn't list now");
     }

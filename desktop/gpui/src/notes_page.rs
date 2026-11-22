@@ -11,12 +11,15 @@
 // never go to the runner, an agent, the phone or the website.
 use crate::app::Threadbear;
 use crate::highlights::{tipped, tipped_as};
+use crate::icons;
 use crate::style::{self, px};
 use crate::tips::Tip as _;
-use crate::icons;
 use gpui_kit::base::TestSupportExt as _;
 use gpui_kit::component::dialog::DialogButtonProps;
-use gpui_kit::component::input::{Editor, EditorState, Enter, FoldRange, HighlightStyleResolver, Input, InputEdit, InputEvent, InputHighlighter, InputHighlighterFactory, InputState, Rope, TabSize};
+use gpui_kit::component::input::{
+    Editor, EditorState, Enter, FoldRange, HighlightStyleResolver, Input, InputEdit, InputEvent,
+    InputHighlighter, InputHighlighterFactory, InputState, Rope, TabSize,
+};
 use gpui_kit::component::menu::{ContextMenuExt as _, PopupMenuItem};
 use gpui_kit::component::{h_flex, v_flex, ActiveTheme as _, Sizable as _, WindowExt as _};
 use gpui_kit::prelude::*;
@@ -90,7 +93,8 @@ impl Threadbear {
         let text_size = stepped_size(self.settings.saved.notes_text_size.unwrap_or(TEXT_SIZE), 0.);
         let mono = self.settings.saved.notes_font.as_deref() == Some("mono");
         let app = cx.entity().downgrade();
-        let page = cx.new(|cx| NotesPage::new(app, &home, list_hidden, text_size, mono, window, cx));
+        let page =
+            cx.new(|cx| NotesPage::new(app, &home, list_hidden, text_size, mono, window, cx));
         self.notes_page = Some(page);
         self.sync_menus(cx);
         cx.notify();
@@ -98,7 +102,9 @@ impl Threadbear {
 
     /// Notes put away, what's typed written first. False if it wasn't up.
     pub(crate) fn close_notes(&mut self, cx: &mut Context<Self>) -> bool {
-        let Some(page) = self.notes_page.take() else { return false };
+        let Some(page) = self.notes_page.take() else {
+            return false;
+        };
         page.update(cx, |page, cx| page.flush(cx));
         // The keyboard back to the window. The note's editor can outlive the
         // page for a moment and keep the focus, which took every key after
@@ -189,7 +195,15 @@ pub(crate) struct NotesPage {
 }
 
 impl NotesPage {
-    fn new(app: WeakEntity<Threadbear>, home: &std::path::Path, list_hidden: bool, text_size: f32, mono: bool, window: &mut Window, cx: &mut Context<Self>) -> Self {
+    fn new(
+        app: WeakEntity<Threadbear>,
+        home: &std::path::Path,
+        list_hidden: bool,
+        text_size: f32,
+        mono: bool,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> Self {
         bind_keys(cx);
         let mut store = Store::new(home);
         store.load();
@@ -206,12 +220,20 @@ impl NotesPage {
                 .auto_close(false)
                 .smart_indent(false)
                 .searchable(false)
-                .tab_size(TabSize { tab_size: 4, hard_tabs: false })
+                .tab_size(TabSize {
+                    tab_size: 4,
+                    hard_tabs: false,
+                })
                 .language(NOTE_LANGUAGE)
         });
         let colours = palette.clone();
         let factory: InputHighlighterFactory = Rc::new(move |language: &str| {
-            (language == NOTE_LANGUAGE).then(|| Box::new(NoteHighlighter { spans: vec![], palette: colours.clone() }) as Box<dyn InputHighlighter>)
+            (language == NOTE_LANGUAGE).then(|| {
+                Box::new(NoteHighlighter {
+                    spans: vec![],
+                    palette: colours.clone(),
+                }) as Box<dyn InputHighlighter>
+            })
         });
         editor.update(cx, |state, cx| state.set_highlighter_factory(factory, cx));
         let mut subs = vec![
@@ -238,7 +260,22 @@ impl NotesPage {
             this.flush(cx);
             async {}
         }));
-        let mut page = NotesPage { app, store, selection: None, title, editor, palette, save_soon: None, deleting: None, list_hidden, text_size, mono, scroll: ScrollHandle::new(), focus: cx.focus_handle(), _subs: subs };
+        let mut page = NotesPage {
+            app,
+            store,
+            selection: None,
+            title,
+            editor,
+            palette,
+            save_soon: None,
+            deleting: None,
+            list_hidden,
+            text_size,
+            mono,
+            scroll: ScrollHandle::new(),
+            focus: cx.focus_handle(),
+            _subs: subs,
+        };
         let first = page.store.sorted().first().map(|n| n.id.clone());
         page.pick(first, window, cx);
         if page.selection.is_none() {
@@ -250,7 +287,11 @@ impl NotesPage {
 
     /// Everything on the page that can hold the keyboard.
     fn focus_handles(&self, cx: &App) -> Vec<FocusHandle> {
-        vec![self.focus.clone(), self.title.read(cx).focus_handle(cx), self.editor.read(cx).focus_handle(cx)]
+        vec![
+            self.focus.clone(),
+            self.title.read(cx).focus_handle(cx),
+            self.editor.read(cx).focus_handle(cx),
+        ]
     }
 
     fn open_note(&self) -> Option<&notes::Note> {
@@ -261,8 +302,13 @@ impl NotesPage {
     fn pick(&mut self, id: Option<String>, window: &mut Window, cx: &mut Context<Self>) {
         self.flush(cx);
         self.selection = id.filter(|id| self.store.get(id).is_some());
-        let (title, body) = self.open_note().map_or((String::new(), String::new()), |n| (n.title.clone(), n.body.clone()));
-        self.title.update(cx, |t, cx| t.set_value(title, window, cx));
+        let (title, body) = self
+            .open_note()
+            .map_or((String::new(), String::new()), |n| {
+                (n.title.clone(), n.body.clone())
+            });
+        self.title
+            .update(cx, |t, cx| t.set_value(title, window, cx));
         // Setting the text isn't typing: the subscription hears neither.
         self.editor.update(cx, |e, cx| {
             e.set_value(body, window, cx);
@@ -284,7 +330,9 @@ impl NotesPage {
 
     /// Typed in the box: kept now, written half a second after it stops.
     fn body_typed(&mut self, cx: &mut Context<Self>) {
-        let Some(id) = self.selection.clone() else { return };
+        let Some(id) = self.selection.clone() else {
+            return;
+        };
         let text = self.editor.read(cx).value().to_string();
         if !self.store.set_body(&id, &text) {
             return;
@@ -311,7 +359,9 @@ impl NotesPage {
 
     /// The title as typed, cleaned and kept if it's new.
     fn commit_title(&mut self, cx: &mut Context<Self>) {
-        let Some(id) = self.selection.clone() else { return };
+        let Some(id) = self.selection.clone() else {
+            return;
+        };
         let typed = self.title.read(cx).value().to_string();
         if self.store.rename(&id, &typed) {
             cx.notify();
@@ -320,7 +370,9 @@ impl NotesPage {
 
     /// The title field back to the kept title (an empty one keeps the old name).
     fn show_title(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        let Some(kept) = self.open_note().map(|n| n.title.clone()) else { return };
+        let Some(kept) = self.open_note().map(|n| n.title.clone()) else {
+            return;
+        };
         if self.title.read(cx).value().as_ref() != kept {
             self.title.update(cx, |t, cx| t.set_value(kept, window, cx));
         }
@@ -328,7 +380,9 @@ impl NotesPage {
 
     /// Asks first: "It can't be brought back."
     fn ask_delete(&mut self, id: String, window: &mut Window, cx: &mut Context<Self>) {
-        let Some(title) = self.store.get(&id).map(|n| n.title.clone()) else { return };
+        let Some(title) = self.store.get(&id).map(|n| n.title.clone()) else {
+            return;
+        };
         self.deleting = Some(title.clone());
         cx.notify();
         let me = cx.entity().downgrade();
@@ -337,26 +391,40 @@ impl NotesPage {
             alert
                 .title(format!("Delete \u{201C}{title}\u{201D}?"))
                 .description("It can't be brought back.")
-                .button_props(DialogButtonProps::default().ok_text("Delete").show_cancel(true))
+                .button_props(
+                    DialogButtonProps::default()
+                        .ok_text("Delete")
+                        .show_cancel(true),
+                )
                 .on_ok(move |_, window, cx| {
                     ok.update(cx, |this, cx| this.delete(&id, window, cx)).ok();
                     true
                 })
                 .on_close(move |_, _, cx| {
-                    closed.update(cx, |this, cx| {
-                        this.deleting = None;
-                        cx.notify();
-                    })
-                    .ok();
+                    closed
+                        .update(cx, |this, cx| {
+                            this.deleting = None;
+                            cx.notify();
+                        })
+                        .ok();
                 })
         });
     }
 
     fn delete(&mut self, id: &str, window: &mut Window, cx: &mut Context<Self>) {
-        if self.save_soon.as_ref().is_some_and(|(pending, _)| pending == id) {
+        if self
+            .save_soon
+            .as_ref()
+            .is_some_and(|(pending, _)| pending == id)
+        {
             self.save_soon = None;
         }
-        let next = self.store.sorted().into_iter().find(|n| n.id != id).map(|n| n.id.clone());
+        let next = self
+            .store
+            .sorted()
+            .into_iter()
+            .find(|n| n.id != id)
+            .map(|n| n.id.clone());
         self.store.delete(id);
         self.deleting = None;
         if self.selection.as_deref() == Some(id) {
@@ -416,33 +484,104 @@ impl NotesPage {
         let hover = style::primary_opacity(cx, 0.08);
         let chosen_fill = style::primary_opacity(cx, 0.1);
         let fg = cx.theme().foreground;
-        let step = |id: &'static str, symbol: &'static str, tip: &'static str, by: f32, enabled: bool, cx: &mut Context<Self>| {
-            tipped(div().id(id).size(px(24.)).rounded(px(5.)).flex().items_center().justify_center(), tip)
-                .text_color(if enabled { secondary } else { faint })
-                .when(enabled, |d| d.cursor_pointer().hover(move |s| s.bg(hover)).on_click(cx.listener(move |this, _, _, cx| this.step_text(by, cx))))
-                .child(icons::symbol(symbol).with_size(px(12.)))
+        let step = |id: &'static str,
+                    symbol: &'static str,
+                    tip: &'static str,
+                    by: f32,
+                    enabled: bool,
+                    cx: &mut Context<Self>| {
+            tipped(
+                div()
+                    .id(id)
+                    .size(px(24.))
+                    .rounded(px(5.))
+                    .flex()
+                    .items_center()
+                    .justify_center(),
+                tip,
+            )
+            .text_color(if enabled { secondary } else { faint })
+            .when(enabled, |d| {
+                d.cursor_pointer()
+                    .hover(move |s| s.bg(hover))
+                    .on_click(cx.listener(move |this, _, _, cx| this.step_text(by, cx)))
+            })
+            .child(icons::symbol(symbol).with_size(px(12.)))
         };
-        let smaller = step("notes-text-smaller", "minus", "Smaller text", -1., self.text_size > TEXT_MIN, cx);
-        let larger = step("notes-text-larger", "plus", "Larger text", 1., self.text_size < TEXT_MAX, cx);
-        let face = |id: &'static str, label: &'static str, tip: &'static str, mono: bool, chosen: bool, family: SharedString, cx: &mut Context<Self>| {
-            tipped(div().id(id).h(px(22.)).px(px(8.)).rounded(px(5.)).flex().items_center().cursor_pointer(), tip)
-                .aria_selected(chosen)
-                .font_family(family)
-                .text_size(px(style::size::SMALL))
-                .text_color(if chosen { fg } else { secondary })
-                .when(chosen, |d| d.bg(chosen_fill))
-                .when(!chosen, |d| d.hover(move |s| s.bg(hover)))
-                .on_click(cx.listener(move |this, _, _, cx| this.set_mono(mono, cx)))
-                .child(label)
+        let smaller = step(
+            "notes-text-smaller",
+            "minus",
+            "Smaller text",
+            -1.,
+            self.text_size > TEXT_MIN,
+            cx,
+        );
+        let larger = step(
+            "notes-text-larger",
+            "plus",
+            "Larger text",
+            1.,
+            self.text_size < TEXT_MAX,
+            cx,
+        );
+        let face = |id: &'static str,
+                    label: &'static str,
+                    tip: &'static str,
+                    mono: bool,
+                    chosen: bool,
+                    family: SharedString,
+                    cx: &mut Context<Self>| {
+            tipped(
+                div()
+                    .id(id)
+                    .h(px(22.))
+                    .px(px(8.))
+                    .rounded(px(5.))
+                    .flex()
+                    .items_center()
+                    .cursor_pointer(),
+                tip,
+            )
+            .aria_selected(chosen)
+            .font_family(family)
+            .text_size(px(style::size::SMALL))
+            .text_color(if chosen { fg } else { secondary })
+            .when(chosen, |d| d.bg(chosen_fill))
+            .when(!chosen, |d| d.hover(move |s| s.bg(hover)))
+            .on_click(cx.listener(move |this, _, _, cx| this.set_mono(mono, cx)))
+            .child(label)
         };
-        let sans = face("notes-font-sans", "Sans", "Set the note in the app's own type", false, !self.mono, cx.theme().font_family.clone(), cx);
-        let mono = face("notes-font-mono", "Mono", "Set the note in the app's code font", true, self.mono, cx.theme().mono_font_family.clone(), cx);
+        let sans = face(
+            "notes-font-sans",
+            "Sans",
+            "Set the note in the app's own type",
+            false,
+            !self.mono,
+            cx.theme().font_family.clone(),
+            cx,
+        );
+        let mono = face(
+            "notes-font-mono",
+            "Mono",
+            "Set the note in the app's code font",
+            true,
+            self.mono,
+            cx.theme().mono_font_family.clone(),
+            cx,
+        );
         h_flex()
             .flex_none()
             .gap(px(2.))
             .items_center()
             .child(smaller)
-            .child(div().w(px(22.)).text_center().text_size(px(style::size::SMALL)).text_color(secondary).child(format!("{}", self.text_size as i32)))
+            .child(
+                div()
+                    .w(px(22.))
+                    .text_center()
+                    .text_size(px(style::size::SMALL))
+                    .text_color(secondary)
+                    .child(format!("{}", self.text_size as i32)),
+            )
             .child(larger)
             .child(div().w(px(6.)))
             .child(sans)
@@ -481,7 +620,9 @@ impl NotesPage {
                 cx.propagate();
                 return;
             }
-            notes::Newline::ContinueList(prefix) => self.editor.update(cx, |e, cx| e.replace(format!("\n{prefix}"), window, cx)),
+            notes::Newline::ContinueList(prefix) => self
+                .editor
+                .update(cx, |e, cx| e.replace(format!("\n{prefix}"), window, cx)),
             notes::Newline::EndList => self.editor.update(cx, |e, cx| {
                 e.set_selected_range(start..caret, cx);
                 e.replace("", window, cx);
@@ -493,17 +634,29 @@ impl NotesPage {
 
     /// A click on a task's box ticks it, through the editor's own edit so
     /// ⌘Z unticks it, and the caret stays where it was.
-    fn on_press(&mut self, position: Point<Pixels>, window: &mut Window, cx: &mut Context<Self>) -> bool {
+    fn on_press(
+        &mut self,
+        position: Point<Pixels>,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> bool {
         let editor = self.editor.read(cx);
         let at = editor.offset_for_point(position);
         let text = editor.value().to_string();
-        let Some(boxed) = notes::spans(&text).into_iter().find(|s| s.kind == Kind::Checkbox && s.range.start <= at && at < s.range.end) else { return false };
+        let Some(boxed) = notes::spans(&text)
+            .into_iter()
+            .find(|s| s.kind == Kind::Checkbox && s.range.start <= at && at < s.range.end)
+        else {
+            return false;
+        };
         self.tick(boxed.range.start, window, cx)
     }
 
     fn tick(&mut self, at: usize, window: &mut Window, cx: &mut Context<Self>) -> bool {
         let text = self.editor.read(cx).value().to_string();
-        let Some((range, mark)) = notes::toggled_box(&text, at) else { return false };
+        let Some((range, mark)) = notes::toggled_box(&text, at) else {
+            return false;
+        };
         self.editor.update(cx, |e, cx| {
             let was = e.selected_range();
             e.set_selected_range(range, cx);
@@ -519,23 +672,60 @@ impl NotesPage {
     fn header(&self, cx: &mut Context<Self>) -> AnyElement {
         let secondary = style::secondary_text(cx);
         let hover = style::primary_opacity(cx, 0.08);
-        let fold_tip = if self.list_hidden { "Show the list of notes" } else { "Hide the list of notes" };
-        let fold = tipped(div().id("notes-fold").size(px(26.)).rounded(px(6.)).flex().items_center().justify_center().cursor_pointer().hover(move |s| s.bg(hover)), fold_tip)
-            .text_color(if self.list_hidden { secondary } else { cx.theme().foreground })
-            .on_click(cx.listener(|this, _, _, cx| this.toggle_list(cx)))
-            .child(icons::symbol("sidebar.left").with_size(px(14.)));
-        let lock = tipped_as(div().id("notes-lock").flex_none(), "Encrypted on this Mac and never sent anywhere", gpui_kit::Role::Image)
-            .text_color(style::tertiary_label(cx))
-            .child(icons::symbol("lock.fill").with_size(px(10.)));
+        let fold_tip = if self.list_hidden {
+            "Show the list of notes"
+        } else {
+            "Hide the list of notes"
+        };
+        let fold = tipped(
+            div()
+                .id("notes-fold")
+                .size(px(26.))
+                .rounded(px(6.))
+                .flex()
+                .items_center()
+                .justify_center()
+                .cursor_pointer()
+                .hover(move |s| s.bg(hover)),
+            fold_tip,
+        )
+        .text_color(if self.list_hidden {
+            secondary
+        } else {
+            cx.theme().foreground
+        })
+        .on_click(cx.listener(|this, _, _, cx| this.toggle_list(cx)))
+        .child(icons::symbol("sidebar.left").with_size(px(14.)));
+        let lock = tipped_as(
+            div().id("notes-lock").flex_none(),
+            "Encrypted on this Mac and never sent anywhere",
+            gpui_kit::Role::Image,
+        )
+        .text_color(style::tertiary_label(cx))
+        .child(icons::symbol("lock.fill").with_size(px(10.)));
         let me = cx.entity().downgrade();
-        let new = crate::push_button::PushButton::new("notes-new", "New Note", "Start a new note").disabled(self.store.problem.is_some()).render(cx, move |_, window, cx| {
-            me.update(cx, |this, cx| this.new_note(window, cx)).ok();
-        });
+        let new = crate::push_button::PushButton::new("notes-new", "New Note", "Start a new note")
+            .disabled(self.store.problem.is_some())
+            .render(cx, move |_, window, cx| {
+                me.update(cx, |this, cx| this.new_note(window, cx)).ok();
+            });
         let close_fill = style::primary_opacity(cx, 0.08);
         let close_hover = style::primary_opacity(cx, 0.14);
-        let close = tipped(div().id("notes-close").size(px(28.)).rounded_full().bg(close_fill).hover(move |s| s.bg(close_hover)).flex().items_center().justify_center().cursor_pointer(), "Close Notes (Esc)")
-            .on_click(cx.listener(|this, _, _, cx| this.close(cx)))
-            .child(icons::symbol("xmark").with_size(px(12.)));
+        let close = tipped(
+            div()
+                .id("notes-close")
+                .size(px(28.))
+                .rounded_full()
+                .bg(close_fill)
+                .hover(move |s| s.bg(close_hover))
+                .flex()
+                .items_center()
+                .justify_center()
+                .cursor_pointer(),
+            "Close Notes (Esc)",
+        )
+        .on_click(cx.listener(|this, _, _, cx| this.close(cx)))
+        .child(icons::symbol("xmark").with_size(px(12.)));
         h_flex()
             .flex_none()
             .gap(px(10.))
@@ -546,7 +736,12 @@ impl NotesPage {
             .border_b(gpui_kit::px(0.5))
             .border_color(style::hairline(cx))
             .child(fold)
-            .child(div().text_size(px(17.)).font_weight(FontWeight::SEMIBOLD).child("Notes"))
+            .child(
+                div()
+                    .text_size(px(17.))
+                    .font_weight(FontWeight::SEMIBOLD)
+                    .child("Notes"),
+            )
             .child(lock)
             .child(div().flex_1())
             .child(new)
@@ -578,27 +773,60 @@ impl NotesPage {
                 .when(selected, |d| d.bg(selected_fill))
                 .when(!selected, |d| d.hover(move |s| s.bg(hover)))
                 .tip(note.title.clone())
-                .on_click(cx.listener(move |this, _, window, cx| this.pick(Some(pick.clone()), window, cx)))
-                .child(div().text_size(px(style::size::LABEL)).font_weight(FontWeight::MEDIUM).truncate().child(note.title.clone()))
-                .child(div().text_size(px(style::size::SMALL)).text_color(secondary).truncate().child(note.preview()))
+                .on_click(
+                    cx.listener(move |this, _, window, cx| {
+                        this.pick(Some(pick.clone()), window, cx)
+                    }),
+                )
+                .child(
+                    div()
+                        .text_size(px(style::size::LABEL))
+                        .font_weight(FontWeight::MEDIUM)
+                        .truncate()
+                        .child(note.title.clone()),
+                )
+                .child(
+                    div()
+                        .text_size(px(style::size::SMALL))
+                        .text_color(secondary)
+                        .truncate()
+                        .child(note.preview()),
+                )
                 .context_menu(move |menu, _, _| {
-                    let (r, d, me_r, me_d) = (rename.clone(), delete.clone(), me.clone(), me.clone());
-                    menu.item(PopupMenuItem::new("Rename").icon(icons::symbol("pencil")).on_click(move |_, window, cx| {
-                        me_r.update(cx, |this, cx| {
-                            this.pick(Some(r.clone()), window, cx);
-                            this.title.update(cx, |t, cx| t.focus(window, cx));
-                            crate::web_panels::keyboard_to_app(window);
-                        })
-                        .ok();
-                    }))
-                    .item(PopupMenuItem::new("Delete").icon(icons::symbol("trash")).on_click(move |_, window, cx| {
-                        me_d.update(cx, |this, cx| this.ask_delete(d.clone(), window, cx)).ok();
-                    }))
+                    let (r, d, me_r, me_d) =
+                        (rename.clone(), delete.clone(), me.clone(), me.clone());
+                    menu.item(
+                        PopupMenuItem::new("Rename")
+                            .icon(icons::symbol("pencil"))
+                            .on_click(move |_, window, cx| {
+                                me_r.update(cx, |this, cx| {
+                                    this.pick(Some(r.clone()), window, cx);
+                                    this.title.update(cx, |t, cx| t.focus(window, cx));
+                                    crate::web_panels::keyboard_to_app(window);
+                                })
+                                .ok();
+                            }),
+                    )
+                    .item(
+                        PopupMenuItem::new("Delete")
+                            .icon(icons::symbol("trash"))
+                            .on_click(move |_, window, cx| {
+                                me_d.update(cx, |this, cx| this.ask_delete(d.clone(), window, cx))
+                                    .ok();
+                            }),
+                    )
                 });
             rows.push(row.into_any_element());
         }
         if self.store.notes.is_empty() {
-            rows.push(div().p(px(14.)).text_size(px(style::size::LABEL)).text_color(secondary).child("No notes yet. New Note starts one.").into_any_element());
+            rows.push(
+                div()
+                    .p(px(14.))
+                    .text_size(px(style::size::LABEL))
+                    .text_color(secondary)
+                    .child("No notes yet. New Note starts one.")
+                    .into_any_element(),
+            );
         }
         div()
             .id("notes-list")
@@ -617,7 +845,12 @@ impl NotesPage {
         let secondary = style::secondary_text(cx);
         let Some(note) = self.open_note() else {
             let me = cx.entity().downgrade();
-            let new = crate::push_button::PushButton::new("notes-new-empty", "New Note", "Start a new note").render(cx, move |_, window, cx| {
+            let new = crate::push_button::PushButton::new(
+                "notes-new-empty",
+                "New Note",
+                "Start a new note",
+            )
+            .render(cx, move |_, window, cx| {
                 me.update(cx, |this, cx| this.new_note(window, cx)).ok();
             });
             return v_flex()
@@ -626,20 +859,50 @@ impl NotesPage {
                 .items_center()
                 .justify_center()
                 .gap(px(10.))
-                .child(div().text_color(style::tertiary_label(cx)).child(icons::symbol("note.text").with_size(px(28.))))
-                .child(div().text_color(secondary).child("Pick a note, or start a new one."))
+                .child(
+                    div()
+                        .text_color(style::tertiary_label(cx))
+                        .child(icons::symbol("note.text").with_size(px(28.))),
+                )
+                .child(
+                    div()
+                        .text_color(secondary)
+                        .child("Pick a note, or start a new one."),
+                )
                 .child(new)
                 .into_any_element();
         };
         let id = note.id.clone();
         let changed = notes::date_label(note.updated_at, true);
         let hover = style::primary_opacity(cx, 0.08);
-        let bin = tipped(div().id("notes-delete").size(px(24.)).rounded(px(5.)).flex().items_center().justify_center().cursor_pointer().text_color(secondary).hover(move |s| s.bg(hover)), "Delete this note")
-            .on_click(cx.listener(move |this, _, window, cx| this.ask_delete(id.clone(), window, cx)))
-            .child(icons::symbol("trash").with_size(px(13.)));
+        let bin = tipped(
+            div()
+                .id("notes-delete")
+                .size(px(24.))
+                .rounded(px(5.))
+                .flex()
+                .items_center()
+                .justify_center()
+                .cursor_pointer()
+                .text_color(secondary)
+                .hover(move |s| s.bg(hover)),
+            "Delete this note",
+        )
+        .on_click(cx.listener(move |this, _, window, cx| this.ask_delete(id.clone(), window, cx)))
+        .child(icons::symbol("trash").with_size(px(13.)));
         // A holder round the kit's field, named for scripts and VoiceOver.
-        let title = tipped_as(div().id("notes-title").flex_1().min_w_0(), "The note's name. Click to rename it", gpui_kit::Role::GenericContainer)
-            .child(Input::new(&self.title).appearance(false).bordered(false).text_size(px(16.)).font_weight(FontWeight::SEMIBOLD));
+        let title = tipped_as(
+            div().id("notes-title").flex_1().min_w_0(),
+            "The note's name. Click to rename it",
+            gpui_kit::Role::GenericContainer,
+        )
+        .child(
+            Input::new(&self.title)
+                .appearance(false)
+                .bordered(false)
+                .text_size(px(16.))
+                .font_weight(FontWeight::SEMIBOLD),
+        );
         // The title and the bin, then the date with the type's controls
         // under it, so a narrow page keeps room for the title.
         let header = v_flex()
@@ -655,13 +918,25 @@ impl NotesPage {
                 h_flex()
                     .gap(px(8.))
                     .items_center()
-                    .child(div().flex_1().min_w_0().truncate().text_size(px(style::size::SMALL)).text_color(style::tertiary_label(cx)).child(changed))
+                    .child(
+                        div()
+                            .flex_1()
+                            .min_w_0()
+                            .truncate()
+                            .text_size(px(style::size::SMALL))
+                            .text_color(style::tertiary_label(cx))
+                            .child(changed),
+                    )
                     .child(self.text_controls(cx)),
             );
         // The app's own sans or code font, at the
         // chosen size on a reading line. The line numbers are drawn in the
         // same type on the same lines, so they stay level with the text.
-        let family: SharedString = if self.mono { cx.theme().mono_font_family.clone() } else { cx.theme().font_family.clone() };
+        let family: SharedString = if self.mono {
+            cx.theme().mono_font_family.clone()
+        } else {
+            cx.theme().font_family.clone()
+        };
         let editor = Editor::new(&self.editor)
             .h_full()
             .appearance(false)
@@ -676,19 +951,30 @@ impl NotesPage {
             .min_h_0()
             .pl(px(4.))
             .pt(px(6.))
-            .capture_action(cx.listener(|this, action: &Enter, window, cx| this.on_enter(action, window, cx)))
+            .capture_action(
+                cx.listener(|this, action: &Enter, window, cx| this.on_enter(action, window, cx)),
+            )
             .capture_any_mouse_down(move |event, window, cx| {
                 if event.button != MouseButton::Left || event.click_count != 1 {
                     return;
                 }
-                if me.update(cx, |this, cx| this.on_press(event.position, window, cx)).unwrap_or(false) {
+                if me
+                    .update(cx, |this, cx| this.on_press(event.position, window, cx))
+                    .unwrap_or(false)
+                {
                     cx.stop_propagation();
                     window.prevent_default();
                 }
             })
             .child(editor);
         let _ = window;
-        v_flex().flex_1().min_w_0().h_full().child(header).child(body).into_any_element()
+        v_flex()
+            .flex_1()
+            .min_w_0()
+            .h_full()
+            .child(header)
+            .child(body)
+            .into_any_element()
     }
 }
 
@@ -702,13 +988,30 @@ impl Render for NotesPage {
             accent: style::control_accent(cx),
             secondary: ground.blend(style::secondary_label(cx)),
             tertiary: ground.blend(style::tertiary_label(cx)),
-            code: if cx.theme().is_dark() { gpui_kit::rgb(0xff375f).into() } else { gpui_kit::rgb(0xff2d55).into() },
+            code: if cx.theme().is_dark() {
+                gpui_kit::rgb(0xff375f).into()
+            } else {
+                gpui_kit::rgb(0xff2d55).into()
+            },
             code_background: style::inline_code_background(cx),
             link: style::link_text(cx),
         };
         let body: AnyElement = match &self.store.problem {
-            Some(problem) => div().flex_1().flex().items_center().justify_center().text_color(style::secondary_text(cx)).child(problem.clone()).into_any_element(),
-            None => h_flex().flex_1().min_h_0().overflow_hidden().when(!self.list_hidden, |d| d.child(self.list(cx))).child(self.note(window, cx)).into_any_element(),
+            Some(problem) => div()
+                .flex_1()
+                .flex()
+                .items_center()
+                .justify_center()
+                .text_color(style::secondary_text(cx))
+                .child(problem.clone())
+                .into_any_element(),
+            None => h_flex()
+                .flex_1()
+                .min_h_0()
+                .overflow_hidden()
+                .when(!self.list_hidden, |d| d.child(self.list(cx)))
+                .child(self.note(window, cx))
+                .into_any_element(),
         };
         v_flex()
             .id("notes-page")
@@ -735,15 +1038,53 @@ impl NoteHighlighter {
         let bold = Some(FontWeight::BOLD);
         match span.kind {
             // The Swift app sizes headings by level; GPUI's runs can't, so they're bold.
-            Kind::Heading => HighlightStyle { font_weight: bold, ..Default::default() },
-            Kind::Checkbox | Kind::ListMarker => HighlightStyle { font_weight: bold, color: Some(p.accent), ..Default::default() },
-            Kind::Done => HighlightStyle { color: Some(p.secondary), strikethrough: Some(StrikethroughStyle { thickness: gpui_kit::px(1.), color: Some(p.secondary) }), ..Default::default() },
-            Kind::Bold => HighlightStyle { font_weight: bold, ..Default::default() },
-            Kind::Italic => HighlightStyle { font_style: Some(FontStyle::Italic), ..Default::default() },
-            Kind::Code | Kind::CodeBlock => HighlightStyle { color: Some(p.code), background_color: Some(p.code_background), ..Default::default() },
-            Kind::Link => HighlightStyle { color: Some(p.link), underline: Some(UnderlineStyle { thickness: gpui_kit::px(1.), color: Some(p.link), wavy: false }), ..Default::default() },
-            Kind::Quote => HighlightStyle { color: Some(p.secondary), ..Default::default() },
-            Kind::Mark => HighlightStyle { color: Some(p.tertiary), ..Default::default() },
+            Kind::Heading => HighlightStyle {
+                font_weight: bold,
+                ..Default::default()
+            },
+            Kind::Checkbox | Kind::ListMarker => HighlightStyle {
+                font_weight: bold,
+                color: Some(p.accent),
+                ..Default::default()
+            },
+            Kind::Done => HighlightStyle {
+                color: Some(p.secondary),
+                strikethrough: Some(StrikethroughStyle {
+                    thickness: gpui_kit::px(1.),
+                    color: Some(p.secondary),
+                }),
+                ..Default::default()
+            },
+            Kind::Bold => HighlightStyle {
+                font_weight: bold,
+                ..Default::default()
+            },
+            Kind::Italic => HighlightStyle {
+                font_style: Some(FontStyle::Italic),
+                ..Default::default()
+            },
+            Kind::Code | Kind::CodeBlock => HighlightStyle {
+                color: Some(p.code),
+                background_color: Some(p.code_background),
+                ..Default::default()
+            },
+            Kind::Link => HighlightStyle {
+                color: Some(p.link),
+                underline: Some(UnderlineStyle {
+                    thickness: gpui_kit::px(1.),
+                    color: Some(p.link),
+                    wavy: false,
+                }),
+                ..Default::default()
+            },
+            Kind::Quote => HighlightStyle {
+                color: Some(p.secondary),
+                ..Default::default()
+            },
+            Kind::Mark => HighlightStyle {
+                color: Some(p.tertiary),
+                ..Default::default()
+            },
         }
     }
 }
@@ -753,12 +1094,27 @@ impl InputHighlighter for NoteHighlighter {
         NOTE_LANGUAGE.into()
     }
 
-    fn update(&mut self, _edit: Option<InputEdit>, text: &Rope, _folding: bool, _window: &mut Window, _cx: &mut Context<EditorState>) {
+    fn update(
+        &mut self,
+        _edit: Option<InputEdit>,
+        text: &Rope,
+        _folding: bool,
+        _window: &mut Window,
+        _cx: &mut Context<EditorState>,
+    ) {
         self.spans = notes::spans(&text.to_string());
     }
 
-    fn styles(&self, range: &Range<usize>, _resolver: &dyn HighlightStyleResolver) -> Vec<(Range<usize>, HighlightStyle)> {
-        let hits: Vec<&notes::Span> = self.spans.iter().filter(|s| s.range.start < range.end && s.range.end > range.start).collect();
+    fn styles(
+        &self,
+        range: &Range<usize>,
+        _resolver: &dyn HighlightStyleResolver,
+    ) -> Vec<(Range<usize>, HighlightStyle)> {
+        let hits: Vec<&notes::Span> = self
+            .spans
+            .iter()
+            .filter(|s| s.range.start < range.end && s.range.end > range.start)
+            .collect();
         let mut cuts: Vec<usize> = vec![range.start, range.end];
         for s in &hits {
             cuts.push(s.range.start.clamp(range.start, range.end));
@@ -770,7 +1126,12 @@ impl InputHighlighter for NoteHighlighter {
         for pair in cuts.windows(2) {
             let (a, b) = (pair[0], pair[1]);
             // Later spans over earlier ones, as the Swift app adds attributes.
-            let style = hits.iter().filter(|s| s.range.start <= a && s.range.end >= b).fold(HighlightStyle::default(), |acc, s| acc.highlight(self.style(s)));
+            let style = hits
+                .iter()
+                .filter(|s| s.range.start <= a && s.range.end >= b)
+                .fold(HighlightStyle::default(), |acc, s| {
+                    acc.highlight(self.style(s))
+                });
             match out.last_mut() {
                 Some((last, prev)) if *prev == style && last.end == a => last.end = b,
                 _ => out.push((a..b, style)),
@@ -789,7 +1150,12 @@ impl InputHighlighter for NoteHighlighter {
 /// note picked from the list, `tick` the box on that line clicked, and
 /// `confirm` the delete that's asking answered Delete.
 #[cfg(feature = "automation")]
-pub(crate) fn automation(app: &Entity<Threadbear>, cmd: &Value, window: &mut Window, cx: &mut App) -> Result<Value, String> {
+pub(crate) fn automation(
+    app: &Entity<Threadbear>,
+    cmd: &Value,
+    window: &mut Window,
+    cx: &mut App,
+) -> Result<Value, String> {
     use gpui_kit::test::{TestEventExt as _, TestWindowExt as _};
     if cmd["close"].as_bool() == Some(true) {
         app.update(cx, |t, cx| t.close_notes(cx));
@@ -798,25 +1164,52 @@ pub(crate) fn automation(app: &Entity<Threadbear>, cmd: &Value, window: &mut Win
     if app.read(cx).notes_page.is_none() {
         app.update(cx, |t, cx| t.open_notes(window, cx));
     }
-    let Some(page) = app.read(cx).notes_page.clone() else { return Err("Show Notes is off".into()) };
+    let Some(page) = app.read(cx).notes_page.clone() else {
+        return Err("Show Notes is off".into());
+    };
     if let Some(title) = cmd["rename"].as_str() {
         page.update(cx, |p, cx| {
-            p.title.update(cx, |t, cx| t.set_value(title.to_owned(), window, cx));
+            p.title
+                .update(cx, |t, cx| t.set_value(title.to_owned(), window, cx));
             p.commit_title(cx);
             p.show_title(window, cx);
         });
     }
     if let Some(title) = cmd["pick"].as_str() {
-        let id = page.read(cx).store.notes.iter().find(|n| n.title == title).map(|n| n.id.clone()).ok_or_else(|| format!("no note called {title:?}"))?;
+        let id = page
+            .read(cx)
+            .store
+            .notes
+            .iter()
+            .find(|n| n.title == title)
+            .map(|n| n.id.clone())
+            .ok_or_else(|| format!("no note called {title:?}"))?;
         page.update(cx, |p, cx| p.pick(Some(id), window, cx));
     }
     if let Some(line) = cmd["tick"].as_u64() {
         // Through a real click on the box, where it's drawn.
         window.render_frame(cx);
         let text = page.read(cx).editor.read(cx).value().to_string();
-        let start: usize = text.split('\n').take(line.saturating_sub(1) as usize).map(|l| l.len() + 1).sum();
-        let at = notes::spans(&text).into_iter().find(|s| s.kind == Kind::Checkbox && s.range.start >= start && !text[start..s.range.start].contains('\n')).map(|s| s.range.start).ok_or_else(|| format!("no box on line {line}"))?;
-        let bounds = page.read(cx).editor.read(cx).range_to_bounds(&(at + 1..at + 2)).ok_or("the box isn't on screen")?;
+        let start: usize = text
+            .split('\n')
+            .take(line.saturating_sub(1) as usize)
+            .map(|l| l.len() + 1)
+            .sum();
+        let at = notes::spans(&text)
+            .into_iter()
+            .find(|s| {
+                s.kind == Kind::Checkbox
+                    && s.range.start >= start
+                    && !text[start..s.range.start].contains('\n')
+            })
+            .map(|s| s.range.start)
+            .ok_or_else(|| format!("no box on line {line}"))?;
+        let bounds = page
+            .read(cx)
+            .editor
+            .read(cx)
+            .range_to_bounds(&(at + 1..at + 2))
+            .ok_or("the box isn't on screen")?;
         let point = bounds.center();
         window.pointer_move(point, None, cx);
         window.pointer_down(point, MouseButton::Left, cx);
@@ -832,8 +1225,19 @@ pub(crate) fn automation(app: &Entity<Threadbear>, cmd: &Value, window: &mut Win
         page.update(cx, |p, cx| p.set_mono(font == "mono", cx));
     }
     if cmd["confirm"].as_bool() == Some(true) {
-        let title = page.read(cx).deleting.clone().ok_or("no delete is asking")?;
-        let id = page.read(cx).store.notes.iter().find(|n| n.title == title).map(|n| n.id.clone()).ok_or("the note has gone")?;
+        let title = page
+            .read(cx)
+            .deleting
+            .clone()
+            .ok_or("no delete is asking")?;
+        let id = page
+            .read(cx)
+            .store
+            .notes
+            .iter()
+            .find(|n| n.title == title)
+            .map(|n| n.id.clone())
+            .ok_or("the note has gone")?;
         page.update(cx, |p, cx| p.delete(&id, window, cx));
         window.close_dialog(cx);
     }
@@ -850,7 +1254,11 @@ mod tests {
         assert_eq!(stepped_size(TEXT_SIZE, -1.), 14.);
         assert_eq!(stepped_size(TEXT_MAX, 1.), TEXT_MAX);
         assert_eq!(stepped_size(TEXT_MIN, -1.), TEXT_MIN);
-        assert_eq!(stepped_size(40., 0.), TEXT_MAX, "a size from the file, brought within them");
+        assert_eq!(
+            stepped_size(40., 0.),
+            TEXT_MAX,
+            "a size from the file, brought within them"
+        );
         assert_eq!(stepped_size(f32::NAN, 0.), TEXT_SIZE);
         assert_eq!(stepped_size(14.6, 0.), 15.);
     }

@@ -11,9 +11,13 @@ use gpui_kit::*;
 use serde_json::{json, Value};
 use std::collections::{HashMap, HashSet};
 use std::time::Duration;
-use threadbear_core::reducer::event::{ApprovalDecision, ApprovalOption, ApprovalRequest, Event, EventPayload};
+use threadbear_core::reducer::event::{
+    ApprovalDecision, ApprovalOption, ApprovalRequest, Event, EventPayload,
+};
 use threadbear_core::reducer::row::RowContent;
-use threadbear_core::voice::{self as rules, Heard, SpokenApprovals, SpokenOutcome, UtteranceTracker};
+use threadbear_core::voice::{
+    self as rules, Heard, SpokenApprovals, SpokenOutcome, UtteranceTracker,
+};
 
 /// The thread id Voice uses for the new-thread page: what he says first
 /// starts the thread, and Voice carries on in it.
@@ -140,9 +144,19 @@ impl Voice {
         let start = self.mode.start + 1;
         // How long a pause sends it: Settings > Voice & Audio's.
         let tracker = UtteranceTracker::new(self.prefs.pause());
-        self.mode = ModeState { start, thread: Some(thread.to_owned()), started_at: Some(threadbear_core::chrono::Utc::now()), phase: Phase::Starting("Getting ready…".to_owned()), tracker, ..ModeState::default() };
+        self.mode = ModeState {
+            start,
+            thread: Some(thread.to_owned()),
+            started_at: Some(threadbear_core::chrono::Utc::now()),
+            phase: Phase::Starting("Getting ready…".to_owned()),
+            tracker,
+            ..ModeState::default()
+        };
         let language = self.prefs.language();
-        if let Err(e) = self.tell(json!({ "cmd": "prepare", "language": language.id, "start": start }), cx) {
+        if let Err(e) = self.tell(
+            json!({ "cmd": "prepare", "language": language.id, "start": start }),
+            cx,
+        ) {
             self.mode_failed(&e, cx);
         }
         cx.notify();
@@ -168,10 +182,16 @@ impl Voice {
         self.stop_listening(Listener::Mode, cx);
         let _ = self.tell(json!({ "cmd": "stopEngineSoon" }), cx);
         if let Some(thread) = &self.mode.thread {
-            log(&format!("off for {thread}: {} results heard, {} taken for its own voice, {} sent", self.mode.heard, self.mode.dropped, self.mode.sent));
+            log(&format!(
+                "off for {thread}: {} results heard, {} taken for its own voice, {} sent",
+                self.mode.heard, self.mode.dropped, self.mode.sent
+            ));
         }
         let start = self.mode.start + 1;
-        self.mode = ModeState { start, ..ModeState::default() };
+        self.mode = ModeState {
+            start,
+            ..ModeState::default()
+        };
         cx.notify();
     }
 
@@ -182,7 +202,12 @@ impl Voice {
         log(&format!("failed: {message}"));
         self.stop_listening(Listener::Mode, cx);
         let (start, thread) = (self.mode.start + 1, self.mode.thread.clone());
-        self.mode = ModeState { start, thread, phase: Phase::Failed(message.to_owned()), ..ModeState::default() };
+        self.mode = ModeState {
+            start,
+            thread,
+            phase: Phase::Failed(message.to_owned()),
+            ..ModeState::default()
+        };
         cx.notify();
     }
 
@@ -197,11 +222,17 @@ impl Voice {
 
     /// Another thread opened: Voice ends. On the new-thread page, the thread
     /// its first words made has opened, and Voice carries on there.
-    pub(super) fn mode_selection_changed(&mut self, selected: Option<String>, cx: &mut Context<Self>) {
+    pub(super) fn mode_selection_changed(
+        &mut self,
+        selected: Option<String>,
+        cx: &mut Context<Self>,
+    ) {
         if !self.mode.is_on() {
             return;
         }
-        let Some(thread) = self.mode.thread.clone() else { return };
+        let Some(thread) = self.mode.thread.clone() else {
+            return;
+        };
         if thread == NEW_THREAD {
             // Another thread opened: Voice ends. The one its words made is
             // taken on before it opens (`mode_thread_started`).
@@ -217,7 +248,10 @@ impl Voice {
 
     /// The thread the new-thread page made for what he said.
     pub(super) fn mode_thread_started(&mut self, id: &str, cx: &mut Context<Self>) {
-        if !self.mode.is_on() || !self.mode.making_thread || self.mode.thread.as_deref() != Some(NEW_THREAD) {
+        if !self.mode.is_on()
+            || !self.mode.making_thread
+            || self.mode.thread.as_deref() != Some(NEW_THREAD)
+        {
             return;
         }
         self.mode.making_thread = false;
@@ -241,12 +275,19 @@ impl Voice {
     }
 
     pub(super) fn mode_engine(&mut self, event: &Value, cx: &mut Context<Self>) {
-        if !matches!(self.mode.phase, Phase::Starting(_)) || event["start"].as_u64() != Some(self.mode.start) {
+        if !matches!(self.mode.phase, Phase::Starting(_))
+            || event["start"].as_u64() != Some(self.mode.start)
+        {
             return;
         }
         match event["event"].as_str() {
             Some("status") => {
-                self.mode.phase = Phase::Starting(event["text"].as_str().unwrap_or("Getting ready…").to_owned());
+                self.mode.phase = Phase::Starting(
+                    event["text"]
+                        .as_str()
+                        .unwrap_or("Getting ready…")
+                        .to_owned(),
+                );
                 cx.notify();
             }
             Some("engineReady") => {
@@ -256,7 +297,12 @@ impl Voice {
                 }
                 cx.notify();
             }
-            Some("engineFailed") => self.mode_failed(event["message"].as_str().unwrap_or("The voice engine didn't start."), cx),
+            Some("engineFailed") => self.mode_failed(
+                event["message"]
+                    .as_str()
+                    .unwrap_or("The voice engine didn't start."),
+                cx,
+            ),
             _ => {}
         }
     }
@@ -279,7 +325,12 @@ impl Voice {
                 }
                 cx.notify();
             }
-            Some("listenFailed") => self.mode_failed(event["message"].as_str().unwrap_or("The microphone wouldn't start."), cx),
+            Some("listenFailed") => self.mode_failed(
+                event["message"]
+                    .as_str()
+                    .unwrap_or("The microphone wouldn't start."),
+                cx,
+            ),
             Some("heard") => self.mode_heard(event, cx),
             _ => {}
         }
@@ -292,7 +343,12 @@ impl Voice {
         if let Some(start) = event["clockStart"].as_f64() {
             self.mode.clock_start = Some(start);
         }
-        let heard = Heard::new(event["text"].as_str().unwrap_or(""), event["start"].as_f64().unwrap_or(0.0), event["end"].as_f64().unwrap_or(0.0), event["final"].as_bool().unwrap_or(false));
+        let heard = Heard::new(
+            event["text"].as_str().unwrap_or(""),
+            event["start"].as_f64().unwrap_or(0.0),
+            event["end"].as_f64().unwrap_or(0.0),
+            event["final"].as_bool().unwrap_or(false),
+        );
         self.mode.heard += 1;
         if self.mode.heard == 1 {
             log("first words heard");
@@ -308,7 +364,10 @@ impl Voice {
             let helper_now = event["now"].as_f64().unwrap_or(f64::INFINITY);
             let captured = self.mode.clock_start.map(|s| s + heard.start);
             let has_spoken = self.mode.quiet_until > 0.0;
-            if self.mode.speaking || helper_now < self.mode.quiet_until || (has_spoken && captured.is_none_or(|c| c < self.mode.quiet_until)) {
+            if self.mode.speaking
+                || helper_now < self.mode.quiet_until
+                || (has_spoken && captured.is_none_or(|c| c < self.mode.quiet_until))
+            {
                 self.mode.dropped += 1;
                 return;
             }
@@ -348,7 +407,11 @@ impl Voice {
             // microphone can hear it.
             self.mode.quiet_until = at + if self.mode.echo_cancels { 0.4 } else { 0.8 };
             if self.mode.phase == Phase::Speaking {
-                self.mode.phase = if self.mode.working { Phase::Thinking } else { Phase::Listening };
+                self.mode.phase = if self.mode.working {
+                    Phase::Thinking
+                } else {
+                    Phase::Listening
+                };
             }
         }
         cx.notify();
@@ -362,7 +425,9 @@ impl Voice {
 
     fn check_pause(&mut self, cx: &mut Context<Self>) {
         let at = self.spoken_at();
-        let Some(thread) = self.mode.thread.clone() else { return };
+        let Some(thread) = self.mode.thread.clone() else {
+            return;
+        };
         if let Some(text) = self.mode.tracker.take(now()) {
             self.send_spoken(&thread, text, at, cx);
         }
@@ -393,7 +458,11 @@ impl Voice {
         }
         // A yes or a no on its own answers the card he heard, and only that
         // one (SpokenApprovals says why).
-        let quiet_since = if self.mode.speaking { f64::INFINITY } else { self.mode.quiet_until };
+        let quiet_since = if self.mode.speaking {
+            f64::INFINITY
+        } else {
+            self.mode.quiet_until
+        };
         match self.mode.approvals.take(&text, spoken_at, quiet_since) {
             SpokenOutcome::Answer(card, decision) => {
                 // Last look at what the thread itself shows: a card settled
@@ -411,10 +480,19 @@ impl Voice {
                 };
                 if let Some(pane) = self.pane(thread, cx) {
                     let id = card.approval_id.clone();
-                    cx.defer(move |cx| pane.update(cx, |p, cx| p.respond_approval(&id, raw, None, None, cx)));
+                    cx.defer(move |cx| {
+                        pane.update(cx, |p, cx| p.respond_approval(&id, raw, None, None, cx))
+                    });
                 }
                 log(&format!("answered an approval by voice: {raw}"));
-                self.speak_now(if decision == ApprovalDecision::Deny { "OK, I won't." } else { "OK, going ahead." }, cx);
+                self.speak_now(
+                    if decision == ApprovalDecision::Deny {
+                        "OK, I won't."
+                    } else {
+                        "OK, going ahead."
+                    },
+                    cx,
+                );
                 self.mode.working = true;
                 self.mode.phase = Phase::Thinking;
                 // Another card still waiting: its turn to be heard.
@@ -445,16 +523,28 @@ impl Voice {
     /// The open thread's pane, if it's this thread.
     fn pane(&self, thread: &str, cx: &App) -> Option<Entity<ThreadPane>> {
         let app = self.app.upgrade()?;
-        app.read(cx).pane.clone().filter(|p| p.read(cx).summary.id == thread)
+        app.read(cx)
+            .pane
+            .clone()
+            .filter(|p| p.read(cx).summary.id == thread)
     }
 
     /// The card as the thread shows it, while it's still waiting.
     fn open_approval(&self, thread: &str, approval_id: &str, cx: &App) -> Option<ApprovalRequest> {
         let pane = self.pane(thread, cx)?;
-        pane.read(cx).feed.model().rows().iter().find_map(|r| match &r.content {
-            RowContent::Approval(a) if a.request.approval_id == approval_id && a.resolution.is_none() => Some(a.request.clone()),
-            _ => None,
-        })
+        pane.read(cx)
+            .feed
+            .model()
+            .rows()
+            .iter()
+            .find_map(|r| match &r.content {
+                RowContent::Approval(a)
+                    if a.request.approval_id == approval_id && a.resolution.is_none() =>
+                {
+                    Some(a.request.clone())
+                }
+                _ => None,
+            })
     }
 
     /// What he said, sent as his message, as typing it would be.
@@ -473,14 +563,18 @@ impl Voice {
     /// folder, login and model as the page has them; Voice follows it when it
     /// opens (`mode_selection_changed`).
     fn start_thread_spoken(&mut self, text: String, cx: &mut Context<Self>) {
-        let Some(app) = self.app.upgrade() else { return };
+        let Some(app) = self.app.upgrade() else {
+            return;
+        };
         let window = app.read(cx).main_window;
         let start = self.mode.start;
         let watched = app.downgrade();
         cx.defer(move |cx| {
             window
                 .update(cx, |_, window, cx| {
-                    app.update(cx, |app, cx| app.send_new_thread(text, Vec::new(), String::new(), window, cx));
+                    app.update(cx, |app, cx| {
+                        app.send_new_thread(text, Vec::new(), String::new(), window, cx)
+                    });
                 })
                 .ok();
         });
@@ -490,11 +584,17 @@ impl Voice {
             if v.mode.start != start || !v.mode.making_thread {
                 return false;
             }
-            let state = watched.upgrade().map(|a| { let a = a.read(cx); (a.new_thread.creating, a.new_thread.error.clone()) });
+            let state = watched.upgrade().map(|a| {
+                let a = a.read(cx);
+                (a.new_thread.creating, a.new_thread.error.clone())
+            });
             match state {
                 Some((true, _)) => true,
                 Some((false, error)) => {
-                    let why = error.map_or_else(|| "That thread couldn't be started. Try again, or type it.".to_owned(), |e| format!("That thread couldn't be started. {e}"));
+                    let why = error.map_or_else(
+                        || "That thread couldn't be started. Try again, or type it.".to_owned(),
+                        |e| format!("That thread couldn't be started. {e}"),
+                    );
                     v.mode_failed(&why, cx);
                     false
                 }
@@ -505,7 +605,11 @@ impl Voice {
 
     /// Back from hearing him, with nothing sent.
     fn idle(&mut self) {
-        self.mode.phase = if self.mode.working { Phase::Thinking } else { Phase::Listening };
+        self.mode.phase = if self.mode.working {
+            Phase::Thinking
+        } else {
+            Phase::Listening
+        };
     }
 
     // ---- The agent's side ----
@@ -533,7 +637,14 @@ impl Voice {
                     self.mode.phase = Phase::Listening;
                 }
             }
-            EventPayload::AssistantText { item_id, text, summary, narration, final_reply, .. } => {
+            EventPayload::AssistantText {
+                item_id,
+                text,
+                summary,
+                narration,
+                final_reply,
+                ..
+            } => {
                 if *summary || *narration {
                     return;
                 }
@@ -541,17 +652,27 @@ impl Voice {
                     self.mode.last_message = None;
                     self.say(text, item_id, &event.ts, cx);
                 } else {
-                    self.mode.last_message = Some((item_id.clone(), text.clone(), event.ts.clone()));
+                    self.mode.last_message =
+                        Some((item_id.clone(), text.clone(), event.ts.clone()));
                 }
             }
             EventPayload::ApprovalRequested(request) => {
                 self.mode.approvals.requested(request.clone());
-                if !self.before_voice(&event.ts) && self.mode.spoken.insert(format!("approval-{}", event.seq)) {
+                if !self.before_voice(&event.ts)
+                    && self.mode.spoken.insert(format!("approval-{}", event.seq))
+                {
                     self.read_out(request, cx);
                 }
             }
-            EventPayload::ApprovalResolved(resolution) => self.mode.approvals.resolved(&resolution.approval_id),
-            EventPayload::QuestionRequested(_) => self.say("I've got a question for you on screen.", &format!("question-{}", event.seq), &event.ts, cx),
+            EventPayload::ApprovalResolved(resolution) => {
+                self.mode.approvals.resolved(&resolution.approval_id)
+            }
+            EventPayload::QuestionRequested(_) => self.say(
+                "I've got a question for you on screen.",
+                &format!("question-{}", event.seq),
+                &event.ts,
+                cx,
+            ),
             _ => {}
         }
         cx.notify();
@@ -562,14 +683,26 @@ impl Voice {
     /// cover is named, and left for the screen.
     fn read_out(&mut self, card: &ApprovalRequest, cx: &mut Context<Self>) {
         let Some(reading) = SpokenApprovals::reading(card).map(str::to_owned) else {
-            self.speak(rules::sentences(&format!("I need your OK on screen: {}.", card.title)), None, cx);
+            self.speak(
+                rules::sentences(&format!("I need your OK on screen: {}.", card.title)),
+                None,
+                cx,
+            );
             return;
         };
-        let ask = if card.options.contains(&ApprovalOption::AllowAlways) { "Say yes, no, or always allow." } else { "Say yes or no." };
+        let ask = if card.options.contains(&ApprovalOption::AllowAlways) {
+            "Say yes, no, or always allow."
+        } else {
+            "Say yes or no."
+        };
         self.mode.next_reading += 1;
         let id = format!("card-{}", self.mode.next_reading);
         self.mode.reading.insert(id.clone(), card.clone());
-        self.speak(vec!["I need your OK.".to_owned(), reading, ask.to_owned()], Some(id), cx);
+        self.speak(
+            vec!["I need your OK.".to_owned(), reading, ask.to_owned()],
+            Some(id),
+            cx,
+        );
     }
 
     fn speak_now(&mut self, line: &str, cx: &mut Context<Self>) {
@@ -585,7 +718,9 @@ impl Voice {
 
     /// Only what came after Voice was turned on is said.
     fn before_voice(&self, ts: &str) -> bool {
-        let Some(started) = self.mode.started_at else { return false };
+        let Some(started) = self.mode.started_at else {
+            return false;
+        };
         threadbear_core::chrono::DateTime::parse_from_rfc3339(ts).is_ok_and(|t| t < started)
     }
 

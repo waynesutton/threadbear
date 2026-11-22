@@ -46,7 +46,10 @@ impl BringIn {
                 days.sort();
             }
         }
-        days.into_iter().map(BringIn::Every).chain([BringIn::Important, BringIn::Off]).collect()
+        days.into_iter()
+            .map(BringIn::Every)
+            .chain([BringIn::Important, BringIn::Off])
+            .collect()
     }
 }
 
@@ -77,13 +80,21 @@ pub struct LabReviewer {
 
 impl LabReviewer {
     pub fn new(provider: &str) -> LabReviewer {
-        LabReviewer { provider: provider.to_owned(), model: None, effort: None }
+        LabReviewer {
+            provider: provider.to_owned(),
+            model: None,
+            effort: None,
+        }
     }
 
     fn decode(v: &Value) -> Option<LabReviewer> {
         let provider = v["provider"].as_str().filter(|p| !p.is_empty())?.to_owned();
         let text = |k: &str| v[k].as_str().filter(|s| !s.is_empty()).map(str::to_owned);
-        Some(LabReviewer { provider, model: text("model"), effort: text("effort") })
+        Some(LabReviewer {
+            provider,
+            model: text("model"),
+            effort: text("effort"),
+        })
     }
 
     pub fn json(&self) -> Value {
@@ -211,13 +222,24 @@ impl RunnerSettings {
             default_cwd: v["defaultCwd"].as_str().unwrap_or("").to_owned(),
             lab_review: v["labReview"].as_bool().unwrap_or(true),
             lab_review_supported: v.get("labReview").is_some_and(Value::is_boolean),
-            lab_reviewers: v["labReviewers"].as_array().map(|list| list.iter().filter_map(LabReviewer::decode).collect()),
+            lab_reviewers: v["labReviewers"]
+                .as_array()
+                .map(|list| list.iter().filter_map(LabReviewer::decode).collect()),
             lab_panel: match (v["labPanel"].as_array(), v["labReviewers"].as_array()) {
                 (Some(panel), _) => Some(panel.iter().filter_map(LabReviewer::decode).collect()),
-                (None, Some(old)) => Some(old.iter().filter(|r| r["panel"] == Value::Bool(true)).filter_map(LabReviewer::decode).collect()),
+                (None, Some(old)) => Some(
+                    old.iter()
+                        .filter(|r| r["panel"] == Value::Bool(true))
+                        .filter_map(LabReviewer::decode)
+                        .collect(),
+                ),
                 (None, None) => None,
             },
-            lab_panel_lines: v["labPanelLines"].as_u64().and_then(|n| u32::try_from(n).ok()).filter(|n| *n > 0).unwrap_or(PANEL_LINES),
+            lab_panel_lines: v["labPanelLines"]
+                .as_u64()
+                .and_then(|n| u32::try_from(n).ok())
+                .filter(|n| *n > 0)
+                .unwrap_or(PANEL_LINES),
             keep_awake: v["keepAwake"].as_bool(),
             full_sync: v["fullSync"].as_bool(),
             prints_when_asked: v["printsWhenAsked"].as_bool(),
@@ -225,16 +247,29 @@ impl RunnerSettings {
             spare_week: v["spareWeek"].as_bool(),
             bring_in_supported: bring_in.is_some(),
             bring_in: bring_in.unwrap_or(BringIn::STANDARD),
-            pool: models["pool"].as_str().filter(|p| !p.is_empty()).map(str::to_owned),
+            pool: models["pool"]
+                .as_str()
+                .filter(|p| !p.is_empty())
+                .map(str::to_owned),
             pool_supported: models.get("pool").is_some(),
-            private_folders: models["privateFolders"].as_array().into_iter().flatten().filter_map(|f| f.as_str().map(str::to_owned)).collect(),
+            private_folders: models["privateFolders"]
+                .as_array()
+                .into_iter()
+                .flatten()
+                .filter_map(|f| f.as_str().map(str::to_owned))
+                .collect(),
             experiments: v["experiments"]
                 .as_array()
                 .into_iter()
                 .flatten()
                 .filter_map(|e| {
                     let id = e["id"].as_str()?.to_owned();
-                    Some(Experiment { name: e["name"].as_str().map_or_else(|| id.clone(), str::to_owned), does: e["does"].as_str().unwrap_or("").to_owned(), on: e["on"].as_bool().unwrap_or(false), id })
+                    Some(Experiment {
+                        name: e["name"].as_str().map_or_else(|| id.clone(), str::to_owned),
+                        does: e["does"].as_str().unwrap_or("").to_owned(),
+                        on: e["on"].as_bool().unwrap_or(false),
+                        id,
+                    })
                 })
                 .collect(),
         }
@@ -249,13 +284,15 @@ impl RunnerSettings {
     /// only with Prints on, as with it off there are none to hold back
     /// (the Swift SettingsView's Prints section, Wayne, 11 Nov).
     pub fn prints_switch(&self) -> Option<bool> {
-        self.prints_when_asked.filter(|_| self.experiment_on(PAGES_EXPERIMENT))
+        self.prints_when_asked
+            .filter(|_| self.experiment_on(PAGES_EXPERIMENT))
     }
 
     /// The "Progress prints for long tasks" switch's state, while it's shown:
     /// like the one above, only with Prints on.
     pub fn progress_switch(&self) -> Option<bool> {
-        self.progress_prints.filter(|_| self.experiment_on(PAGES_EXPERIMENT))
+        self.progress_prints
+            .filter(|_| self.experiment_on(PAGES_EXPERIMENT))
     }
 }
 
@@ -293,7 +330,10 @@ pub struct StandingInstructions {
 
 impl StandingInstructions {
     pub fn decode(v: &Value) -> StandingInstructions {
-        StandingInstructions { text: v["text"].as_str().unwrap_or("").to_owned(), outside: v["outside"].as_bool().unwrap_or(false) }
+        StandingInstructions {
+            text: v["text"].as_str().unwrap_or("").to_owned(),
+            outside: v["outside"].as_bool().unwrap_or(false),
+        }
     }
 }
 
@@ -311,60 +351,158 @@ mod tests {
         }));
         assert!(!s.lab_review && s.lab_review_supported);
         assert_eq!(s.keep_awake, Some(true));
-        assert_eq!(s.prints_when_asked, None, "a runner without it hides the switch");
-        assert_eq!(RunnerSettings::decode(&json!({ "printsWhenAsked": true })).prints_when_asked, Some(true));
+        assert_eq!(
+            s.prints_when_asked, None,
+            "a runner without it hides the switch"
+        );
+        assert_eq!(
+            RunnerSettings::decode(&json!({ "printsWhenAsked": true })).prints_when_asked,
+            Some(true)
+        );
         assert_eq!(s.full_sync, Some(false));
         assert_eq!(s.spare_week, Some(false));
         assert_eq!(s.bring_in, BringIn::Important);
         assert_eq!(s.pool.as_deref(), Some("claude"));
         assert_eq!(s.private_folders, vec!["~/private"]);
-        assert_eq!(s.experiments[1].name, "bare", "an experiment with no name goes by its id");
+        assert_eq!(
+            s.experiments[1].name, "bare",
+            "an experiment with no name goes by its id"
+        );
         assert_eq!(experiment_about(&s.experiments[0].does), "The GPUI app.");
         let old = RunnerSettings::decode(&json!({ "defaultCwd": "/x", "models": {} }));
-        assert!(old.lab_review && !old.lab_review_supported, "an older runner shows no Code review switch");
+        assert!(
+            old.lab_review && !old.lab_review_supported,
+            "an older runner shows no Code review switch"
+        );
         assert!(!old.pool_supported && old.keep_awake.is_none() && !old.bring_in_supported);
-        assert!(old.full_sync.is_none(), "an older runner shows no Full sync switch");
-        assert!(old.spare_week.is_none(), "an older runner shows no spare week switch");
+        assert!(
+            old.full_sync.is_none(),
+            "an older runner shows no Full sync switch"
+        );
+        assert!(
+            old.spare_week.is_none(),
+            "an older runner shows no spare week switch"
+        );
         let none = RunnerSettings::decode(&json!({ "models": { "pool": null } }));
-        assert!(none.pool_supported && none.pool.is_none(), "null is None, and the runner has the setting");
+        assert!(
+            none.pool_supported && none.pool.is_none(),
+            "null is None, and the runner has the setting"
+        );
     }
 
     #[test]
     fn the_prints_switch_shows_only_with_prints_on() {
-        let on = RunnerSettings::decode(&json!({ "printsWhenAsked": false, "experiments": [{ "id": "pages", "on": true }] }));
+        let on = RunnerSettings::decode(
+            &json!({ "printsWhenAsked": false, "experiments": [{ "id": "pages", "on": true }] }),
+        );
         assert_eq!(on.prints_switch(), Some(false));
-        let progress = RunnerSettings::decode(&json!({ "progressPrints": false, "experiments": [{ "id": "pages", "on": true }] }));
+        let progress = RunnerSettings::decode(
+            &json!({ "progressPrints": false, "experiments": [{ "id": "pages", "on": true }] }),
+        );
         assert_eq!(progress.progress_switch(), Some(false));
-        assert_eq!(RunnerSettings::decode(&json!({ "progressPrints": true, "experiments": [{ "id": "pages", "on": false }] })).progress_switch(), None, "hidden with Prints off");
-        assert_eq!(RunnerSettings::decode(&json!({ "experiments": [{ "id": "pages", "on": true }] })).progress_switch(), None, "an older runner hides it");
-        let off = RunnerSettings::decode(&json!({ "printsWhenAsked": true, "experiments": [{ "id": "pages", "on": false }] }));
-        assert_eq!(off.prints_switch(), None, "with Prints off there are none to hold back");
-        let old = RunnerSettings::decode(&json!({ "experiments": [{ "id": "pages", "on": true }] }));
-        assert_eq!(old.prints_switch(), None, "a runner from before the setting shows no switch");
+        assert_eq!(
+            RunnerSettings::decode(
+                &json!({ "progressPrints": true, "experiments": [{ "id": "pages", "on": false }] })
+            )
+            .progress_switch(),
+            None,
+            "hidden with Prints off"
+        );
+        assert_eq!(
+            RunnerSettings::decode(&json!({ "experiments": [{ "id": "pages", "on": true }] }))
+                .progress_switch(),
+            None,
+            "an older runner hides it"
+        );
+        let off = RunnerSettings::decode(
+            &json!({ "printsWhenAsked": true, "experiments": [{ "id": "pages", "on": false }] }),
+        );
+        assert_eq!(
+            off.prints_switch(),
+            None,
+            "with Prints off there are none to hold back"
+        );
+        let old =
+            RunnerSettings::decode(&json!({ "experiments": [{ "id": "pages", "on": true }] }));
+        assert_eq!(
+            old.prints_switch(),
+            None,
+            "a runner from before the setting shows no switch"
+        );
     }
 
     #[test]
     fn bring_in_keeps_a_custom_number_of_days() {
-        let titles: Vec<String> = BringIn::choices(BringIn::Every(10)).into_iter().map(BringIn::title).collect();
-        assert_eq!(titles, vec!["Every day", "Every 3 days", "Every 5 days", "Every week", "Every 10 days", "Every 2 weeks", "Only important ones", "Never"]);
+        let titles: Vec<String> = BringIn::choices(BringIn::Every(10))
+            .into_iter()
+            .map(BringIn::title)
+            .collect();
+        assert_eq!(
+            titles,
+            vec![
+                "Every day",
+                "Every 3 days",
+                "Every 5 days",
+                "Every week",
+                "Every 10 days",
+                "Every 2 weeks",
+                "Only important ones",
+                "Never"
+            ]
+        );
     }
 
     #[test]
     fn reviewers_read_save_and_reorder() {
-        let s = RunnerSettings::decode(&json!({ "labReviewers": [{ "provider": "grok", "model": "grok-4.7", "effort": "high" }, { "provider": "" }, { "provider": "codex" }] }));
+        let s = RunnerSettings::decode(
+            &json!({ "labReviewers": [{ "provider": "grok", "model": "grok-4.7", "effort": "high" }, { "provider": "" }, { "provider": "codex" }] }),
+        );
         let list = s.lab_reviewers.expect("sent, so shown");
-        assert_eq!(list, vec![LabReviewer { provider: "grok".into(), model: Some("grok-4.7".into()), effort: Some("high".into()) }, LabReviewer::new("codex")], "one with no provider is left out");
-        assert_eq!(reviewers_change(&list), json!({ "labReviewers": [{ "provider": "grok", "model": "grok-4.7", "effort": "high" }, { "provider": "codex" }] }), "a reviewer with no model or effort sends neither");
+        assert_eq!(
+            list,
+            vec![
+                LabReviewer {
+                    provider: "grok".into(),
+                    model: Some("grok-4.7".into()),
+                    effort: Some("high".into())
+                },
+                LabReviewer::new("codex")
+            ],
+            "one with no provider is left out"
+        );
+        assert_eq!(
+            reviewers_change(&list),
+            json!({ "labReviewers": [{ "provider": "grok", "model": "grok-4.7", "effort": "high" }, { "provider": "codex" }] }),
+            "a reviewer with no model or effort sends neither"
+        );
         let old = RunnerSettings::decode(&json!({}));
-        assert!(old.lab_reviewers.is_none() && old.lab_panel.is_none(), "an older runner: no lists");
+        assert!(
+            old.lab_reviewers.is_none() && old.lab_panel.is_none(),
+            "an older runner: no lists"
+        );
         assert_eq!(old.lab_panel_lines, PANEL_LINES, "no labPanelLines: 150");
 
-        let three = vec![LabReviewer::new("codex"), LabReviewer::new("claude"), LabReviewer::new("grok")];
+        let three = vec![
+            LabReviewer::new("codex"),
+            LabReviewer::new("claude"),
+            LabReviewer::new("grok"),
+        ];
         let order = |l: Vec<LabReviewer>| l.into_iter().map(|r| r.provider).collect::<Vec<_>>();
-        assert_eq!(order(reviewer_dropped(&three, 2, 0).unwrap()), vec!["grok", "codex", "claude"], "dropped on the first: goes first");
-        assert_eq!(order(reviewer_dropped(&three, 0, 2).unwrap()), vec!["claude", "grok", "codex"], "dropped on the last: goes last");
+        assert_eq!(
+            order(reviewer_dropped(&three, 2, 0).unwrap()),
+            vec!["grok", "codex", "claude"],
+            "dropped on the first: goes first"
+        );
+        assert_eq!(
+            order(reviewer_dropped(&three, 0, 2).unwrap()),
+            vec!["claude", "grok", "codex"],
+            "dropped on the last: goes last"
+        );
         assert!(reviewer_dropped(&three, 0, 0).is_none());
-        assert!(reviewer_dropped(&three, 3, 0).is_none(), "a row that's gone moves nothing");
+        assert!(
+            reviewer_dropped(&three, 3, 0).is_none(),
+            "a row that's gone moves nothing"
+        );
     }
 
     #[test]
@@ -377,17 +515,39 @@ mod tests {
         }));
         let (every, panel) = (s.lab_reviewers.expect("sent"), s.lab_panel.expect("sent"));
         assert_eq!(every.len(), 3);
-        assert_eq!(panel.iter().map(|r| (r.provider.as_str(), r.effort.as_deref())).collect::<Vec<_>>(), vec![("codex", Some("xhigh")), ("opencode", Some("high"))], "its own entries, one with no provider left out");
+        assert_eq!(
+            panel
+                .iter()
+                .map(|r| (r.provider.as_str(), r.effort.as_deref()))
+                .collect::<Vec<_>>(),
+            vec![("codex", Some("xhigh")), ("opencode", Some("high"))],
+            "its own entries, one with no provider left out"
+        );
         assert_eq!(s.lab_panel_lines, 200);
         assert_eq!(
             panel_change(&panel),
             json!({ "labPanel": [{ "provider": "codex", "effort": "xhigh" }, { "provider": "opencode", "model": "google/gemini-4-neon", "effort": "high" }] }),
             "no panel key on an entry"
         );
-        assert_eq!(panel[1].lab(), Some("Gemini"), "OpenCode on a Gemini model is Gemini");
+        assert_eq!(
+            panel[1].lab(),
+            Some("Gemini"),
+            "OpenCode on a Gemini model is Gemini"
+        );
         assert_eq!(panel[0].lab(), None, "only OpenCode names another lab");
-        assert_eq!(LabReviewer { model: Some("zai/glm-5".into()), ..LabReviewer::new("opencode") }.lab(), None);
-        assert_eq!(RunnerSettings::decode(&json!({ "labReviewers": [], "labPanel": [] })).lab_panel, Some(vec![]), "an empty panel is kept");
+        assert_eq!(
+            LabReviewer {
+                model: Some("zai/glm-5".into()),
+                ..LabReviewer::new("opencode")
+            }
+            .lab(),
+            None
+        );
+        assert_eq!(
+            RunnerSettings::decode(&json!({ "labReviewers": [], "labPanel": [] })).lab_panel,
+            Some(vec![]),
+            "an empty panel is kept"
+        );
     }
 
     #[test]
@@ -398,9 +558,20 @@ mod tests {
             { "provider": "opencode", "model": "zai/glm-5", "panel": true },
         ] });
         let s = RunnerSettings::decode(&sent);
-        let (list, panel) = (s.lab_reviewers.expect("sent, so shown"), s.lab_panel.expect("derived from the ticks"));
-        assert_eq!(list.len(), 3, "the ticked ones stay on Every change, as they reviewed every change then");
-        assert_eq!(panel.iter().map(|r| r.model.as_deref()).collect::<Vec<_>>(), vec![Some("google/gemini-4-carbon"), Some("zai/glm-5")], "only true is on the panel");
+        let (list, panel) = (
+            s.lab_reviewers.expect("sent, so shown"),
+            s.lab_panel.expect("derived from the ticks"),
+        );
+        assert_eq!(
+            list.len(),
+            3,
+            "the ticked ones stay on Every change, as they reviewed every change then"
+        );
+        assert_eq!(
+            panel.iter().map(|r| r.model.as_deref()).collect::<Vec<_>>(),
+            vec![Some("google/gemini-4-carbon"), Some("zai/glm-5")],
+            "only true is on the panel"
+        );
         assert_eq!(
             reviewers_change(&list),
             json!({ "labReviewers": [
@@ -410,10 +581,17 @@ mod tests {
             ] }),
             "the ticks aren't sent back"
         );
-        assert_eq!(RunnerSettings::decode(&json!({ "labReviewers": [{ "provider": "codex" }] })).lab_panel, Some(vec![]), "none ticked: an empty panel");
+        assert_eq!(
+            RunnerSettings::decode(&json!({ "labReviewers": [{ "provider": "codex" }] })).lab_panel,
+            Some(vec![]),
+            "none ticked: an empty panel"
+        );
         // Dragging the second OpenCode moves that one, not the first.
         let moved = reviewer_dropped(&list, 2, 0).unwrap();
-        assert_eq!(moved.iter().map(|r| r.model.as_deref()).collect::<Vec<_>>(), vec![Some("zai/glm-5"), Some("google/gemini-4-carbon"), None]);
+        assert_eq!(
+            moved.iter().map(|r| r.model.as_deref()).collect::<Vec<_>>(),
+            vec![Some("zai/glm-5"), Some("google/gemini-4-carbon"), None]
+        );
     }
 
     #[test]

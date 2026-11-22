@@ -17,7 +17,11 @@ pub enum VoiceTriggerKey {
 }
 
 impl VoiceTriggerKey {
-    pub const ALL: [VoiceTriggerKey; 3] = [VoiceTriggerKey::Fn, VoiceTriggerKey::RightOption, VoiceTriggerKey::RightCommand];
+    pub const ALL: [VoiceTriggerKey; 3] = [
+        VoiceTriggerKey::Fn,
+        VoiceTriggerKey::RightOption,
+        VoiceTriggerKey::RightCommand,
+    ];
 
     /// The Swift app's raw value, as saved.
     pub fn name(self) -> &'static str {
@@ -70,7 +74,11 @@ pub enum VoiceCommandKey {
 }
 
 impl VoiceCommandKey {
-    pub const ALL: [VoiceCommandKey; 3] = [VoiceCommandKey::Control, VoiceCommandKey::Option, VoiceCommandKey::Shift];
+    pub const ALL: [VoiceCommandKey; 3] = [
+        VoiceCommandKey::Control,
+        VoiceCommandKey::Option,
+        VoiceCommandKey::Shift,
+    ];
 
     pub fn name(self) -> &'static str {
         match self {
@@ -131,7 +139,15 @@ pub struct VoiceKeys {
 
 impl Default for VoiceKeys {
     fn default() -> VoiceKeys {
-        VoiceKeys { trigger: VoiceTriggerKey::Fn, hold_to_dictate: true, hands_free_with_space: true, shift_toggle: true, double_tap: false, command_mode: false, command: VoiceCommandKey::Control }
+        VoiceKeys {
+            trigger: VoiceTriggerKey::Fn,
+            hold_to_dictate: true,
+            hands_free_with_space: true,
+            shift_toggle: true,
+            double_tap: false,
+            command_mode: false,
+            command: VoiceCommandKey::Control,
+        }
     }
 }
 
@@ -161,7 +177,9 @@ impl VoiceKeys {
     pub fn listening_line(&self, mode: KeyMode) -> String {
         let key = self.trigger.display();
         match mode {
-            KeyMode::Command => format!("Command Mode: let go of {key} to send it to the thread. Esc cancels."),
+            KeyMode::Command => {
+                format!("Command Mode: let go of {key} to send it to the thread. Esc cancels.")
+            }
             KeyMode::HandsFree => {
                 let stop = if self.shift_toggle {
                     self.shift_display()
@@ -172,7 +190,9 @@ impl VoiceKeys {
                 };
                 format!("Hands-free: {stop} to stop, Esc to cancel")
             }
-            KeyMode::Dictating | KeyMode::Idle => format!("Listening: let go of {key} to type it in. Esc cancels."),
+            KeyMode::Dictating | KeyMode::Idle => {
+                format!("Listening: let go of {key} to type it in. Esc cancels.")
+            }
         }
     }
 }
@@ -232,7 +252,10 @@ pub struct KeyOutcome {
 
 impl KeyOutcome {
     fn of(actions: Vec<KeyAction>) -> KeyOutcome {
-        KeyOutcome { actions, swallow: false }
+        KeyOutcome {
+            actions,
+            swallow: false,
+        }
     }
 
     fn swallowing(actions: Vec<KeyAction>, swallow: bool) -> KeyOutcome {
@@ -277,7 +300,12 @@ pub struct VoiceKeyMachine {
 
 impl VoiceKeyMachine {
     pub fn new(keys: VoiceKeys) -> VoiceKeyMachine {
-        VoiceKeyMachine { keys, mode: KeyMode::Idle, press: Press::Up, last_tap: None }
+        VoiceKeyMachine {
+            keys,
+            mode: KeyMode::Idle,
+            press: Press::Up,
+            last_tap: None,
+        }
     }
 
     pub fn mode(&self) -> KeyMode {
@@ -314,10 +342,17 @@ impl VoiceKeyMachine {
                     return KeyOutcome::of(vec![KeyAction::Start(KeyMode::HandsFree)]);
                 }
                 self.press = Press::Down(at);
-                if self.keys.hold_to_dictate { KeyOutcome::of(vec![KeyAction::WaitToHold(at)]) } else { KeyOutcome::default() }
+                if self.keys.hold_to_dictate {
+                    KeyOutcome::of(vec![KeyAction::WaitToHold(at)])
+                } else {
+                    KeyOutcome::default()
+                }
             }
             KeyEvent::HoldDelayPassed(pressed_at) => {
-                if self.press != Press::Down(pressed_at) || self.mode != KeyMode::Idle || !self.keys.hold_to_dictate {
+                if self.press != Press::Down(pressed_at)
+                    || self.mode != KeyMode::Idle
+                    || !self.keys.hold_to_dictate
+                {
                     return KeyOutcome::default();
                 }
                 self.press = Press::Acting;
@@ -328,7 +363,8 @@ impl VoiceKeyMachine {
                 if !self.keys.command_mode {
                     return self.other_modifier();
                 }
-                let can = matches!(self.press, Press::Down(_)) || (self.press == Press::Acting && self.mode == KeyMode::Dictating);
+                let can = matches!(self.press, Press::Down(_))
+                    || (self.press == Press::Acting && self.mode == KeyMode::Dictating);
                 if !can {
                     return KeyOutcome::default();
                 }
@@ -397,7 +433,10 @@ impl VoiceKeyMachine {
             Press::Down(_) | Press::Acting => {
                 self.press = Press::Spent;
                 self.mode = KeyMode::HandsFree;
-                Some(KeyOutcome::swallowing(vec![KeyAction::Start(KeyMode::HandsFree)], swallow))
+                Some(KeyOutcome::swallowing(
+                    vec![KeyAction::Start(KeyMode::HandsFree)],
+                    swallow,
+                ))
             }
             Press::Up | Press::Spent => None,
         }

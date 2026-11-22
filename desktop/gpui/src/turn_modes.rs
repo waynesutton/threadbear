@@ -41,7 +41,11 @@ impl Composer {
     /// Shift-Tab (`togglePlanFirst`): Plan first on or off. False when
     /// Settings has it off, so the key does what it did.
     pub(crate) fn cycle_turn_mode(&mut self, cx: &mut Context<Self>) -> bool {
-        if !self.app.upgrade().is_none_or(|app| app.read(cx).settings.turn_modes_enabled()) {
+        if !self
+            .app
+            .upgrade()
+            .is_none_or(|app| app.read(cx).settings.turn_modes_enabled())
+        {
             return false;
         }
         // Another Mac's thread keeps its access as it is from here
@@ -50,7 +54,15 @@ impl Composer {
             return false;
         }
         let key = self.mode_key();
-        let Some(permission) = self.chip_data(cx).summary.map(|t| if t.permission_mode.is_empty() { "full".to_owned() } else { t.permission_mode }) else { return false };
+        let Some(permission) = self.chip_data(cx).summary.map(|t| {
+            if t.permission_mode.is_empty() {
+                "full".to_owned()
+            } else {
+                t.permission_mode
+            }
+        }) else {
+            return false;
+        };
         let put_back = PUT_BACK.with(|p| p.borrow().get(&key).cloned());
         let mode: &'static str = match rules::next(&permission, put_back.as_deref()).as_str() {
             "plan" => "plan",

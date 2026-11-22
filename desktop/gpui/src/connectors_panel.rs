@@ -7,7 +7,9 @@
 // the pages for it). The runner asks the gateway; the app only asks the
 // runner, which also looks every few minutes by itself. The words are
 // threadbear_core::connectors.
-use crate::activity_panels::{about_button, dot, icon_button, push_button, small_heading, system_orange, text_line};
+use crate::activity_panels::{
+    about_button, dot, icon_button, push_button, small_heading, system_orange, text_line,
+};
 use crate::app::Threadbear;
 use crate::highlights::tipped;
 use crate::{call, icons, shell, style};
@@ -17,7 +19,9 @@ use gpui_kit::*;
 // The zoom-aware px (style.rs), in place of GPUI's.
 use crate::style::px;
 use serde_json::{json, Value};
-use threadbear_core::connectors::{self as rules, ConnectorService, ConnectorsStatus, XSearchStatus};
+use threadbear_core::connectors::{
+    self as rules, ConnectorService, ConnectorsStatus, XSearchStatus,
+};
 
 /// The Connectors panel's state in the app (`Threadbear::connectors_panel`).
 #[derive(Default)]
@@ -118,7 +122,9 @@ impl Threadbear {
                     t.connectors_panel.refreshing = false;
                 }
                 match res {
-                    Ok(v) => t.connectors_panel.status = Some(ConnectorsStatus::decode(&v["connectors"])),
+                    Ok(v) => {
+                        t.connectors_panel.status = Some(ConnectorsStatus::decode(&v["connectors"]))
+                    }
                     // A runner from before Connectors: no icon, no panel.
                     Err(e) if e.code == -32601 => {
                         t.connectors_panel.status = None;
@@ -143,7 +149,10 @@ impl Threadbear {
 
     /// Show the panel for a gateway, an available setup, or outside agents.
     pub(crate) fn connectors_on(&self) -> bool {
-        rules::shows_icon(self.connectors_panel.status.as_ref(), self.connectors_panel.setup.agents.as_ref())
+        rules::shows_icon(
+            self.connectors_panel.status.as_ref(),
+            self.connectors_panel.setup.agents.as_ref(),
+        )
     }
 
     /// A service's page on the gateway in the browser: its sign-in when it's
@@ -163,26 +172,76 @@ impl Threadbear {
 
     /// `ConnectorsPanel`: where they live, the gateway's page, refresh and
     /// the ⓘ, then a row per service (or why there are none).
-    pub(crate) fn render_connectors_panel(&mut self, window: &mut Window, cx: &mut Context<Self>) -> AnyElement {
+    pub(crate) fn render_connectors_panel(
+        &mut self,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> AnyElement {
         let status = self.visible_connectors();
         let host = rules::host(status.as_ref());
-        let mut header = h_flex().gap(px(6.)).items_center().child(small_heading(host.clone().unwrap_or_else(|| "Gateway".to_owned()), cx)).child(div().flex_1());
+        let mut header = h_flex()
+            .gap(px(6.))
+            .items_center()
+            .child(small_heading(
+                host.clone().unwrap_or_else(|| "Gateway".to_owned()),
+                cx,
+            ))
+            .child(div().flex_1());
         if rules::manage_url(status.as_ref()).is_some() {
-            let tip = format!("Manage connectors on {}", host.as_deref().unwrap_or("the gateway"));
-            header = header.child(icon_button("connectors-manage", "arrow.up.forward.square", tip, false, cx, |t, _, cx| t.open_connectors_admin(cx)));
+            let tip = format!(
+                "Manage connectors on {}",
+                host.as_deref().unwrap_or("the gateway")
+            );
+            header = header.child(icon_button(
+                "connectors-manage",
+                "arrow.up.forward.square",
+                tip,
+                false,
+                cx,
+                |t, _, cx| t.open_connectors_admin(cx),
+            ));
         }
-        header = header.child(icon_button("connectors-refresh", "arrow.clockwise", "Check the gateway again now", self.connectors_panel.refreshing, cx, |t, _, cx| t.refresh_connectors(true, cx)));
+        header = header.child(icon_button(
+            "connectors-refresh",
+            "arrow.clockwise",
+            "Check the gateway again now",
+            self.connectors_panel.refreshing,
+            cx,
+            |t, _, cx| t.refresh_connectors(true, cx),
+        ));
         let footnote = status.as_ref().and_then(|s| s.checked_ms).and_then(|at| {
             use threadbear_core::chrono::TimeZone as _;
-            threadbear_core::chrono::Local.timestamp_millis_opt(at).single().map(|d| format!("Last checked {}.", threadbear_core::schedules::time_of_day(&d)))
+            threadbear_core::chrono::Local
+                .timestamp_millis_opt(at)
+                .single()
+                .map(|d| {
+                    format!(
+                        "Last checked {}.",
+                        threadbear_core::schedules::time_of_day(&d)
+                    )
+                })
         });
-        header = header.child(about_button("connectors-about", rules::about(status.as_ref()).into_iter().collect(), footnote, cx));
+        header = header.child(about_button(
+            "connectors-about",
+            rules::about(status.as_ref()).into_iter().collect(),
+            footnote,
+            cx,
+        ));
         let mut children = vec![header.into_any_element()];
         if status.as_ref().is_some_and(|s| s.can_set_up) {
             children.push(self.render_connector_setup(cx));
-        } else if self.connectors_panel.status.as_ref().is_none_or(|s| s.services.is_empty()) {
+        } else if self
+            .connectors_panel
+            .status
+            .as_ref()
+            .is_none_or(|s| s.services.is_empty())
+        {
             if let Some(line) = rules::empty_line(status.as_ref()) {
-                let color = if status.as_ref().is_some_and(|s| s.state == "unreachable") { style::label_text(cx) } else { style::secondary_text(cx) };
+                let color = if status.as_ref().is_some_and(|s| s.state == "unreachable") {
+                    style::label_text(cx)
+                } else {
+                    style::secondary_text(cx)
+                };
                 children.push(text_line(line, 12., color).into_any_element());
             }
         }
@@ -191,12 +250,25 @@ impl Threadbear {
         }
         children.extend(self.render_connector_sections(window, cx));
         if let Some(x) = self.connectors_panel.x_search.filter(|x| x.on) {
-            children.push(div().h(px(1.)).my(px(2.)).bg(style::hairline(cx)).into_any_element());
+            children.push(
+                div()
+                    .h(px(1.))
+                    .my(px(2.))
+                    .bg(style::hairline(cx))
+                    .into_any_element(),
+            );
             children.push(self.render_x_search(x, cx));
         }
-        if let Some(menu) = self.render_hidden_connectors(cx) { children.push(menu); }
-        div().id("connectors-panel").size_full().overflow_y_scroll().track_scroll(&self.connectors_panel.scroll)
-            .child(v_flex().w_full().p(px(16.)).gap(px(12.)).children(children)).into_any_element()
+        if let Some(menu) = self.render_hidden_connectors(cx) {
+            children.push(menu);
+        }
+        div()
+            .id("connectors-panel")
+            .size_full()
+            .overflow_y_scroll()
+            .track_scroll(&self.connectors_panel.scroll)
+            .child(v_flex().w_full().p(px(16.)).gap(px(12.)).children(children))
+            .into_any_element()
     }
 
     /// `XSearchSection`: built into Threadbear, not the gateway, so it sits
@@ -206,25 +278,64 @@ impl Threadbear {
         // The gateway rows' mark: filled grey when ready, never the accent.
         let mark = secondary.opacity(if x.key_saved { 0.7 } else { 0.3 });
         let words = tipped(
-            v_flex().id("x-search-words").flex_1().min_w_0().gap(px(2.)).child(text_line("X search", 12., fg).truncate()).child(text_line(x.line(), 11., secondary)),
+            v_flex()
+                .id("x-search-words")
+                .flex_1()
+                .min_w_0()
+                .gap(px(2.))
+                .child(text_line("X search", 12., fg).truncate())
+                .child(text_line(x.line(), 11., secondary)),
             "Agents search X through xAI's Grok with x_search, billed to your xAI credit",
         );
-        let mut row = h_flex()
-            .items_start()
-            .gap(px(8.))
-            .child(h_flex().flex_1().min_w_0().items_start().gap(px(8.)).when(x.key_saved, |s| s.mt(px(2.))).child(div().flex_none().h(px(15.)).flex().items_center().child(dot(mark).mt(px(1.)))).child(words));
+        let mut row = h_flex().items_start().gap(px(8.)).child(
+            h_flex()
+                .flex_1()
+                .min_w_0()
+                .items_start()
+                .gap(px(8.))
+                .when(x.key_saved, |s| s.mt(px(2.)))
+                .child(
+                    div()
+                        .flex_none()
+                        .h(px(15.))
+                        .flex()
+                        .items_center()
+                        .child(dot(mark).mt(px(1.))),
+                )
+                .child(words),
+        );
         if x.key_saved {
             let busy = self.connectors_panel.forgetting_key;
-            row = row.child(push_button("x-search-forget", "Forget key", "Delete the saved xAI key. The next search asks for one again", true, busy, cx, |t, _, cx| t.forget_xai_key(cx)));
+            row = row.child(push_button(
+                "x-search-forget",
+                "Forget key",
+                "Delete the saved xAI key. The next search asks for one again",
+                true,
+                busy,
+                cx,
+                |t, _, cx| t.forget_xai_key(cx),
+            ));
         }
-        v_flex().gap(px(10.)).child(small_heading("Built into Threadbear", cx)).child(row).into_any_element()
+        v_flex()
+            .gap(px(10.))
+            .child(small_heading("Built into Threadbear", cx))
+            .child(row)
+            .into_any_element()
     }
 
     /// `ConnectorRow`: a mark for its state (filled when signed in, the
     /// accent only where Mike has something to do), its name and state, its
     /// message, and Connect, or a quiet arrow to its page.
-    fn render_connector_row(&mut self, service: &ConnectorService, cx: &mut Context<Self>) -> AnyElement {
-        let (fg, secondary, tertiary) = (style::label_text(cx), style::secondary_text(cx), style::tertiary_label(cx));
+    fn render_connector_row(
+        &mut self,
+        service: &ConnectorService,
+        cx: &mut Context<Self>,
+    ) -> AnyElement {
+        let (fg, secondary, tertiary) = (
+            style::label_text(cx),
+            style::secondary_text(cx),
+            style::tertiary_label(cx),
+        );
         let signed_out = service.state == "signed_out";
         let mark = match service.state.as_str() {
             "signed_out" => style::accent(cx),
@@ -236,9 +347,22 @@ impl Threadbear {
             .flex_1()
             .min_w_0()
             .gap(px(2.))
-            .child(text_line(service.title.clone(), 12., fg).font_weight(if signed_out { FontWeight::MEDIUM } else { FontWeight::NORMAL }).truncate())
+            .child(
+                text_line(service.title.clone(), 12., fg)
+                    .font_weight(if signed_out {
+                        FontWeight::MEDIUM
+                    } else {
+                        FontWeight::NORMAL
+                    })
+                    .truncate(),
+            )
             .child(text_line(rules::state_line(service), 11., secondary));
-        if let Some(message) = service.state_note.clone().or_else(|| service.message.clone()).filter(|_| service.state != "connected") {
+        if let Some(message) = service
+            .state_note
+            .clone()
+            .or_else(|| service.message.clone())
+            .filter(|_| service.state != "connected")
+        {
             words = words.child(text_line(message, 11., tertiary).line_clamp(3));
         }
         let group = SharedString::from(format!("connector-{}", service.id));
@@ -259,19 +383,44 @@ impl Threadbear {
                     .when(button.is_some(), |s| s.mt(px(2.)))
                     // The dot on the name's line, a point under its middle, as
                     // the Swift row puts it on the text's baseline.
-                    .child(div().flex_none().h(px(15.)).flex().items_center().child(dot(mark).mt(px(1.))))
+                    .child(
+                        div()
+                            .flex_none()
+                            .h(px(15.))
+                            .flex()
+                            .items_center()
+                            .child(dot(mark).mt(px(1.))),
+                    )
                     .child(words),
             );
         if let Some(title) = button {
             let s = service.clone();
-            row = row.child(push_button(SharedString::from(format!("connector-connect-{}", service.id)), title, format!("Open {}'s sign-in page in your browser", service.title), true, false, cx, move |t, _, cx| t.open_connect(&s, cx)));
+            row = row.child(push_button(
+                SharedString::from(format!("connector-connect-{}", service.id)),
+                title,
+                format!("Open {}'s sign-in page in your browser", service.title),
+                true,
+                false,
+                cx,
+                move |t, _, cx| t.open_connect(&s, cx),
+            ));
         } else if rules::service_url(self.connectors_panel.status.as_ref(), service).is_some() {
             // A signed-in service has nothing to press, but Mike may want to
             // sign it out or switch accounts: its page on the gateway has
             // Disconnect. Quiet until the row's hovered.
             let s = service.clone();
-            let action = if service.local { "retry or turn it off" } else { "sign out or reconnect" };
-            let tip = format!("Open {}'s page on {} to {action}", service.title, rules::host(self.connectors_panel.status.as_ref()).as_deref().unwrap_or("the gateway"));
+            let action = if service.local {
+                "retry or turn it off"
+            } else {
+                "sign out or reconnect"
+            };
+            let tip = format!(
+                "Open {}'s page on {} to {action}",
+                service.title,
+                rules::host(self.connectors_panel.status.as_ref())
+                    .as_deref()
+                    .unwrap_or("the gateway")
+            );
             let quiet = secondary.opacity(0.35);
             row = row.child(
                 tipped(
@@ -296,11 +445,28 @@ impl Threadbear {
             );
         }
         if let Some(setup) = service.client_setup.clone() {
-            row = row.child(self.create_app_button(&service.id, &service.title, &setup.create_url, cx));
+            row = row.child(self.create_app_button(
+                &service.id,
+                &service.title,
+                &setup.create_url,
+                cx,
+            ));
         }
-        row = row.child(self.connector_hide_button(format!("service:{}", service.id), format!("Hide {} from this panel. Agents can still use it; the + below brings it back.", service.title), group, cx));
+        row = row.child(self.connector_hide_button(
+            format!("service:{}", service.id),
+            format!(
+                "Hide {} from this panel. Agents can still use it; the + below brings it back.",
+                service.title
+            ),
+            group,
+            cx,
+        ));
         match service.client_setup.clone() {
-            Some(setup) => v_flex().gap(px(8.)).child(row).child(self.render_client_setup(&service.id, &service.title, &setup, cx)).into_any_element(),
+            Some(setup) => v_flex()
+                .gap(px(8.))
+                .child(row)
+                .child(self.render_client_setup(&service.id, &service.title, &setup, cx))
+                .into_any_element(),
             None => row.into_any_element(),
         }
     }
@@ -312,18 +478,43 @@ impl Threadbear {
         let visible = self.visible_connectors();
         let status = visible.as_ref();
         let mut lines = vec![rules::host(status).unwrap_or_else(|| "Gateway".to_owned())];
-        if !status.is_some_and(|s| s.can_set_up) && self.connectors_panel.status.as_ref().is_none_or(|s| s.services.is_empty()) {
+        if !status.is_some_and(|s| s.can_set_up)
+            && self
+                .connectors_panel
+                .status
+                .as_ref()
+                .is_none_or(|s| s.services.is_empty())
+        {
             lines.extend(rules::empty_line(status));
         }
         for s in status.iter().flat_map(|s| s.services.iter()) {
-            lines.push(format!("{}: {}{}{}", s.title, rules::state_line(s), rules::button_title(s).map_or_else(String::new, |b| format!(" [{b}]")), if s.client_setup.is_some() { format!(" [{}]", rules::create_app_title(&s.title)) } else { String::new() }));
-            if let Some(message) = s.state_note.as_ref().or(s.message.as_ref()).filter(|_| s.state != "connected") {
+            lines.push(format!(
+                "{}: {}{}{}",
+                s.title,
+                rules::state_line(s),
+                rules::button_title(s).map_or_else(String::new, |b| format!(" [{b}]")),
+                if s.client_setup.is_some() {
+                    format!(" [{}]", rules::create_app_title(&s.title))
+                } else {
+                    String::new()
+                }
+            ));
+            if let Some(message) = s
+                .state_note
+                .as_ref()
+                .or(s.message.as_ref())
+                .filter(|_| s.state != "connected")
+            {
                 lines.push(format!("  {message}"));
             }
         }
         if let Some(x) = self.connectors_panel.x_search.filter(|x| x.on) {
             lines.push("Built into Threadbear".to_owned());
-            lines.push(format!("X search: {}{}", x.line(), if x.key_saved { " [Forget key]" } else { "" }));
+            lines.push(format!(
+                "X search: {}{}",
+                x.line(),
+                if x.key_saved { " [Forget key]" } else { "" }
+            ));
         }
         lines.extend(self.connector_setup_lines());
         json!({ "shown": self.activity_panel_showing(shell::CONNECTORS, cx), "lines": lines })
@@ -334,7 +525,11 @@ impl Threadbear {
 /// the panel, `click` presses a service's Connect (which opens its page in
 /// the browser); with neither, the icon's dots and tooltip and each
 /// service's line.
-pub(crate) fn automation(app: &Entity<Threadbear>, cmd: &Value, cx: &mut App) -> Result<Value, String> {
+pub(crate) fn automation(
+    app: &Entity<Threadbear>,
+    cmd: &Value,
+    cx: &mut App,
+) -> Result<Value, String> {
     if let Some(show) = cmd["show"].as_bool() {
         let shown = app.update(cx, |t, cx| {
             if t.activity_panel_showing(shell::CONNECTORS, cx) != show {
@@ -350,16 +545,40 @@ pub(crate) fn automation(app: &Entity<Threadbear>, cmd: &Value, cx: &mut App) ->
     }
     let status = app.read(cx).visible_connectors();
     if let Some(id) = cmd["click"].as_str() {
-        let service = status.as_ref().and_then(|s| s.services.iter().find(|x| x.id == id)).cloned().ok_or_else(|| format!("no service {id}"))?;
+        let service = status
+            .as_ref()
+            .and_then(|s| s.services.iter().find(|x| x.id == id))
+            .cloned()
+            .ok_or_else(|| format!("no service {id}"))?;
         if rules::button_title(&service).is_none() {
             return Err(format!("{id} has no button"));
         }
         app.update(cx, |t, cx| t.open_connect(&service, cx));
-        return Ok(json!(format!("ok opened {}", service.connect_url.unwrap_or_default())));
+        return Ok(json!(format!(
+            "ok opened {}",
+            service.connect_url.unwrap_or_default()
+        )));
     }
-    let Some(s) = status else { return Err("the runner has no connectors".into()) };
-    let mut lines = vec![format!("state: {}", s.state), format!("dot: {}", rules::needs_you(Some(&s))), format!("quietDot: {}", rules::quiet(Some(&s))), format!("tip: {}", rules::tooltip(Some(&s)).replace('\n', " / "))];
+    let Some(s) = status else {
+        return Err("the runner has no connectors".into());
+    };
+    let mut lines = vec![
+        format!("state: {}", s.state),
+        format!("dot: {}", rules::needs_you(Some(&s))),
+        format!("quietDot: {}", rules::quiet(Some(&s))),
+        format!("tip: {}", rules::tooltip(Some(&s)).replace('\n', " / ")),
+    ];
     lines.extend(rules::empty_line(Some(&s)));
-    lines.extend(s.services.iter().map(|x| format!("{}: {}{}", x.id, rules::state_line(x), rules::button_title(x).map_or_else(String::new, |b| format!(" [{b}]")))));
-    Ok(json!(format!("ok {}", serde_json::to_string(&lines).unwrap_or_default())))
+    lines.extend(s.services.iter().map(|x| {
+        format!(
+            "{}: {}{}",
+            x.id,
+            rules::state_line(x),
+            rules::button_title(x).map_or_else(String::new, |b| format!(" [{b}]"))
+        )
+    }));
+    Ok(json!(format!(
+        "ok {}",
+        serde_json::to_string(&lines).unwrap_or_default()
+    )))
 }

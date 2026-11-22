@@ -66,9 +66,24 @@ pub(crate) fn get(app: &WeakEntity<Threadbear>, cx: &mut App) -> Entity<Voice> {
     let app = app.clone();
     let voice = cx.new(|cx: &mut Context<Voice>| {
         if let Some(entity) = app.upgrade() {
-            cx.observe(&entity, |voice: &mut Voice, app, cx| voice.app_changed(app, cx)).detach();
+            cx.observe(&entity, |voice: &mut Voice, app, cx| {
+                voice.app_changed(app, cx)
+            })
+            .detach();
         }
-        Voice { app, prefs: load_prefs(), helper: None, helper_gen: 0, mics_asked: false, listener: None, session: 0, mode: mode::ModeState::default(), keys: keys::Dictation::default(), microphones: Vec::new(), preview_status: None }
+        Voice {
+            app,
+            prefs: load_prefs(),
+            helper: None,
+            helper_gen: 0,
+            mics_asked: false,
+            listener: None,
+            session: 0,
+            mode: mode::ModeState::default(),
+            keys: keys::Dictation::default(),
+            microphones: Vec::new(),
+            preview_status: None,
+        }
     });
     cx.set_global(VoiceGlobal(voice.clone()));
     keys::install(voice.downgrade(), cx);
@@ -104,29 +119,43 @@ pub(crate) fn thread_started(id: &str, cx: &mut App) {
 /// The runner says the experiment is on: Settings' switch first, as it
 /// changes without a new hello, else the hello's list (experiment_on).
 pub(crate) fn experiment_on(app: &Threadbear) -> bool {
-    let switch = app.runner_settings.as_ref().and_then(|s| s["experiments"].as_array()?.iter().find(|e| e["id"] == EXPERIMENT).map(|e| e["on"].as_bool() == Some(true)));
+    let switch = app.runner_settings.as_ref().and_then(|s| {
+        s["experiments"]
+            .as_array()?
+            .iter()
+            .find(|e| e["id"] == EXPERIMENT)
+            .map(|e| e["on"].as_bool() == Some(true))
+    });
     switch.unwrap_or_else(|| app.remote.experiments.iter().any(|e| e == EXPERIMENT))
 }
 
 fn prefs_path() -> std::path::PathBuf {
-    threadbear_client::config::RunnerConfig::from_env().home.join("desktop-voice.json")
+    threadbear_client::config::RunnerConfig::from_env()
+        .home
+        .join("desktop-voice.json")
 }
 
 fn load_prefs() -> VoicePrefs {
-    std::fs::read(prefs_path()).ok().and_then(|b| serde_json::from_slice(&b).ok()).unwrap_or_default()
+    std::fs::read(prefs_path())
+        .ok()
+        .and_then(|b| serde_json::from_slice(&b).ok())
+        .unwrap_or_default()
 }
 
 /// Voice's own log, ~/Library/Logs/Threadbear/voice.log, as the Swift app's
 /// VoiceLog writes it: what happened, never what was said.
 pub(crate) fn log(line: &str) {
     use std::io::Write as _;
-    let Some(home) = std::env::var_os("HOME") else { return };
+    let Some(home) = std::env::var_os("HOME") else {
+        return;
+    };
     let path = std::path::PathBuf::from(home).join("Library/Logs/Threadbear/voice.log");
     if std::fs::metadata(&path).is_ok_and(|m| m.len() > 256_000) {
         let _ = std::fs::remove_file(&path);
     }
     if let Ok(mut f) = threadbear_core::private_file::append(&path) {
-        let stamp = threadbear_core::chrono::Utc::now().to_rfc3339_opts(threadbear_core::chrono::SecondsFormat::Secs, true);
+        let stamp = threadbear_core::chrono::Utc::now()
+            .to_rfc3339_opts(threadbear_core::chrono::SecondsFormat::Secs, true);
         let _ = writeln!(f, "{stamp} [gpui] {line}");
     }
 }
@@ -134,13 +163,21 @@ pub(crate) fn log(line: &str) {
 /// Seconds on a clock of the app's own, for the pauses between words.
 pub(crate) fn now() -> f64 {
     static START: std::sync::OnceLock<std::time::Instant> = std::sync::OnceLock::new();
-    START.get_or_init(std::time::Instant::now).elapsed().as_secs_f64()
+    START
+        .get_or_init(std::time::Instant::now)
+        .elapsed()
+        .as_secs_f64()
 }
 
 impl Voice {
     /// The experiment's on, Use Voice is on and this build can listen.
     pub(crate) fn available(&self, cx: &App) -> bool {
-        self.prefs.enabled() && helper::built_in() && self.app.upgrade().is_some_and(|a| experiment_on(a.read(cx)))
+        self.prefs.enabled()
+            && helper::built_in()
+            && self
+                .app
+                .upgrade()
+                .is_some_and(|a| experiment_on(a.read(cx)))
     }
 
     pub(crate) fn set_prefs(&mut self, edit: impl FnOnce(&mut VoicePrefs), cx: &mut Context<Self>) {
@@ -182,7 +219,14 @@ impl Voice {
             cx.spawn(async move |this, cx| {
                 use futures::StreamExt as _;
                 while let Some(event) = rx.next().await {
-                    if this.update(cx, |v, cx| if v.helper_gen == gen { v.from_helper(event, cx) }).is_err() {
+                    if this
+                        .update(cx, |v, cx| {
+                            if v.helper_gen == gen {
+                                v.from_helper(event, cx)
+                            }
+                        })
+                        .is_err()
+                    {
                         break;
                     }
                 }
@@ -245,10 +289,28 @@ impl Voice {
                     _ => {}
                 }
             }
-            "speaking" => self.mode_speaking(event["on"].as_bool().unwrap_or(false), event["at"].as_f64().unwrap_or(0.0), cx),
-            "played" => self.mode_played(event["id"].as_str().unwrap_or(""), event["at"].as_f64().unwrap_or(0.0), cx),
+            "speaking" => self.mode_speaking(
+                event["on"].as_bool().unwrap_or(false),
+                event["at"].as_f64().unwrap_or(0.0),
+                cx,
+            ),
+            "played" => self.mode_played(
+                event["id"].as_str().unwrap_or(""),
+                event["at"].as_f64().unwrap_or(0.0),
+                cx,
+            ),
             "microphones" => {
-                self.microphones = event["list"].as_array().into_iter().flatten().filter_map(|m| Some((m["uid"].as_str()?.to_owned(), m["name"].as_str()?.to_owned()))).collect();
+                self.microphones = event["list"]
+                    .as_array()
+                    .into_iter()
+                    .flatten()
+                    .filter_map(|m| {
+                        Some((
+                            m["uid"].as_str()?.to_owned(),
+                            m["name"].as_str()?.to_owned(),
+                        ))
+                    })
+                    .collect();
                 cx.notify();
             }
             "previewStatus" => {
@@ -278,7 +340,12 @@ impl Voice {
     }
 
     /// A timer of the app's own, every `every`, while `keep` says so.
-    fn every(&self, every: Duration, cx: &mut Context<Self>, tick: impl Fn(&mut Voice, &mut Context<Voice>) -> bool + 'static) {
+    fn every(
+        &self,
+        every: Duration,
+        cx: &mut Context<Self>,
+        tick: impl Fn(&mut Voice, &mut Context<Voice>) -> bool + 'static,
+    ) {
         cx.spawn(async move |this, cx| loop {
             cx.background_executor().timer(every).await;
             match this.update(cx, |v, cx| tick(v, cx)) {
@@ -290,7 +357,12 @@ impl Voice {
     }
 
     /// Once, after `after`.
-    fn after(&self, after: Duration, cx: &mut Context<Self>, then: impl FnOnce(&mut Voice, &mut Context<Voice>) + 'static) {
+    fn after(
+        &self,
+        after: Duration,
+        cx: &mut Context<Self>,
+        then: impl FnOnce(&mut Voice, &mut Context<Voice>) + 'static,
+    ) {
         cx.spawn(async move |this, cx| {
             cx.background_executor().timer(after).await;
             this.update(cx, |v, cx| then(v, cx)).ok();

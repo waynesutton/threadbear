@@ -34,8 +34,28 @@ impl Art {
         static SCHEDULED: OnceLock<Arc<Image>> = OnceLock::new();
         static LIBRARIAN: OnceLock<Arc<Image>> = OnceLock::new();
         match self {
-            Art::Scheduled => SCHEDULED.get_or_init(|| Arc::new(Image::from_bytes(ImageFormat::Png, include_bytes!("../../../app/Sources/Threadbear/Resources/Art/scheduled.png").to_vec()))).clone(),
-            Art::Librarian => LIBRARIAN.get_or_init(|| Arc::new(Image::from_bytes(ImageFormat::Png, include_bytes!("../../../app/Sources/Threadbear/Resources/Art/librarian.png").to_vec()))).clone(),
+            Art::Scheduled => SCHEDULED
+                .get_or_init(|| {
+                    Arc::new(Image::from_bytes(
+                        ImageFormat::Png,
+                        include_bytes!(
+                            "../../../app/Sources/Threadbear/Resources/Art/scheduled.png"
+                        )
+                        .to_vec(),
+                    ))
+                })
+                .clone(),
+            Art::Librarian => LIBRARIAN
+                .get_or_init(|| {
+                    Arc::new(Image::from_bytes(
+                        ImageFormat::Png,
+                        include_bytes!(
+                            "../../../app/Sources/Threadbear/Resources/Art/librarian.png"
+                        )
+                        .to_vec(),
+                    ))
+                })
+                .clone(),
         }
     }
 
@@ -80,7 +100,13 @@ pub(crate) struct Pokes {
 
 impl Pokes {
     pub(crate) fn new(art: Art) -> Self {
-        Pokes { lines: PokeLines::new(art.lines()), line: None, count: 0, fade: None, poked: None }
+        Pokes {
+            lines: PokeLines::new(art.lines()),
+            line: None,
+            count: 0,
+            fade: None,
+            poked: None,
+        }
     }
 }
 
@@ -94,11 +120,23 @@ impl Threadbear {
 
     /// `HomePage`: the picture, the lines about the view, its numbers in
     /// tiles, and `below` under them.
-    pub(crate) fn render_home_page(&mut self, art: Art, about: AnyElement, stats: &[HomeStat], below: Option<AnyElement>, cx: &mut Context<Self>) -> AnyElement {
+    pub(crate) fn render_home_page(
+        &mut self,
+        art: Art,
+        about: AnyElement,
+        stats: &[HomeStat],
+        below: Option<AnyElement>,
+        cx: &mut Context<Self>,
+    ) -> AnyElement {
         let picture = self.render_poke_picture(art, None, cx);
         let tiles = (!stats.is_empty()).then(|| {
             // Three across at most, so six tiles make even rows.
-            h_flex().flex_wrap().max_w(px(620.)).gap(px(14.)).children(stats.iter().enumerate().map(|(i, stat)| home_stat_tile(i, stat, cx)))
+            h_flex().flex_wrap().max_w(px(620.)).gap(px(14.)).children(
+                stats
+                    .iter()
+                    .enumerate()
+                    .map(|(i, stat)| home_stat_tile(i, stat, cx)),
+            )
         });
         div()
             .id("home-page")
@@ -114,7 +152,12 @@ impl Threadbear {
                         .pb(px(48.))
                         .gap(px(32.))
                         // Room under the picture for what it says when it's poked.
-                        .child(v_flex().gap(px(36.)).child(picture).child(div().max_w(px(620.)).child(about)))
+                        .child(
+                            v_flex()
+                                .gap(px(36.))
+                                .child(picture)
+                                .child(div().max_w(px(620.)).child(about)),
+                        )
                         .children(tiles)
                         .children(below.map(|b| div().max_w(px(620.)).child(b))),
                 ),
@@ -125,10 +168,18 @@ impl Threadbear {
     /// `PokeablePicture`: the bear, which says something and wobbles when
     /// it's clicked. `side` is a customized page's picture size, its
     /// largest side; None is the page as it ships.
-    pub(crate) fn render_poke_picture(&mut self, art: Art, side: Option<f32>, cx: &mut Context<Self>) -> AnyElement {
+    pub(crate) fn render_poke_picture(
+        &mut self,
+        art: Art,
+        side: Option<f32>,
+        cx: &mut Context<Self>,
+    ) -> AnyElement {
         let secondary = style::secondary_text(cx);
         let line = self.pokes_mut(art).line;
-        let poked = self.pokes_mut(art).poked.filter(|at| at.elapsed() < threadbear_core::juice::WOBBLE);
+        let poked = self
+            .pokes_mut(art)
+            .poked
+            .filter(|at| at.elapsed() < threadbear_core::juice::WOBBLE);
         let (width, height) = match side {
             None => art.size(),
             Some(side) => {
@@ -141,21 +192,33 @@ impl Threadbear {
         // keyframes). GPUI can't turn a picture, so the Swift app's tilt is a
         // sway: the picture's middle moving as far as the tilt would take it.
         let picture_el = match poked {
-            None => img(art.image()).size_full().object_fit(ObjectFit::Contain).into_any_element(),
+            None => img(art.image())
+                .size_full()
+                .object_fit(ObjectFit::Contain)
+                .into_any_element(),
             Some(at) => {
                 let length = threadbear_core::juice::WOBBLE;
                 div()
                     .relative()
                     .size_full()
-                    .child(div().absolute().bottom_0().child(img(art.image()).size_full().object_fit(ObjectFit::Contain)).with_animation(
-                        SharedString::from(format!("home-wobble-{at:?}")),
-                        Animation::new(length),
-                        move |el, t| {
-                            let (squash, sway) = threadbear_core::juice::wobble(t * length.as_secs_f32(), height);
-                            let (w, h) = (width * squash, height * (2. - squash));
-                            el.w(px(w)).h(px(h)).left(px((width - w) / 2. + sway))
-                        },
-                    ))
+                    .child(
+                        div()
+                            .absolute()
+                            .bottom_0()
+                            .child(img(art.image()).size_full().object_fit(ObjectFit::Contain))
+                            .with_animation(
+                                SharedString::from(format!("home-wobble-{at:?}")),
+                                Animation::new(length),
+                                move |el, t| {
+                                    let (squash, sway) = threadbear_core::juice::wobble(
+                                        t * length.as_secs_f32(),
+                                        height,
+                                    );
+                                    let (w, h) = (width * squash, height * (2. - squash));
+                                    el.w(px(w)).h(px(h)).left(px((width - w) / 2. + sway))
+                                },
+                            ),
+                    )
                     .into_any_element()
             }
         };
@@ -165,14 +228,29 @@ impl Threadbear {
                 div()
                     .id("home-picture")
                     .test_support()
-                    .role(Role::Image).aria_label(art.label())
+                    .role(Role::Image)
+                    .aria_label(art.label())
                     .w(px(width))
                     .h(px(height))
-                    .on_click(cx.listener(move |this, _: &ClickEvent, _, cx| this.poke_home_picture(art, cx)))
+                    .on_click(cx.listener(move |this, _: &ClickEvent, _, cx| {
+                        this.poke_home_picture(art, cx)
+                    }))
                     .child(picture_el),
             )
             // Drawn in the gap below, taking no room of its own.
-            .when_some(line, |s, line| s.child(div().absolute().left_0().bottom(px(-24.)).whitespace_nowrap().text_size(px(style::size::LABEL)).line_height(px(16.)).text_color(secondary).child(line)))
+            .when_some(line, |s, line| {
+                s.child(
+                    div()
+                        .absolute()
+                        .left_0()
+                        .bottom(px(-24.))
+                        .whitespace_nowrap()
+                        .text_size(px(style::size::LABEL))
+                        .line_height(px(16.))
+                        .text_color(secondary)
+                        .child(line),
+                )
+            })
             .into_any_element()
     }
 
@@ -186,7 +264,9 @@ impl Threadbear {
             pokes.poked = Some(std::time::Instant::now());
             cx.notify();
         }
-        let Some(line) = pokes.lines.poke() else { return };
+        let Some(line) = pokes.lines.poke() else {
+            return;
+        };
         pokes.line = Some(line);
         pokes.count += 1;
         let count = pokes.count;
@@ -209,7 +289,11 @@ impl Threadbear {
 
 /// `ModeHeader`: the view's name at the top of the sidebar, and its count on
 /// the right when it has one.
-pub(crate) fn mode_header(title: &'static str, count: Option<usize>, p: &Palette) -> impl IntoElement {
+pub(crate) fn mode_header(
+    title: &'static str,
+    count: Option<usize>,
+    p: &Palette,
+) -> impl IntoElement {
     h_flex()
         .flex_none()
         .h(px(34.))
@@ -219,42 +303,107 @@ pub(crate) fn mode_header(title: &'static str, count: Option<usize>, p: &Palette
         .pr(px(OUTER_INSET + TRAILING))
         .gap(px(6.))
         .items_center()
-        .child(div().text_size(px(style::size::SIDEBAR_BUTTON)).line_height(px(17.)).font_semibold().text_color(p.fg).child(title))
+        .child(
+            div()
+                .text_size(px(style::size::SIDEBAR_BUTTON))
+                .line_height(px(17.))
+                .font_semibold()
+                .text_color(p.fg)
+                .child(title),
+        )
         .child(div().flex_1())
-        .children(count.filter(|c| *c > 0).map(|count| div().text_size(px(13.)).line_height(px(16.)).text_color(p.faint).child(count.to_string())))
+        .children(count.filter(|c| *c > 0).map(|count| {
+            div()
+                .text_size(px(13.))
+                .line_height(px(16.))
+                .text_color(p.faint)
+                .child(count.to_string())
+        }))
 }
 
 /// `HomeTitle`: the page's title, with more behind the ⓘ, and the line under it.
-pub(crate) fn home_title(title: &'static str, line: &'static str, more: &'static str, cx: &App) -> impl IntoElement {
+pub(crate) fn home_title(
+    title: &'static str,
+    line: &'static str,
+    more: &'static str,
+    cx: &App,
+) -> impl IntoElement {
     home_title_parts(Some(title), Some(line), more, cx)
 }
 
 /// The same with either part taken off by a customized page: no title
 /// leaves the line with the ⓘ beside it.
-pub(crate) fn home_title_parts(title: Option<&'static str>, line: Option<&'static str>, more: &'static str, cx: &App) -> impl IntoElement {
+pub(crate) fn home_title_parts(
+    title: Option<&'static str>,
+    line: Option<&'static str>,
+    more: &'static str,
+    cx: &App,
+) -> impl IntoElement {
     let secondary = style::secondary_text(cx);
-    let words = line.map(|line| div().text_size(px(style::size::LABEL)).line_height(px(16.)).text_color(secondary).child(line));
+    let words = line.map(|line| {
+        div()
+            .text_size(px(style::size::LABEL))
+            .line_height(px(16.))
+            .text_color(secondary)
+            .child(line)
+    });
     match title {
         Some(title) => v_flex()
             .gap(px(12.))
             // Named as a heading, so a screen reader and a script find the page's title.
-            .child(h_flex().items_center().gap(px(8.)).child(div().id("home-title").test_support().role(gpui_kit::Role::Heading).aria_label(title).text_size(px(24.)).line_height(px(29.)).font_semibold().child(title)).child(info_tip("home-more", more, cx)))
+            .child(
+                h_flex()
+                    .items_center()
+                    .gap(px(8.))
+                    .child(
+                        div()
+                            .id("home-title")
+                            .test_support()
+                            .role(gpui_kit::Role::Heading)
+                            .aria_label(title)
+                            .text_size(px(24.))
+                            .line_height(px(29.))
+                            .font_semibold()
+                            .child(title),
+                    )
+                    .child(info_tip("home-more", more, cx)),
+            )
             .children(words),
-        None => v_flex().child(h_flex().items_center().gap(px(8.)).children(words).child(info_tip("home-more", more, cx))),
+        None => v_flex().child(
+            h_flex()
+                .items_center()
+                .gap(px(8.))
+                .children(words)
+                .child(info_tip("home-more", more, cx)),
+        ),
     }
 }
 
 /// `InfoTip`: an ⓘ that says more in its tooltip, and in a popover when
 /// clicked, for text too long to read in a tooltip.
-pub(crate) fn info_tip(id: impl Into<SharedString>, text: impl Into<SharedString>, cx: &App) -> AnyElement {
+pub(crate) fn info_tip(
+    id: impl Into<SharedString>,
+    text: impl Into<SharedString>,
+    cx: &App,
+) -> AnyElement {
     let secondary = style::secondary_text(cx);
     let (id, text): (SharedString, SharedString) = (id.into(), text.into());
     let shown = text.clone();
     Popover::new(ElementId::Name(id.clone()))
         // Above it, as the Swift popover's arrow on its bottom edge puts it.
         .anchor(Anchor::BottomLeft)
-        .trigger(InfoTrigger { id, text, color: secondary })
-        .content(move |_, _, _| div().w(px(280.)).p(px(12.)).text_size(px(12.)).child(shown.clone()))
+        .trigger(InfoTrigger {
+            id,
+            text,
+            color: secondary,
+        })
+        .content(move |_, _, _| {
+            div()
+                .w(px(280.))
+                .p(px(12.))
+                .text_size(px(12.))
+                .child(shown.clone())
+        })
         .into_any_element()
 }
 
@@ -284,19 +433,36 @@ impl gpui_kit::component::Selectable for InfoTrigger {
 impl RenderOnce for InfoTrigger {
     fn render(self, _window: &mut Window, _cx: &mut App) -> impl IntoElement {
         // A little bigger than the icon, as it's small to aim at.
-        crate::highlights::tipped(div().id(SharedString::from(format!("{}-button", self.id))).p(px(2.)).cursor_pointer(), self.text).child(icon("info.circle", 11., self.color))
+        crate::highlights::tipped(
+            div()
+                .id(SharedString::from(format!("{}-button", self.id)))
+                .p(px(2.))
+                .cursor_pointer(),
+            self.text,
+        )
+        .child(icon("info.circle", 11., self.color))
     }
 }
 
 /// `HomeStatusLine`: what it's doing now, under the title; a dot, accent while busy.
 pub(crate) fn home_status_line(text: &str, busy: bool, cx: &App) -> impl IntoElement {
-    let dot = if busy { style::control_accent(cx) } else { style::faint_text(cx) };
+    let dot = if busy {
+        style::control_accent(cx)
+    } else {
+        style::faint_text(cx)
+    };
     h_flex()
         .pt(px(4.))
         .gap(px(6.))
         .items_center()
         .child(div().flex_none().size(px(7.)).rounded_full().bg(dot))
-        .child(div().truncate().text_size(px(style::size::LABEL)).line_height(px(16.)).child(text.to_owned()))
+        .child(
+            div()
+                .truncate()
+                .text_size(px(style::size::LABEL))
+                .line_height(px(16.))
+                .child(text.to_owned()),
+        )
 }
 
 /// `HomeStatTile`: one number, what it counts, and more in its tooltip.
@@ -305,17 +471,45 @@ pub(crate) fn home_stat_tile(index: usize, stat: &HomeStat, cx: &App) -> impl In
 }
 
 /// The same tile, frosted when the page has a photo behind it.
-pub(crate) fn home_stat_tile_on(index: usize, stat: &HomeStat, on_picture: bool, cx: &App) -> impl IntoElement {
+pub(crate) fn home_stat_tile_on(
+    index: usize,
+    stat: &HomeStat,
+    on_picture: bool,
+    cx: &App,
+) -> impl IntoElement {
     let secondary = style::secondary_text(cx);
     let fill = crate::looks::tile_fill(on_picture, cx);
-    crate::highlights::tipped_as(div().id(("home-stat", index)).flex_grow(1.).flex_basis(px(170.)).min_w(px(170.)), stat.help.clone(), gpui_kit::Role::GenericContainer).child(
+    crate::highlights::tipped_as(
+        div()
+            .id(("home-stat", index))
+            .flex_grow(1.)
+            .flex_basis(px(170.))
+            .min_w(px(170.)),
+        stat.help.clone(),
+        gpui_kit::Role::GenericContainer,
+    )
+    .child(
         v_flex()
             .gap(px(4.))
             .px(px(14.))
             .py(px(12.))
             .rounded(px(10.))
             .bg(fill)
-            .child(div().truncate().text_size(px(22.)).line_height(px(26.)).font_semibold().child(stat.value.clone()))
-            .child(div().truncate().text_size(px(style::size::LABEL)).line_height(px(16.)).text_color(secondary).child(stat.label.clone())),
+            .child(
+                div()
+                    .truncate()
+                    .text_size(px(22.))
+                    .line_height(px(26.))
+                    .font_semibold()
+                    .child(stat.value.clone()),
+            )
+            .child(
+                div()
+                    .truncate()
+                    .text_size(px(style::size::LABEL))
+                    .line_height(px(16.))
+                    .text_color(secondary)
+                    .child(stat.label.clone()),
+            ),
     )
 }

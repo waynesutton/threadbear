@@ -22,7 +22,9 @@ fn a_service_without_its_app_gets_create_not_connect() {
     let s = status();
     let slack = &s.services[0];
     let setup = slack.client_setup.as_ref().unwrap();
-    assert!(setup.create_url.starts_with("https://api.slack.com/apps?new_app=1"));
+    assert!(setup
+        .create_url
+        .starts_with("https://api.slack.com/apps?new_app=1"));
     assert_eq!(setup.redirect_url, "http://127.0.0.1:8795/oauth/callback");
     assert_eq!(rules::button_title(slack), None);
     assert_eq!(rules::create_app_title(&slack.title), "Create Slack app");
@@ -36,7 +38,11 @@ fn a_service_without_its_app_gets_create_not_connect() {
 
 #[test]
 fn the_paste_form_saves_odd_looking_keys_with_a_warning() {
-    let good = paste_check("slack", " 3769284211.12664135813042 ", "0123456789abcdef0123456789abcdef");
+    let good = paste_check(
+        "slack",
+        " 3769284211.12664135813042 ",
+        "0123456789abcdef0123456789abcdef",
+    );
     assert!(good.can_save);
     assert_eq!(good.warning, None);
     assert!(!paste_check("slack", "", "x").can_save);

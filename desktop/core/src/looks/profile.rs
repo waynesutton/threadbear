@@ -82,7 +82,10 @@ pub const HELD_BACK: &[ProfilePart] = &[ProfilePart::Background];
 
 /// The parts Customize offers.
 pub fn offered() -> Vec<ProfilePart> {
-    ProfilePart::ALL.into_iter().filter(|p| !HELD_BACK.contains(p)).collect()
+    ProfilePart::ALL
+        .into_iter()
+        .filter(|p| !HELD_BACK.contains(p))
+        .collect()
 }
 
 /// The page's numbers, as the runner works them out.
@@ -145,7 +148,10 @@ impl Default for ProfilePageSettings {
 }
 
 fn strings(v: &Value) -> Option<Vec<String>> {
-    v.as_array()?.iter().map(|s| s.as_str().map(str::to_owned)).collect()
+    v.as_array()?
+        .iter()
+        .map(|s| s.as_str().map(str::to_owned))
+        .collect()
 }
 
 impl ProfilePageSettings {
@@ -202,7 +208,16 @@ impl ProfilePageSettings {
         let optional = |key: &str| v[key].as_str().map(str::to_owned);
         let links = v["links"]
             .as_array()
-            .and_then(|list| list.iter().map(|l| Some(ProfileLink { title: l["title"].as_str()?.to_owned(), url: l["url"].as_str()?.to_owned() })).collect::<Option<Vec<_>>>())
+            .and_then(|list| {
+                list.iter()
+                    .map(|l| {
+                        Some(ProfileLink {
+                            title: l["title"].as_str()?.to_owned(),
+                            url: l["url"].as_str()?.to_owned(),
+                        })
+                    })
+                    .collect::<Option<Vec<_>>>()
+            })
             .unwrap_or_default();
         ProfilePageSettings {
             published: v["published"].as_bool().unwrap_or(false),
@@ -210,7 +225,11 @@ impl ProfilePageSettings {
             name: string("name"),
             bio: string("bio"),
             links,
-            show: strings(&v["show"]).unwrap_or_default().iter().filter_map(|s| ProfilePart::from_raw(s)).collect(),
+            show: strings(&v["show"])
+                .unwrap_or_default()
+                .iter()
+                .filter_map(|s| ProfilePart::from_raw(s))
+                .collect(),
             numbers: strings(&v["numbers"]).unwrap_or_default(),
             project_ids: strings(&v["projectIds"]).unwrap_or_default(),
             order: strings(&v["order"]).unwrap_or_default(),
@@ -228,8 +247,19 @@ impl ProfilePageSettings {
         out.insert("home".into(), json!(self.home));
         out.insert("name".into(), json!(self.name));
         out.insert("bio".into(), json!(self.bio));
-        out.insert("links".into(), Value::Array(self.links.iter().map(|l| json!({ "title": l.title, "url": l.url })).collect()));
-        out.insert("show".into(), json!(self.show.iter().map(|p| p.raw()).collect::<Vec<_>>()));
+        out.insert(
+            "links".into(),
+            Value::Array(
+                self.links
+                    .iter()
+                    .map(|l| json!({ "title": l.title, "url": l.url }))
+                    .collect(),
+            ),
+        );
+        out.insert(
+            "show".into(),
+            json!(self.show.iter().map(|p| p.raw()).collect::<Vec<_>>()),
+        );
         out.insert("numbers".into(), json!(self.numbers));
         out.insert("projectIds".into(), json!(self.project_ids));
         out.insert("order".into(), json!(self.order));
@@ -239,10 +269,16 @@ impl ProfilePageSettings {
             }
         };
         put("picturePath", self.picture_path.as_ref().map(|s| json!(s)));
-        put("backgroundPath", self.background_path.as_ref().map(|s| json!(s)));
+        put(
+            "backgroundPath",
+            self.background_path.as_ref().map(|s| json!(s)),
+        );
         put("backgroundDim", self.background_dim.map(|d| json!(d)));
         put("githubUser", self.github_user.as_ref().map(|s| json!(s)));
-        put("changelogRepo", self.changelog_repo.as_ref().map(|s| json!(s)));
+        put(
+            "changelogRepo",
+            self.changelog_repo.as_ref().map(|s| json!(s)),
+        );
         Value::Object(out)
     }
 }
@@ -263,7 +299,9 @@ pub fn clean_repo(typed: &str) -> String {
         && parts[1] != "."
         && parts[1] != ".."
         && parts[1].chars().count() <= 100
-        && parts[1].chars().all(|c| c.is_ascii_alphanumeric() || "._-".contains(c));
+        && parts[1]
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || "._-".contains(c));
     if ok {
         format!("{}/{}", parts[0], parts[1])
     } else {
@@ -274,7 +312,12 @@ pub fn clean_repo(typed: &str) -> String {
 /// Why a link won't do, or None: it needs to be an http(s) address with a host.
 pub fn link_problem(url: &str) -> Option<&'static str> {
     match split_url(url.trim()) {
-        Some((scheme, authority, _)) if (scheme.eq_ignore_ascii_case("https") || scheme.eq_ignore_ascii_case("http")) && !host_of(authority).is_empty() => None,
+        Some((scheme, authority, _))
+            if (scheme.eq_ignore_ascii_case("https") || scheme.eq_ignore_ascii_case("http"))
+                && !host_of(authority).is_empty() =>
+        {
+            None
+        }
         _ => Some("Starts with https://"),
     }
 }
@@ -292,7 +335,10 @@ pub fn card_order(look: &LibrarianLook) -> Vec<String> {
         ("projects", Place::Bottom, 3),
     ];
     cards.sort_by_key(|(_, place, n)| (rank(*place), *n));
-    cards.iter().map(|(name, _, _)| (*name).to_owned()).collect()
+    cards
+        .iter()
+        .map(|(name, _, _)| (*name).to_owned())
+        .collect()
 }
 
 /// What `profilePage.get` and `profilePage.update` answer.
@@ -310,7 +356,9 @@ pub struct ProfilePageStatus {
 impl ProfilePageStatus {
     pub fn decode(v: &Value) -> ProfilePageStatus {
         ProfilePageStatus {
-            profile: v["profile"].is_object().then(|| ProfilePageSettings::decode(&v["profile"])),
+            profile: v["profile"]
+                .is_object()
+                .then(|| ProfilePageSettings::decode(&v["profile"])),
             url: v["url"].as_str().map(str::to_owned),
             sent_at: v["sentAt"].as_str().map(str::to_owned),
             problem: v["problem"].as_str().map(str::to_owned),
@@ -341,7 +389,11 @@ impl ProfilePageStatus {
 /// when it has no `scheme://`.
 fn split_url(url: &str) -> Option<(&str, &str, &str)> {
     let (scheme, rest) = url.split_once("://")?;
-    if scheme.is_empty() || !scheme.chars().all(|c| c.is_ascii_alphanumeric() || "+-.".contains(c)) {
+    if scheme.is_empty()
+        || !scheme
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || "+-.".contains(c))
+    {
         return None;
     }
     let end = rest.find(['/', '?', '#']).unwrap_or(rest.len());
@@ -359,14 +411,31 @@ mod tests {
     use super::*;
 
     fn link(title: &str, url: &str) -> ProfileLink {
-        ProfileLink { title: title.into(), url: url.into() }
+        ProfileLink {
+            title: title.into(),
+            url: url.into(),
+        }
     }
 
     #[test]
     fn what_is_sent() {
-        let mut s = ProfilePageSettings { links: vec![link("GitHub", "https://github.com/waynesutton"), link("Half typed", "https://")], home: true, ..Default::default() };
+        let mut s = ProfilePageSettings {
+            links: vec![
+                link("GitHub", "https://github.com/waynesutton"),
+                link("Half typed", "https://"),
+            ],
+            home: true,
+            ..Default::default()
+        };
         let sent = s.sendable();
-        assert_eq!(sent.links.iter().map(|l| l.title.as_str()).collect::<Vec<_>>(), ["GitHub"], "a link still being typed waits");
+        assert_eq!(
+            sent.links
+                .iter()
+                .map(|l| l.title.as_str())
+                .collect::<Vec<_>>(),
+            ["GitHub"],
+            "a link still being typed waits"
+        );
         assert!(!sent.home, "the front page needs it published");
         s.published = true;
         assert!(s.sendable().home);
@@ -382,14 +451,26 @@ mod tests {
     #[test]
     fn cards_follow_the_librarian_page() {
         let mut look = LibrarianLook::default();
-        assert_eq!(card_order(&look), ["numbers", "activity", "github", "projects"]);
+        assert_eq!(
+            card_order(&look),
+            ["numbers", "activity", "github", "projects"]
+        );
         look.set_place(Place::Top, LibrarianBlock::Github);
-        assert_eq!(card_order(&look), ["github", "numbers", "activity", "projects"]);
+        assert_eq!(
+            card_order(&look),
+            ["github", "numbers", "activity", "projects"]
+        );
         look.set_place(Place::Bottom, LibrarianBlock::Numbers);
-        assert_eq!(card_order(&look), ["github", "numbers", "activity", "projects"]);
+        assert_eq!(
+            card_order(&look),
+            ["github", "numbers", "activity", "projects"]
+        );
         look.set_place(Place::Bottom, LibrarianBlock::Github);
         look.set_place(Place::Top, LibrarianBlock::Numbers);
-        assert_eq!(card_order(&look), ["numbers", "activity", "github", "projects"]);
+        assert_eq!(
+            card_order(&look),
+            ["numbers", "activity", "github", "projects"]
+        );
     }
 
     #[test]
@@ -406,17 +487,35 @@ mod tests {
     #[test]
     fn changelog_repository() {
         let mut s = ProfilePageSettings::default();
-        assert_eq!(s.changelog_repo_for("waynesutton").as_deref(), Some("waynesutton/threadbear"), "nothing typed: the fork's usual name");
-        assert_eq!(s.changelog_repo_for(""), None, "no GitHub user, no changelog");
+        assert_eq!(
+            s.changelog_repo_for("waynesutton").as_deref(),
+            Some("waynesutton/threadbear"),
+            "nothing typed: the fork's usual name"
+        );
+        assert_eq!(
+            s.changelog_repo_for(""),
+            None,
+            "no GitHub user, no changelog"
+        );
         s.changelog_repo = Some("https://github.com/mikecann/threadbear.git".into());
-        assert_eq!(s.changelog_repo_for("waynesutton").as_deref(), Some("mikecann/threadbear"));
+        assert_eq!(
+            s.changelog_repo_for("waynesutton").as_deref(),
+            Some("mikecann/threadbear")
+        );
         s.changelog_repo = Some("half typed".into());
         assert_eq!(s.changelog_repo_for("waynesutton"), None);
         assert_eq!(clean_repo("waynesutton/.."), "");
-        assert_eq!(s.sendable().changelog_repo.as_deref(), Some("half typed"), "sent as typed; the runner reads it");
+        assert_eq!(
+            s.sendable().changelog_repo.as_deref(),
+            Some("half typed"),
+            "sent as typed; the runner reads it"
+        );
         s.set_shown(true, ProfilePart::Changelog);
         let back = ProfilePageSettings::decode(&s.to_value());
-        assert!(back.shows(ProfilePart::Changelog) && back.changelog_repo.as_deref() == Some("half typed"));
+        assert!(
+            back.shows(ProfilePart::Changelog)
+                && back.changelog_repo.as_deref() == Some("half typed")
+        );
         assert!(offered().contains(&ProfilePart::Changelog));
     }
 
@@ -430,29 +529,60 @@ mod tests {
         assert_eq!(s.show, [ProfilePart::Activity]);
         assert!(s.links.len() == 1 && s.name.is_empty());
         assert_eq!(ProfilePageSettings::decode(&s.to_value()), s);
-        let status = ProfilePageStatus::decode(&serde_json::from_str(r#"{"profile":null,"url":"https://a.convex.site/profile"}"#).unwrap());
-        assert!(status.profile.is_none() && status.url.as_deref() == Some("https://a.convex.site/profile"));
+        let status = ProfilePageStatus::decode(
+            &serde_json::from_str(r#"{"profile":null,"url":"https://a.convex.site/profile"}"#)
+                .unwrap(),
+        );
+        assert!(
+            status.profile.is_none()
+                && status.url.as_deref() == Some("https://a.convex.site/profile")
+        );
     }
 
     #[test]
     fn background_photo_is_held_back() {
         assert!(!offered().contains(&ProfilePart::Background));
-        let settings = ProfilePageSettings { show: vec![ProfilePart::Picture, ProfilePart::Background], background_path: Some("/tmp/b.jpg".into()), background_dim: Some(0.4), ..Default::default() };
+        let settings = ProfilePageSettings {
+            show: vec![ProfilePart::Picture, ProfilePart::Background],
+            background_path: Some("/tmp/b.jpg".into()),
+            background_dim: Some(0.4),
+            ..Default::default()
+        };
         let sent = settings.sendable();
-        assert_eq!(sent.show, [ProfilePart::Picture], "an older build's switch doesn't send it");
+        assert_eq!(
+            sent.show,
+            [ProfilePart::Picture],
+            "an older build's switch doesn't send it"
+        );
         assert_eq!(sent.background_path, None);
         assert_eq!(sent.background_dim, None);
     }
 
     #[test]
     fn profile_opens_the_profile_even_when_it_is_the_front_page() {
-        let at = |url: Option<&str>| ProfilePageStatus { url: url.map(str::to_owned), ..Default::default() };
+        let at = |url: Option<&str>| ProfilePageStatus {
+            url: url.map(str::to_owned),
+            ..Default::default()
+        };
         let home = at(Some("https://wayne.convex.site/"));
-        assert_eq!(home.profile_url().as_deref(), Some("https://wayne.convex.site/profile"));
-        assert_eq!(home.site_url().as_deref(), Some("https://wayne.convex.site/"));
+        assert_eq!(
+            home.profile_url().as_deref(),
+            Some("https://wayne.convex.site/profile")
+        );
+        assert_eq!(
+            home.site_url().as_deref(),
+            Some("https://wayne.convex.site/")
+        );
         let plain = at(Some("https://wayne.convex.site/profile"));
-        assert_eq!(plain.profile_url().as_deref(), Some("https://wayne.convex.site/profile"));
-        assert_eq!(plain.site_url(), None, "no Open Site unless it's on the front page");
+        assert_eq!(
+            plain.profile_url().as_deref(),
+            Some("https://wayne.convex.site/profile")
+        );
+        assert_eq!(
+            plain.site_url(),
+            None,
+            "no Open Site unless it's on the front page"
+        );
         assert_eq!(at(None).profile_url(), None);
         assert_eq!(at(Some("not a link")).profile_url(), None);
     }

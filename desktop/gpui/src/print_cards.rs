@@ -50,7 +50,11 @@ struct Shared(Entity<CardStore>);
 impl Global for Shared {}
 
 pub(crate) fn init(cx: &mut App) {
-    let store = cx.new(|_| CardStore { app: None, blocks: HashMap::new(), asking: HashSet::new() });
+    let store = cx.new(|_| CardStore {
+        app: None,
+        blocks: HashMap::new(),
+        asking: HashSet::new(),
+    });
     cx.set_global(Shared(store));
 }
 
@@ -97,8 +101,12 @@ impl CardStore {
                     let version = v["page"]["version"].as_u64().unwrap_or(0) as u32;
                     match v["file"].as_str().map(str::to_owned) {
                         Some(file) => {
-                            let read = cx.background_executor().spawn(async move { std::fs::read_to_string(file) }).await;
-                            read.ok().map(|html| (version, RichBlock::new(RichKind::Html, html)))
+                            let read = cx
+                                .background_executor()
+                                .spawn(async move { std::fs::read_to_string(file) })
+                                .await;
+                            read.ok()
+                                .map(|html| (version, RichBlock::new(RichKind::Html, html)))
                         }
                         None => None,
                     }
@@ -129,7 +137,9 @@ struct CardRef(String);
 
 /// The Print id a code node names, once its closing fence has come.
 fn closed_print(node: &markdown::mdast::Node, source: &str) -> Option<String> {
-    let markdown::mdast::Node::Code(code) = node else { return None };
+    let markdown::mdast::Node::Code(code) = node else {
+        return None;
+    };
     let language = match (&code.lang, &code.meta) {
         (Some(lang), Some(meta)) => format!("{lang} {meta}"),
         (Some(lang), None) => lang.clone(),
@@ -142,7 +152,9 @@ fn closed_print(node: &markdown::mdast::Node, source: &str) -> Option<String> {
 
 /// Whether Prints are on, which decides if a fence is a card at all.
 fn on(cx: &App) -> bool {
-    store(cx).and_then(|s| s.read(cx).app.as_ref()?.upgrade()).is_some_and(|app| app.read(cx).prints_on())
+    store(cx)
+        .and_then(|s| s.read(cx).app.as_ref()?.upgrade())
+        .is_some_and(|app| app.read(cx).prints_on())
 }
 
 impl MarkdownPlugin for PrintCards {
@@ -154,17 +166,36 @@ impl MarkdownPlugin for PrintCards {
         NODE
     }
 
-    fn parse(&self, node: &markdown::mdast::Node, cx: &MarkdownParseContext<'_>) -> Option<MarkdownNode> {
+    fn parse(
+        &self,
+        node: &markdown::mdast::Node,
+        cx: &MarkdownParseContext<'_>,
+    ) -> Option<MarkdownNode> {
         let id = closed_print(node, cx.source())?;
         let source = cx.node_source(node).unwrap_or_default().to_owned();
-        Some(MarkdownNode::new(NODE, CardRef(id.clone())).text(format!("```print {id}\n```")).markdown(source).accessibility_label(format!("Print {id}")))
+        Some(
+            MarkdownNode::new(NODE, CardRef(id.clone()))
+                .text(format!("```print {id}\n```"))
+                .markdown(source)
+                .accessibility_label(format!("Print {id}")),
+        )
     }
 
     fn render(&self, node: &MarkdownNode, window: &mut Window, cx: &mut App) -> impl IntoElement {
         match node.data::<CardRef>() {
             Some(CardRef(id)) if on(cx) => card(id, window, cx),
             // Prints off: the fence as it was written.
-            _ => div().w_full().my(px(4.)).p(px(PAD)).rounded(px(8.)).bg(style::code_background(cx)).font_family(cx.theme().mono_font_family.clone()).text_size(px(size::CODE)).text_color(style::secondary_text(cx)).child(node.as_text().to_owned()).into_any_element(),
+            _ => div()
+                .w_full()
+                .my(px(4.))
+                .p(px(PAD))
+                .rounded(px(8.))
+                .bg(style::code_background(cx))
+                .font_family(cx.theme().mono_font_family.clone())
+                .text_size(px(size::CODE))
+                .text_color(style::secondary_text(cx))
+                .child(node.as_text().to_owned())
+                .into_any_element(),
         }
     }
 }
@@ -181,22 +212,50 @@ fn shown(id: &str, cx: &App) -> (Option<Entity<Threadbear>>, Shown) {
     let shown = match &app {
         Some(app) => {
             let a = app.read(cx);
-            let page = a.prints.list.iter().find(|p| p.id == id && p.deleted_at.is_none()).cloned();
-            Shown { refreshing: page.as_ref().is_some_and(|p| a.print_refreshing(p)), busy: a.print_busy(id), page }
+            let page = a
+                .prints
+                .list
+                .iter()
+                .find(|p| p.id == id && p.deleted_at.is_none())
+                .cloned();
+            Shown {
+                refreshing: page.as_ref().is_some_and(|p| a.print_refreshing(p)),
+                busy: a.print_busy(id),
+                page,
+            }
         }
-        None => Shown { page: None, refreshing: false, busy: false },
+        None => Shown {
+            page: None,
+            refreshing: false,
+            busy: false,
+        },
     };
     (app, shown)
 }
 
 /// The card (PageCardCell).
 fn card(id: &str, window: &mut Window, cx: &mut App) -> AnyElement {
-    let (app, Shown { page, refreshing, busy }) = shown(id, cx);
+    let (
+        app,
+        Shown {
+            page,
+            refreshing,
+            busy,
+        },
+    ) = shown(id, cx);
     let now = now_ms();
-    let (fg, secondary, faint) = (style::label_text(cx), style::secondary_text(cx), style::faint_text(cx));
+    let (fg, secondary, faint) = (
+        style::label_text(cx),
+        style::secondary_text(cx),
+        style::faint_text(cx),
+    );
     let accent = style::accent(cx);
-    let new_version = page.as_ref().is_some_and(|p| p.is_new_version(refreshing, now));
-    let preview = page.as_ref().map(|page| preview(page, refreshing, app.clone(), window, cx));
+    let new_version = page
+        .as_ref()
+        .is_some_and(|p| p.is_new_version(refreshing, now));
+    let preview = page
+        .as_ref()
+        .map(|page| preview(page, refreshing, app.clone(), window, cx));
     let glyph = div()
         .flex_none()
         .size(px(30.))
@@ -205,34 +264,121 @@ fn card(id: &str, window: &mut Window, cx: &mut App) -> AnyElement {
         .flex()
         .items_center()
         .justify_center()
-        .child(icons::symbol(page.as_ref().map_or("questionmark.circle", |p| p.symbol())).with_size(px(13.)).text_color(secondary));
-    let meta = page.as_ref().map_or_else(|| core::NOT_HERE.to_owned(), |p| p.card_meta(refreshing, now));
+        .child(
+            icons::symbol(page.as_ref().map_or("questionmark.circle", |p| p.symbol()))
+                .with_size(px(13.))
+                .text_color(secondary),
+        );
+    let meta = page.as_ref().map_or_else(
+        || core::NOT_HERE.to_owned(),
+        |p| p.card_meta(refreshing, now),
+    );
     let title = h_flex()
         .min_w_0()
         .gap(px(8.))
         .items_center()
-        .child(div().flex_shrink(1.).min_w_0().truncate().text_size(px(size::LABEL)).line_height(px(17.)).font_semibold().text_color(fg).child(page.as_ref().map_or_else(|| id.to_owned(), |p| p.title.clone())))
-        .when(new_version, |s| s.child(div().flex_none().px(px(5.)).rounded(px(4.)).border(gpui_kit::px(0.75)).border_color(accent.opacity(0.5)).text_size(px(size::DETAIL - 1.)).line_height(px(15.)).font_medium().text_color(accent).child("New version")));
-    let words = v_flex().flex_1().min_w_0().child(title).child(div().truncate().text_size(px(size::DETAIL)).line_height(px(15.)).text_color(secondary).child(meta));
-    let mut footer = h_flex().h(px(FOOTER)).flex_none().px(px(PAD)).gap(px(10.)).items_center().child(glyph).child(words);
+        .child(
+            div()
+                .flex_shrink(1.)
+                .min_w_0()
+                .truncate()
+                .text_size(px(size::LABEL))
+                .line_height(px(17.))
+                .font_semibold()
+                .text_color(fg)
+                .child(
+                    page.as_ref()
+                        .map_or_else(|| id.to_owned(), |p| p.title.clone()),
+                ),
+        )
+        .when(new_version, |s| {
+            s.child(
+                div()
+                    .flex_none()
+                    .px(px(5.))
+                    .rounded(px(4.))
+                    .border(gpui_kit::px(0.75))
+                    .border_color(accent.opacity(0.5))
+                    .text_size(px(size::DETAIL - 1.))
+                    .line_height(px(15.))
+                    .font_medium()
+                    .text_color(accent)
+                    .child("New version"),
+            )
+        });
+    let words = v_flex().flex_1().min_w_0().child(title).child(
+        div()
+            .truncate()
+            .text_size(px(size::DETAIL))
+            .line_height(px(15.))
+            .text_color(secondary)
+            .child(meta),
+    );
+    let mut footer = h_flex()
+        .h(px(FOOTER))
+        .flex_none()
+        .px(px(PAD))
+        .gap(px(10.))
+        .items_center()
+        .child(glyph)
+        .child(words);
     if let (Some(app), Some(page)) = (app.clone(), page.as_ref()) {
         let pid = page.id.clone();
         footer = footer
-            .child(button(format!("print-open-{pid}"), "arrow.up.forward.square", Some("Open"), OPEN_TIP, true, busy, cx, {
-                let (app, pid) = (app.clone(), pid.clone());
-                move |_, window, cx| app.update(cx, |a, cx| a.open_print_here(&pid, window, cx))
-            }))
-            .child(button(format!("print-refresh-{pid}"), "arrow.clockwise", Some("Refresh"), REFRESH_TIP, false, busy || refreshing, cx, {
-                let (app, pid) = (app.clone(), pid.clone());
-                move |_, window, cx| app.update(cx, |a, cx| a.run_print_action(PrintAction::Refresh(pid.clone()), window, cx))
-            }))
-            .child(button(format!("print-more-{pid}"), "ellipsis", None, MORE_TIP, false, false, cx, {
-                let (app, pid) = (app.clone(), pid.clone());
-                move |ev, window, cx| {
-                    let at = ev.position();
-                    app.update(cx, |a, cx| a.open_print_menu(&pid, true, point(at.x, at.y + gpui_kit::px(14.)), window, cx))
-                }
-            }));
+            .child(button(
+                format!("print-open-{pid}"),
+                "arrow.up.forward.square",
+                Some("Open"),
+                OPEN_TIP,
+                true,
+                busy,
+                cx,
+                {
+                    let (app, pid) = (app.clone(), pid.clone());
+                    move |_, window, cx| app.update(cx, |a, cx| a.open_print_here(&pid, window, cx))
+                },
+            ))
+            .child(button(
+                format!("print-refresh-{pid}"),
+                "arrow.clockwise",
+                Some("Refresh"),
+                REFRESH_TIP,
+                false,
+                busy || refreshing,
+                cx,
+                {
+                    let (app, pid) = (app.clone(), pid.clone());
+                    move |_, window, cx| {
+                        app.update(cx, |a, cx| {
+                            a.run_print_action(PrintAction::Refresh(pid.clone()), window, cx)
+                        })
+                    }
+                },
+            ))
+            .child(button(
+                format!("print-more-{pid}"),
+                "ellipsis",
+                None,
+                MORE_TIP,
+                false,
+                false,
+                cx,
+                {
+                    let (app, pid) = (app.clone(), pid.clone());
+                    move |ev, window, cx| {
+                        let at = ev.position();
+                        app.update(cx, |a, cx| {
+                            a.open_print_menu(
+                                &pid,
+                                true,
+                                point(at.x, at.y + gpui_kit::px(14.)),
+                                window,
+                                cx,
+                            )
+                        })
+                    }
+                },
+            ));
     }
     v_flex()
         .id(SharedString::from(format!("print-card-{id}")))
@@ -242,10 +388,17 @@ fn card(id: &str, window: &mut Window, cx: &mut App) -> AnyElement {
         .rounded(px(RADIUS))
         .bg(style::code_background(cx))
         .border(gpui_kit::px(if new_version { 1. } else { 0.5 }))
-        .border_color(if new_version { accent.opacity(0.55) } else { style::card_border(cx) })
+        .border_color(if new_version {
+            accent.opacity(0.55)
+        } else {
+            style::card_border(cx)
+        })
         .overflow_hidden()
         .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
-        .when_some(preview, |s, p| s.child(p).child(div().h(gpui_kit::px(0.5)).w_full().bg(style::hairline(cx))))
+        .when_some(preview, |s, p| {
+            s.child(p)
+                .child(div().h(gpui_kit::px(0.5)).w_full().bg(style::hairline(cx)))
+        })
         .child(footer)
         .text_color(faint)
         .into_any_element()
@@ -253,18 +406,53 @@ fn card(id: &str, window: &mut Window, cx: &mut App) -> AnyElement {
 
 /// The top of the newest page as a picture; a click opens it beside the
 /// thread.
-fn preview(page: &Page, refreshing: bool, app: Option<Entity<Threadbear>>, window: &mut Window, cx: &mut App) -> AnyElement {
+fn preview(
+    page: &Page,
+    refreshing: bool,
+    app: Option<Entity<Threadbear>>,
+    window: &mut Window,
+    cx: &mut App,
+) -> AnyElement {
     let block = store(cx).and_then(|s| s.update(cx, |s, cx| s.block(page, cx)));
-    let thumb = block.as_ref().map_or(Thumb::Waiting, |b| crate::rich_boxes::thumb(b, window, cx));
+    let thumb = block
+        .as_ref()
+        .map_or(Thumb::Waiting, |b| crate::rich_boxes::thumb(b, window, cx));
     let secondary = style::secondary_text(cx);
-    let note = |text: String| div().absolute().inset_0().flex().items_center().justify_center().px(px(PAD)).text_size(px(size::DETAIL)).text_color(secondary).child(text);
+    let note = |text: String| {
+        div()
+            .absolute()
+            .inset_0()
+            .flex()
+            .items_center()
+            .justify_center()
+            .px(px(PAD))
+            .text_size(px(size::DETAIL))
+            .text_color(secondary)
+            .child(text)
+    };
     let body = match thumb {
         Thumb::Picture(picture, width, height) => {
             let ratio = if height > 0. { width / height } else { 1. };
-            div().absolute().top_0().left_0().right_0().opacity(if refreshing { 0.35 } else { 1. }).child(div().w_full().aspect_ratio(ratio).child(img(ImageSource::Image(picture)).size_full().object_fit(ObjectFit::Fill))).into_any_element()
+            div()
+                .absolute()
+                .top_0()
+                .left_0()
+                .right_0()
+                .opacity(if refreshing { 0.35 } else { 1. })
+                .child(
+                    div().w_full().aspect_ratio(ratio).child(
+                        img(ImageSource::Image(picture))
+                            .size_full()
+                            .object_fit(ObjectFit::Fill),
+                    ),
+                )
+                .into_any_element()
         }
         Thumb::Waiting => note("Drawing a preview…".into()).into_any_element(),
-        Thumb::NoRuntime => note("The preview needs the web runtime. Open shows the print itself.".into()).into_any_element(),
+        Thumb::NoRuntime => {
+            note("The preview needs the web runtime. Open shows the print itself.".into())
+                .into_any_element()
+        }
         Thumb::Failed(why) => note(format!("Couldn't draw a preview: {why}")).into_any_element(),
     };
     let pid = page.id.clone();
@@ -284,12 +472,34 @@ fn preview(page: &Page, refreshing: bool, app: Option<Entity<Threadbear>>, windo
             }
         })
         .child(body)
-        .when(refreshing, |s| s.child(div().absolute().inset_0().flex().items_center().justify_center().text_size(px(size::DETAIL)).font_medium().text_color(style::label_text(cx)).child("Refreshing in its thread…")))
+        .when(refreshing, |s| {
+            s.child(
+                div()
+                    .absolute()
+                    .inset_0()
+                    .flex()
+                    .items_center()
+                    .justify_center()
+                    .text_size(px(size::DETAIL))
+                    .font_medium()
+                    .text_color(style::label_text(cx))
+                    .child("Refreshing in its thread…"),
+            )
+        })
         .into_any_element()
 }
 
 #[allow(clippy::too_many_arguments)]
-fn button(id: String, symbol: &'static str, label: Option<&'static str>, tip: &'static str, strong: bool, off: bool, cx: &App, on_click: impl Fn(&ClickEvent, &mut Window, &mut App) + 'static) -> AnyElement {
+fn button(
+    id: String,
+    symbol: &'static str,
+    label: Option<&'static str>,
+    tip: &'static str,
+    strong: bool,
+    off: bool,
+    cx: &App,
+    on_click: impl Fn(&ClickEvent, &mut Window, &mut App) + 'static,
+) -> AnyElement {
     let fg = style::label_text(cx);
     let color = if off { style::faint_text(cx) } else { fg };
     // Tipped as the app's buttons are (`tipped`): a button to VoiceOver,
@@ -309,11 +519,14 @@ fn button(id: String, symbol: &'static str, label: Option<&'static str>, tip: &'
         .text_color(color)
         .text_size(px(size::DETAIL))
         .font_medium()
-        .when(!off, |s| s.cursor_pointer().hover(move |s| s.bg(fg.opacity(if strong { 0.18 } else { 0.1 }))).on_click(on_click))
+        .when(!off, |s| {
+            s.cursor_pointer()
+                .hover(move |s| s.bg(fg.opacity(if strong { 0.18 } else { 0.1 })))
+                .on_click(on_click)
+        })
         .child(icons::symbol(symbol).with_size(px(12.)))
         .when_some(label, |s, l| s.child(l));
-    crate::highlights::tipped(el, tip)
-        .into_any_element()
+    crate::highlights::tipped(el, tip).into_any_element()
 }
 
 // ---------------------------------------------------------------- the dump
@@ -326,7 +539,9 @@ pub(crate) fn dump(text: &str, cx: &App) -> Option<Value> {
     if !text.contains("```") && !text.contains("~~~") {
         return None;
     }
-    let Ok(tree) = markdown::to_mdast(text, &markdown::ParseOptions::gfm()) else { return None };
+    let Ok(tree) = markdown::to_mdast(text, &markdown::ParseOptions::gfm()) else {
+        return None;
+    };
     let mut found = Vec::new();
     collect(&tree, text, &mut found);
     if found.is_empty() {

@@ -32,12 +32,24 @@ impl Page {
     /// The same, for a page shown in a window: a person's click on a web
     /// link in it goes to `on_link` (the app opens it in the browser), one
     /// for each click and at most one a second, and the page stays put.
-    pub fn sealed_with_links(parent: *mut c_void, url: &str, on_link: impl Fn(String) + Send + Sync + 'static) -> Result<Page, String> {
-        let links = Arc::new(sealed::LinksOut { view: std::sync::atomic::AtomicUsize::new(0), gate: Mutex::new(crate::panel_rules::LeaveGate::default()), send: Box::new(on_link) });
+    pub fn sealed_with_links(
+        parent: *mut c_void,
+        url: &str,
+        on_link: impl Fn(String) + Send + Sync + 'static,
+    ) -> Result<Page, String> {
+        let links = Arc::new(sealed::LinksOut {
+            view: std::sync::atomic::AtomicUsize::new(0),
+            gate: Mutex::new(crate::panel_rules::LeaveGate::default()),
+            send: Box::new(on_link),
+        });
         Self::make(parent, url, Some(links))
     }
 
-    fn make(parent: *mut c_void, url: &str, links: Option<Arc<sealed::LinksOut>>) -> Result<Page, String> {
+    fn make(
+        parent: *mut c_void,
+        url: &str,
+        links: Option<Arc<sealed::LinksOut>>,
+    ) -> Result<Page, String> {
         if super::host::status() != super::host::Status::Ready {
             return Err("the web runtime isn't running".into());
         }
@@ -45,10 +57,26 @@ impl Page {
             return Err("the window has no view to put the page in".into());
         }
         let mut context = sealed::context().ok_or("the sealed pages' context isn't there")?;
-        let guard = sealed::Guard { allowed: Arc::new(Mutex::new(url.to_owned())), on_stop: Arc::new(|| {}), links: links.clone() };
+        let guard = sealed::Guard {
+            allowed: Arc::new(Mutex::new(url.to_owned())),
+            on_stop: Arc::new(|| {}),
+            links: links.clone(),
+        };
         // Alloy (no Chrome toolbar or menus), a native child view: the style
         // Ghostex ships and the spike ran.
-        let window_info = WindowInfo { runtime_style: RuntimeStyle::ALLOY, ..WindowInfo::default() }.set_as_child(parent, &Rect { x: 0, y: 0, width: 1, height: 1 });
+        let window_info = WindowInfo {
+            runtime_style: RuntimeStyle::ALLOY,
+            ..WindowInfo::default()
+        }
+        .set_as_child(
+            parent,
+            &Rect {
+                x: 0,
+                y: 0,
+                width: 1,
+                height: 1,
+            },
+        );
         let settings = BrowserSettings {
             javascript: State::DISABLED,
             javascript_access_clipboard: State::DISABLED,
@@ -59,19 +87,42 @@ impl Page {
             webgl: State::DISABLED,
             ..Default::default()
         };
-        let mut client = PageClient::new(sealed::SealedRequests::new(guard), match &links {
-            Some(links) => sealed::LinkPopups::new(links.clone()),
-            None => sealed::NoPopups::new(),
-        }, sealed::QuietConsole::new(), sealed::NoMenu::new(), sealed::NoDownloads::new());
-        let browser = browser_host_create_browser_sync(Some(&window_info), Some(&mut client), Some(&CefString::from(url)), Some(&settings), None, Some(&mut context))
-            .ok_or("Chromium didn't make the page")?;
-        let view = browser.host().ok_or("the page has no host")?.window_handle();
+        let mut client = PageClient::new(
+            sealed::SealedRequests::new(guard),
+            match &links {
+                Some(links) => sealed::LinkPopups::new(links.clone()),
+                None => sealed::NoPopups::new(),
+            },
+            sealed::QuietConsole::new(),
+            sealed::NoMenu::new(),
+            sealed::NoDownloads::new(),
+        );
+        let browser = browser_host_create_browser_sync(
+            Some(&window_info),
+            Some(&mut client),
+            Some(&CefString::from(url)),
+            Some(&settings),
+            None,
+            Some(&mut context),
+        )
+        .ok_or("Chromium didn't make the page")?;
+        let view = browser
+            .host()
+            .ok_or("the page has no host")?
+            .window_handle();
         if let Some(links) = &links {
             // A person's clicks and keys in it, counted for the gate.
-            links.view.store(view as usize, std::sync::atomic::Ordering::Release);
+            links
+                .view
+                .store(view as usize, std::sync::atomic::Ordering::Release);
             unsafe { super::host::tb_view_watch_input(view) };
         }
-        Ok(Page { browser, view, frame: Cell::new((0., 0., 0., 0.)), hidden: Cell::new(false) })
+        Ok(Page {
+            browser,
+            view,
+            frame: Cell::new((0., 0., 0., 0.)),
+            hidden: Cell::new(false),
+        })
     }
 
     /// Places it in a GPUI layout slot: window points, from the top left.
@@ -80,7 +131,15 @@ impl Page {
             return;
         }
         self.frame.set((x, y, width, height));
-        unsafe { tb_view_set_frame(self.view, f64::from(x), f64::from(y), f64::from(width), f64::from(height)) };
+        unsafe {
+            tb_view_set_frame(
+                self.view,
+                f64::from(x),
+                f64::from(y),
+                f64::from(width),
+                f64::from(height),
+            )
+        };
         if let Some(host) = self.browser.host() {
             host.was_resized();
         }

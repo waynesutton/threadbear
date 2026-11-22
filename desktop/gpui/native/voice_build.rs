@@ -12,8 +12,12 @@ pub fn build() {
     if std::env::var("CARGO_CFG_TARGET_OS").as_deref() != Ok("macos") {
         return;
     }
-    cc::Build::new().file("native/voice_keys.m").flag("-fobjc-arc").compile("threadbear_voice_keys");
-    let out = std::path::PathBuf::from(std::env::var("OUT_DIR").unwrap()).join("threadbear-voice-helper");
+    cc::Build::new()
+        .file("native/voice_keys.m")
+        .flag("-fobjc-arc")
+        .compile("threadbear_voice_keys");
+    let out =
+        std::path::PathBuf::from(std::env::var("OUT_DIR").unwrap()).join("threadbear-voice-helper");
     let _ = std::fs::write(&out, b"");
     if std::env::var_os("THREADBEAR_NO_VOICE_HELPER").is_some() {
         return;
@@ -26,7 +30,15 @@ pub fn build() {
     // As old a macOS as the app itself; SpeechAnalyzer's parts check for 26
     // when they run.
     let built = std::process::Command::new("xcrun")
-        .args(["swiftc", "-O", "-parse-as-library", "-target", &format!("{arch}-apple-macos13.0"), "native/voice_helper.swift", "-o"])
+        .args([
+            "swiftc",
+            "-O",
+            "-parse-as-library",
+            "-target",
+            &format!("{arch}-apple-macos13.0"),
+            "native/voice_helper.swift",
+            "-o",
+        ])
         .arg(&out)
         .status();
     if !built.is_ok_and(|s| s.success()) {
