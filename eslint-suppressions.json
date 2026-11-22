@@ -131,7 +131,7 @@
   },
   "convex/push.ts": {
     "@convex-dev/no-process-env": {
-      "count": 6
+      "count": 9
     },
     "@typescript-eslint/no-explicit-any": {
       "count": 1
@@ -682,6 +682,11 @@
   "runner/test/unit/provider-switch.test.ts": {
     "@typescript-eslint/no-explicit-any": {
       "count": 1
+    }
+  },
+  "runner/test/unit/push-clear.test.ts": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 3
     }
   },
   "runner/test/unit/push-hold.test.ts": {
