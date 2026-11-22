@@ -631,11 +631,10 @@ fn profile_picture_path(look: &LibrarianLook) -> Option<String> {
         Picture::Bear => {
             let file = looks::folder().join("profile-bear.png");
             if !file.exists() {
-                let image = image::load_from_memory(include_bytes!(
-                    "../../../shared/art/librarian.png"
-                ))
-                .ok()?
-                .thumbnail(480, 480);
+                let image =
+                    image::load_from_memory(include_bytes!("../../../shared/art/librarian.png"))
+                        .ok()?
+                        .thumbnail(480, 480);
                 let mut bytes = Vec::new();
                 image
                     .write_to(
