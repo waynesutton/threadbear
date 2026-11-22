@@ -15,10 +15,6 @@ pub enum Event {
     /// list's box, a board card's arrow): never followed, but handed to the
     /// app, which acts on it only for a page in the runner's Prints folder.
     Print(String),
-    /// A link Mike clicked on a page the app made itself (a design review's:
-    /// preview_rules::asked): what follows the app's own prefix, for the app
-    /// to read. The page stays where it is.
-    Asked(String),
 }
 
 /// Whose page it is, which decides where its links may go.

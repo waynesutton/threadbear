@@ -15,8 +15,10 @@ import { above, MODE_NAMES, raises, scheduleModes, type Authority } from './thre
 type Params = Record<string, unknown>;
 
 // Anyone holding a thread's key may read: these change nothing outside the
-// connection. media.import only copies a file into the runner's inbox for a
-// tb --image, which the thread's shell could already read.
+// connection. media.import is the exception: it copies a file the thread's
+// shell could already read into the runner's inbox for a tb --image, so it's
+// open to every thread but metered below Full access (Runner.importMediaForThread,
+// media-quota.ts; Daybreak finding 157).
 export const GATED_READS: ReadonlySet<string> = new Set([
   'auth',
   'auth.whoami',
@@ -79,6 +81,10 @@ export type CallerGateDeps = {
   };
   // Threads a draining runner still has (rpc.ts's RemoteThreads).
   remote?: { owns(threadId: string): boolean; summaries(include: ('inbox' | 'snoozed' | 'archived')[]): (ThreadLike & { id: string })[] };
+  // The pictures a thread below Full may send: only ones it imported, each
+  // once (media-quota.ts take), sent as the copies take makes. Without it,
+  // such a thread sends none.
+  images?: { take(threadId: string, images: unknown): { path: string }[]; releaseHeld(images: unknown): void };
   schedules?: {
     find(idOrPrefix: string): { id: string; title: string; threadId?: string; permissionMode?: PermissionMode; check?: string; paused?: boolean };
     list(threadId?: string): { threadId?: string; check?: string }[];
@@ -126,6 +132,12 @@ export class CallerGate {
     return t ? `"${t.title}"` : threadId.slice(0, 8);
   }
 
+  // After a call that took a limited thread's pictures (check), whichever
+  // way it ended: take's copies go.
+  releaseHeld(images: unknown): void {
+    this.deps.images?.releaseHeld(images);
+  }
+
   whoami(threadId: string): { threadId: string; mode: PermissionMode; limited: boolean } {
     const a = this.authority(threadId);
     return { threadId, mode: a?.mode ?? 'ask', limited: a?.mode !== 'full' };
@@ -167,6 +179,19 @@ export class CallerGate {
     const who = `This thread is on ${MODE_NAMES[caller.mode]}`;
     const needs = (what: string, tool?: string) =>
       new RpcError(ErrorCode.notAllowed, `${who}, so ${what} needs the user's OK. ${tool ? `Use the ${tool} tool, which asks them on a card.` : 'Ask them to do it in the app.'}`);
+    // A picture by path would have the runner copy any file into a thread's
+    // media, unmetered (Daybreak finding 157, Gemini's review of the fix), so
+    // only its own imports, taken once the rest of the call is allowed.
+    const takeImages = (out: Params): Params => {
+      if (p.images === undefined || p.images === null || (Array.isArray(p.images) && p.images.length === 0)) return out;
+      if (!this.deps.images) throw needs('sending pictures');
+      // Only to a thread on this runner: to one another runner has (a
+      // handover, another Mac), the copy's path would cross to a runner that
+      // can't check it, after this tick (Codex's and Gemini's third reviews).
+      const to = method === 'threads.send' ? str(p, 'threadId') : undefined;
+      if (method === 'threads.send' && (!to || !this.deps.runner.has(to))) throw needs("sending pictures to a thread that isn't on this runner");
+      return { ...out, images: this.deps.images.take(threadId, p.images) };
+    };
     switch (method) {
       case 'threads.create': {
         // Left out, a tool's new thread takes the caller's mode, not the
@@ -177,7 +202,7 @@ export class CallerGate {
         // `unconfine` is only ever the user's: an older runner across a
         // handover still reads it (the sandbox taken out 16 Nov 2026).
         const { unconfine: _u, ...rest } = p;
-        return { ...rest, permissionMode: mode, startedBy: { ...given, kind: 'thread', threadId, label: typeof given.label === 'string' && given.label ? given.label : 'Agent' } };
+        return takeImages({ ...rest, permissionMode: mode, startedBy: { ...given, kind: 'thread', threadId, label: typeof given.label === 'string' && given.label ? given.label : 'Agent' } });
       }
       case 'threads.send': {
         const id = str(p, 'threadId');
@@ -188,7 +213,7 @@ export class CallerGate {
         // Only the app's Needs you answers and a phone command passed on
         // say these.
         const { answers: _a, origin: _o, ...rest } = p;
-        return rest;
+        return takeImages(rest);
       }
       case 'threads.interrupt': {
         const id = str(p, 'threadId');
