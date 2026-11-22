@@ -110,6 +110,14 @@ impl Threadbear {
         if self.new_thread.composer.as_ref().is_some_and(|c| c.read(cx).fast_armed) {
             return;
         }
+        self.warm_new_thread_unarmed(cx);
+    }
+
+    /// `warm_new_thread` without the Fast lane check, for the composer's own
+    /// change handler: it runs inside the composer's update, so reading the
+    /// composer here would double-lease it and abort the app on every
+    /// keystroke. The composer checks `fast_armed` itself before calling.
+    pub(crate) fn warm_new_thread_unarmed(&mut self, cx: &mut Context<Self>) {
         let Some(params) = self.warm_params() else { return };
         if self.new_thread.warm_asked.as_ref() == Some(&params) {
             return;

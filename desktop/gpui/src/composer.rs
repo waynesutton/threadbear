@@ -263,7 +263,7 @@ impl Composer {
                         // A new thread's CLI, started again if the box's
                         // settings changed since the page opened (warm start).
                         if new_thread {
-                            app.warm_new_thread(cx);
+                            app.warm_new_thread_unarmed(cx);
                         }
                     });
                 }
