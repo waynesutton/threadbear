@@ -153,7 +153,7 @@ Then('Tasks offers View Thread', async function (this: ThreadbearWorld) {
 });
 
 When('I choose a Tasks photo', async function (this: ThreadbearWorld) {
-  await this.app.do({ cmd: 'tasks', photoPath: new URL('../../app/icons/threadbear.png', import.meta.url).pathname });
+  await this.app.do({ cmd: 'tasks', photoPath: new URL('../../shared/icons/threadbear.png', import.meta.url).pathname });
 });
 Then('the Tasks photo is displayed', async function (this: ThreadbearWorld) {
   await this.until('photo decoded for display', d => (d as { tasksPage?: { photoLoaded?: boolean } }).tasksPage?.photoLoaded === true);

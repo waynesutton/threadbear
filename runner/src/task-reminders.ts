@@ -85,7 +85,7 @@ export type ReminderDeps = {
 
 export class TaskReminders {
   private deps: ReminderDeps;
-  private tasks: DueTask[] = [];
+  private dueTasks: DueTask[] = [];
   private reminders: Reminders = DEFAULT_REMINDERS;
   private readAt = 0;
   private dirty = true;
@@ -116,7 +116,7 @@ export class TaskReminders {
       const email = r.channel !== 'none' && r.to !== '';
       if (!r.mac && !email) return 0;
       let sent = 0;
-      for (const t of dueNow(this.tasks, now, r.lead)) {
+      for (const t of dueNow(this.dueTasks, now, r.lead)) {
         const key = reminderKey(t)!;
         // Marked first, so a failing claim isn't retried every minute.
         t.remindedFor = key;
@@ -139,7 +139,7 @@ export class TaskReminders {
       if (!res.next) break;
       after = res.next;
     }
-    this.tasks = all;
+    this.dueTasks = all;
     this.reminders = readReminders(await this.deps.call('preferences'));
     this.readAt = now;
     this.dirty = false;

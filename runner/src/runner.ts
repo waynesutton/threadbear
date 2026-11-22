@@ -2405,9 +2405,11 @@ export class Runner {
       const res = await this.fastLane(parsed.query, { signal: ac.signal });
       if (gone()) return;
       const formatted = formatFastAnswer(res.answer, res.citations);
-      this.emit(st, { type: 'assistant.text', itemId: crypto.randomUUID(), text: formatted, final: true }, turn.turnId);
-      turn.lastText = formatted;
-      turn.endTurn = { needs: 'nothing' };
+      const itemId = crypto.randomUUID();
+      this.emit(st, { type: 'assistant.text', itemId, text: formatted, final: true }, turn.turnId);
+      // The turn's last words, through the reply phase (reply-phase.ts):
+      // with no end_turn and no asks in them, it needs nothing.
+      this.reply(st, { kind: 'text', itemId, text: formatted });
       this.emit(st, { type: 'system.note', text: formatFastNote(res.durationMs, res.source) }, turn.turnId);
       rec.preview = oneLine(res.answer, LIMITS.previewChars);
       if (!rec.sessionUsed && !rt.session) {

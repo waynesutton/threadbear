@@ -23,7 +23,7 @@ test('diagram SVG refuses active elements, events, external references and CSS i
 test('diagram renderer is the app bundle, with source passed as text and theme-aware export', () => {
   assert.equal(
     fs.readFileSync(new URL('../../skills/pele/pele.js', import.meta.url), 'utf8'),
-    fs.readFileSync(new URL('../../../app/Sources/Threadbear/Resources/Rich/pele.js', import.meta.url), 'utf8'),
+    fs.readFileSync(new URL('../../../shared/rich/pele.js', import.meta.url), 'utf8'),
   );
   const diagram = renderDiagram('<Flow>', 'flowchart LR\n A["process.exit(1)"] --> B[Done]', 'Version 1');
   assert.match(diagram.html, /&lt;Flow&gt;/);

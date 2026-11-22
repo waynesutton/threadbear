@@ -1255,7 +1255,7 @@ pub(crate) struct PrintSheet {
     pub(crate) kind: SheetKind,
     pub(crate) text: Entity<TextareaState>,
     /// Edit Text's source has come.
-    pub(crate) loaded: bool,
+    pub(crate) text_loaded: bool,
     pub(crate) saving: bool,
     /// Why the last save didn't go, said in the sheet (a diagram that
     /// couldn't be drawn).
@@ -1287,7 +1287,7 @@ impl PrintSheet {
             page,
             kind,
             text,
-            loaded: kind == SheetKind::Ask,
+            text_loaded: kind == SheetKind::Ask,
             saving: false,
             error: None,
             _subs: vec![sub],
@@ -1317,7 +1317,7 @@ impl PrintSheet {
                     (Some(source), _) => {
                         this.text
                             .update(cx, |t, cx| t.set_value(source, window, cx));
-                        this.loaded = true;
+                        this.text_loaded = true;
                     }
                     (None, Ok(_)) => this.error = Some(words::NO_SOURCE.to_owned()),
                     (None, Err(e)) => this.error = Some(print_error(&e)),
@@ -1346,7 +1346,7 @@ impl PrintSheet {
     pub(crate) fn can_go(&self, cx: &App) -> bool {
         match self.kind {
             SheetKind::Ask => !self.value(cx).trim().is_empty(),
-            SheetKind::Edit => self.loaded && !self.saving,
+            SheetKind::Edit => self.text_loaded && !self.saving,
         }
     }
 
@@ -1403,7 +1403,7 @@ impl PrintSheet {
 
     #[cfg(feature = "automation")]
     pub(crate) fn dump(&self, cx: &App) -> Value {
-        json!({ "kind": if self.kind == SheetKind::Ask { "ask" } else { "edit" }, "page": self.page.id, "title": self.page.title, "text": self.value(cx), "loaded": self.loaded, "saving": self.saving, "error": self.error })
+        json!({ "kind": if self.kind == SheetKind::Ask { "ask" } else { "edit" }, "page": self.page.id, "title": self.page.title, "text": self.value(cx), "loaded": self.text_loaded, "saving": self.saving, "error": self.error })
     }
 }
 
@@ -1433,7 +1433,7 @@ impl Render for PrintSheet {
             .when(edit, |s| {
                 s.font_family(mono).text_size(px(style::size::LABEL))
             })
-            .child(if self.loaded || !edit {
+            .child(if self.text_loaded || !edit {
                 Textarea::new(&self.text)
                     .h(px(height))
                     .appearance(false)

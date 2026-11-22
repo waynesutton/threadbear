@@ -82,8 +82,8 @@ test("finding an icon: the app icon over favicons and logos, never another thing
   assert.equal((await findIcon([ext]))?.path, path.join(ext, 'art/i128.png'));
 
   // A picture named after the project in an icons folder.
-  const named = folder(root, 'threadbear', { 'app/icons/threadbear.png': png(1024, 1024) });
-  assert.equal((await findIcon([named]))?.path, path.join(named, 'app/icons/threadbear.png'));
+  const named = folder(root, 'threadbear', { 'shared/icons/threadbear.png': png(1024, 1024) });
+  assert.equal((await findIcon([named]))?.path, path.join(named, 'shared/icons/threadbear.png'));
 
   // Under a folder named for something else, it's that thing's icon.
   const other = folder(root, 'sketchpad', { 'public/inventory/icon.svg': '<svg viewBox="0 0 512 512"></svg>' });

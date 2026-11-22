@@ -13,7 +13,7 @@ When('I open the visible Designer thread menu', async function (this: Threadbear
   this.lastAnswer = JSON.stringify(answer);
 });
 Then('the Designer menu offers Bear Colour', async function (this: ThreadbearWorld) {
-  assert.ok(this.lastAnswer?.includes('Bear Colour'), this.lastAnswer);
+  assert.ok(this.lastAnswer?.includes('Bear Colour'), this.lastAnswer ?? 'no menu answer');
 });
 
 When('I type a Writer mention in a local thread', async function (this: ThreadbearWorld) {

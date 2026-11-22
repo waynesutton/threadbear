@@ -1,5 +1,5 @@
-//! The public profile page, `<site>/profile` (docs/protocol.md, "Profile
-//! page"), a port of the Swift app's ProfilePage.swift: what the Librarian
+//! The public profile page, `<site>/profile` (docs/protocol/panels.md,
+//! "Profile page"), a port of the Swift app's ProfilePage.swift: what the Librarian
 //! page's Customize panel lets you put on it. A site is one person's, so
 //! there's no handle. The runner keeps it (profile.json) and sends only the
 //! parts turned on to your Convex backend; every part starts off.

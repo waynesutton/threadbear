@@ -84,7 +84,7 @@ concurrency:
 # repo still run, as they run in his repo.
 jobs:
   build:
-    if: github.repository == 'mikecann/threadbear' || github.event_name == 'workflow_dispatch'
+    if: github.repository == 'mikecann/threadbear' || github.repository == 'waynesutton/threadbear' || github.event_name == 'workflow_dispatch'
     name: ${{ matrix.name }}
     runs-on: ${{ matrix.os }}
     # Windows needs time for its release build after the behaviour specs, and

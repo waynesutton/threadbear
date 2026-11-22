@@ -3,11 +3,13 @@ import type { ThreadCompletion } from './protocol.ts';
 
 export const MAX_COMPLETION_TASKS = 30;
 
+type CompletionTask = ThreadCompletion['tasks'][number];
+
 export function mergeCompletion(previous: ThreadCompletion | undefined, input: unknown): ThreadCompletion | undefined {
   if (!input || typeof input !== 'object') return previous;
   const value = input as Record<string, unknown>;
   if (!Array.isArray(value.tasks) || value.tasks.length > MAX_COMPLETION_TASKS) return previous;
-  const updates: ThreadCompletion['tasks'] = [];
+  const updates: CompletionTask[] = [];
   const seen = new Set<string>();
   for (const raw of value.tasks) {
     if (!raw || typeof raw !== 'object') return previous;

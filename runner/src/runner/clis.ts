@@ -150,7 +150,7 @@ export const clisPart = {
     for (const st of this.threads.values()) {
       const { rec, rt } = st;
       if (!rt.session || rt.closing) continue;
-      rt.releaseWhenIdle = true;
+      this.cli(st, { kind: 'leave' });
       if (this.idleForUpdate(st)) {
         this.log.info('releasing an idle CLI for a skills change', { threadId: rec.id });
         this.releaseSession(st);

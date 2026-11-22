@@ -41,7 +41,7 @@ Then('the standard Librarian page is shown and my look is kept', async function(
 When('I choose my own Librarian picture', async function(this: ThreadbearWorld) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'look-picture-'));
   const file = path.join(dir, 'picture.png');
-  fs.copyFileSync(new URL('../../app/Sources/Threadbear/Resources/Art/librarian.png', import.meta.url), file);
+  fs.copyFileSync(new URL('../../shared/art/librarian.png', import.meta.url), file);
   try {
     await this.app.do({ cmd: 'mode', mode: 'librarian' });
     await this.app.do({ cmd: 'look', page: 'librarian', on: true, picture: file });
@@ -55,7 +55,7 @@ Then('my Librarian picture is still drawn', async function(this: ThreadbearWorld
 
 When('I choose a Librarian background', async function(this: ThreadbearWorld) {
   // fileURLToPath, not .pathname: on Windows that's /D:/... and no file.
-  const file = fileURLToPath(new URL('../../app/Sources/Threadbear/Resources/Art/librarian.png', import.meta.url));
+  const file = fileURLToPath(new URL('../../shared/art/librarian.png', import.meta.url));
   await this.app.do({ cmd: 'look', page: 'librarian', background: file });
   await this.until('background copied', d => looks(d).librarian.background);
 });

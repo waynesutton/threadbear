@@ -680,7 +680,8 @@ export class Bears {
   async archive(id: string, on: boolean): Promise<BearInfo> {
     const b = this.get(id, { faces: false });
     this.changeState(b.id, (s) => {
-      s.archivedAt = on ? (s.archivedAt ?? new Date(this.now()).toISOString()) : undefined;
+      // A bear's own state file, not a thread's record (place.ts has those).
+      Object.assign(s, { archivedAt: on ? (s.archivedAt ?? new Date(this.now()).toISOString()) : undefined });
     });
     if (on) await this.pauseRoutines(b);
     return this.get(b.id);
