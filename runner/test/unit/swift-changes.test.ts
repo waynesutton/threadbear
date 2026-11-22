@@ -172,7 +172,7 @@ test('Dismiss takes one off the list, and undo brings it back', async () => {
 });
 
 test('what the GPUI app used from app/ before it moved out is no change to rebuild', () => {
-  for (const f of ['app/Tools/mock-runner/server.mjs', 'app/Tools/realdrag.swift', 'app/Tests/Fixtures/x.json', 'shared/art/librarian.png', 'shared/rich/pele.js']) {
+  for (const f of ['app/Tools/mock-runner/server.mjs', 'app/Tools/realdrag.swift', 'app/Tests/Fixtures/x.json', 'app/Sources/Threadbear/Resources/Art/librarian.png', 'app/Sources/Threadbear/Resources/Rich/pele.js']) {
     assert.match(f, GPUI_SHARED, f);
   }
   assert.doesNotMatch('app/Sources/Threadbear/Views/ThreadView.swift', GPUI_SHARED);

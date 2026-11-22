@@ -164,7 +164,7 @@ test("what moved out of app/ is open through app/'s links, and the links stay fr
   link('../../../../ios/ThreadbearKit/Sources/ThreadbearKit/SlashCommands.swift', 'app/Sources/ThreadbearCore/Threads/SlashCommands.swift');
   assert.equal(edit(dir, 'app/Tools/mock-runner/server.mjs').status, 0, 'through a folder link');
   assert.equal(edit(dir, 'app/Tools/mock-runner/fixtures/new/thread.json').status, 0, 'a new file through it');
-  assert.equal(edit(dir, 'shared/art/librarian.png').status, 0);
+  assert.equal(edit(dir, 'app/Sources/Threadbear/Resources/Art/librarian.png').status, 0);
   assert.equal(edit(dir, 'app/Sources/ThreadbearCore/Threads/SlashCommands.swift').status, 0, 'through a file link');
   assert.equal(edit(dir, 'app/Sources/ThreadbearCore/Threads/ThreadSections.swift').status, 2, 'beside it');
   spawnSync('git', ['add', 'app/Tools/mock-runner', 'app/Sources/ThreadbearCore/Threads/SlashCommands.swift'], { cwd: dir });

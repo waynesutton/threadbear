@@ -58,15 +58,15 @@ const ALLOWED: Record<string, string> = {
 const LOOKALIKES: Record<string, string[]> = {
   'desktop/core/src/file_refs.rs': ['app/Sources/.'],
   'desktop/scripts/make-bundle.sh': ['app/Resources/Info.plist'],
-  'mock-runner/server.mjs': ['shared/icons/threadbear.png'],
+  'mock-runner/server.mjs': ['app/icons/threadbear.png'],
   'runner/test/fixtures/pool-folder-cases.json': ['app/Tests/Fixtures'],
   'runner/test/unit/agent-write-trust.test.ts': ['app/Sources/ThreadbearCore/Protocol/Models.swift'],
-  'runner/test/unit/project-icons.test.ts': ['shared/icons/threadbear.png'],
+  'runner/test/unit/project-icons.test.ts': ['app/icons/threadbear.png'],
   // A fork's checkout from before the move, found by its old mock runner.
   'runner/src/tb-dev.ts': ['app/Tools/mock-runner/server.mjs'],
   'runner/test/unit/tb-dev.test.ts': ['app/Tools/mock-runner', 'app/Tools/mock-runner/server.mjs'],
   'runner/test/unit/fix-link-kinds.test.ts': ['app/Tools/mock-runner'],
-  'runner/test/unit/swift-changes.test.ts': ['app/Tools/mock-runner/server.mjs', 'app/Tools/realdrag.swift', 'shared/art/librarian.png', 'shared/rich/pele.js'],
+  'runner/test/unit/swift-changes.test.ts': ['app/Tools/mock-runner/server.mjs', 'app/Tools/realdrag.swift', 'app/Sources/Threadbear/Resources/Art/librarian.png', 'app/Sources/Threadbear/Resources/Rich/pele.js'],
   'site/scripts/clips/turns.json': ['app/Sources'],
 };
 
