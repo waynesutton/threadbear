@@ -76,9 +76,12 @@ When("I click the picture of option {int} on the review's page", async function 
 
 Then("the review's page has {string} ticked", async function (this: ThreadbearWorld, ids: string) {
   const want = ids ? ids.split(', ') : [];
-  const s = await untilPage(this, `"${ids}" ticked and saved`, (s) => !s.saving && JSON.stringify(s.picked) === JSON.stringify(want));
-  // And on the page itself: each ticked option's section is marked.
-  assert.equal(s.page.split('class="opt picked').length - 1, want.length);
+  // Saved, and on the page itself: each ticked option's section is marked.
+  // The page is made again when the pane next draws, a moment after the
+  // save is back, so both are waited for (checked at once, it failed on
+  // GitHub's Mac, 20 Nov).
+  const marked = (html: string) => html.split('class="opt picked').length - 1;
+  await untilPage(this, `"${ids}" ticked, saved and marked on the page`, (s) => !s.saving && JSON.stringify(s.picked) === JSON.stringify(want) && marked(s.page) === want.length);
 });
 
 Then('the message box shows the ticks {string}', async function (this: ThreadbearWorld, titles: string) {

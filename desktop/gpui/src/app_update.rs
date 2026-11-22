@@ -63,6 +63,9 @@ pub(crate) struct AppUpdater {
     noted_waiting: Option<String>,
     /// The last build found no Mac to build on; the next look tries again.
     pub(crate) waiting_for_host: bool,
+    /// Where the build is on its host (stage-update.sh's phase file), read
+    /// once a second with the restart looks: busy, queued or compiling.
+    pub(crate) phase: Option<threadbear_core::updates::BuildPhase>,
     /// The last build found no Mac trusted to build it (stage-update.sh's 5:
     /// check hosts but no updateBuildHosts), so Mike has to name one; the
     /// next look tries again, so naming one is picked up without a restart.
@@ -154,6 +157,14 @@ pub(crate) fn log_path() -> PathBuf {
 }
 
 /// The script in the running bundle, so the app runs the copy it was built with.
+/// Where stage-update.sh says how its build is going (`BuildPhase`): its
+/// cache folder, the same path on every platform as the script uses $HOME.
+fn phase_file() -> PathBuf {
+    installed::home_dir()
+        .join("Library/Caches/Threadbear/update-desktop")
+        .join("phase")
+}
+
 fn script() -> Option<PathBuf> {
     let exe = std::env::current_exe().ok()?;
     let script = threadbear_core::app_update::bundle_of(&exe)?
@@ -202,7 +213,7 @@ pub(crate) fn apply_staged_at_launch() -> bool {
 
 /// What the installed app was built from, in hello's `build`, so the runner
 /// can tell a thread waiting for the app to restart when it's back on a new
-/// one (docs/protocol.md, "App restarts"). Any other launch sends none.
+/// one (docs/protocol/updates.md, "App restarts"). Any other launch sends none.
 pub(crate) fn announce_build() {
     let launch = installed::launch();
     if let Some(build) = launch
@@ -563,13 +574,39 @@ impl Threadbear {
             // a window's dialogs and focus are read through its root, which
             // reads the app back.
             let windows = cx.update(|cx| windows_now(main, cx));
+            let phase = cx
+                .background_executor()
+                .spawn(async { std::fs::read_to_string(phase_file()).ok() })
+                .await;
             if this
-                .update(cx, |t, cx| t.consider_auto_restart(windows, cx))
+                .update(cx, |t, cx| {
+                    t.read_build_phase(phase, cx);
+                    t.consider_auto_restart(windows, cx)
+                })
                 .is_err()
             {
                 break;
             }
         })
+    }
+
+    /// What stage-update.sh's phase file says, kept while a build runs or
+    /// waits for a host; redrawn only when the line changes (once a minute
+    /// at most, as it counts minutes).
+    fn read_build_phase(&mut self, text: Option<String>, cx: &mut Context<Self>) {
+        if self.updater.preview {
+            return;
+        }
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map_or(0, |d| d.as_secs());
+        let phase = text
+            .filter(|_| self.updater.building.is_some() || self.updater.waiting_for_host)
+            .and_then(|t| threadbear_core::updates::BuildPhase::parse(&t, now));
+        if phase != self.updater.phase {
+            self.updater.phase = phase;
+            cx.notify();
+        }
     }
 
     /// Main moved: a look in a few seconds. A burst of ref writes (a merge,
@@ -906,11 +943,7 @@ impl Threadbear {
     pub(crate) fn restart_moment(&self, windows: WindowsNow, cx: &App) -> rules::RestartMoment {
         rules::RestartMoment {
             staged: self.updater.staged.is_some(),
-            loaded: self.sidebar.loaded
-                && matches!(
-                    self.status,
-                    threadbear_client::runner::Status::Connected { .. }
-                ),
+            loaded: self.sidebar.loaded && self.connected(),
             has_drafts: self.has_unsent_words(cx),
             held: windows.held || self.under_way(cx),
             other_window_input: windows.other_window_input,
@@ -1225,10 +1258,11 @@ impl Threadbear {
                 .filter(|_| installed::launch().installed)
                 .or_else(|| u.no_builder.then(|| NO_BUILDER.to_owned())),
             wait: u.wait.clone().filter(|_| u.staged.is_some()),
+            phase: u.phase.clone().filter(|_| u.staged.is_none()),
         }
     }
 
-    /// A made-up update that's "staged", "building", "settling", "failed", "waiting" or "no-builder"
+    /// A made-up update that's "staged", "building", "queued", "settling", "failed", "waiting" or "no-builder"
     /// (or none, on abc1234), for a scripted app's pictures and specs, as
     /// the Swift app's `previewUpdate`. Only scripts reach it, through the
     /// Updates panel's `updates` command.
@@ -1244,7 +1278,20 @@ impl Threadbear {
         u.preview = true;
         u.running = Some(build("abc1234"));
         u.staged = (state == "staged").then(|| build("def5678"));
-        u.building = (state == "building").then(|| "def5678".to_owned());
+        u.building = matches!(state, "building" | "queued").then(|| "def5678".to_owned());
+        u.phase = match state {
+            "queued" => Some(threadbear_core::updates::BuildPhase {
+                state: threadbear_core::updates::BuildState::Queued { ahead: 2 },
+                host: "build-mac".into(),
+                minutes: 12,
+            }),
+            "building" => Some(threadbear_core::updates::BuildPhase {
+                state: threadbear_core::updates::BuildState::Building,
+                host: "build-mac".into(),
+                minutes: 4,
+            }),
+            _ => None,
+        };
         u.settling = state == "settling";
         u.failed = (state == "failed").then(|| "def5678".to_owned());
         u.waiting_for_host = state == "waiting";

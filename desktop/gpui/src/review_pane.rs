@@ -946,6 +946,7 @@ pub(crate) async fn automation(
     cmd: &Value,
     cx: &mut AsyncApp,
 ) -> Result<Value, String> {
+    use gpui_kit::test::TestWindowExt as _;
     use std::time::Duration;
     let wanted = cmd["id"].as_str().map(str::to_owned);
     let found = app
@@ -1018,5 +1019,11 @@ pub(crate) async fn automation(
                 .await;
         }
     }
+    // A frame before it's read: the page is made as the pane draws, and a
+    // scripted window behind others draws only when asked, so on a check
+    // host it was never made at all and the specs waited on it in vain
+    // (review-page.feature, 21 Nov).
+    cx.update_window(main, |_, window, cx| window.render_frame(cx))
+        .map_err(|e| e.to_string())?;
     Ok(side.read_with(cx, |s, _| s.review_dump(&thread_id)))
 }

@@ -457,7 +457,7 @@ async function dropThread(ctx: MutationCtx, threadId: string, row: Doc<'threads'
 // With four runner keys all at their caps, the database holds at most about
 // 4 x 75 MB of theirs (messages 48 MB, threads 3,000 x 8 KB, the rest under
 // 5 MB) and file storage 4 x 150 MB: inside Convex's free plan (0.5 GB and
-// 1 GB) with room for the main Mac's own (docs/protocol.md, "Caps").
+// 1 GB) with room for the main Mac's own (docs/protocol/keys.md, "Caps").
 // Four since 17 Nov 2026: bruce, the Hetzner box and the Pixel held three,
 // and a Windows laptop (its runner in WSL) needed a fourth. The whole-list
 // reads above were already budgeted for four (6.4 MB).
@@ -916,7 +916,7 @@ export const upsertThreads = mutation({
       const existing = await threadRow(ctx, t.threadId);
       // A runner key writes only its own threads, and never one that's
       // another runner's: the row says where the phone's commands for it go
-      // and carries its secret card's key (docs/protocol.md, "Runner keys").
+      // and carries its secret card's key (docs/protocol/keys.md, "Runner keys").
       // A box key only its one thread (runnerAccess.ts ownThreadOnly).
       if (!mayWrite(caller, t.runnerId, existing?.runnerId, t.threadId)) throw forbidden(`write thread ${t.threadId}`);
       // Only its own runner's projects (heldElsewhere), and only so many: each
@@ -1641,7 +1641,7 @@ export const runnersList = query({
 
 // ------------------------------------------------------------ tokens
 // The Mac app's Settings › Phone & browser, through the runner (API 6;
-// docs/protocol.md "Devices"): issues the token a new phone or browser
+// docs/protocol/moves.md "Devices"): issues the token a new phone or browser
 // holds, lists them, revokes one. The plain token goes back in the reply
 // that issued it and nowhere else.
 
@@ -2437,7 +2437,7 @@ export const setSchedules = mutation({
 });
 
 // ------------------------------------------------------------ schedules (API 9)
-// Schedules that live here (docs/protocol.md, Schedules, "Runners"). Every
+// Schedules that live here (docs/protocol/projects.md, Schedules, "Runners"). Every
 // runner subscribes to the whole list; a schedule's own runner is the only
 // one that sends it, and takes each run with claimSchedule first so it's
 // sent once even while a handover has two runner processes under one
@@ -2461,6 +2461,7 @@ const ownedScheduleDoc = v.object({
   poolId: v.optional(v.string()),
   check: v.optional(v.string()),
   checkTimeoutSecs: v.optional(v.number()),
+  provider: v.optional(v.string()),
 });
 
 const lastRunDoc = v.object({ at: v.string(), outcome: v.string(), threadId: v.optional(v.string()), note: v.optional(v.string()) });
@@ -3334,7 +3335,7 @@ export const finishCommand = mutation({
         updatedAt: Math.max(Date.now(), (latest?.updatedAt ?? 0) + 1),
       });
     }
-    // Its words, and a secret's sealed answer (docs/protocol.md, "Secrets"), have
+    // Its words, and a secret's sealed answer (docs/protocol/threads.md, "Secrets"), have
     // done their job: see finishedArgs.
     await ctx.db.patch(commandId, { args: finishedArgs(c.args) });
     // The runner has its copy of the phone's photos by now, and images are
@@ -4160,7 +4161,7 @@ export const otherRunnersThreads = query({
 });
 
 // ------------------------------------------------------------ runner keys (API 41)
-// The main Mac's `tb runner add|list|revoke` (docs/protocol.md, "Runner
+// The main Mac's `tb runner add|list|revoke` (docs/protocol/keys.md, "Runner
 // keys"): a key for one other runner, which authenticates as that runnerId
 // alone. The plain key goes back in the reply that made it and nowhere
 // else; only its hash is kept.

@@ -3,7 +3,7 @@ Feature: A design review as a page beside the thread
   I want them on a page beside the thread, with their words at reading size
   So I read and look in one place, and answer in the message box
 
-  # Experiment reviewPage (docs/protocol.md, "Design reviews"): the GPUI app
+  # Experiment reviewPage (docs/protocol/events.md, "Design reviews"): the GPUI app
   # only. The Swift app is frozen and opens the review in its window. Mike,
   # 20 Nov: he went into the window for the pictures and back to the thread
   # to read about them, as the window's words were small, grey and narrow.

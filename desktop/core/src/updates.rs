@@ -1,6 +1,6 @@
 // What the Updates panel and its activity bar icon say, a port of
 // UpdatesText.swift and `CliText` (AccountUsageText.swift): the runner's own
-// update (docs/protocol.md, "Runner updates"), Mike's releases on a fork
+// update (docs/protocol/updates.md, "Runner updates"), Mike's releases on a fork
 // ("Mike's releases"), and the agent CLIs' versions (`clis.list`,
 // `CliStatus`). Plain sentences, one per thing going on; the view adds the
 // buttons.
@@ -441,6 +441,62 @@ pub struct AppSide {
     /// What the staged build's restart waits on (`restart_wait`), when the
     /// app knows: a countdown, or what's typed or open.
     pub wait: Option<crate::app_update::RestartWait>,
+    /// Where the build is on its host, from stage-update.sh's phase file,
+    /// while it's building or waiting for one: busy, queued or compiling.
+    pub phase: Option<BuildPhase>,
+}
+
+/// Where the app's update build is on its build host, as stage-update.sh
+/// writes it in its phase file (`<state> <host> <since> [<ahead>]`). On 20
+/// Nov the ring turned for over an hour while the build sat behind other
+/// threads' runs on Tinker Desk, and the panel only said it was building.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct BuildPhase {
+    pub state: BuildState,
+    pub host: String,
+    /// Whole minutes in this state.
+    pub minutes: u64,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum BuildState {
+    /// Every trusted host was busy, so it tries again later.
+    Busy,
+    /// Waiting its turn on the host, with this many runs ahead of it.
+    Queued { ahead: u32 },
+    /// Compiling there.
+    Building,
+}
+
+impl BuildPhase {
+    /// The phase file's line, read at `now` (Unix seconds).
+    pub fn parse(text: &str, now: u64) -> Option<Self> {
+        let mut words = text.split_whitespace();
+        let state = words.next()?;
+        let host = words.next()?.to_owned();
+        let since: u64 = words.next()?.parse().ok()?;
+        let state = match state {
+            "busy" => BuildState::Busy,
+            "building" => BuildState::Building,
+            "queued" => BuildState::Queued {
+                ahead: words.next().and_then(|w| w.parse().ok()).unwrap_or(0),
+            },
+            _ => return None,
+        };
+        Some(Self {
+            state,
+            host,
+            minutes: now.saturating_sub(since) / 60,
+        })
+    }
+}
+
+fn minutes(n: u64) -> String {
+    if n == 1 {
+        "1 minute".to_owned()
+    } else {
+        format!("{n} minutes")
+    }
 }
 
 impl AppSide {
@@ -943,6 +999,27 @@ pub fn app_line(a: &AppSide) -> String {
             None => format!("The app's next version ({staged}) is ready. It switches in when you're not using the app, or now."),
         };
     }
+    if a.building || a.waiting {
+        if let Some(p) = &a.phase {
+            let (host, so_far) = (&p.host, minutes(p.minutes));
+            match p.state {
+                BuildState::Building if a.building => {
+                    return format!("Building the app from main on {host}, {so_far} in.");
+                }
+                BuildState::Queued { ahead } if a.building => {
+                    return match ahead {
+                        0 => format!("The app's next version is queued on {host}, waiting for what it's running to finish ({so_far} so far)."),
+                        1 => format!("The app's next version is queued on {host} behind 1 other run ({so_far} so far)."),
+                        n => format!("The app's next version is queued on {host} behind {n} other runs ({so_far} so far)."),
+                    };
+                }
+                BuildState::Busy if a.waiting => {
+                    return format!("The app has a new version on main, waiting for {host}, which has been busy with other work for {so_far}.");
+                }
+                _ => {}
+            }
+        }
+    }
     if a.building {
         return "Building the app from main.".to_owned();
     }
@@ -969,6 +1046,13 @@ pub fn app_line(a: &AppSide) -> String {
 pub fn popover_line(a: &AppSide) -> String {
     if a.staged.is_some() {
         return "A new version of the app is ready.".to_owned();
+    }
+    if a.building
+        && a.phase
+            .as_ref()
+            .is_some_and(|p| matches!(p.state, BuildState::Queued { .. }))
+    {
+        return "The app's next version is queued behind other work.".to_owned();
     }
     if a.building {
         return "Building the app's next version.".to_owned();
@@ -1416,7 +1500,7 @@ mod tests {
             .is_empty());
     }
 
-    /// The mock runner's two CLIs (app/Tools/mock-runner/server.mjs).
+    /// The mock runner's two CLIs (mock-runner/server.mjs).
     fn mock_clis() -> Vec<CliStatus> {
         decode_clis(&json!([
             { "provider": "claude", "path": "/x/claude", "managedBy": "cli", "installedVersion": "2.1.311", "latestVersion": "2.1.312", "status": "behind", "policy": "auto", "inUse": [], "checkedAt": "2026-11-11T01:00:00.000Z" },
@@ -1823,6 +1907,52 @@ mod tests {
         assert_eq!(
             app_line(&waiting),
             "The app has a new version on main, waiting for a Mac to build it on."
+        );
+    }
+
+    #[test]
+    fn the_panel_says_where_the_build_is_on_its_host() {
+        let at = |line: &str, building: bool| AppSide {
+            running: Some("abc1234".into()),
+            building,
+            waiting: !building,
+            phase: BuildPhase::parse(line, 10_000),
+            ..Default::default()
+        };
+        assert_eq!(
+            app_line(&at("queued tinker-desk 8020 3", true)),
+            "The app's next version is queued on tinker-desk behind 3 other runs (33 minutes so far)."
+        );
+        assert_eq!(
+            app_line(&at("queued tinker-desk 9990", true)),
+            "The app's next version is queued on tinker-desk, waiting for what it's running to finish (0 minutes so far)."
+        );
+        assert_eq!(
+            popover_line(&at("queued tinker-desk 9990 1", true)),
+            "The app's next version is queued behind other work."
+        );
+        assert_eq!(
+            app_line(&at("building tinker-desk 9940", true)),
+            "Building the app from main on tinker-desk, 1 minute in."
+        );
+        assert_eq!(
+            app_line(&at("busy tinker-desk 8800", false)),
+            "The app has a new version on main, waiting for tinker-desk, which has been busy with other work for 20 minutes."
+        );
+        // A phase left from another state, or unreadable, says what it did before.
+        assert_eq!(
+            app_line(&at("busy tinker-desk 8800", true)),
+            "Building the app from main."
+        );
+        assert_eq!(
+            app_line(&at("compiling tinker-desk 1", true)),
+            "Building the app from main."
+        );
+        assert_eq!(BuildPhase::parse("queued tinker-desk", 5), None);
+        // Still the ring, whatever the phase.
+        assert_eq!(
+            next_version(&at("queued tinker-desk 1 2", true), None),
+            NextVersion::Coming
         );
     }
 

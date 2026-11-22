@@ -149,7 +149,7 @@ Then('in the {string} card, {string} has been checked: {string}', async function
   await this.until(`${name} in ${card} checked: ${words}`, (d) => login(d, card, name)?.check === words);
 });
 
-/** Marks a login on the mock as the runner's sign-in check would (docs/protocol.md, Pools, "Signed out"). */
+/** Marks a login on the mock as the runner's sign-in check would (docs/protocol/settings.md, Pools, "Signed out"). */
 async function setSignIn(world: ThreadbearWorld, account: string, change: { signedOut?: boolean; loginEndsAt?: string; planEnded?: boolean; yearToken?: { madeAt: string } }) {
   const { accounts } = answer(await world.app.do({ cmd: 'mock', method: 'accounts', params: {} })) as { accounts: { id: string; signedOut?: boolean; loginEndsAt?: string }[] };
   const a = accounts.find((x) => x.id === account);

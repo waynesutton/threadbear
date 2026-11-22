@@ -3,6 +3,11 @@
 // Swift app. Each of Daybreak's findings 58, 59 and 64 (9 Nov 2026) was a new
 // button or link that called the system's opener itself, with a URL made by
 // pasting a path into `file://`.
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    reason = "a test: a panic is its failure, with the line"
+)]
 use std::path::{Path, PathBuf};
 
 /// What reaches the system's opener, or starts a program, directly. The

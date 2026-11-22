@@ -251,7 +251,7 @@ fn shot_html(
         (Some(w), Some(h)) if w > 0 && h > 0 => format!(" width=\"{w}\" height=\"{h}\""),
         _ => String::new(),
     };
-    let inner = match (video.and_then(|clip| source(clip)), &still) {
+    let inner = match (video.and_then(source), &still) {
         (Some(clip), _) => {
             let poster = still
                 .as_ref()

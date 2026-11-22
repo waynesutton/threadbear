@@ -79,9 +79,9 @@ the pairing QR code, which holds no token (Daybreak finding 127, 15 Nov
 `url=<https://….convex.cloud>&code=<tbp_…>&key=<runnerId>:<key>`: not a
 link, so no app can claim it, with a code that works once for ten minutes.
 Scan the code (`PairView`) reads it and trades the code for a token with
-`tokens:claim` (docs/protocol.md "Devices"). The `key` is the runner's
+`tokens:claim` (docs/protocol/moves.md "Devices"). The `key` is the runner's
 secret-box key, without which the phone pairs but won't answer secret
-cards (docs/protocol.md, "Trusting the key"). The same tab lists paired
+cards (docs/protocol/threads.md, "Trusting the key"). The same tab lists paired
 phones with Revoke.
 
 By hand, `swift ios/scripts/pair-qr.swift` makes a code with `npx convex

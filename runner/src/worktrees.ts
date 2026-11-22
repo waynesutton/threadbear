@@ -1071,7 +1071,7 @@ async function remadeOwn(t: LandTarget, main: string, out: (line: string) => voi
     const moved = await git(t.path, ['reset', '--keep', r.tip]);
     if (!moved.ok) return [`Couldn't move ${t.branch} to its remade commits in ${t.path}, so nothing landed: ${firstLine(moved.stderr || moved.stdout)}`];
     for (const n of r.notes) out(n);
-    out(`Made ${r.remade.map((c) => c.slice(0, 10)).join(', ')} again on ${MAIN} with the tool its .git-blame-ignore-revs entry names, as main has moved on in what it rewrites (${t.branch} was at ${before.slice(0, 10)}).`);
+    out(`Made ${r.remade.map((c) => c.slice(0, 10)).join(', ')} again on ${MAIN} with the tool its .git-blame-ignore-revs entry names, so it's that tool's output on ${MAIN} as it is now (${t.branch} was at ${before.slice(0, 10)}).`);
     return 'done';
   } catch (e) {
     out(`Couldn't make its format commit again (${e instanceof Error ? e.message : String(e)}).`);
@@ -1279,7 +1279,17 @@ async function stackWaiting(
 // The `./check.sh --only` a failed check ends with: what to run again to see
 // the same failure, as THREADBEAR_CHECK_ONLY takes it. Undefined for a check
 // that says no such thing (another repo's, or one that died before its end).
+// The output of the last run in a check's: check-remote.sh runs it again on
+// another host when one drops out or runs out of disk, and what the earlier
+// one said (what failed, what ran) isn't this one's.
+function lastRun(text: string): string {
+  const starts = [...text.matchAll(/^(?:Checking on \S+ \(|So the checks run on this Mac instead\b)/gm)];
+  const at = starts.at(-1)?.index;
+  return at === undefined ? text : text.slice(at);
+}
+
 export function onlyFailed(text: string): string | undefined {
+  text = lastRun(text);
   const said = [...text.matchAll(/^To run only what failed again: (?:\.\/check\.sh )?--only "([A-Za-z0-9 ._/=;()-]{1,4000})"$/gm)].at(-1)?.[1];
   return said && !said.startsWith('-') ? said : undefined;
 }
@@ -1287,6 +1297,7 @@ export function onlyFailed(text: string): string | undefined {
 // The steps a run with --only says it ran (check.sh's last line for one), or
 // undefined when it says no such thing.
 export function onlyRan(text: string): Set<string> | undefined {
+  text = lastRun(text);
   const said = [...text.matchAll(/^--only ran: "([A-Za-z0-9 ._/;()-]{0,4000})"$/gm)].at(-1)?.[1];
   return said === undefined ? undefined : new Set(said.split(';').filter(Boolean));
 }
@@ -1391,7 +1402,8 @@ async function findBroken(a: {
     // group's: another one, or a host named by one and not the other (the
     // group's own line can be lost off the front of a long output; with no
     // host known the runs aren't sent to one, and then none may name one).
-    if (r.stopped || times.host !== a.host) return { state: 'unknown', text: r.text };
+    // Nor one no host could run (out of disk, every host unreachable).
+    if (r.stopped || times.host !== a.host || r.code === CHECK_HOSTS_UNAVAILABLE) return { state: 'unknown', text: r.text };
     // Failed means the check ran to its end and named a step that failed.
     return { state: r.ok ? 'passed' : onlyFailed(r.text) ? 'failed' : 'unknown', text: r.text };
   };
@@ -1695,6 +1707,22 @@ async function landLocked(
         check,
         ...(intact ? { intact: true } : {}),
       });
+      // No check host could run it: one ran out of disk partway (and again
+      // when tried elsewhere), or none had room or answered. That's the
+      // hosts' trouble, not any landing's, so nothing is halved or looked
+      // for: on 20 Nov a group failed when the cloud box ran out of disk,
+      // and each landing in it was checked alone for a fault none had.
+      if (!r.ok && r.code === CHECK_HOSTS_UNAVAILABLE) {
+        if (!(await back())) return fail(`No check host could run the check, so nothing landed. ${stuck}`);
+        if (carried) return fail(committedMeanwhile);
+        return fail(
+          `No check host could run the check${group.length ? ` of ${group.length + 1} landings together` : ''}, so ${MAIN} wasn't touched. That's the hosts' trouble, not ${group.length ? 'any landing in it' : 'this landing'}. The last lines of its output:`,
+          '',
+          ...r.text.trimEnd().split('\n').slice(-CHECK_TAIL_LINES),
+          '',
+          'Run tb land again: the lines above say which host and why.',
+        );
+      }
       if (!r.ok && group.length) {
         lastFailed = group.map((g) => g.entry);
         // The halving goes on the others' entries before anything slow
@@ -2077,6 +2105,9 @@ async function pushMain(a: {
       ...(r.ok && intact ? { intact: true } : {}),
     });
     if (r.ok && !intact) return gave(`the check changed files or HEAD in ${dir} as it ran, so it didn't check the merge itself`);
+    // The hosts' trouble, not the merge's: the next landing tries again,
+    // rather than the merge being put off for hours as a failed one is.
+    if (r.code === CHECK_HOSTS_UNAVAILABLE) return notPushed(`no check host could run the check on the merge. The next landing tries again.`);
     if (!r.ok) {
       const tail = r.text.trimEnd().split('\n').slice(-CHECK_TAIL_LINES).join('\n').slice(-8000);
       return gave(`the check failed on the merge${r.code !== undefined ? ` (exit ${r.code})` : ''}`, ` The last lines of its output:\n\n${tail}`);
@@ -2153,6 +2184,12 @@ export function overwrittenFiles(text: string): string[] {
 // where a test runner says what failed).
 // With `limitMs` (findBroken's runs), it's stopped past that, its whole
 // process group, and says so: `stopped`.
+// The exit a check sent to the check hosts (scripts/check-remote.sh) ends
+// with when no host could run it, rather than a failed step's: none had room,
+// none could be reached, or each ran out of disk partway. EX_UNAVAILABLE, as
+// the runner's self-update has it (runner/scripts/deploy-steps.mjs).
+export const CHECK_HOSTS_UNAVAILABLE = 69;
+
 function runCheck(command: string, cwd: string, shell = ['/bin/sh', '-c'], extraEnv: NodeJS.ProcessEnv = {}, limitMs?: number): Promise<{ ok: boolean; code?: number; text: string; durationMs: number; stopped?: boolean }> {
   const started = Date.now();
   // At background priority: a land's check is the full quick suite.
@@ -2170,6 +2207,7 @@ function runCheck(command: string, cwd: string, shell = ['/bin/sh', '-c'], extra
     if (!extraEnv.THREADBEAR_CHECK_GROUP) delete env.THREADBEAR_CHECK_GROUP;
     if (!extraEnv.THREADBEAR_CHECK_ONLY) delete env.THREADBEAR_CHECK_ONLY;
     if (!extraEnv.THREADBEAR_CHECK_HOST_ONLY) delete env.THREADBEAR_CHECK_HOST_ONLY;
+    env.THREADBEAR_CHECK_BUSY_EXIT = extraEnv.THREADBEAR_CHECK_BUSY_EXIT ?? String(CHECK_HOSTS_UNAVAILABLE);
     if (!extraEnv.THREADBEAR_CHECK_MAX_SECS && limitMs !== undefined) delete env.THREADBEAR_CHECK_MAX_SECS;
     // A group of its own when it has a limit, so the ssh and whatever else
     // it started go with it.
@@ -2415,7 +2453,19 @@ export async function cleanUpWorktree(w: WorktreeRecord, stillOurs: () => boolea
     const status = await gitOut(here, ['status', '--porcelain', '--untracked-files=all']);
     if (status === undefined) return { removed: false, reason: `git couldn't read ${w.path}` };
     const lines = status ? status.split('\n') : [];
-    if (lines.some((l) => !l.startsWith('??'))) return { removed: false, reason: `the worktree has uncommitted changes` };
+    const DIRTY: Cleanup = { removed: false, reason: `the worktree has uncommitted changes` };
+    if (lines.some((l) => !l.startsWith('??'))) return DIRTY;
+    // Read again just before the folder is pooled or removed: an edit made
+    // since the look above would go into a spare, whose next taker's
+    // `reset --hard` takes it, or be removed with the folder by --force
+    // (21 Nov; borrows.ts does the same). If there is one, it goes back on
+    // its branch, as it was, and stays.
+    const editedSince = async (where: string): Promise<Cleanup | undefined> => {
+      const again = await gitOut(where, ['status', '--porcelain', '--untracked-files=all']);
+      if (again !== undefined && !again.split('\n').some((l) => l && !l.startsWith('??'))) return undefined;
+      if (head !== `ref: refs/heads/${w.branch}`) await git(where, ['checkout', '-q', '-B', w.branch]);
+      return again === undefined ? { removed: false, reason: `git couldn't read ${w.path}` } : DIRTY;
+    };
     if (w.keep && (await spares(w.mainCheckout, path.dirname(w.path))).length < MAX_SPARES) {
       // Detached where it is (no files change), so the branch can go; its
       // untracked files go when the next thread takes it.
@@ -2430,7 +2480,12 @@ export async function cleanUpWorktree(w: WorktreeRecord, stillOurs: () => boolea
         if (!stillOurs()) return LET_GO;
         if (branchThere && (await git(w.mainCheckout, ['branch', '-D', w.branch])).ok) branchThere = false;
         if (!stillOurs()) return LET_GO;
-        if (!branchThere && (await git(w.mainCheckout, ['worktree', 'lock', '--reason', SPARE, w.path])).ok) return { removed: true, spare: true };
+        if (!branchThere) {
+          if (!(here = worktreeFolderNow(w, head))) return CHANGED;
+          const edited = await editedSince(here);
+          if (edited) return edited;
+          if ((await git(w.mainCheckout, ['worktree', 'lock', '--reason', SPARE, w.path])).ok) return { removed: true, spare: true };
+        }
       }
       // Couldn't be set aside: removed instead, below.
     }
@@ -2438,6 +2493,10 @@ export async function cleanUpWorktree(w: WorktreeRecord, stillOurs: () => boolea
     if (!stillOurs()) return LET_GO;
     // On its branch still, or detached just above (a spare that couldn't be
     // locked), and nothing else.
+    if (!(here = worktreeFolderNow(w, head))) return CHANGED;
+    const edited = await editedSince(here);
+    if (edited) return edited;
+    if (!stillOurs()) return LET_GO;
     if (!worktreeFolderNow(w, head)) return CHANGED;
     const rm = await git(w.mainCheckout, args);
     if (!rm.ok) return { removed: false, reason: `git worktree remove failed: ${firstLine(rm.stderr)}` };

@@ -555,6 +555,36 @@ checked. Mike's own live commands all keep to it (as of 7 Nov), except
 walkies-arrow's older Pixel check, which still runs perl and was already
 hidden.
 
+#### What changed
+
+A patch asked about again says what changed since the version last
+trusted in its folder (`src/patch-changes.ts`), in `PatchInfo.changes`:
+the files whose bytes differ (`changed`), that its hash now covers and
+didn't (`added`: a new helper, or one Threadbear now follows) or no longer
+covers (`removed`); for each, the commits since then that touched it and
+whether what's on disk is committed; and the lines, for a changed file
+both of whose versions could be checked against their hashes (the old
+side read with `git cat-file` from the commit trusted then, or HEAD's,
+only when it hashes to what was trusted; the new side only when it still
+hashes to what the ask is for). A folder whose only patch hashes are from
+before version 3 gets `{ recheck: true }`: its trust is from before the
+6 Nov change to how patches are checked, so nothing says whether this
+patch was trusted before (the hashes are per folder) or what changed. The thread's note names
+the files too. When git takes more than five seconds, the rest are named
+without commits or lines, and git isn't asked again for a minute. A file
+outside the folder, or a symlink, gets no commits or "not committed", as
+git can't speak for its bytes; a diff line over 1000 characters is cut
+with a note saying so, never silently.
+
+Each trusted version (when, its files by SHA-256, the repo's HEAD) is kept
+in `patch-trust-versions.json` beside the trust file, the last five a
+patch; a version trusted before this was kept goes in the next time it's
+seen trusted. It only describes: nothing in it trusts anything, and a
+missing or unreadable one only means the ask says less. Commit subjects,
+paths and lines are the repo's text, shown as plain lines with control and
+direction characters replaced, so they say who wrote a change only as
+far as git can be believed: the lines are what to read.
+
 ### Trusting a folder's Claude Code hooks
 
 The runner starts Claude in a thread's folder with that folder's own

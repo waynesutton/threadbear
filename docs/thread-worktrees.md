@@ -9,14 +9,14 @@ when its checks pass.
 
 ## Opting in
 
-Only repos that ask. A patch (docs/protocol.md, "Patches") can say:
+Only repos that ask. A patch (docs/protocol/patches.md, "Patches") can say:
 
 ```ts
 export default {
   worktree: {
     // Run in the new worktree before the first turn. Optional. One
     // script in the repo and plain words, as it runs by itself
-    // (docs/protocol.md, "Trusting a folder's patches").
+    // (docs/protocol/trust.md, "Trusting a folder's patches").
     setup: "./scripts/setup.sh",
     // Run by `tb land` before main moves. Optional; a failure stops it.
     check: "./check.sh --quick",
@@ -58,7 +58,7 @@ for a folder inside an opted-in repo:
    "worktree.setup"`). A failure is shown and the turn starts anyway.
    It's the worktree's own copy of the patch that's read, and only when
    that copy (with the scripts it names, as they are in the worktree) is
-   trusted; otherwise a note says the setup was skipped (docs/protocol.md,
+   trusted; otherwise a note says the setup was skipped (docs/protocol/trust.md,
    "Trusting a folder's patches").
 4. The record keeps `worktree: { repo, mainCheckout, path, branch, base }`
    (`base` is main's commit when it was made); the summary carries
@@ -396,6 +396,10 @@ So a failed check says what failed, and that alone is run on each landing:
   by itself: its own, then each of the others replayed onto main without
   the rest. A few test files are seconds each, plus the copy to the check
   host.
+- A group check no host could run (exit 69: each host it tried ran out of
+  disk during it, or none had room or answered; `scripts/check-remote.sh`)
+  is nobody's failure: nothing is run alone or halved, the holder's
+  `tb land` stops with the hosts' lines, and the rest go on in the line.
 - Main runs it first, with every step it names run whether or not
   anything changed (`THREADBEAR_CHECK_ALL`, check.sh's `--all`: the Swift
   steps never run on main with nothing changed, and a skip is no pass).
@@ -508,7 +512,10 @@ it again next time, a teardown should be safe to run twice.
 When a thread with a worktree is archived or deleted: if its branch is
 merged into main (or has no commits of its own), the worktree is removed
 (`git worktree remove`, `--force` only for untracked files) and the branch
-deleted. Otherwise both stay, with a `system.note` saying so and how to
+deleted. Its status is read again just before it's locked as a spare or
+removed, and an edit made meanwhile puts it back on its branch, kept: on 21
+Nov one made after the first look would have gone into the spare, for the
+next thread's `reset --hard`, or out with the folder under `--force`. Otherwise both stay, with a `system.note` saying so and how to
 land or drop them. Unarchiving a thread whose worktree was removed starts
 its next turn in the main checkout, with a note.
 

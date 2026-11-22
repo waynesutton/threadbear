@@ -196,7 +196,12 @@ Copy, change the words and press Done (or ⌘Return). The box says
 version goes on the end of your next message to that thread (an answer
 on its card counts, from the thread or a project page), with a line
 asking the agent to use your words, so picking "Post and close" posts
-what you wrote. The change is kept on your Mac, in the desktop app.
+what you wrote. Until then a chip over the message box says so ("Your
+edited email · 2 lines changed"): View shows the draft in its reply,
+and × puts the agent's back, as Undo does. Once sent, your message
+shows the same chip under your words in place of that line, and Show
+opens the draft you sent; the website and the phone show it that way
+too. The change is kept on your Mac, in the desktop app.
 
 A reply that needs nothing from you ends with a Done card at the top of
 the message box, with an Archive button to put the thread away. When something it talked about is
@@ -1539,7 +1544,8 @@ pool the composer was on when you made it, so each run starts on
 whichever of that pool's logins it would pick then; ask an agent to put
 it on another pool or one login. Its model and effort start as the
 composer's too, and you can change them in the schedule's editor (click it
-in the list). Click a heading to fold it away (Done starts folded); a
+in the list). In a pool with logins of several kinds, each run starts on
+the kind you picked its model under. Click a heading to fold it away (Done starts folded); a
 folded one shows how many are under it. Its page
 says what's coming up next with a few numbers: how many are on, due in the
 next day, repeating, set by threads, paused, and how often they've run.
@@ -2917,7 +2923,7 @@ with a Back), so the patch's page stays put; if the page moves on to
 another of its own pages, a Back shows in the panel's bar, and Reload goes
 back to where it started. Closing a panel, or picking another thread,
 pauses anything it's playing. A panel's address can carry the thread
-it's beside, as `{threadId}` (docs/protocol.md, "Patches"), and an agent
+it's beside, as `{threadId}` (docs/protocol/patches.md, "Patches"), and an agent
 that has changed a panel's page can have it load afresh as it shows you
 (`show_panel` with `reload`). The new desktop app shows a panel's page, and the Convex dashboard, with the same
 Chromium it draws diagrams with: until that's installed the panel asks for
@@ -2956,8 +2962,8 @@ panel ("only in my acceptance testing threads").
 You don't need to write one yourself. In a thread in that folder, ask
 "add a button that runs the tests" or "add a panel showing localhost:3000",
 and the agent writes the patch into the folder's `.threadbear/patches/`
-(the format is under "Patches" in `docs/protocol.md`, in your Threadbear
-folder). It shows up within a few seconds. A patch is code that runs on your
+(the format is under "Patches" in `docs/protocol/patches.md`, in your
+Threadbear folder). It shows up within a few seconds. A patch is code that runs on your
 Mac, so keep only the ones you'd be happy to run.
 
 Patches only run once you've trusted them. One the agent writes for you in
@@ -2972,7 +2978,12 @@ cloned or with a `git pull`, waits: a "patch to trust" chip shows above the
 composer, and Patches lists it as "Not run yet" (or "Changed since you
 trusted it") with a Trust button. Open its file to read it first, and
 any files it imports or runs (a setup script, say), which Patches lists
-under it: a change to one of those asks again too. A patch that loads code
+under it: a change to one of those asks again too. When it changed since you
+trusted it, Patches says which files changed, in which commits (or that
+it isn't committed), and shows the changed lines, so a re-ask after your
+own merge reads differently from code you've never seen. In a folder
+last trusted before Threadbear changed how it checks patches (on 6 Nov),
+it says it can't tell what changed. A patch that loads code
 by a name it works out as it runs (`import(name)`) can't be checked, so it
 never runs and Patches says why: import its files by a plain path instead.
 The same goes for a command a patch runs by itself, a worktree's setup or
@@ -3097,6 +3108,12 @@ the new one is up. If one can't be sent, its words go
 back in that thread's box and a note above the thread says which thread,
 until you dismiss it.
 
+If the runner hits an unexpected error, it restarts itself the same way, so
+you may see that restart line with no update behind it; busy threads finish
+their turns first, as in an update. If that happens three times in ten
+minutes it stops restarting for it and says so in the error bar, and carries
+on until an hour goes by without another.
+
 A runner update lets a job a thread left running in the background finish, for
 up to about 4 hours after the thread's last turn. If one goes on longer it's
 stopped, and the thread gets told and wakes by itself to check on it, so you'll
@@ -3124,7 +3141,10 @@ builds the app by being one. With neither set it builds on this Mac in the
 background. With check hosts set but no update build host it builds
 nothing, and its Updates panel says to name one. With update build hosts
 set but none answering, the panel says it's waiting for a Mac and it tries
-again later. A new version waiting to go in that a Mac off that list built
+again later. When that Mac is busy with other builds and tests, the panel
+names it and says how long it's been busy, then, once the build has taken
+its place in that Mac's queue, how many runs are ahead of it and how long
+it's waited; once it starts, how long it's been building. A new version waiting to go in that a Mac off that list built
 is thrown away. An app installed before 12 Nov 2026 built its updates on a
 check host, so it can't update itself past then: install it again once
 (`desktop/scripts/install-app.sh`, with `--build-on <host>` to build on a

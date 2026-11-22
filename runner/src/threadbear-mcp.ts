@@ -99,7 +99,7 @@ export type AppRestartControl = Pick<AppRestarts, 'watch' | 'isWatching'>;
 // The phone's Pocket, in the Convex backend (sync.ts).
 export type PocketControl = Pick<ConvexSync, 'savePocketCard' | 'removePocketCard' | 'pocketCards'>;
 
-// Other runners' threads, through the backend (relay.ts, docs/protocol.md
+// Other runners' threads, through the backend (relay.ts, docs/protocol/runners.md
 // "Other runners' threads through the backend"): the Mac's sidebar lists
 // them, so an agent's list_threads, read_thread and send_message reach them
 // too. `list` is the sidebar's list (empty on a runner key, which the
@@ -305,6 +305,9 @@ export function buildThreadbearTools(
     // Settings' Progress prints for long tasks (progressPrints): off,
     // create_print refuses one and says to carry on without it.
     progressPrints?: () => boolean;
+    // Experiment loadEndTurn: Claude gets end_turn's schema in every
+    // request instead of finding it with ToolSearch first (experiments/loadEndTurn.md).
+    loadEndTurn?: () => boolean;
     // The once-a-turn note asking for a card in plain words (needs.ts,
     // plainCardNudge). Off only in tests about the rest of end_turn, which
     // would otherwise each have to answer it first.
@@ -564,7 +567,7 @@ export function buildThreadbearTools(
     throw new Error(`No account ${q}. Accounts: ${accounts.map(named).join(', ')}`);
   };
 
-  // A pool by id or title (docs/protocol.md, "Pools").
+  // A pool by id or title (docs/protocol/settings.md, "Pools").
   const pool = (q: string): string => {
     const pools = control.hello().pools ?? [];
     const hit = findPool(pools, q);
@@ -773,7 +776,7 @@ export function buildThreadbearTools(
   const scheduleLine = async (sc: Schedule): Promise<string> => {
     const state = sc.finishedAt ? 'done' : sc.paused ? 'paused' : sc.nextRunAt ? `next ${relativeFuture(sc.nextRunAt, now())} (${sc.nextRunAt})` : 'no more runs';
     // A new-thread one says what it runs on, so a change to it shows.
-    const on = [sc.accountId, sc.poolId && `${sc.poolId} pool`, sc.model, sc.effort, sc.permissionMode && sc.permissionMode !== 'full' ? sc.permissionMode : undefined].filter(Boolean).join(', ');
+    const on = [sc.accountId, sc.poolId && `${sc.poolId} pool${sc.provider ? ` (${sc.provider})` : ''}`, sc.model, sc.effort, sc.permissionMode && sc.permissionMode !== 'full' ? sc.permissionMode : undefined].filter(Boolean).join(', ');
     const target = sc.threadId ? (sc.threadId === selfId ? 'this thread' : `thread ${sc.threadId.slice(0, 8)} ${await titleOf(sc.threadId)}`) : `a new thread in ${sc.cwd ?? 'its default folder'}${on ? ` (${on})` : ''}`;
     const last = sc.lastRun && sc.lastRun.outcome !== 'sent' ? `; last run ${sc.lastRun.outcome}: ${sc.lastRun.note ?? ''}` : '';
     const checked = sc.check ? `; check: ${sc.check.length > 80 ? sc.check.slice(0, 80) + '…' : sc.check}${sc.checkTimeoutSecs ? ` (up to ${sc.checkTimeoutSecs} s)` : ''}` : '';
@@ -815,7 +818,7 @@ export function buildThreadbearTools(
     ),
   ];
 
-  // docs/protocol.md, "Reply buttons".
+  // docs/protocol/events.md, "Reply buttons".
   const buttonTools = control.createButton
     ? [
         tool(
@@ -911,7 +914,7 @@ export function buildThreadbearTools(
       ]
     : [];
 
-  // docs/protocol.md, "Secrets". The tool waits for the card's answer and
+  // docs/protocol/threads.md, "Secrets". The tool waits for the card's answer and
   // returns paths, never the value.
   const askSecret = control.requestSecret?.bind(control);
   const secretTools = askSecret
@@ -1236,7 +1239,7 @@ export function buildThreadbearTools(
         return removed ? 'Unpinned.' : `Nothing pinned as ${id}.`;
       }),
     ),
-    // docs/protocol.md, "Showing panels". Opens or brings forward, never
+    // docs/protocol/panels.md, "Showing panels". Opens or brings forward, never
     // moves one Mike has open: his layout is his.
     tool(
       'show_panel',
@@ -1531,7 +1534,7 @@ export function buildThreadbearTools(
     ...(p.tasks?.items.length ? { tasks: p.tasks.items } : {}),
   });
   // The brief a thread in `p` is told, with what it gets from a parent
-  // (its title and goals) and its parts' names (docs/protocol.md, Projects,
+  // (its title and goals) and its parts' names (docs/protocol/projects.md, Projects,
   // "Parts"), for an approval to show and hold fixed (Codex review: the
   // parent's goals came along unseen).
   const fullBriefShown = async (p: Project): Promise<Record<string, unknown>> => {
@@ -1721,7 +1724,7 @@ export function buildThreadbearTools(
         // the brief tells them to keep it moving.
         const caller = await restricted();
         const added = addFolders?.length ? await Promise.all(addFolders.map(folder)) : undefined;
-        // Parts (docs/protocol.md, Projects, "Parts") widen who's told: a
+        // Parts (docs/protocol/projects.md, Projects, "Parts") widen who's told: a
         // parent's title and goals go to its parts' threads, a part's name
         // to its parent's, and a new parent's goals to this one's threads.
         // So every one of those counts (Codex review), and the card shows
@@ -1904,7 +1907,7 @@ export function buildThreadbearTools(
     .optional()
     .describe('Threads the rest of this work waits on, as ids or { thread, until: "it reports the I/O saving" }: hibernates until each finishes (or has done its until), then wakes with their replies; snooze is the latest (1 day if left out). Needs "nothing".');
 
-  // end_turn with one reply (docs/protocol.md, "One reply"): the card and
+  // end_turn with one reply (docs/protocol/needs-you.md, "One reply"): the card and
   // a headline; the reply is the message the agent writes next. Nothing to
   // check for a reply, as it comes after; only a second call, a sign-in no
   // ask covers, and Restart to Update apply, as below.
@@ -2042,7 +2045,7 @@ export function buildThreadbearTools(
         asks: z
           .array(
             z.object({
-              // No where: the paragraph says it (docs/protocol.md, "Needs
+              // No where: the paragraph says it (docs/protocol/needs-you.md, "Needs
               // you"). The runner still takes one from older sessions.
               action: z.string().min(1).describe('The ask\'s first sentence: one concrete thing for the user to do, or the question, e.g. "Add your Claude login to the Claude pool in Settings › Pools." The card shows it with why as one paragraph; Highlights and notifications show it alone, so keep it to a sentence.'),
               reply: z.string().optional().describe('The exact words to send back when it is done, e.g. "done" or "key set". Leave it out when the reply is their own answer (a decision, a choice).'),
@@ -2178,10 +2181,17 @@ export function buildThreadbearTools(
   // Claude keeps each tool's definition from when the session first loaded
   // it, through every resume, whatever the server lists by then. ToolSearch
   // shows that one too, and tools/list_changed changes nothing, even live
-  // (tried on CLI 2.1.316, 1 Nov 2026, thread 1b770c6a; docs/protocol.md,
+  // (tried on CLI 2.1.316, 1 Nov 2026, thread 1b770c6a; docs/protocol/needs-you.md,
   // "One reply").
+  // Claude Code defers MCP tools behind ToolSearch, so a turn's first
+  // step was a request that only loaded end_turn, re-sending the whole
+  // context to do it: 3 requests for a "hello" where the bare CLI makes 1
+  // (ADEMark B1 on a Scaleway M2, 21 Nov 2026, thread 0b6b183c). Every
+  // turn ends with it, so it's always listed (experiment loadEndTurn).
+  const loaded = <T extends { _meta?: Record<string, unknown> }>(t: T): T =>
+    !codex && opts.loadEndTurn?.() ? Object.assign(t, { _meta: { ...t._meta, 'anthropic/alwaysLoad': true } }) : t;
   const endTurn = () => {
-    const today = oneReply ? oneReplyEndTurn() : bulletsEndTurn();
+    const today = loaded(oneReply ? oneReplyEndTurn() : bulletsEndTurn());
     const other = oneReply ? bulletsEndTurn() : oneReplyEndTurn();
     const otherForm = (args: unknown) => {
       const form = endTurnForm(args);
@@ -2315,7 +2325,7 @@ export function buildThreadbearTools(
         const head = far ? describeRemote(far.t, far.runner) : describe(await control.get(id));
         const want = messages ?? 10;
         const picked: string[] = [];
-        // What edits cut out (docs/protocol.md, "Editing a message"). Each
+        // What edits cut out (docs/protocol/threads.md, "Editing a message"). Each
         // thread.rewound comes after the range it cuts, so walking back
         // meets it first.
         const cuts: { from: number; to: number }[] = [];
@@ -2431,7 +2441,7 @@ export function buildThreadbearTools(
           permissionMode,
           startedBy: { kind: 'thread', label: 'Agent', threadId: selfId, ...(why?.trim() ? { why: cutSafely(why.replace(/\s+/g, ' ').trim(), MAX_BYLINE) } : {}) },
           // Not part of this thread's work: it keeps a row of its own
-          // (docs/protocol.md, "Nested threads").
+          // (docs/protocol/threads.md, "Nested threads").
           ...(nested === false ? { detached: true as const } : {}),
         });
         const where = r.thread.poolId ? ` It's in the ${r.thread.poolId} pool, so it moves to another login if this one runs dry.` : '';
@@ -2474,7 +2484,7 @@ export function buildThreadbearTools(
         }
         const sent = (await control.send(id, head + text)) as { turnId: string; held?: boolean };
         // A report to the thread that started this one, kept until its
-        // other threads finish (docs/protocol.md, "Nested threads").
+        // other threads finish (docs/protocol/threads.md, "Nested threads").
         if (sent.held) return `Held for ${id.slice(0, 8)} "${(await control.get(id)).title}": it gets this with the other reports once the threads it started have finished, so there's no need to send it again.`;
         return `Sent to ${id.slice(0, 8)} "${(await control.get(id)).title}".`;
       }),
@@ -2758,10 +2768,10 @@ export function guideLine(file = guidePath(), exists: (p: string) => boolean = f
 // mod, pinned the page and wrote an npm script that made an HTML file:
 // nothing told it that in Threadbear those are a patch file (2 Nov).
 export function patchesLine(guide = guidePath(), exists: (p: string) => boolean = fs.existsSync): string {
-  const protocol = path.join(path.dirname(guide), 'protocol.md');
+  const protocol = path.join(path.dirname(guide), 'protocol', 'patches.md');
   if (!exists(protocol)) return '';
   return (
-    'When the user asks for a button above the message box (one that runs a command or sends you a message) or a panel beside the thread (a web page, or a list of rows), for this folder or a project, make it a Threadbear patch: a `.threadbear/patches/<name>.ts` file in that folder, as "Patches" in ' +
+    'When the user asks for a button above the message box (one that runs a command or sends you a message) or a panel beside the thread (a web page, or a list of rows), for this folder or a project, make it a Threadbear patch: a `.threadbear/patches/<name>.ts` file in that folder, as ' +
     `${protocol} describes (actions with run, prompt or url, panels with a url or an items function). ` +
     'Write it with Edit or Write, so on Full access it is trusted as you left it, then check it loaded in Patches with show_panel. Not a Claude Code plugin, hook, mod or slash command, and not a pin.'
   );
@@ -2801,13 +2811,13 @@ async function taskAgent(control: ThreadControl, selfId: string): Promise<{ kind
     return { kind: 'agent', name: 'Agent' };
   }
 }
-export function threadbearMcpServer(control: ThreadControl, selfId: string, schedules?: ScheduleControl, projects?: ProjectControl, appRestarts?: AppRestartControl, bulletReplies: () => boolean = () => true, pocket?: () => PocketControl | undefined, oneReply: () => boolean = () => false, gateway?: () => string | undefined, gatewayHealth?: () => Promise<ConnectorService[] | undefined>, remote?: () => RemoteControl | undefined, xSearch?: () => { secretsDir: string } | undefined, pages?: () => Pages | undefined, printPublisher?: () => PagePublisher | undefined, printsWhenAsked?: () => boolean, tasks?: () => import('./tasks.ts').Tasks | undefined, clearerCompletion?: () => boolean, progressPrints?: () => boolean): McpSdkServerConfigWithInstance {
+export function threadbearMcpServer(control: ThreadControl, selfId: string, schedules?: ScheduleControl, projects?: ProjectControl, appRestarts?: AppRestartControl, bulletReplies: () => boolean = () => true, pocket?: () => PocketControl | undefined, oneReply: () => boolean = () => false, gateway?: () => string | undefined, gatewayHealth?: () => Promise<ConnectorService[] | undefined>, remote?: () => RemoteControl | undefined, xSearch?: () => { secretsDir: string } | undefined, pages?: () => Pages | undefined, printPublisher?: () => PagePublisher | undefined, printsWhenAsked?: () => boolean, tasks?: () => import('./tasks.ts').Tasks | undefined, clearerCompletion?: () => boolean, progressPrints?: () => boolean, loadEndTurn?: () => boolean): McpSdkServerConfigWithInstance {
   const one = oneReply();
   const server = createSdkMcpServer({
     name: SERVER_NAME,
     version: RUNNER_VERSION,
     instructions: serverInstructions(selfId, { one, bulletReplies: bulletReplies(), pocket: Boolean(pocket?.()), projects: Boolean(projects) }),
-    tools: buildThreadbearTools(control, selfId, Date.now, schedules, projects, appRestarts, { bulletReplies, pocket, oneReply: () => one, gateway, gatewayHealth, remote, xSearch, pages, printPublisher, printsWhenAsked, tasks, clearerCompletion, progressPrints }),
+    tools: buildThreadbearTools(control, selfId, Date.now, schedules, projects, appRestarts, { bulletReplies, pocket, oneReply: () => one, gateway, gatewayHealth, remote, xSearch, pages, printPublisher, printsWhenAsked, tasks, clearerCompletion, progressPrints, loadEndTurn }),
   });
   server.tools = [...ALWAYS_ASK_TOOLS].map((name) => ({ name: name.split('__').at(-1)!, permission_policy: 'always_ask' as const }));
   return server;

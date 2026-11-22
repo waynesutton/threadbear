@@ -128,6 +128,7 @@ impl StageState {
                 }
             }
         }
+        #[expect(clippy::expect_used, reason = "made just above when there was none")]
         let z = self.zoom.as_mut().expect("just made");
         z.peeking = peeking;
         if let Some(step) = self.pending.take() {
@@ -757,10 +758,11 @@ impl ReviewWindow {
         let mut rows = v_flex().gap(gpui_kit::px(CELL_SPACING)).items_center();
         for first in (0..options.len()).step_by(layout.columns.max(1)) {
             let mut row = h_flex().gap(gpui_kit::px(CELL_SPACING));
-            for index in first..(first + layout.columns).min(options.len()) {
+            let end = (first + layout.columns).min(options.len());
+            for (index, option) in options.iter().enumerate().take(end).skip(first) {
                 row = row.child(self.render_cell(
                     index,
-                    &options[index],
+                    option,
                     layout.cell_width,
                     layout.cell_height,
                     window,
@@ -844,7 +846,12 @@ impl ReviewWindow {
             this.enlarge(index, 0, cx);
         }))
         .child(
+            // With an id, so a GIF option plays here too, as it does
+            // enlarged (render_stage's picture).
             img(crate::rows::markdown::file_picture(&path))
+                .id(SharedString::from(format!(
+                    "review-cell-picture-{index}-{path}"
+                )))
                 .size_full()
                 .object_fit(ObjectFit::Fill)
                 .with_fallback(move || {

@@ -24,14 +24,14 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 // The tour's sample threads, the runner's own (it runs TypeScript as it is).
-import { SAMPLE_THREADS } from '../../../runner/src/samples.ts';
+import { SAMPLE_THREADS } from '../runner/src/samples.ts';
 import { fileURLToPath } from 'node:url';
-import { reviewDraft, reviewReply, sameDraft } from '../../../runner/src/reviews.ts';
-import { authProof, isNonce, newNonce } from '../../../runner/src/rpc-auth.ts';
+import { reviewDraft, reviewReply, sameDraft } from '../runner/src/reviews.ts';
+import { authProof, isNonce, newNonce } from '../runner/src/rpc-auth.ts';
 // Docs, todo lists and boards drawn as the runner draws them, so a click in
 // a list changes the same lines the real one does.
-import { renderDoc } from '../../../runner/src/page-doc.ts';
-import { moveCard, renderBoard, renderTodo, toggleItem } from '../../../runner/src/page-list.ts';
+import { renderDoc } from '../runner/src/page-doc.ts';
+import { moveCard, renderBoard, renderTodo, toggleItem } from '../runner/src/page-list.ts';
 
 // What a waiting (untrusted) demo patch gives once it's trusted, by file.
 const waitingPatchGives = new Map();
@@ -169,12 +169,12 @@ if (process.env.TB_MOCK_REVIEWERS) {
   ];
 }
 // TB_MOCK_SIGN_INS: claude-4 signed out and claude-3's sign-in ending in two
-// days, for pictures of the Usage panel's sign-in lines (docs/protocol.md,
+// days, for pictures of the Usage panel's sign-in lines (docs/protocol/settings.md,
 // Pools, "Signed out"). Off by default so the design set stays as it was.
 if (process.env.TB_MOCK_SIGN_INS) {
   accounts = accounts.map((a) => (a.id === 'claude-4' ? { ...a, signedOut: true } : a.id === 'claude-3' ? { ...a, loginEndsAt: hoursFromNow(50) } : a.provider === 'claude' ? { ...a, loginEndsAt: hoursFromNow(24 * 20) } : a));
 }
-// usage.stats (docs/protocol.md, "Usage history"), made up but steady: the
+// usage.stats (docs/protocol/settings.md, "Usage history"), made up but steady: the
 // same seed every time, so screenshots only change when the code does.
 // Each login works the hours of a day (busier in the afternoon, quiet at
 // night), at its own pace; its weekly and 5-hour readings go down with its
@@ -384,7 +384,7 @@ loadFixtures();
 addFillers(fillerCount);
 addDemoPanels();
 addDemoPools();
-/** threadId -> ThreadHighlights (docs/protocol.md, "Highlights"). */
+/** threadId -> ThreadHighlights (docs/protocol/panels.md, "Highlights"). */
 const highlights = new Map();
 addDemoHighlights();
 addDemoSubagents();
@@ -392,14 +392,14 @@ addDemoSubagents();
 addDemoPrints();
 applyScriptedThreads();
 /**
- * The runners a schedule can run on (runners.list, docs/protocol.md,
+ * The runners a schedule can run on (runners.list, docs/protocol/projects.md,
  * "Schedules", "Runners"): this one first, and an online "mac-mini", as if
  * sync were on with a backend that has both. A runner played as old
  * (mock.accounts {old: true}) answers runners.list with -32601.
  */
 const SELF_RUNNER = { id: 'runner_mock', name: 'laptop', icon: 'laptopcomputer', self: true };
 const runners = [SELF_RUNNER, { id: 'runner_mini', name: 'mac-mini', icon: 'macmini', self: false }];
-// The Mac mini's own threads (docs/protocol.md, "Other runners' threads"). This
+// The Mac mini's own threads (docs/protocol/runners.md, "Other runners' threads"). This
 // mock plays mac-mini's side of the backend too: its threads sit in `threads`
 // marked with `runnerId`, and a request about one is answered as mac-mini
 // (`as`, in handle). A client of this runner hears of them through
@@ -435,7 +435,7 @@ const MORE_RUNNERS = process.env.MOCK_MORE_RUNNERS ? [
 let runnerOrder = ['runner_mock', BRUCE, ...MORE_RUNNERS.map((r) => r.id)];
 // accounts.yearToken's one flow, for mac-mini's claude-main.
 let yearTokenFlow;
-// Files on mac-mini's Mac that its threads name (docs/protocol.md, "Other
+// Files on mac-mini's Mac that its threads name (docs/protocol/runners.md, "Other
 // runners' threads"): the picture is a real PNG, the rest text. None of
 // these paths exist on this Mac.
 const BRUCE_FILES = {
@@ -449,7 +449,7 @@ let remotePicturesUp = true;
 // A picture pasted into a message of one of `runnerId`'s threads.
 const pastedOn = (runnerId, file) => [...threads.values()].some((t) => t.runnerId === runnerId && t.events.some((e) => e.type === 'user.message' && e.images?.some((i) => i.path === file)));
 if (!process.env.TB_MOCK_NO_REMOTE) addRemoteDemo();
-// Virtual runners (docs/virtual-runners.md, docs/protocol.md "Virtual
+// Virtual runners (docs/virtual-runners.md, docs/protocol/keys.md "Virtual
 // runners"), with MOCK_VIRTUAL_RUNNERS=1 only, so the usual demo stays as it
 // is: one virtual runner, "Cloud (Fly)", and a thread on a box of it in each
 // state worth seeing. `boxes` is each box's runner's `box` as the backend
@@ -463,10 +463,10 @@ const cloudTokens = new Map([
   ['alex+4@example.com', { state: 'valid', madeAt: Date.now() - 20 * 86_400_000, setAt: Date.now() - 20 * 86_400_000 }],
 ]);
 if (VIRTUAL) addVirtualDemo();
-/** The schedules (docs/protocol.md, "Schedules"), soonest first. */
+/** The schedules (docs/protocol/projects.md, "Schedules"), soonest first. */
 let schedules = [];
 addDemoSchedules();
-/** The projects (docs/protocol.md, "Projects"), and the librarian's status. */
+/** The projects (docs/protocol/projects.md, "Projects"), and the librarian's status. */
 let projects = [];
 let librarian;
 let mockProfile = { profile: null };
@@ -527,10 +527,10 @@ function mockExperiments() {
 }
 
 // TB_MOCK_RECIPES: the recipes experiment on, with recipes in every state
-// (docs/protocol.md, "Recipes"): three on with a month of made-up runs, one
+// (docs/protocol/projects.md, "Recipes"): three on with a month of made-up runs, one
 // off, the rest not added. The ones that come with Threadbear use their
 // header pictures from runner/src/recipes; the rest have colours only.
-const RECIPES_DIR = path.join(path.dirname(fileURLToPath(import.meta.url)), '../../../runner/src/recipes');
+const RECIPES_DIR = path.join(path.dirname(fileURLToPath(import.meta.url)), '../runner/src/recipes');
 const recipes = new Map();
 function addRecipesDemo() {
   const day = 86_400_000;
@@ -704,7 +704,7 @@ if (process.env.TB_MOCK_NESTED) addDemoNested();
 // The Feed (the feed experiment): the threads of mockup r3-c-status, as cards.
 // Only when asked, as it adds rows other specs count.
 if (process.env.TB_MOCK_FEED) addDemoFeed();
-// Parts of a project (docs/protocol.md, Projects, "Parts"): Photo sync as a
+// Parts of a project (docs/protocol/projects.md, Projects, "Parts"): Photo sync as a
 // part of Threadbear, for features/projects.feature.
 if (process.env.TB_MOCK_PARTS) {
   const photo = projects.find((p) => p.title === 'Photo sync');
@@ -786,7 +786,7 @@ function onConnection(ws, request) {
   const client = { ws, subs: new Set(), authed: header === `Bearer ${token}`, as: null };
   clients.add(client);
   ws.on('close', () => clients.delete(client));
-  // The real runner's auth challenge (docs/protocol.md, "Auth"), for a
+  // The real runner's auth challenge (docs/protocol/connection.md, "Auth"), for a
   // client that didn't send the old bearer header.
   const challenge = client.authed ? null : newNonce();
   // Bound to its own listening port, as the real runner's are.
@@ -827,7 +827,7 @@ async function handle(client, { id, method, params = {} }) {
   let caller = client;
   if (typeof params?.threadId === 'string' && threads.has(params.threadId) && ownerOf(params.threadId) !== client.as) {
     // ...except that this runner answers for mac-mini's threads through the
-    // backend (docs/protocol.md, "Other runners' threads through the
+    // backend (docs/protocol/runners.md, "Other runners' threads through the
     // backend"), the app's default way in: here, that's mac-mini's own code
     // answering, on the same connection and with the same shapes. Events
     // come to whoever subscribed, whichever runner's connection they used.
@@ -1319,7 +1319,7 @@ async function dispatch(client, method, p) {
     case 'threads.send': {
       const t = need(p.threadId);
       // A message declines any secret card still open, first (docs/
-      // protocol.md, "Secrets"), as the real runner does.
+      // protocol/threads.md, "Secrets"), as the real runner does.
       const resolved = new Set(t.events.filter((e) => e.type === 'approval.resolved').map((e) => e.approvalId));
       for (const card of t.events.filter((e) => e.type === 'secret.requested' && !resolved.has(e.approvalId))) {
         persist(t.summary.id, { type: 'approval.resolved', approvalId: card.approvalId, decision: 'deny' }, card.turnId);
@@ -1338,7 +1338,7 @@ async function dispatch(client, method, p) {
       return { turnId };
     }
     case 'threads.edit': {
-      // Editing a message (docs/protocol.md, "Editing a message"): stop
+      // Editing a message (docs/protocol/threads.md, "Editing a message"): stop
       // the turn, cut back to the message with a thread.rewound, then the
       // edited text as a new turn. The files are made up.
       const t = need(p.threadId);
@@ -1475,7 +1475,7 @@ async function dispatch(client, method, p) {
       client.subs.delete(p.threadId);
       return {};
     case 'threads.tickAsk': {
-      // docs/protocol.md, "Needs you": ticks one ask on the open card.
+      // docs/protocol/needs-you.md, "Needs you": ticks one ask on the open card.
       const t = need(p.threadId);
       const s = t.summary;
       if (!s.asks || s.asksSeq !== p.asksSeq) throw rpcError(-32602, "That isn't the thread's open card of asks.");
@@ -1491,7 +1491,7 @@ async function dispatch(client, method, p) {
       return { thread: s };
     }
     case 'threads.share': {
-      // docs/protocol.md, "Sharing". The mock keeps it on the summary; no
+      // docs/protocol/runners.md, "Sharing". The mock keeps it on the summary; no
       // website reads it.
       const t = need(p.threadId);
       if (p.access !== 'off' && p.access !== 'link') throw rpcError(-32602, 'access is "off" or "link"');
@@ -1510,7 +1510,7 @@ async function dispatch(client, method, p) {
       return { thread: t.summary };
     }
     case 'buttons.list': {
-      // docs/protocol.md, "Reply buttons": every button the thread has.
+      // docs/protocol/events.md, "Reply buttons": every button the thread has.
       const t = need(p.threadId);
       return { buttons: [...(t.buttons?.values() ?? [])].map((button) => structuredClone(button)) };
     }
@@ -1615,7 +1615,7 @@ async function dispatch(client, method, p) {
       return {};
     }
     case 'secrets.answer': {
-      // docs/protocol.md, "Secrets". The mock keeps nothing: it checks the
+      // docs/protocol/threads.md, "Secrets". The mock keeps nothing: it checks the
       // answer's shape, never writes or logs the value, and closes the card
       // with approval.resolved (never a message).
       const t = need(p.threadId);
@@ -1789,7 +1789,7 @@ async function dispatch(client, method, p) {
       return { answer: `**${sel}** is what the agent called this step. It means the smallest piece to move first, so the rest can follow.\n\n- It's in \`runner/src/explain.ts\`\n- Nothing here goes into the thread`, model: 'mock' };
     }
     case 'threads.contextUsage': {
-      // What fills the context (docs/protocol.md, "Context breakdown"), the
+      // What fills the context (docs/protocol/threads.md, "Context breakdown"), the
       // rows Ghostex showed on 9 Nov, scaled to the thread's own total. A
       // moment's wait, like the CLI's count; Codex threads have none.
       const t = need(p.threadId);
@@ -1826,7 +1826,7 @@ async function dispatch(client, method, p) {
     }
     case 'folders.commands':
     case 'threads.commands': {
-      // The palette's list (docs/protocol.md, "Slash commands"): Threadbear's
+      // The palette's list (docs/protocol/threads.md, "Slash commands"): Threadbear's
       // own, the CLI's, then skills, as a real Claude thread lists them.
       // A slow catalog for the Return-while-loading scenario.
       const commandDelay = Number(process.env.THREADBEAR_MOCK_COMMANDS_DELAY_MS ?? 0);
@@ -1902,14 +1902,14 @@ async function dispatch(client, method, p) {
         note: p.note, seq: t.summary.lastSeq, lastSeq: t.summary.lastSeq, at: iso(),
       });
       t.summary.highlightsAt = iso();
-      // show is a panel request naming the pin, as the runner's (docs/protocol.md, "Highlights").
+      // show is a panel request naming the pin, as the runner's (docs/protocol/panels.md, "Highlights").
       if (p.show) t.summary.panelRequest = { id: 'pr_' + crypto.randomBytes(4).toString('hex'), panel: 'highlights', title: list.highlights[0].title, highlight: id, at: iso() };
       broadcastSummary(t.summary.id);
       return { highlight: list.highlights[0] };
     }
     case 'mock.showPanel': {
       // As the agent's show_panel tool would: {threadId, panel, where?, reload?}
-      // (docs/protocol.md, "Showing panels"). The panel isn't checked.
+      // (docs/protocol/panels.md, "Showing panels"). The panel isn't checked.
       const t = need(p.threadId);
       const named = { highlights: 'Highlights', patches: 'Patches', usage: 'Usage', updates: 'Updates' };
       const title = named[p.panel] ?? t.summary.panels?.find((x) => x.id === p.panel)?.title ?? String(p.panel);
@@ -1986,7 +1986,7 @@ async function dispatch(client, method, p) {
     case 'remoteThreads.list':
       if (oldRunner) throw rpcError(-32601, `Unknown method ${method}`);
       return remoteThreads(client);
-    // A virtual runner's cloud tokens (docs/protocol.md, "Cloud tokens on
+    // A virtual runner's cloud tokens (docs/protocol/keys.md, "Cloud tokens on
     // the Mac"): Make one takes a few seconds here, as if Mike approved it on
     // claude.ai straight away; mock.holdTokens holds it until released.
     case 'cloudTokens.make':
@@ -2083,7 +2083,7 @@ async function dispatch(client, method, p) {
       // when it runs: kept as sent, and no folder means its default.
       const settings = away
         ? { ...(p.cwd?.trim() ? { cwd: p.cwd.trim() } : {}), accountId: p.accountId, model: p.model, effort: p.effort, permissionMode: p.permissionMode }
-        : { cwd: p.cwd ?? defaults.cwd, accountId: p.accountId ?? defaults.accountId, model: p.model, effort: p.effort, permissionMode: p.permissionMode ?? 'full' };
+        : { cwd: p.cwd ?? defaults.cwd, ...(p.poolId ? { poolId: p.poolId, ...(p.provider ? { provider: p.provider } : {}) } : { accountId: p.accountId ?? defaults.accountId }), model: p.model, effort: p.effort, permissionMode: p.permissionMode ?? 'full' };
       const schedule = {
         id: 'sc_' + crypto.randomBytes(5).toString('hex'), title: p.title || p.text.split('\n')[0].slice(0, 60), text: p.text,
         ...(p.at ? { at: new Date(p.at).toISOString() } : { cron: p.cron }), whenText: when.whenText,
@@ -2101,7 +2101,7 @@ async function dispatch(client, method, p) {
       for (const key of ['title', 'text', 'cwd', 'accountId', 'permissionMode']) if (p[key] !== undefined) schedule[key] = p[key];
       // Another runner's folder, emptied, is its default again.
       if (schedule.runnerId !== SELF_RUNNER.id && !schedule.cwd?.trim()) delete schedule.cwd;
-      for (const key of ['model', 'effort', 'timezone']) if (p[key] !== undefined) schedule[key] = p[key] ?? undefined;
+      for (const key of ['model', 'effort', 'timezone', 'provider']) if (p[key] !== undefined) schedule[key] = p[key] ?? undefined;
       if (p.at || p.cron) {
         const when = readWhen(p);
         if (p.at) { schedule.at = new Date(p.at).toISOString(); delete schedule.cron; delete schedule.finishedAt; }
@@ -2125,10 +2125,10 @@ async function dispatch(client, method, p) {
       const when = readWhen(p, Math.min(20, p.count ?? 5));
       return { whenText: when.whenText, runs: when.runs };
     }
-    // Settings (docs/protocol.md, "Settings and models"), kept in memory.
+    // Settings (docs/protocol/settings.md, "Settings and models"), kept in memory.
     // Like the real runner, the key itself is never kept or sent back:
     // only whether one is set and its last 4 characters.
-    // Projects and the librarian (docs/protocol.md, "Projects"). A runner
+    // Projects and the librarian (docs/protocol/projects.md, "Projects"). A runner
     // played as old (mock.accounts {old: true}) has none of them.
     case 'projects.list':
     case 'projects.get':
@@ -2164,7 +2164,7 @@ async function dispatch(client, method, p) {
     case 'profilePage.remove':
       mockProfile = { profile: null };
       return mockProfile;
-    // The Connectors gateway (docs/protocol.md, "Connectors"): a made-up
+    // The Connectors gateway (docs/protocol/panels.md, "Connectors"): a made-up
     // one, with a service signed out so the panel and its dot show.
     // mock.connectors changes it.
     // Outside agents (docs/protocol.md, "Outside agents"): keys made here
@@ -2472,7 +2472,7 @@ async function dispatch(client, method, p) {
       broadcastSettings();
       return { settings };
     }
-    // Phone & browser (docs/protocol.md, "Devices"): the paired phones and
+    // Phone & browser (docs/protocol/moves.md, "Devices"): the paired phones and
     // browsers, kept in memory, and a made-up link for each pair (the
     // demo deployment, a token that opens nothing).
     case 'devices.list':
@@ -2932,10 +2932,12 @@ async function dispatch(client, method, p) {
     case 'mock.thread': {
       const threadId = typeof p.id === 'string' && p.id ? p.id : crypto.randomUUID();
       const now = iso();
-      const accountId = defaults.accountId;
+      // A login and pool of its own when asked (a pool of several kinds).
+      const accountId = typeof p.accountId === 'string' ? p.accountId : defaults.accountId;
       const provider = providerOf(accountId);
       const summary = {
         id: threadId, title: p.title ?? 'A thread', cwd: p.cwd ?? defaults.cwd, accountId, provider,
+        ...(typeof p.poolId === 'string' && poolOf(p.poolId) ? { poolId: p.poolId } : {}),
         model: defaults.models[provider], effort: defaults.efforts[provider], permissionMode: 'full', status: 'idle', live: false,
         needsYou: false, createdAt: now, updatedAt: now, lastActivityAt: now, preview: '', lastSeq: 0, lastSeenSeq: 0,
       };
@@ -3080,7 +3082,7 @@ async function fakeTurn(threadId, text, images, turnId = 'turn_' + crypto.random
   persist(threadId, { type: 'reasoning', itemId: thinkId, text: 'Checking what the message asks for before answering.' }, turnId);
 
   // "queued" in a message: an edit's card with the reply's other calls
-  // queued on it (docs/protocol.md, "Queued calls").
+  // queued on it (docs/protocol/threads.md, "Queued calls").
   if (/queued/i.test(text)) {
     const approvalId = 'ap_' + crypto.randomBytes(4).toString('hex');
     const root = t.summary.cwd || '/Users/alex/dev/photo-sync';
@@ -3170,7 +3172,7 @@ async function fakeTurn(threadId, text, images, turnId = 'turn_' + crypto.random
   t.inProgress.delete(itemId);
   persist(threadId, { type: 'assistant.text', itemId, text: finalText }, turnId);
   // Say "decisions" for a turn that ends with a card of asks to step
-  // through (docs/protocol.md, "Needs you", Answering).
+  // through (docs/protocol/needs-you.md, "Needs you", Answering).
   // "one decision" gives a single ask with no options, like a thread
   // started before end_turn had them. "follow-ups" ends done, with
   // end_turn's next under "Or carry on". "pick a design" asks with a link
@@ -3243,7 +3245,7 @@ function applyScriptedThreads() {
       }
     }
     if (o.panels) t.summary.panels = [...(t.summary.panels ?? []), ...o.panels];
-    // `asks`: the card of asks its last turn ended with (docs/protocol.md, "Needs you").
+    // `asks`: the card of asks its last turn ended with (docs/protocol/needs-you.md, "Needs you").
     if (o.asks) {
       const done = t.events.findLast((e) => e.type === 'turn.completed');
       if (done) Object.assign(done, { needs: 'you', asks: o.asks });
@@ -3256,6 +3258,7 @@ function applyScriptedThreads() {
 
 async function playScripted(threadId, turnId, started, turn, interrupted) {
   const t = threads.get(threadId);
+  if (turn.usage) scriptUsage(threadId, turn.usage);
   await sleep(turn.firstMs ?? 500);
   if (turn.thinking) persist(threadId, { type: 'reasoning', itemId: 'r_' + crypto.randomBytes(4).toString('hex'), text: turn.thinking }, turnId);
   for (const tool of turn.tools ?? []) {
@@ -3279,6 +3282,25 @@ async function playScripted(threadId, turnId, started, turn, interrupted) {
   persist(threadId, { type: 'assistant.text', itemId, text: finalText }, turnId);
   if (turn.limit && !interrupted()) return limitHit(threadId, turnId, started, turn.limit);
   finishTurn(threadId, turnId, started, interrupted() ? 'interrupted' : 'completed', turn.end);
+}
+
+// A scripted turn's `usage`: [{ ms, left }] sets the room left on the
+// thread's login (every window it has, as a percent) `ms` after the
+// turn starts, as the runner's usage polls would see it spent, so a recording
+// catches the activity bar's honey pot draining. A step back up to 95 or more
+// is a reset, which the pot shows as a refill with a drip. Steps can land
+// after the turn's over.
+function scriptUsage(threadId, steps) {
+  for (const { ms = 0, left } of steps) {
+    setTimeout(() => {
+      const s = threads.get(threadId)?.summary;
+      const a = s && accounts.find((x) => x.id === s.accountId);
+      if (!a?.usage) return;
+      for (const w of a.usage.windows ?? []) w.remainingPercent = left;
+      a.usage.blocked = left <= 0;
+      broadcast('accounts.updated', { accounts: publicAccounts() });
+    }, ms);
+  }
 }
 
 // A scripted turn with `limit` stops partway at its login's usage limit, as
@@ -4324,7 +4346,7 @@ function projectRequest(method, p) {
       }
       if (p.state !== undefined) { project.state = p.state; project.stateUpdatedAt = iso(); }
       if (p.archived !== undefined) project.archived = Boolean(p.archived) || undefined;
-      // Parts (docs/protocol.md, Projects, "Parts"): '' or null makes it its own.
+      // Parts (docs/protocol/projects.md, Projects, "Parts"): '' or null makes it its own.
       if (p.parentId !== undefined) project.parentId = p.parentId || undefined;
       project.updatedAt = iso();
       if (p.title !== undefined) for (const s of membersOf(project.id)) { renameIn(s, project); broadcastSummary(s.id); }
@@ -4477,7 +4499,7 @@ function addPerfProjects(count) {
   const ago = (minutes) => new Date(now - minutes * 60_000).toISOString();
   const base = ['Garden planner', 'Walkies HQ', 'Recipe box', 'Bird log', 'Bike routes', 'Tutorial videos', 'Club site', 'Budget sheet'];
   const names = Array.from({ length: 80 }, (_, i) => `${base[i % base.length]}${i < base.length ? '' : ` ${Math.floor(i / base.length) + 1}`}`);
-  const picture = fileURLToPath(new URL('../../icons/threadbear.png', import.meta.url));
+  const picture = fileURLToPath(new URL('../shared/icons/threadbear.png', import.meta.url));
   const made = names.map((title, i) => ({
     id: `p_perf_${i}`, title, folders: [`/Users/alex/code/${title.toLowerCase().replace(/ /g, '-')}`],
     goals: `Keep ${title} moving.`, state: `${title} is in progress; a few threads are waiting on decisions.`, notes: '', links: [],
@@ -4524,7 +4546,7 @@ function addPerfProjects(count) {
  */
 /**
  * TB_MOCK_NESTED: "GPUI Port Coordinator" and the threads it started
- * (docs/protocol.md, "Nested threads"): one waiting on Mike with a question,
+ * (docs/protocol/threads.md, "Nested threads"): one waiting on Mike with a question,
  * four working, one idle, two archived, one moved out from under it
  * (`detached`), and one started by a nested thread, which nests under the
  * coordinator too. All in the Threadbear project when it's there.
@@ -4585,7 +4607,7 @@ function addDemoNested() {
 }
 
 /**
- * TB_MOCK_FEED: the Feed's demo (docs/protocol.md, "What Mike first asked";
+ * TB_MOCK_FEED: the Feed's demo (docs/protocol/threads.md, "What Mike first asked";
  * runner/src/experiments/feed.md), the cards of the mockup Mike picked on 20
  * Nov: one he started that needs him with a card of two asks (the agent's
  * pick starred), one started by another thread asking him something, one
@@ -4794,7 +4816,7 @@ function addDemoProjects() {
     createdBy: 'librarian', createdByThread: 'demo_release_notes', createdAt: ago(60 * 24 * 9), updatedAt: ago(3), stateUpdatedAt: ago(41),
     // The three kinds of icon: a picture (the app's own), a symbol, and
     // Walkies with none yet, which shows its letter.
-    icon: { image: { path: fileURLToPath(new URL('../../icons/threadbear.png', import.meta.url)), mediaType: 'image/png' }, from: '/Users/alex/code/threadbear/app/icons/threadbear.png', by: 'librarian', updatedAt: ago(60) },
+    icon: { image: { path: fileURLToPath(new URL('../shared/icons/threadbear.png', import.meta.url)), mediaType: 'image/png' }, from: '/Users/alex/code/threadbear/app/icons/threadbear.png', by: 'librarian', updatedAt: ago(60) },
   };
   const photo = {
     id: 'p_7a2c41f0', title: 'Photo sync', folders: ['/Users/alex/dev/photo-sync'],
@@ -4814,7 +4836,7 @@ function addDemoProjects() {
       { title: 'Admin', url: 'https://walkies.example.app/admin' },
       { title: 'App Store', url: 'https://apps.apple.com/app/walkies/id6700000000' },
     ],
-    // A task board from Notion (docs/protocol.md, "Project tasks").
+    // A task board from Notion (docs/protocol/projects.md, "Project tasks").
     notion: 'https://www.notion.so/Walkies-1a2b3c4d5e6f40718293a4b5c6d7e8f9',
     tasks: walkiesTasks(ago(2)),
   };
@@ -4887,7 +4909,7 @@ function addDemoProjects() {
 
 function defaultFixtureDirs() {
   const dirs = [path.join(here, 'fixtures')];
-  const privateDir = path.resolve(here, '../../.fixtures');
+  const privateDir = path.resolve(here, '../.fixtures');
   if (fs.existsSync(privateDir)) dirs.push(privateDir);
   // Not .fixtures/threads, where `tb export` puts Mike's real threads: they'd
   // sort above the demo threads in every screenshot. Pass --fixtures for them.
@@ -5051,6 +5073,14 @@ ${process.env.MOCK_SCRIPTED_TURNS ? '' : "<p>The mock runner's stand-in for the 
       { id: 'convex', source: 'builtin' },
       { id: 'release', source: 'project', file: '/Users/alex/dev/walkies/.threadbear/patches/release.ts', folder: '/Users/alex/dev/walkies',
         untrusted: 'new', hash: 'a'.repeat(64) },
+      // One trusted before, asked about again after a merge changed the
+      // package.json it runs from: it says what changed and where from.
+      { id: 'stats', source: 'project', file: '/Users/alex/dev/walkies/.threadbear/patches/stats.ts', folder: '/Users/alex/dev/walkies',
+        untrusted: 'changed', hash: 'b'.repeat(64), helpers: ['/Users/alex/dev/walkies/package.json'],
+        changes: { since: '2026-11-18T01:33:17.000Z', files: [
+          { path: 'package.json', was: 'changed', commits: [{ sha: '5c3fc77', subject: 'Upgrade fluent-convex to 0.15 (#57)' }],
+            diff: '    "dependencies": {\n-     "fluent-convex": "^0.13.0",\n+     "fluent-convex": "^0.15.0",\n      "react": "^19.3.1"' },
+        ] } },
     ];
     waitingPatchGives.set('/Users/alex/dev/walkies/.threadbear/patches/release.ts', [
       { id: 'release.upload-build', title: 'Upload build', kind: 'command', command: './scripts/upload.sh', patch: 'release' },
@@ -5227,7 +5257,7 @@ The new hero is shorter, and every page now leads with what the app does.
     const before = file('screens/pricing-before.png', { copy: path.join(here, 'fixtures/demo-upload-resume/media/progress-before.png') });
     // A real film (the site's inbox clip, 1600x1058 H.264), for a video in
     // the pane (features/file-previews.feature). Only listed in the folder.
-    const clip = path.join(here, '../../../site/public/clips/inbox.mp4');
+    const clip = path.join(here, '../site/public/clips/inbox.mp4');
     if (fs.existsSync(clip)) file('screens/hero-walkthrough.mp4', { copy: clip });
     // And a one-page PDF, for a PDF in the pane.
     file('docs/launch-brief.pdf', onePagePdf('Launch brief: the new hero ships Friday', 'https://example.com/launch-brief'));
@@ -5315,7 +5345,7 @@ The new hero is shorter, and every page now leads with what the app does.
         .map((rel) => `/Users/alex/code/app/${rel}`),
     });
   }
-  // Threads Mike didn't start (docs/protocol.md, "Who started a thread").
+  // Threads Mike didn't start (docs/protocol/threads.md, "Who started a thread").
   for (const [id, startedBy] of [
     ['demo_ci_slow', { kind: 'tool', label: 'Sentry', icon: 'ladybug', why: '1 event, 0 users' }],
     ['demo_settings_tabs', { kind: 'thread', label: 'Agent', threadId: 'demo_upload_resume', threadTitle: 'Uploads', why: 'fixing a hook it hit' }],

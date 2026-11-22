@@ -170,6 +170,8 @@ impl Site {
             use std::os::fd::FromRawFd as _;
             use std::os::unix::ffi::OsStrExt as _;
             let c = std::ffi::CString::new(root.as_os_str().as_bytes()).ok()?;
+            // SAFETY: `c` is a NUL-terminated CString that outlives the call,
+            // and open only reads the path from it.
             let fd = unsafe {
                 libc::open(
                     c.as_ptr(),
@@ -179,6 +181,8 @@ impl Site {
             if fd < 0 {
                 return None;
             }
+            // SAFETY: open just returned this fd (checked non-negative above)
+            // and nothing else holds it, so OwnedFd can take sole ownership.
             let root_fd = unsafe { std::os::fd::OwnedFd::from_raw_fd(fd) };
             Some(Site {
                 root,
@@ -375,6 +379,9 @@ impl Site {
         let mut dir = self.root_fd.as_raw_fd();
         for part in folders {
             let c = std::ffi::CString::new(part.as_bytes()).ok()?;
+            // SAFETY: `dir` is either root_fd or an fd in `held`, both open for
+            // the whole loop, and `c` is a NUL-terminated CString that
+            // outlives the call.
             let fd = unsafe {
                 libc::openat(
                     dir,
@@ -385,12 +392,16 @@ impl Site {
             if fd < 0 {
                 return None;
             }
+            // SAFETY: openat just returned this fd (checked non-negative
+            // above) and nothing else holds it.
             let owned = unsafe { OwnedFd::from_raw_fd(fd) };
             dir = owned.as_raw_fd();
             held.push(owned);
         }
         let c = std::ffi::CString::new(name.as_bytes()).ok()?;
         // O_NONBLOCK, so a FIFO named like a picture can't hang the open.
+        // SAFETY: `dir` is root_fd or the last fd in `held`, both still open
+        // here, and `c` is a NUL-terminated CString that outlives the call.
         let fd = unsafe {
             libc::openat(
                 dir,
@@ -401,6 +412,8 @@ impl Site {
         if fd < 0 {
             return None;
         }
+        // SAFETY: openat just returned this fd (checked non-negative above)
+        // and nothing else holds it.
         let file = std::fs::File::from(unsafe { OwnedFd::from_raw_fd(fd) });
         let meta = file.metadata().ok()?;
         use std::os::unix::fs::MetadataExt as _;

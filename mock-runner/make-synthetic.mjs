@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // Writes the synthetic demo threads in fixtures/ (safe to commit: made up,
 // no real transcripts). The mock runner serves them alongside any private
-// fixtures in app/.fixtures. Re-run after changing this file.
+// fixtures in the repo's .fixtures/. Re-run after changing this file.
 
 import fs from 'node:fs';
 import path from 'node:path';
@@ -167,13 +167,13 @@ function smallThread({ name, title, minutesAgo, status = 'idle', needsYou = fals
       events.push({ seq: ++seq, ts, threadId: id, turnId, type: 'question.requested', approvalId: `${turnId}_q`, questions: turn.question });
       return;
     }
-    // An ask_secret card (docs/protocol.md, "Secrets"), still waiting.
+    // An ask_secret card (docs/protocol/threads.md, "Secrets"), still waiting.
     if (turn.secret) {
       events.push({ seq: ++seq, ts, threadId: id, turnId, type: 'secret.requested', approvalId: `${turnId}_secret`, itemId: `${turnId}_ask`, ...turn.secret });
       return;
     }
     events.push({ seq: ++seq, ts, threadId: id, turnId, type: 'assistant.text', itemId: `${turnId}_m`, text: turn.reply });
-    // What the turn said it needs from Mike (docs/protocol.md, "Needs you").
+    // What the turn said it needs from Mike (docs/protocol/needs-you.md, "Needs you").
     const said = turn.needs ? { needs: turn.needs, ...(turn.asks ? { asks: turn.asks } : {}), ...(turn.next ? { next: turn.next } : {}), needsFrom: 'tool' } : {};
     events.push({ seq: ++seq, ts, threadId: id, turnId, type: 'turn.completed', turnId, outcome: 'completed', durationMs: turn.ms ?? 18_000, costUsd: turn.cost ?? 0.05, ...said });
   });

@@ -1,4 +1,4 @@
-// The window that answers an agent's `show_options` (docs/protocol.md, "Design
+// The window that answers an agent's `show_options` (docs/protocol/events.md, "Design
 // reviews"), a port of the Swift app's ReviewWindow.swift: the option on show
 // big on the stage with a mark for every shot of every option under it, then
 // all of them side by side; down the right, the options with their reasons,
@@ -1901,7 +1901,7 @@ pub(crate) async fn automation(
         clicked.map_err(|e| e.to_string())??;
     }
     if cmd["closeViewer"].as_bool() == Some(true) {
-        view.update(cx, |v, cx| crate::viewer::close(v, cx));
+        view.update(cx, crate::viewer::close);
     }
     let busy = |view: &Entity<ReviewWindow>, cx: &mut AsyncApp| {
         view.read_with(cx, |v, _| v.session.saving() || v.session.submitting())

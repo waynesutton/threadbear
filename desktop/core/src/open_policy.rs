@@ -614,10 +614,16 @@ fn hold(real: &Path, meta: &std::fs::Metadata) -> Result<Held, ()> {
 fn volume_of(path: &Path) -> Option<PathBuf> {
     use std::os::unix::ffi::OsStrExt as _;
     let name = std::ffi::CString::new(path.as_os_str().as_bytes()).ok()?;
+    // SAFETY: statfs is a plain C struct of integers and char arrays, so all
+    // zeros is a valid value.
     let mut fs: libc::statfs = unsafe { std::mem::zeroed() };
+    // SAFETY: `name` is a NUL-terminated CString that outlives the call, and
+    // statfs only writes into the local struct it's given.
     if unsafe { libc::statfs(name.as_ptr(), &mut fs) } != 0 {
         return None;
     }
+    // SAFETY: statfs succeeded, so the kernel filled f_mntonname with a
+    // NUL-terminated path inside the array, which lives as long as `fs`.
     let mount = unsafe { std::ffi::CStr::from_ptr(fs.f_mntonname.as_ptr()) };
     Some(PathBuf::from(std::ffi::OsStr::from_bytes(mount.to_bytes())))
 }
@@ -1474,7 +1480,7 @@ fn film_boxes(read_at: &mut dyn FnMut(u64, &mut [u8]) -> usize, len: u64) -> boo
 /// An `ftyp` box at `at`, `size` bytes: a few dozen bytes, whole brands, a
 /// film's main brand, and no picture's brand among the rest.
 fn ftyp_is_a_films(read_at: &mut dyn FnMut(u64, &mut [u8]) -> usize, at: u64, size: u64) -> bool {
-    if !(16..=4096).contains(&size) || size % 4 != 0 {
+    if !(16..=4096).contains(&size) || !size.is_multiple_of(4) {
         return false;
     }
     let mut body = vec![0u8; size as usize];
@@ -2270,6 +2276,10 @@ mod tests {
     /// an app at its real path, so the app has to be there.
     #[cfg(target_os = "macos")]
     #[test]
+    #[expect(
+        clippy::too_many_lines,
+        reason = "baselined at 220 lines when the lint was turned on (20 Nov 2026); split it when it's next worked on"
+    )]
     fn an_unknown_kind_can_be_trusted_to_its_installed_app() {
         let s = Scratch::new("trust");
         let project = s.file("Workbench Drawers.tandem", "{}");
@@ -2291,7 +2301,7 @@ mod tests {
             question.always.as_deref(),
             Some("Always open .tandem in Tandem")
         );
-        let kind = look.trustable.clone().expect("trustable");
+        let kind = look.trustable.expect("trustable");
         assert_eq!(
             kind,
             TrustedOpener {
@@ -2476,7 +2486,7 @@ mod tests {
         let script = s.file("go.command", "x");
         let command = TrustedOpener {
             extension: "command".into(),
-            ..kind.clone()
+            ..kind
         };
         assert!(matches!(
             decide_file_trusting(
@@ -3040,6 +3050,30 @@ mod tests {
         assert!(is_own_scheme("threadbear://thread/x"));
     }
 
+    /// The cases the iPhone, Android and the website run too
+    /// (`shared/cases/link-policy.json`): only the kind, not the path.
+    #[test]
+    fn links_follow_the_shared_cases() {
+        let path = concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../../shared/cases/link-policy.json"
+        );
+        let file: serde_json::Value =
+            serde_json::from_str(&std::fs::read_to_string(path).unwrap()).unwrap();
+        let cases = file["cases"].as_array().unwrap();
+        assert!(cases.len() >= 40);
+        for case in cases.iter().filter(|c| c["differs"]["desktop"].is_null()) {
+            let name = case["name"].as_str().unwrap();
+            let kind = match link_kind(case["input"].as_str().unwrap()) {
+                LinkKind::Web(_) => "web",
+                LinkKind::Ask(_) => "ask",
+                LinkKind::File(_) => "file",
+                LinkKind::Refuse => "refuse",
+            };
+            assert_eq!(kind, case["expect"].as_str().unwrap(), "{name}");
+        }
+    }
+
     #[test]
     fn file_urls_escape_what_a_url_would_read() {
         assert_eq!(
@@ -3423,6 +3457,7 @@ mod tests {
         let s = Scratch::new("media-pipe");
         let pipe = s.path("stream.mp4");
         let c = std::ffi::CString::new(pipe.to_string_lossy().as_bytes()).unwrap();
+        // SAFETY: `c` is a NUL-terminated CString that outlives the call.
         assert_eq!(unsafe { libc::mkfifo(c.as_ptr(), 0o600) }, 0);
         let (tx, rx) = std::sync::mpsc::channel();
         let path = pipe.to_string_lossy().into_owned();

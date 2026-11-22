@@ -4,8 +4,8 @@ Threadbear is Mike's own agent app: a runner driving the official Claude Code an
 CLIs, and apps that talk to it. This file is the traps to avoid; each job's how-to is in
 the doc that owns it ("Doing X? Read Y"). Put detail there and link it, not here.
 
-- `runner/`: the runner (runner/README.md). `docs/protocol.md` is the contract between it
-  and the apps, far too long to read whole: search it for the section you need.
+- `runner/`: the runner (runner/README.md). The contract between it and the apps is
+  docs/protocol/, a file per area; `docs/protocol.md` says which section is in which.
 - `desktop/`: the GPUI app for Mac, Windows and Linux, the one Mike uses
   (desktop/README.md, docs/gpui-port.md). `app/` and `dock/`: the SwiftUI Mac app and
   BearDock, frozen (app/README.md). `features/`: their behaviour specs.
@@ -85,11 +85,11 @@ thing on Tinker Desk's desktop from a throwaway copy (`ssh tinker-desk
 ## Changing behaviour
 
 - Test first for anything non-trivial.
-- The protocol is the contract: change `docs/protocol.md` first, then both sides, and keep
+- The protocol is the contract: change its file in docs/protocol/ first, then both sides, and keep
   both sides tolerant of unknown fields and event types.
 - Changing a threadbear tool's arguments: keep taking the old ones. A resumed session
   keeps the definition it first loaded and goes on calling the old form
-  (docs/protocol.md, "One reply").
+  (docs/protocol/needs-you.md, "One reply").
 - What every agent is handed (the threadbear tools, the standing instructions) has a byte
   budget, `runner/context-budget.json` (`context-budget.test.ts`). Before accepting
   growth, see if it can be shorter or go behind something agents look up.
@@ -105,8 +105,16 @@ thing on Tinker Desk's desktop from a throwaway copy (`ssh tinker-desk
   code against it); `docs/forking.md` (where features live, anything of Mike's in the
   code; what only his setup needs goes in his runner.json). Patches here show in every
   fork: a chip for Mike's accounts needs a `when` only his Mac passes.
+- Rust in `desktop/`: `cd desktop && cargo fmt --all` before committing (light, fine
+  here). Clippy runs with `-D warnings`; an exception is `#[expect(clippy::x, reason =
+  "...")]`, never a bare `allow` (desktop/README.md, "Lints").
+- A branch from before a format commit (`.git-blame-ignore-revs`) lands across it by
+  itself; on a real conflict, `scripts/replay-over-format.sh`.
+- TypeScript: a promise is awaited, ends in `.catch`, or is marked `void` only when its
+  failure truly doesn't matter. Don't hand-edit `eslint-suppressions.json`: `npx eslint
+  <files> --suppress-rule <rule>` adds, `--prune-suppressions` removes.
 - When Mike asks for a button or panel for a project, write a `.threadbear/patches/*.ts`
-  patch (docs/protocol.md, "Patches") with Edit or Write, not the shell, so it's trusted.
+  patch (docs/protocol/patches.md, "Patches") with Edit or Write, not the shell, so it's trusted.
 
 ## The GPUI port
 

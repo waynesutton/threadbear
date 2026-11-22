@@ -1514,6 +1514,7 @@ pub(crate) fn automation(
         if ![
             "staged",
             "building",
+            "queued",
             "settling",
             "failed",
             "waiting",
@@ -1523,7 +1524,7 @@ pub(crate) fn automation(
         .contains(&state)
         {
             return Err(
-                "preview is staged, building, settling, failed, waiting, no-builder or none".into(),
+                "preview is staged, building, queued, settling, failed, waiting, no-builder or none".into(),
             );
         }
         app.update(cx, |t, cx| t.preview_update(state, cx));

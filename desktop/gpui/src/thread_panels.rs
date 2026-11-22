@@ -210,7 +210,7 @@ impl Threadbear {
             {
                 if let Some(pane) = self.pane.take() {
                     self.pane_events = None;
-                    self.keep_panel_pane(id.clone(), pane, cx);
+                    self.keep_panel_pane(id, pane, cx);
                 }
             }
             self.new_thread(cx);
@@ -437,7 +437,7 @@ impl Threadbear {
         cx: &mut Context<Self>,
     ) -> AnyElement {
         let me = cx.entity().downgrade();
-        let (go_id, here_id, here_me) = (id.clone(), id.clone(), me.clone());
+        let (go_id, here_id, here_me) = (id.clone(), id, me.clone());
         let go = crate::push_button::PushButton::new(
             "elsewhere-go",
             "Go to it",

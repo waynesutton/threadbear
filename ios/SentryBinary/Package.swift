@@ -3,8 +3,8 @@
 // and the iPhone app (ios/Threadbear.xcodeproj). sentry-cocoa's own package
 // declares eight prebuilt frameworks and SwiftPM downloads and unpacks every
 // one, 3.2 GB in each checkout's .build; this is the one the apps link
-// (about 360 MB, every Apple platform). It's under app/ so that a version
-// bump here is an app change the installed app updates for.
+// (about 360 MB, every Apple platform). It lives here, beside the iPhone
+// app that outlives the frozen Mac app; app/SentryBinary is a link to it.
 //
 // To update: the URL and checksum are the "Sentry" binary target in
 // https://github.com/getsentry/sentry-cocoa/blob/<version>/Package.swift.

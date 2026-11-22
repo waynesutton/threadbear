@@ -27,7 +27,7 @@ pub enum Kind {
     /// A patch's url panel: its own site stays, other sites leave.
     Patch,
     /// The Convex embedded dashboard: only its own site stays, and the page
-    /// answers its credentials request (docs/protocol.md, "The Convex panel")
+    /// answers its credentials request (docs/protocol/patches.md, "The Convex panel")
     /// with this script, run in it before its own.
     Convex { credentials_script: String },
     /// A local page previewed in the app (preview_rules.rs): its own page

@@ -1,4 +1,4 @@
-// Pools: picking a login for a thread, noticing one at its limit, waiting for room and moving the thread to another login (docs/protocol.md, "Pools").
+// Pools: picking a login for a thread, noticing one at its limit, waiting for room and moving the thread to another login (docs/protocol/settings.md, "Pools").
 // Part of the Runner (runner.ts), split out on 4 Nov 2026 as a plain move so a
 // fork's change to one area doesn't clash with another's. Each method's `this`
 // is the Runner; runner.ts puts them on its prototype.
@@ -376,7 +376,7 @@ export const poolsPart = {
       note += ` It's on ${providerName(to.provider)} now, with ${model}${rec.sessionUsed ? ' and a summary of the thread so far' : ''}.`;
     }
     if (rt.session) {
-      rt.releaseWhenIdle = true;
+      this.cli(st, { kind: 'leave' });
       if (!rt.turn) this.releaseSession(st);
     }
     rec.updatedAt = this.isoNow();

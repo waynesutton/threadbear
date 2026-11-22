@@ -831,3 +831,50 @@ type AskLink = { title: string; url: string }
 type AskAnswer = { action: string; answer: string } // an ask's action and the answer he picked
 type OpenAsk = Ask & { ticked?: true }
 ```
+
+## The reply phase
+
+How the runner reads a turn around `end_turn`, as one state type
+(`runner/src/reply-phase.ts`, 20 Nov 2026; its header has the table of every
+event in every phase). It changes nothing on the wire: the events above are
+what the phases write. A turn starts `working`. An accepted call
+(`Noted: this thread`) moves it to `replying` when the result says "Now write
+your reply" (the text after it is the reply, `final: true`), else to `ended`
+(text after it is dropped, but for a narration's real message or the message
+bullets stood for). The Stop hook sending it back for a card under a reply
+already written (`endTurnNudge` with `reopen`) makes it `reopened`: words are
+dropped, and the next taken call is that card, with the reply written again
+under it. A message steered in, or a background job's notice the agent has
+read, opens it again (`open`): another `end_turn` is no repeat, and archive,
+snooze and waitFor asked before a message are off. Codex's bullets form
+(`Noted. Now write your final answer`) moves a working turn to `open` too.
+A refused repeat or unread-message refusal puts the call's arguments back to
+the ones before; `ARCHIVE_ADDED` and `SNOOZE_ADDED` add only that. The turn's
+end reads its card (`turnNeeds`): the reply's "What I need from you", else
+the call, else the last text's section. A Stop, an error or the CLI dying
+ends the turn with no card.
+
+```mermaid
+stateDiagram-v2
+  direction LR
+  [*] --> working
+  working --> replying: accepted, "Now write your reply"
+  working --> ended: accepted, bullets or "your message above is the reply"
+  working --> open: Codex's "Noted. Now write"
+  ended --> reopened: Stop hook, reopen
+  replying --> reopened: Stop hook, reopen
+  reopened --> replying: taken, "Now write your reply"
+  reopened --> ended: taken, other
+  ended --> open: message, notice read
+  replying --> open: message, notice read (still the reply)
+  reopened --> open: message, notice read
+  open --> replying: accepted, "Now write your reply"
+  open --> ended: accepted, other
+  ended --> ended: refused, archive or snooze added
+  replying --> replying: text (the reply)
+  working --> [*]: turn ends (card from the call or the text)
+  ended --> [*]: turn ends
+  replying --> [*]: turn ends
+  reopened --> [*]: turn ends
+  open --> [*]: turn ends
+```

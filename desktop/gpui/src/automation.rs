@@ -516,7 +516,7 @@ fn label_point(window: &Window, label: &str, prefix: bool) -> Result<(i32, i32),
                     }
                 })
         })
-        .last();
+        .next_back();
     found
         .and_then(|e| whole_point(e.visible_bounds()))
         .ok_or_else(|| format!("nothing labelled {label:?} on screen"))
@@ -865,7 +865,7 @@ fn step(
                             }
                         })
                 })
-                .last()
+                .next_back()
                 .ok_or_else(|| format!("nothing labelled {label:?} on screen"))?;
             let node = json!({
                 "role": found.role().map(|r| format!("{r:?}")),
@@ -1652,7 +1652,7 @@ fn step(
                 cx.background_executor()
                     .timer(std::time::Duration::from_millis(100))
                     .await;
-                let _ = cx.update(|cx| cx.quit());
+                cx.update(|cx| cx.quit());
             })
             .detach();
             Ok(json!("ok"))

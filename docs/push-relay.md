@@ -222,7 +222,7 @@ hosts (self-hosted, a custom domain) can't use this relay: run your own
 - A backend hears when its pushes stop getting through: each send's
   outcome goes in its `pushHealth` row (`convex/pushHealth.ts`), and the
   owner runner's heartbeat carries `pushFailing` to `tb status` and a
-  notice in the app (docs/protocol.md, "Sync").
+  notice in the app (docs/protocol/moves.md, "Sync").
 - Deploy: `npm ci` then `npx convex deploy` in `relay/`, signed in to the
   Convex CLI as Mike (it isn't part of the runner's backend deploy, which
   is for each person's own deployment).

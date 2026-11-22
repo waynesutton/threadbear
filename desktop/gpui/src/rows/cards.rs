@@ -769,7 +769,7 @@ impl ThreadPane {
                 this.respond_queued(&id_for_allow, "allow", cx)
             }));
         }
-        let id_for_deny = approval_id.clone();
+        let id_for_deny = approval_id;
         let mut deny = pill(("stack-deny", ix), "Deny all", false, !busy, None, cx)
             .tip("Don't let it do any of these; the agent is told no");
         if !busy {
@@ -963,7 +963,7 @@ impl ThreadPane {
         else {
             return;
         };
-        let shown = item.start_request.clone();
+        let shown = item.start_request;
         if allow
             && shown
                 .as_ref()
@@ -1617,7 +1617,7 @@ impl ThreadPane {
             );
         // The plan (its start, until it's opened), or once approved its
         // checklist with the plan under it when opened.
-        let plan_markdown = if expanded { body_text.clone() } else { preview };
+        let plan_markdown = if expanded { body_text } else { preview };
         let doc = (!plan_markdown.is_empty() && (plan.entries.is_empty() || expanded)).then(|| {
             self.markdown_state(
                 &format!("plan-{}", plan.item_id),
@@ -1935,6 +1935,10 @@ fn markdown_source(text: &str, thread: &str) -> String {
     super::markdown::prepare(text, thread)
 }
 
+#[expect(
+    clippy::too_many_arguments,
+    reason = "baselined when the lint was turned on (20 Nov 2026); take it off when this is next split up"
+)]
 fn question_option(
     ix: usize,
     qi: usize,

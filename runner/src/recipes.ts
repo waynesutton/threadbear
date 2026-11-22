@@ -1,4 +1,4 @@
-// Recipes (docs/protocol.md, "Recipes"; experiment `recipes`): techniques
+// Recipes (docs/protocol/projects.md, "Recipes"; experiment `recipes`): techniques
 // worth keeping, written so an agent can set them up for anyone. Each is a
 // folder with a RECIPE.md (format: recipes/FORMAT.md) and maybe a header
 // picture. The ones that come with Threadbear are in src/recipes/, so a

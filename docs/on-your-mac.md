@@ -154,7 +154,7 @@ File references are where to look.
   `<data folder>/runner/reinstall.log`, and is left loaded but stopped
   until the next one replaces it. On Linux
   it's a transient `systemd-run --user` unit instead (`runner/src/reinstall.ts`).
-- **Commands:** `~/.local/bin/threadbear`, a link into your clone, and
+- **Commands:** `~/.local/bin/threadbear`, a link into your clone (only where the old Swift app was installed with `app/install.sh`), and
   `~/.local/bin/tb`, a three-line script that runs the `tb` of the runner
   release this Mac runs (`runner/scripts/link-tb.sh`; it leaves a `tb` that
   isn't its own alone, and `install-runner.sh --uninstall` removes it).
@@ -194,6 +194,9 @@ File references are where to look.
   Macs and which thread here each one's replies go back to (ids, the last
   turn passed on and when), read from your Convex backend every 15 seconds
   while one is busy (every five minutes once it's quiet), and
+  `run/error-exits.json`, when the runner last restarted itself after an
+  unexpected error (times only, so it can stop restarting after three in
+  ten minutes),
   `shared-pools.json`, the last pools your Convex backend had, which every
   runner shares, so one starts with them while the backend can't be reached,
   `profiles/`, the last ten CPU profiles of the runner, made only when
@@ -261,7 +264,7 @@ File references are where to look.
   ```` ```html ```` blocks in replies, and each one's page for the side pane,
   newest 900 files kept). They're drawn on this Mac in web views that load
   nothing from the network: the diagram library, [Pele](https://pele.run/),
-  is bundled with the app (`Resources/Rich/pele.js`, MIT), and a block's
+  is bundled with the app (`shared/rich/pele.js` in the repo, MIT), and a block's
   page runs no scripts;
   `~/Library/Logs/threadbear-runner.log` and `threadbear-update.log`;
   `~/Library/Logs/Threadbear/hangs` (the last 10 times the app froze: if its
@@ -492,7 +495,7 @@ the host's `CLAUDE.md`. Faces are drawn by the `open-bot-avatar` package
   environment (`THREADBEAR_THREAD_KEY`), never the token. When something
   connects, the runner runs `lsof` and `ps` on that one connection to see
   which process it is and whether it's under a thread's CLI
-  (`runner/src/peer.ts`, docs/protocol.md "Who's really calling").
+  (`runner/src/peer.ts`, docs/protocol/connection.md "Who's really calling").
 - **Whether each Claude login is signed in** (`runner/src/sign-in-state.ts`):
   when the runner starts, every 10 minutes, and after a turn the login
   refused, it runs `claude auth status --json` once per Claude login, in
@@ -899,6 +902,11 @@ the host's `CLAUDE.md`. Faces are drawn by the `open-bot-avatar` package
   and what you say is turned into text on this Mac by macOS's own speech
   recognition (SpeechAnalyzer); the audio isn't saved or sent anywhere.
   The text goes to the thread as your message.
+  checkout's standing trust doesn't reach. And `patch-trust-versions.json` keeps,
+  for the last few versions of each patch you trusted, the SHA-256 of each
+  file and the repo's HEAD, so a patch asked about again can say what
+  changed: for that it runs `git rev-list`, `git cat-file` and
+  `git rev-parse` in the folder (`runner/src/patch-changes.ts`).
 - **Menus on macOS 27.2** (`app/Sources/Threadbear/DragSpace.swift`): every
   5 seconds, and before a button opens a menu, the app asks the window
   server which Spaces its own windows are on, and takes them off the drag

@@ -1317,7 +1317,7 @@ test("a sidebar row's mode is kept, and a runner key's is cut short", async () =
   assert.deepEqual(modes, { A: 'auto', B: 'x'.repeat(16) });
 });
 
-// A sidebar row's `request` (API 96, docs/protocol.md "What Mike first
+// A sidebar row's `request` (API 96, docs/protocol/threads.md "What Mike first
 // asked") reaches the main Mac's watch, for its Feed, and a runner key's is
 // cut to 400 bytes, room for the runner's 200 characters of any text.
 test("a sidebar row's request is kept, and a runner key's is cut short", async () => {

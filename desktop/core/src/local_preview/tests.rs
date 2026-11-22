@@ -241,6 +241,7 @@ fn a_fifo_is_refused() {
     let f = Folder::new();
     f.write("index.html", "<img src=pipe.png>");
     let c = std::ffi::CString::new(f.dir.join("pipe.png").to_str().unwrap()).unwrap();
+    // SAFETY: `c` is a NUL-terminated CString that outlives the call.
     assert_eq!(unsafe { libc::mkfifo(c.as_ptr(), 0o600) }, 0);
     let site = f.site();
     assert!(site.serve("/pipe.png").is_none());
@@ -388,6 +389,7 @@ fn a_scan_never_blocks_on_a_fifo() {
     assert_eq!(found, digest(b"<script>draw()</script>"));
     let fifo = f.dir.join("pipe.html");
     let c = std::ffi::CString::new(fifo.to_str().unwrap()).unwrap();
+    // SAFETY: `c` is a NUL-terminated CString that outlives the call.
     assert_eq!(unsafe { libc::mkfifo(c.as_ptr(), 0o600) }, 0);
     assert!(scan(&fifo).is_none());
     assert!(scan(&f.dir.join("gone.html")).is_none());
@@ -400,7 +402,7 @@ fn a_page_with_a_digest_is_served_only_while_it_matches() {
     let page = f.dir.join("drawn.html");
     fs::write(&page, "<script>draw()</script>").unwrap();
     let allowed = digest(b"<script>draw()</script>");
-    let site = Site::new(&page, Some(allowed.clone())).unwrap();
+    let site = Site::new(&page, Some(allowed)).unwrap();
     assert!(site.serve("drawn.html").is_some());
     fs::write(&page, "<script>steal()</script>").unwrap();
     assert!(
@@ -623,7 +625,7 @@ fn what_a_site_keeps_is_bounded_in_bytes() {
     let kept = site.allowed_count();
     // The page and eight stylesheets, then 1,004-byte names up to the budget.
     assert!(
-        kept >= 2_000 && kept <= 9 + MAX_ALLOWED_BYTES / 1_004,
+        (2_000..=9 + MAX_ALLOWED_BYTES / 1_004).contains(&kept),
         "kept {kept}"
     );
     assert!(site.allows(&name(0)) && !site.allows(&name(15_999)));

@@ -288,7 +288,7 @@ impl Composer {
             );
             return;
         }
-        let provider = settings.provider.clone();
+        let provider = settings.provider;
         if column == provider {
             return self.set_model(model, cx);
         }
@@ -496,7 +496,7 @@ impl Composer {
                             .text_size(px(size::CHIP))
                             .text_color(style::secondary_text(cx))
                             .child(format!("Can't reach {}", away.name))
-                            .tip(problem.clone()),
+                            .tip(problem),
                     ),
                     None => row.child(
                         div()
@@ -572,7 +572,7 @@ impl Composer {
                 .child(self.render_model_chip(&data, window, cx))
                 .child(chip_divider(cx));
             coding = coding.child(self.render_permission_chip(
-                settings.permission_mode.clone(),
+                settings.permission_mode,
                 &composer,
                 cx,
             ));
@@ -1015,6 +1015,10 @@ impl Composer {
         {
             Some(runner) => {
                 let app = self.app.upgrade();
+                #[expect(
+                    clippy::expect_used,
+                    reason = "the composer lives inside the app, so the app is there while it draws"
+                )]
                 let t = app.as_ref().expect("the app").read(cx);
                 let name = t.runner_name_of(&runner);
                 let tip = if t.remote.runners.iter().any(|r| r.id == runner && !r.online) {
@@ -1066,7 +1070,7 @@ impl Composer {
                             .with_size(px(size::CHIP - 1.))
                             .text_color(style::faint_icon(cx)),
                     )
-                    .tip(tip.clone())
+                    .tip(tip)
                     .on_click(move |ev: &ClickEvent, window, cx| {
                         if let Some(app) = app.upgrade() {
                             let at = ev.position();
@@ -1259,7 +1263,7 @@ impl RenderOnce for ChipTrigger {
             .test_support()
             .role(if menu { Role::Button } else { Role::Label })
             .aria_label(label)
-            .tip(tip.clone());
+            .tip(tip);
         let spinner = |side: f32| {
             crate::spinner::Spinner::new()
                 .color(style::secondary_text(cx))
@@ -1438,6 +1442,10 @@ fn abbreviate_home(path: &str) -> String {
 /// A row in one of the chips' menus: an icon, a title, a line under it and a
 /// tick when it's the current one (ActionMenuItem), drawn as the app's menus
 /// are (style::menu).
+#[expect(
+    clippy::too_many_arguments,
+    reason = "baselined when the lint was turned on (20 Nov 2026); take it off when this is next split up"
+)]
 fn menu_row(
     id: impl Into<ElementId>,
     icon: Option<IconName>,
@@ -1555,6 +1563,10 @@ impl ModelPickerView {
 }
 
 impl Render for ModelPickerView {
+    #[expect(
+        clippy::too_many_lines,
+        reason = "baselined at 296 lines when the lint was turned on (20 Nov 2026); split it when it's next worked on"
+    )]
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         // Fresh each time ⌘/ opens it, as Cursor's is, not last time's words.
         if std::mem::take(&mut self.focus_search) {
@@ -1710,7 +1722,7 @@ impl Render for ModelPickerView {
                         .cursor_pointer()
                         .when(active, |s| s.bg(active_fill))
                         .when(!active, |s| s.hover(move |s| s.bg(hover_fill)))
-                        .tip(tip.clone())
+                        .tip(tip)
                         .on_click(move |_, _, cx| {
                             if let Some(this) = this.upgrade() {
                                 this.update(cx, |this, cx| {
@@ -1813,7 +1825,7 @@ impl Render for ModelPickerView {
                         })
                         .hover(|s| s.bg(style::hover_fill(cx)))
                         .child(title)
-                        .tip(tip.clone())
+                        .tip(tip)
                         .on_click(move |_, _, cx| {
                             if let Some(c) = composer.upgrade() {
                                 c.update(cx, |c, cx| c.set_effort(level2.clone(), cx));
@@ -2064,7 +2076,7 @@ fn pool_login_row(
                         .text_color(style::label_text(cx))
                         .child(row.title.clone()),
                 )
-                .when_some(row.subtitle.clone(), |s, sub| {
+                .when_some(row.subtitle, |s, sub| {
                     s.child(
                         div()
                             .truncate()
@@ -2145,7 +2157,7 @@ impl Composer {
             // The thread's provider while the pool has it, so a mixed pool
             // keeps a Codex thread on Codex (Codex's review, 12 Nov).
             let providers = threadbear_core::new_thread::pool_providers(target, accounts);
-            let keeps = providers.iter().any(|p| *p == settings.provider);
+            let keeps = providers.contains(&settings.provider);
             if data.is_new {
                 // None lets the draft fall back on the provider it last
                 // used in that pool, rather than overwriting it.
@@ -2161,7 +2173,7 @@ impl Composer {
             // As the runner picks: the thread's provider first, then the
             // pool's others, the first with a login that has room; else the
             // first login it would try.
-            let stays = target.account_ids.iter().any(|a| *a == settings.account);
+            let stays = target.account_ids.contains(&settings.account);
             let moved = (!stays)
                 .then(|| {
                     let now_ms = threadbear_core::chrono::Local::now().timestamp_millis();

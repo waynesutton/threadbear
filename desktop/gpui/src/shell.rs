@@ -1783,6 +1783,9 @@ impl Threadbear {
             self.menu_signature = signature;
             cx.set_menus(gpui_menus(&menus));
             #[cfg(target_os = "macos")]
+            // SAFETY: tb_menu_icons (native/menu_icons.m) takes nothing and only
+            // sets images on NSApp.mainMenu's items; we're on the main thread
+            // in a GPUI update, just after set_menus built that menu.
             unsafe {
                 extern "C" {
                     fn tb_menu_icons();

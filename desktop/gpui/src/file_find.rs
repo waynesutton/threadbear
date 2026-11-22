@@ -323,9 +323,9 @@ impl SidePane {
             }),
             Target::Page(doc) => {
                 if back {
-                    bar.finder.previous();
+                    bar.finder.previous_match();
                 } else {
-                    bar.finder.next();
+                    bar.finder.next_match();
                 }
                 let finder = bar.finder.clone();
                 mark_page(&doc, &finder, cx);

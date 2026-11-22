@@ -408,7 +408,10 @@ impl Threadbear {
     /// page) has it from that place; otherwise on the project's page if its
     /// folder is in a project, which has its folders' panels on the rail,
     /// else on the newest thread that has it.
-    #[allow(clippy::too_many_arguments)]
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "baselined when the lint was turned on (20 Nov 2026); take it off when this is next split up"
+    )]
     fn open_anything_panel(
         &mut self,
         key: &str,
@@ -800,7 +803,7 @@ impl Threadbear {
         json!({
             "query": b.query(cx),
             "matched": b.matched,
-            "groups": b.groups.iter().map(|g| json!({ "title": g.title, "items": g.items.iter().map(|i| line(i)).collect::<Vec<_>>() })).collect::<Vec<_>>(),
+            "groups": b.groups.iter().map(|g| json!({ "title": g.title, "items": g.items.iter().map(line).collect::<Vec<_>>() })).collect::<Vec<_>>(),
             "picked": picked.map(|i| i.title.clone()),
             "recent": self.anything_recent,
         })

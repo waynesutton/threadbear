@@ -22,7 +22,7 @@ use std::rc::Rc;
 use std::sync::atomic::{AtomicU64, Ordering};
 
 /// The most a note on one option and the reply may be, in UTF-16 units, as
-/// the runner counts them (docs/protocol.md, "Design reviews").
+/// the runner counts them (docs/protocol/events.md, "Design reviews").
 pub const NOTE_LIMIT: usize = 4000;
 pub const REPLY_LIMIT: usize = 8000;
 
@@ -157,9 +157,8 @@ impl ReviewDraft {
             notes: self
                 .notes
                 .iter()
-                .filter_map(|(id, note)| {
-                    (!note.trim().is_empty()).then(|| (id.clone(), note.trim().to_owned()))
-                })
+                .filter(|&(_id, note)| !note.trim().is_empty())
+                .map(|(id, note)| (id.clone(), note.trim().to_owned()))
                 .collect(),
             reply: (!reply.is_empty()).then(|| reply.to_owned()),
             images: self.images.clone(),
@@ -1927,7 +1926,10 @@ fn closing_ticks(c: &[char], from: usize, end: usize, ticks: usize) -> Option<us
     None
 }
 
-#[allow(clippy::too_many_arguments)]
+#[expect(
+    clippy::too_many_arguments,
+    reason = "baselined when the lint was turned on (20 Nov 2026); take it off when this is next split up"
+)]
 fn inline_runs(
     c: &[char],
     marks: &Marks,
@@ -2485,7 +2487,7 @@ mod tests {
         s.receive(remote.clone());
         let mut acknowledgement = initial;
         acknowledgement.revision = 2;
-        acknowledgement.draft = call.draft.clone();
+        acknowledgement.draft = call.draft;
         s.save_done(acknowledgement);
         assert_eq!(s.review().revision, 3);
         assert_eq!(s.draft().notes["A"], "Mine");
@@ -2822,7 +2824,7 @@ mod tests {
                 RowContent::Review(review),
             )
         };
-        let rows = vec![row(first.clone()), row(second.clone())];
+        let rows = vec![row(first), row(second)];
         assert_eq!(
             find_review("review_account_picker", &rows).map(|r| r.id.as_str()),
             Some("review_account_picker")
@@ -3352,8 +3354,8 @@ mod tests {
     fn old_inline_link(c: &[char], at: usize, end: usize) -> Option<(usize, String, usize)> {
         let mut depth = 0;
         let mut close = None;
-        for j in at..end {
-            match c[j] {
+        for (j, ch) in c.iter().enumerate().take(end).skip(at) {
+            match *ch {
                 '\\' => continue,
                 '[' => depth += 1,
                 ']' => {

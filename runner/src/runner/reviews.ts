@@ -97,7 +97,7 @@ export const reviewsPart = {
     // The answer and outbox live in one atomic thread.json write. Publish
     // the card only after it succeeds, then start the queued reply.
     this.persistReview(st, next, [...st.rec.queue, message], true);
-    st.rt.releaseWhenIdle = false;
+    this.cli(st, { kind: 'stay' });
     this.markDirty(st);
     this.kickQueue(st);
     return {review: structuredClone(next), turnId};

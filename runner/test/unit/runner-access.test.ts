@@ -1,4 +1,4 @@
-// Per-runner keys (convex/runnerAccess.ts, docs/protocol.md "Runner keys"):
+// Per-runner keys (convex/runnerAccess.ts, docs/protocol/keys.md "Runner keys"):
 // the owner key does everything, a runner key acts as its own runner only.
 // The plain rules, without a deployment, plus a check that every function
 // in convex/sync.ts is sorted and asks the gate under its own name.

@@ -2768,7 +2768,7 @@ test("projects: notes go up only when they change, and a backend before API 50 a
   assert.deepEqual(await run(NOTES_APART_API_VERSION - 1), ['long notes', 'longer notes', 'longer notes']);
 });
 
-// docs/protocol.md, "Secrets".
+// docs/protocol/threads.md, "Secrets".
 import { seal } from '../../src/secrets.ts';
 import { NOTES_APART_API_VERSION, SECRETS_API_VERSION, LIVE_PAGES_API_VERSION } from '../../src/sync.ts';
 
@@ -2827,7 +2827,7 @@ test('secrets: an older backend gets the row without the card', async () => {
 });
 
 test("a runner key's refused setSchedules stops the mirroring quietly, and the rest of the write goes on", async () => {
-  // docs/protocol.md, "Runner keys": setSchedules is the main key's only.
+  // docs/protocol/keys.md, "Runner keys": setSchedules is the main key's only.
   let setSchedules = 0;
   const f = setup({
     fail: () => undefined,
@@ -2853,7 +2853,7 @@ test("a runner key's refused setSchedules stops the mirroring quietly, and the r
 });
 
 test('a write the backend refuses for good is tried row by row, the bad row left out and said, and the rest go', async () => {
-  // docs/protocol.md, "Runner keys": caps are permanent refusals, not outages.
+  // docs/protocol/keys.md, "Runner keys": caps are permanent refusals, not outages.
   let bad = '';
   const f = setup({
     answer: (fn) => {
@@ -3566,7 +3566,7 @@ test('pushes failing at the backend are said once per run in tb status and the a
   await sync.stop();
 });
 
-// docs/protocol.md, "Asking another runner" (cross-runner.ts): the card on
+// docs/protocol/runners.md, "Asking another runner" (cross-runner.ts): the card on
 // the asking runner's thread. The phone can't answer it, and an "allow"
 // that the backend's row doesn't back up changes nothing.
 import { START_CARD, type RequestAnswer } from '../../src/cross-runner.ts';
@@ -3628,7 +3628,7 @@ test('asking another runner: a deny from anywhere declines it, and no answer in 
   assert.equal((await second).status, 'expired');
 });
 
-// docs/protocol.md, "Reply buttons": the phone and website draw a reply's
+// docs/protocol/events.md, "Reply buttons": the phone and website draw a reply's
 // buttons from its row, so the row carries their state and goes up again
 // when one is pressed, here or from the phone.
 test('reply buttons: a row carries the buttons it links, is sent again when one is pressed, and a press command presses it once', async () => {

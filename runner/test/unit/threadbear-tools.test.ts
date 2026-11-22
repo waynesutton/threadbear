@@ -524,7 +524,7 @@ test('end_turn is refused until the turn has replied to Alex in text', async () 
   assert.deepEqual(slept, []);
 });
 
-// The summary is the turn's reply (docs/protocol.md, "The summary"): in 36
+// The summary is the turn's reply (docs/protocol/needs-you.md, "The summary"): in 36
 // test sessions Opus left its final message as prose, and put bullets in
 // end_turn every time (29 Oct 2026).
 test('end_turn with a summary needs no message first, and the runner writes it as the reply', async () => {
@@ -1831,7 +1831,7 @@ test('the patches line sends button and panel asks to a patch file, by the proto
   const { patchesLine } = await import('../../src/threadbear-mcp.ts');
   const line = patchesLine('/Users/someone/threadbear/docs/guide.md', () => true);
   assert.match(line, /\.threadbear\/patches\/<name>\.ts/);
-  assert.ok(line.includes(path.join('/Users/someone/threadbear', 'docs', 'protocol.md')), line);
+  assert.ok(line.includes(path.join('/Users/someone/threadbear', 'docs', 'protocol', 'patches.md')), line);
   assert.match(line, /Edit or Write/);
   assert.match(line, /not a pin/);
   assert.equal(patchesLine('/nowhere/docs/guide.md', () => false), '');
@@ -1955,7 +1955,7 @@ test('one reply: after hidden text, end_turn asks for the answer and evidence, i
   assert.match(r.text, /If the user needs a draft or descriptions of choices/, 'what the asks are about always goes in the reply');
 });
 
-// One reply (docs/protocol.md, "One reply"; 1 Nov 2026): end_turn carries
+// One reply (docs/protocol/needs-you.md, "One reply"; 1 Nov 2026): end_turn carries
 // the card and a headline, and the message after it is the reply.
 test('one reply: end_turn takes the card, never asks for a message first, and says the reply comes next', async () => {
   const h = makeHarness();
