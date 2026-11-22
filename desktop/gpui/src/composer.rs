@@ -1646,7 +1646,7 @@ impl Composer {
                 // button doesn't look quite right").
                 .child(div().size(px(9.)).rounded(px(2.)).bg(fg))
                 .on_click(cx.listener(|this, _: &ClickEvent, _, cx| this.stop(cx)))
-                .tip(if cfg!(target_os = "macos") { "Stop (⌘.)" } else { "Stop (Ctrl+.)" })
+                .tip_leftward(if cfg!(target_os = "macos") { "Stop (⌘.)" } else { "Stop (Ctrl+.)" })
                 // Its key to the left while ⌘ is held (key_hints.rs).
                 .relative()
                 .children(crate::key_hints::hint(self.app.upgrade().and_then(|a| a.read(cx).shortcut_display(threadbear_core::shortcuts::ShortcutCommand::Stop)), crate::key_hints::Placement::Before))
@@ -1674,7 +1674,7 @@ impl Composer {
             .bg(bg)
             .child(self.hopping(Icon::from(IconName::ArrowUp).with_size(px(14.)).text_color(fg).into_any_element()))
             .when(can_send, |s| s.on_click(cx.listener(|this, _: &ClickEvent, window, cx| this.send(window, cx))))
-            .tip(tip)
+            .tip_leftward(tip)
             // Dimmed with nothing to send, as SendButton's `.disabled`.
             .a11y_disabled(!can_send)
             .into_any_element()
