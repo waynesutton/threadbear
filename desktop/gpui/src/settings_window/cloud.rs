@@ -559,35 +559,6 @@ impl Render for CloudSheet {
         let label = |text: &'static str| div().text_size(px(12.)).text_color(secondary).child(text);
         let me = cx.entity().downgrade();
 
-        let mut providers = h_flex()
-            .gap(px(2.))
-            .p(px(2.))
-            .rounded(px(7.))
-            .bg(style::primary_opacity(cx, 0.06));
-        for (i, (name, open)) in rules::PROVIDERS.iter().enumerate() {
-            let words = if *open {
-                (*name).to_owned()
-            } else {
-                format!("{name} (later)")
-            };
-            let tip = if *open {
-                "Fly: the boxes run on your Fly account"
-            } else {
-                rules::LATER_TIP
-            };
-            let seg = div()
-                .id(SharedString::from(format!("cloud-provider-{i}")))
-                .flex_1()
-                .py(px(4.))
-                .rounded(px(5.))
-                .text_center()
-                .text_size(px(12.))
-                .when(i == 0, |d| d.bg(style::primary_opacity(cx, 0.12)))
-                .when(!open, |d| d.text_color(style::tertiary_label(cx)))
-                .child(words);
-            providers = providers.child(crate::highlights::tipped(seg, tip));
-        }
-
         let mut sizes = h_flex().gap(px(6.));
         for (i, (cpus, mb)) in rules::SIZES.iter().enumerate() {
             let me = me.clone();
@@ -649,8 +620,6 @@ impl Render for CloudSheet {
                     }),
             )
             .child(div().text_color(secondary).child(rules::SHEET_ABOUT))
-            .child(label("Provider"))
-            .child(providers)
             .child(label("Name"))
             .child(Input::new(&self.name).small().disabled(running))
             .child(label("Fly app for the boxes"))

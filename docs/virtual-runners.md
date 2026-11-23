@@ -1063,8 +1063,8 @@ terminal (`runner/src/cloud-setup.ts`; protocol: docs/protocol/keys.md,
 
 Not done yet: removing a virtual runner from the app (archive its threads,
 then delete the `runnerServices` row and unset the env vars, as
-docs/forking.md says), the "image behind main" check, and the other
-providers, which the sheet shows as "later".
+docs/forking.md says), the "image behind main" check, and other
+providers. The sheet sets up Fly only.
 
 ## Faster starts
 

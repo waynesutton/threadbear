@@ -27,13 +27,9 @@ pub const REBUILD: &str = "Rebuild";
 pub const REBUILD_TIP: &str = "Build the box image again from this Mac's copy of Threadbear";
 pub const EDIT: &str = "Edit…";
 pub const EDIT_TIP: &str = "Change the name or box size, or give it a new token";
-pub const LATER_TIP: &str = "Not yet: Fly is the one provider for now";
 /// What a runner too old for `cloud.*` gets, in place of the section.
 pub const TOO_OLD: &str =
     "This Mac's runner is too old to set up cloud runners. It updates by itself.";
-
-/// The providers the sheet shows: only Fly can be picked so far.
-pub const PROVIDERS: [(&str, bool); 3] = [("Fly", true), ("Daytona", false), ("E2B", false)];
 
 /// The box sizes offered: (CPUs, MB). Fly can pause a box of 2 GB or less.
 pub const SIZES: [(u32, u32); 3] = [(1, 1024), (1, 2048), (2, 2048)];
