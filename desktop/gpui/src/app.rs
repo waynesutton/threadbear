@@ -226,6 +226,9 @@ pub struct Threadbear {
     pub(crate) task_counts: std::collections::HashMap<String, Option<usize>>,
     pub(crate) tasks_page: Option<Entity<crate::tasks_page::TasksPage>>,
     pub(crate) tasks_draft_page: Option<Entity<crate::tasks_page::TasksPage>>,
+    /// Where Tasks was when it closed (list or board, and the open task), so
+    /// coming back lands there instead of on the default view.
+    pub(crate) tasks_last: (Option<String>, Option<String>),
     pub(crate) notes_page: Option<Entity<crate::notes_page::NotesPage>>,
     /// Skills over the main panel while it's up (skills_page.rs), and what the runner said.
     pub(crate) skills_page: Option<Entity<crate::skills_page::SkillsPage>>,
@@ -671,6 +674,7 @@ impl Threadbear {
             notes_page: None,
             tasks_page: None,
             tasks_draft_page: None,
+            tasks_last: (None, None),
             task_counts: std::collections::HashMap::new(),
             skills_page: None,
             skills: Default::default(),

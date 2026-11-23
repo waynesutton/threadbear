@@ -185,10 +185,18 @@ impl Threadbear {
         self.close_skills(cx);
         let app = cx.entity().downgrade();
         let client = self.client.clone();
-        let page = self
-            .tasks_draft_page
-            .take()
-            .unwrap_or_else(|| cx.new(|cx| TasksPage::new(app, client, window, cx)));
+        // A kept draft page is already where it was; a new one goes back to
+        // the view and task Tasks closed on.
+        let page = self.tasks_draft_page.take().unwrap_or_else(|| {
+            let (view, task) = self.tasks_last.clone();
+            cx.new(|cx| {
+                let mut page = TasksPage::new(app, client, window, cx);
+                page.view = view;
+                page.opening_quietly = task.is_some();
+                page.opening = task;
+                page
+            })
+        });
         let focus = page.read(cx).focus.clone();
         window.focus(&focus, cx);
         crate::web_panels::keyboard_to_app(window);
@@ -211,6 +219,8 @@ impl Threadbear {
         let Some(page) = self.tasks_page.take() else {
             return false;
         };
+        let p = page.read(cx);
+        self.tasks_last = (p.view.clone(), p.open_task_id().map(String::from));
         if page.read(cx).draft_dirty(cx) || page.read(cx).busy {
             self.tasks_draft_page = Some(page);
         }
@@ -254,6 +264,8 @@ impl Threadbear {
         cx: &mut Context<Self>,
     ) {
         self.close_tasks(cx);
+        // A project's tasks start on its list, not the task open last time.
+        self.tasks_last.1 = None;
         self.toggle_tasks(window, cx);
         if let Some(page) = &self.tasks_page {
             page.update(cx, |p, cx| {
@@ -278,6 +290,7 @@ impl Threadbear {
         };
         page.update(cx, |p, cx| {
             p.opening = Some(id);
+            p.opening_quietly = false;
             p.open_pending(window, cx);
         });
         cx.notify();
@@ -408,6 +421,9 @@ pub(crate) struct TasksPage {
     project_filter_id: Option<String>,
     /// A task to open once the rows have it (`Threadbear::open_task`).
     opening: Option<String>,
+    /// The open task came back from last time, so if it's gone since, Tasks
+    /// just shows the list rather than an error.
+    opening_quietly: bool,
     focus: FocusHandle,
     selected_task: Option<String>,
     editing: Option<String>,
@@ -705,6 +721,7 @@ impl TasksPage {
             linear_again: false,
             hovered_task: None,
             quick_pick: None,
+            opening_quietly: false,
             _subscriptions: subs,
         }
     }
@@ -1698,12 +1715,15 @@ impl TasksPage {
         };
         if let Some(row) = self.rows.iter().find(|r| r.id == id).cloned() {
             self.opening = None;
+            self.opening_quietly = false;
             if self.open_task_id() != Some(id.as_str()) {
                 self.open_editor(&row, false, window, cx);
             }
         } else if !self.loading && self.prefs["defaultView"].is_string() {
             self.opening = None;
-            self.error = Some("That task isn't in Tasks any more.".into());
+            if !std::mem::take(&mut self.opening_quietly) {
+                self.error = Some("That task isn't in Tasks any more.".into());
+            }
             cx.notify();
         }
     }
