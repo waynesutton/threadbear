@@ -130,6 +130,13 @@ function lastLine(s: string): string {
   return (lines[lines.length - 1] ?? '').slice(0, 300);
 }
 
+// The token flyctl prints, whole: an org token runs to hundreds of characters,
+// so it mustn't go through lastLine's cut.
+export function tokenLine(s: string): string {
+  const lines = s.trim().split('\n').map((l) => l.trim()).filter(Boolean);
+  return lines[lines.length - 1] ?? '';
+}
+
 export class CloudSetup {
   private job: CloudStatus['job'];
   private going: Promise<void> | undefined;
@@ -271,7 +278,7 @@ export class CloudSetup {
     const signedIn = await this.deps.exec('fly', ['auth', 'whoami'], { timeoutMs: 20_000 });
     if (!signedIn.ok) throw new Error('flyctl isn\'t signed in. Run fly auth login in a terminal, then try again, or paste a token.');
     const r = await this.deps.exec('fly', ['tokens', 'create', 'org', org, '--name', 'threadbear-boxes', '--expiry', '8760h'], { timeoutMs: 30_000 });
-    const t = cleanToken(lastLine(r.out));
+    const t = cleanToken(tokenLine(r.out));
     if (!r.ok || !looksLikeFlyToken(t)) throw new Error(`flyctl couldn't make a token for ${org}: ${scrub(lastLine(r.err) || 'no answer', t)}`);
     rememberToken(t);
     return t;
@@ -355,7 +362,7 @@ export class CloudSetup {
       return;
     }
     const deploy = await this.deps.exec('fly', ['tokens', 'create', 'deploy', '-a', app, '--name', 'threadbear-box-image', '--expiry', '8760h'], { env: { FLY_API_TOKEN: token }, timeoutMs: 30_000 });
-    const narrow = cleanToken(lastLine(deploy.out));
+    const narrow = cleanToken(tokenLine(deploy.out));
     if (!deploy.ok || !looksLikeFlyToken(narrow)) {
       s.state = 'warn';
       s.detail = `flyctl couldn't make the image's own token: ${scrub(lastLine(deploy.err) || 'no answer', token)}`;

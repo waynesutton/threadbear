@@ -11,8 +11,9 @@ import type { Logger } from '../../src/log.ts';
 import { CloudSetup, cleanToken, defaultAppName, looksLikeFlyToken, type CloudDeps, type Run } from '../../src/cloud-setup.ts';
 
 const TOKEN = `FlyV1 fm2_${'Ab1x'.repeat(12)}`;
-const MINTED = `FlyV1 fm2_${'Zz9q'.repeat(12)}`;
-const DEPLOY = `FlyV1 fm2_${'Dd4p'.repeat(12)}`;
+// As long as real ones: flyctl's org and deploy tokens run to hundreds of characters.
+const MINTED = `FlyV1 fm2_${'Zz9q'.repeat(120)},fm2_${'Zz9r'.repeat(40)}`;
+const DEPLOY = `FlyV1 fm2_${'Dd4p'.repeat(120)},fm2_${'Dd4r'.repeat(40)}`;
 
 type Calls = { exec: string[]; fly: string[]; convex: string[]; mutations: Record<string, unknown>[]; logs: string[] };
 
@@ -87,7 +88,7 @@ function world(opts: { flyctl?: boolean; signedIn?: boolean; gh?: boolean; apps?
       calls.fly.push(`${method} ${u.pathname}${u.search}`);
       const auth = (init?.headers as Record<string, string>)?.authorization;
       const json = (status: number, body: unknown) => new Response(JSON.stringify(body), { status });
-      if (opts.badToken || !auth?.startsWith('Bearer FlyV1 ')) return json(401, { error: 'unauthorized' });
+      if (opts.badToken || ![TOKEN, MINTED].map((t) => `Bearer ${t}`).includes(auth ?? '')) return json(401, { error: 'unauthorized' });
       const m = u.pathname.match(/^\/v1\/apps(?:\/([^/]+))?(?:\/machines(?:\/([^/]+))?)?$/);
       if (!m) return json(404, {});
       const [, app, machine] = m;
