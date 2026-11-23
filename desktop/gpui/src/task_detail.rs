@@ -1901,6 +1901,7 @@ impl TasksPage {
                 list = list.child(
                     h_flex()
                         .id(SharedString::from(format!("sub-{}", sub.id)))
+                        .group("sub-row")
                         .gap(px(10.))
                         .px(px(6.))
                         .py(px(6.))
@@ -1910,6 +1911,7 @@ impl TasksPage {
                         .child(
                             Checkbox::new(SharedString::from(format!("sub-check-{}", sub.id)))
                                 .checked(done)
+                                .unchecked_look(style::list_checkbox(cx, "sub-row"))
                                 .accessibility_label(format!(
                                     "Mark {} {}",
                                     sub.title,
