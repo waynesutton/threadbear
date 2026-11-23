@@ -89,6 +89,8 @@ import { TokenTally } from './token-tally.ts';
 import { usageStatsMethods } from './usage-stats.ts';
 import { Relay } from './relay.ts';
 import { VirtualRunners } from './virtual-runners.ts';
+import { CloudSetup, realExec } from './cloud-setup.ts';
+import { convexCli } from './runner-keys.ts';
 import { RpcServer } from './rpc.ts';
 import { AppSeen } from './app-seen.ts';
 import { realClock } from './clock.ts';
@@ -1685,6 +1687,32 @@ async function main(): Promise<void> {
   methods['cloudTokens.set'] = (p) => virtualRunners.set(String(p.login ?? ''), String(p.token ?? ''));
   methods['cloudTokens.useMac'] = (p) => virtualRunners.useMac(String(p.login ?? ''));
   methods['cloudTokens.list'] = () => virtualRunners.list();
+  // A Fly cloud runner set up from Settings, Runners or tb cloud (cloud-setup.ts):
+  // the backend's env on this Mac's deploy key, the image from this checkout.
+  const cloudSetup = new CloudSetup({
+    on: () => sync.virtualRunnersReady(),
+    call: (kind, fn, args) => sync.ownerCall(kind, fn, args),
+    convex: convexCli(cfg.home),
+    exec: realExec,
+    fetch: (url, init) => fetch(url, init),
+    checkout: () => ownCheckout(),
+    log,
+    now: () => Date.now(),
+  });
+  methods['cloud.status'] = () => cloudSetup.status();
+  methods['cloud.setup'] = (p) =>
+    cloudSetup.setup({
+      ...(typeof p.token === 'string' ? { token: p.token } : {}),
+      useFlyctl: p.useFlyctl === true,
+      ...(typeof p.org === 'string' ? { org: p.org } : {}),
+      ...(typeof p.app === 'string' ? { app: p.app } : {}),
+      ...(typeof p.name === 'string' ? { name: p.name } : {}),
+      ...(typeof p.serviceId === 'string' ? { serviceId: p.serviceId } : {}),
+      ...(typeof p.cpus === 'number' ? { cpus: p.cpus } : {}),
+      ...(typeof p.memoryMb === 'number' ? { memoryMb: p.memoryMb } : {}),
+    });
+  methods['cloud.check'] = () => cloudSetup.check();
+  methods['cloud.rebuild'] = () => cloudSetup.rebuild();
   // Starting threads on other runners, and a runner key's requests for
   // that (docs/protocol/runners.md, "Asking another runner").
   // A request's mode as the card showed it: none is the default (full

@@ -28,3 +28,24 @@ When('I drag {string} onto {string} in Settings', async function (this: Threadbe
   await this.until('the runners in an order that can change', (d) => section(d)?.canOrder === true);
   await this.app.do({ cmd: 'settings', drag: name, onto });
 });
+
+// Cloud runners (settings_window/cloud.rs): the section's dump has each
+// runner's name and line, and the last job's steps as "ok Box image" lines.
+type CloudSection = { runners?: { name: string; line: string }[]; steps?: string[] | null; running?: boolean };
+const cloud = (d: unknown) => (section(d) as (RunnersSection & { cloud?: CloudSection }) | null | undefined)?.cloud;
+
+Then('Settings shows no cloud runner yet', async function (this: ThreadbearWorld) {
+  await this.until('an empty Cloud runners section', (d) => Array.isArray(cloud(d)?.runners) && cloud(d)?.runners?.length === 0);
+});
+
+When('I add a cloud runner in Settings with a Fly token', async function (this: ThreadbearWorld) {
+  await this.app.do({ cmd: 'settings', cloudSetup: { token: `FlyV1 fm2_${'a'.repeat(40)}`, app: 'tb-boxes-alex' } });
+});
+
+Then('Settings lists the cloud runner {string} as {string}', async function (this: ThreadbearWorld, name: string, line: string) {
+  await this.until(`${name} under Cloud runners`, (d) => Boolean(cloud(d)?.runners?.some((r) => r.name === name && r.line === line)));
+});
+
+Then('Settings shows the cloud step {string}', async function (this: ThreadbearWorld, step: string) {
+  await this.until(`the step "${step}"`, (d) => Boolean(cloud(d)?.steps?.includes(step)));
+});

@@ -582,6 +582,36 @@ has to be on for it.
   moment it's read. `cloudTokens.list {}` answers `{ tokens: { login,
   madeAt, setAt, state }[] }`. Each needs the `virtualRunners`
   experiment and a backend of 94; otherwise `-32602`.
+- **Cloud setup** (cloud-setup.ts; docs/virtual-runners.md, "Setting one
+  up"). The app's Settings, Runners and `tb cloud` ask their own runner to
+  set up a Fly virtual runner, on the main Mac with its Convex deploy key.
+  `cloud.setup { token?, useFlyctl?, org?, app?, name?, serviceId?, cpus?,
+  memoryMb? }` answers `{ started: true }` at once and runs in the
+  background; `cloud.check {}` reads it all back without changing
+  anything, and `cloud.rebuild {}` builds the box image again. One job at
+  a time: another while one runs is `-32000`. `cloud.status {}` answers
+  `{ job?: { kind: "setup" | "check" | "rebuild", running, steps: { id,
+  title, state, detail? }[], startedAt, endedAt?, error? }, services:
+  { serviceId, name, provider, image, box, running, asleep }[] }`, never a
+  token; a step's `state` is `todo`, `doing`, `ok`, `warn`, `fail` or
+  `skipped`, and its `id` one of `flyctl`, `token`, `app`, `backend`,
+  `image`, `updates`, `service`, `test`. Setup checks each step and does
+  only what's missing: flyctl installed; the token (a paste wins, else
+  the one already on the backend, else with `useFlyctl` an org token
+  made by flyctl's own sign-in) checked with `GET /apps?org_slug=`; the
+  app made if it isn't there; `FLY_API_TOKEN`, `FLY_APP` and `FLY_ORG`
+  set on the backend, and `BOX_SEAL_KEY` only when it has none (a new one
+  would make every sealed cloud token unreadable); the image built from
+  this Mac's checkout on Fly's remote builder as
+  `registry.fly.io/<app>:latest`; with `gh` signed in, `FLY_BOX_APP` and
+  a narrowed `FLY_BOX_IMAGE_TOKEN` on the checkout's GitHub repo so
+  `box-image.yml` keeps it up to date (else `warn`); `setRunnerService`
+  (the first Fly one, or `serviceId`'s); and a test box from the image
+  with no boot token, which must exit 64 and is then deleted. The token
+  goes only to the backend's env and flyctl's environment, never to an
+  argument, the log, a step or an error. Each needs the
+  `virtualRunners` experiment and a backend of 94; otherwise `-32602`.
+  From a thread's own key only `cloud.status` is taken (rpc-gate.ts).
 - **Starting from the Mac.** `threads.create` with `serviceId` (a virtual
   runner's id from `RemoteThreads.services`) starts the thread on it:
   the runner reads the repo from `cwd` on this Mac (`origin` without

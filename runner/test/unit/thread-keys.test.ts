@@ -863,13 +863,17 @@ test("a login's cloud token and a thread on a virtual runner are the user's, fro
       started.push(p);
       return { thread: { id: 'cloud-1', runnerId: 'abcdef012345' } };
     },
-    methods: { 'cloudTokens.set': (p) => (tokens.push(p), {}), 'cloudTokens.make': (p) => (tokens.push(p), {}) },
+    methods: { 'cloudTokens.set': (p) => (tokens.push(p), {}), 'cloudTokens.make': (p) => (tokens.push(p), {}), 'cloud.setup': (p) => (tokens.push(p), { started: true }), 'cloud.rebuild': () => (tokens.push({}), { started: true }), 'cloud.status': () => ({ services: [] }) },
   });
   const me = thread(h, 'full');
   try {
     const c = await as(url, token, me.id);
     await assert.rejects(c.call('cloudTokens.set', { login: 'me@example.com', token: 'sk-ant-oat01-x' }), (e: { code?: number; message?: string }) => refused(e) && /card in the app/.test(e.message ?? ''));
     await assert.rejects(c.call('cloudTokens.make', { login: 'me@example.com' }), refused);
+    // A Fly cloud runner's setup is the user's too; reading its status isn't.
+    await assert.rejects(c.call('cloud.setup', { token: 'FlyV1 x' }), (e: { code?: number; message?: string }) => refused(e) && /Settings, Runners/.test(e.message ?? ''));
+    await assert.rejects(c.call('cloud.rebuild', {}), refused);
+    assert.deepEqual(await c.call('cloud.status', {}), { services: [] });
     await assert.rejects(c.call('threads.create', { text: 'x', serviceId: 'runnerServices:1', cwd: '/x', accountId: 'claude-3' }), (e: { code?: number; message?: string }) => refused(e) && /Runs on/.test(e.message ?? ''));
     c.close();
     assert.deepEqual([started.length, tokens.length], [0, 0]);

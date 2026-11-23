@@ -30,3 +30,15 @@ Feature: Settings › Runners
     Then Settings lists the runners "mac-mini: Online" and "laptop *: This Mac"
     When I open the Runners panel
     Then the Runners panel lists "mac-mini" before "laptop"
+
+  # Cloud runners: a Fly virtual runner set up from one token
+  # (docs/virtual-runners.md, "Setting one up"). The Swift app is frozen, so
+  # this is the GPUI app's alone.
+  @settings.cloud @virtual-runners @swift-pending
+  Scenario: Adding a cloud runner shows each step, then the runner
+    When I open Settings on "runners"
+    Then Settings shows no cloud runner yet
+    When I add a cloud runner in Settings with a Fly token
+    Then Settings lists the cloud runner "Cloud (Fly)" as "Fly · 1 CPU, 2 GB"
+    And Settings shows the cloud step "ok Box image"
+    And Settings shows the cloud step "warn Image follows main (GitHub): gh isn't signed in here, so the image updates only when you press Rebuild."

@@ -463,6 +463,10 @@ const cloudTokens = new Map([
   ['alex+4@example.com', { state: 'valid', madeAt: Date.now() - 20 * 86_400_000, setAt: Date.now() - 20 * 86_400_000 }],
 ]);
 if (VIRTUAL) addVirtualDemo();
+// Cloud setup's last job and its runners (none until a setup here).
+const CLOUD_STEPS = [['flyctl', 'flyctl installed'], ['token', 'Fly token works'], ['app', 'App for the boxes'], ['backend', 'Token and keys saved to your backend'], ['image', 'Box image'], ['updates', 'Image follows main (GitHub)'], ['service', 'Cloud runner'], ['test', 'Test box: start, check, delete']];
+let cloudJob;
+const cloudServices = [];
 /** The schedules (docs/protocol/projects.md, "Schedules"), soonest first. */
 let schedules = [];
 addDemoSchedules();
@@ -1998,6 +2002,34 @@ async function dispatch(client, method, p) {
       if (tokenHold) await tokenHold.promise;
       tokenSet(login);
       return {};
+    }
+    // Setting up a Fly virtual runner (docs/protocol/keys.md, "Cloud setup"):
+    // each step takes a moment here, as if Fly and flyctl answered at once.
+    case 'cloud.status':
+      if (!VIRTUAL) throw rpcError(-32602, 'Virtual runners are an experiment that is off here.');
+      return { ...(cloudJob ? { job: cloudJob } : {}), services: cloudServices };
+    case 'cloud.setup':
+    case 'cloud.check':
+    case 'cloud.rebuild': {
+      if (!VIRTUAL) throw rpcError(-32602, 'Virtual runners are an experiment that is off here.');
+      if (cloudJob?.running) throw rpcError(-32000, `A cloud ${cloudJob.kind} is already running.`);
+      if (method === 'cloud.setup' && p.token !== undefined && !/^FlyV1 \S{20,}$/.test(String(p.token))) throw rpcError(-32602, "That doesn't look like a Fly token (FlyV1 fm2_… from fly tokens create, or fo1_…).");
+      const kind = method.slice('cloud.'.length);
+      const ids = kind === 'setup' ? CLOUD_STEPS : kind === 'check' ? CLOUD_STEPS.filter(([id]) => ['flyctl', 'token', 'app', 'backend', 'service'].includes(id)) : CLOUD_STEPS.filter(([id]) => ['flyctl', 'token', 'image'].includes(id));
+      cloudJob = { kind, running: true, startedAt: Date.now(), steps: ids.map(([id, title]) => ({ id, title, state: 'todo' })) };
+      const job = cloudJob;
+      void (async () => {
+        for (const step of job.steps) {
+          step.state = 'doing';
+          await sleep(250);
+          step.state = step.id === 'updates' ? 'warn' : 'ok';
+          if (step.id === 'updates') step.detail = "gh isn't signed in here, so the image updates only when you press Rebuild.";
+        }
+        if (kind === 'setup' && !cloudServices.length) cloudServices.push({ serviceId: 'svc_fly', name: String(p.name ?? 'Cloud (Fly)'), provider: 'fly', image: `registry.fly.io/${p.app ?? 'tb-boxes-alex'}:latest`, box: { cpus: p.cpus ?? 1, memoryMb: p.memoryMb ?? 2048 }, running: 0, asleep: 0 });
+        job.running = false;
+        job.endedAt = Date.now();
+      })();
+      return { started: true };
     }
     case 'cloudTokens.list':
       return { tokens: [...cloudTokens].map(([login, t]) => ({ login, madeAt: t.madeAt, setAt: t.setAt, state: t.state })) };

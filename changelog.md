@@ -22,6 +22,7 @@ How the Tasks section works today (an experiment: turn it on in Settings > Exper
 
 ### Added
 
+- Settings > Runners has a Cloud runners section. Add a cloud runner… sets up Fly from one org token, or from flyctl's own sign-in: it makes the Fly app, saves the token and keys to your backend, builds the box image, makes the runner and tries a test box, showing each step as it goes. Afterwards the section lists each cloud runner's box size and threads, with Check again, Rebuild and Edit…. `tb cloud setup`, `check` and `rebuild` do the same from a terminal. Needs the `virtualRunners` experiment and flyctl.
 - Tasks have Favorites: add a task from its ⋯ menu, the star on its page or Option-F, and it shows under Favorites at the top of the list and as the board's first column while staying in its own column. The list and board also take Linear's keys for what tasks have: C for a new task, S, P and Shift-D for status, priority and due date pickers (type to filter or press a number), Command-Shift-D, Command-Delete, Shift-R and Control-Shift-I. The app's own shortcuts always win.
 - Tasks can go to Linear when Linear is connected in Connectors. Send to Linear makes one issue in the team and project you pick, with sub-tasks as a checklist and the task's pictures uploaded. Add from Linear brings issues in as tasks, and Link to Linear issue ties a task to one that exists. Tasks you keep in sync copy status, priority, due date, title and comments from Linear every hour (or 6, 12 or 24 hours), with no tokens spent. Without Linear, Tasks is unchanged.
 

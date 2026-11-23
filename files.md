@@ -1,5 +1,12 @@
 # Files
 
+## Cloud runners setup
+
+- `runner/src/cloud-setup.ts`: sets up a Fly virtual runner from one token (flyctl, the Fly app, backend env, box image, GitHub variables, the runner row, a test box), and checks or rebuilds it; `cloud.*` RPC methods in `runner/src/main.ts`, `tb cloud` in `runner/src/cli.ts`.
+- `runner/test/unit/cloud-setup.test.ts`: the steps against a fake Fly API, flyctl, gh and backend.
+- `desktop/core/src/cloud_runners.rs`: `cloud.status` read into rows, and the section's and sheet's words.
+- `desktop/gpui/src/settings_window/cloud.rs`: Settings › Runners › Cloud runners and the Add a cloud runner sheet.
+
 ## November release verification
 
 - `prds/bring-in-2026-11-20-verification.md`: remaining merge repairs, verification and landing review.

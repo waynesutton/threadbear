@@ -36,6 +36,7 @@ use threadbear_core::runner_settings::{
     experiment_about, BringIn, Experiment, RunnerSettings, StandingInstructions,
 };
 
+mod cloud;
 pub(crate) mod devices;
 mod keyboard;
 mod pools;
@@ -179,6 +180,7 @@ impl Threadbear {
             view.commit_instructions(cx);
             view.stop_listening(cx);
             view.devices_hidden();
+            view.cloud_hidden();
         });
         let (window, focus) = (self.main_window, self.root_focus.clone());
         cx.defer(move |cx| {
@@ -282,6 +284,8 @@ pub(crate) struct SettingsWindow {
     pools: pools::PoolsDraft,
     /// Phone & browser's list and pairing (`settings_window/devices.rs`).
     devices: devices::DevicesDraft,
+    /// Runners' Cloud runners section (`settings_window/cloud.rs`).
+    cloud: cloud::CloudDraft,
     /// Keyboard's search and the key being listened for (`settings_window/keyboard.rs`).
     keyboard: keyboard::KeyboardDraft,
     /// The ding's volume (Notifications).
@@ -499,6 +503,7 @@ impl SettingsWindow {
             resolve_error: None,
             pools: Default::default(),
             devices: Default::default(),
+            cloud: Default::default(),
             keyboard: Default::default(),
             volume,
             scroll: ScrollHandle::new(),
@@ -530,6 +535,7 @@ impl SettingsWindow {
             // back to Phone & browser asks for the list again (`onAppear`).
             self.stop_listening(cx);
             self.devices_hidden();
+            self.cloud_hidden();
             self.tab = tab;
             self.scroll
                 .set_offset(point(gpui_kit::px(0.), gpui_kit::px(0.)));

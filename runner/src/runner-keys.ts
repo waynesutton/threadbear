@@ -20,7 +20,7 @@ import { convexPoster, forbiddenText, readSyncKey, type Post } from './sync.ts';
 type Run = { ok: boolean; out: string; err: string };
 type Ssh = (host: string, command: string, input?: string) => Run;
 // The Convex CLI with this Mac's deploy key, for rotate-owner's env vars.
-type ConvexCli = (args: string[], input?: string) => Run;
+export type ConvexCli = (args: string[], input?: string) => Run;
 // heads: this Mac's runner's threads and their last seq, for the audit (cli.ts asks the runner).
 // deployKeys: the deployment's deploy keys as Convex lists them (undefined:
 // no way to ask, see listDeployKeys). host: this Mac's short name.
@@ -206,7 +206,8 @@ export function convexScratchDir(): string {
   return dir;
 }
 
-const realConvex =
+// The Convex CLI on this Mac's deploy key alone; cloud-setup.ts sets the box env vars with it.
+export const convexCli =
   (home: string): ConvexCli =>
   (args, input) => {
     // Only this Mac's deploy key (or a self-hosted backend's admin key) picks the deployment.
@@ -292,7 +293,7 @@ export async function runnerKeysCommand(cfg: Pick<Config, 'home' | 'sync'>, args
     if (sub === 'check') return check(cfg, key, f, deps.ssh ?? realSsh, print, fail, deps.userHome ?? os.homedir(), url);
     if (sub === 'audit') return await auditCommand(f, call, deps.heads, print, fail, cfg.sync.runnerId);
     if (sub === 'rotate-owner') {
-      const code = await rotateOwner(cfg.home, key, f, call, deps.convex ?? realConvex(cfg.home), print, fail, url, deps.deployKeys ?? (() => listDeployKeys(url, process.env.CONVEX_TEAM_TOKEN)), cfg.sync.runnerId, (deps.now ?? Date.now)());
+      const code = await rotateOwner(cfg.home, key, f, call, deps.convex ?? convexCli(cfg.home), print, fail, url, deps.deployKeys ?? (() => listDeployKeys(url, process.env.CONVEX_TEAM_TOKEN)), cfg.sync.runnerId, (deps.now ?? Date.now)());
       // Finishing kills the old key, not what it made: show that next.
       if (code === 0 && f.finish) await auditCommand({}, call, deps.heads, print, fail, cfg.sync.runnerId);
       return code;

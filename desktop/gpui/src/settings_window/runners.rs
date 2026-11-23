@@ -197,6 +197,11 @@ impl SettingsWindow {
             ));
         }
 
+        // Cloud runners: a machine per thread (settings_window/cloud.rs).
+        if let Some(cloud) = self.cloud_section(cx) {
+            sections.push(cloud);
+        }
+
         sections
     }
 
@@ -386,6 +391,7 @@ impl SettingsWindow {
             "default": default,
             "canOrder": shown.orderable,
             "directLink": false,
+            "cloud": self.cloud_dump(),
         })
     }
 }
@@ -418,6 +424,9 @@ pub(crate) fn automation(
     cx: &mut App,
 ) -> Result<Option<Value>, String> {
     use gpui_kit::test::{TestEventExt as _, TestWindowExt as _};
+    if let Some(done) = super::cloud::automation(app, cmd, window, cx)? {
+        return Ok(Some(done));
+    }
     if let Some(name) = cmd["defaultRunner"].as_str() {
         let runner = if name == "This Mac" {
             None

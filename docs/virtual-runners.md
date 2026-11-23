@@ -1021,6 +1021,51 @@ Not built yet, in about the order they're needed:
 Everything here goes through the cross-lab review in Mike's global instructions before
 it's called done.
 
+## Setting one up
+
+Wayne, 22 Nov 2026: setting up Fly by hand took about 14 commands across
+flyctl, `npx convex env set`, `gh` and openssl, then a `setRunnerService`
+by hand, and nothing in the app said what was missing. Settings › Runners
+now has the section the plan above calls for, Cloud runners, with Add a
+cloud runner… when there's none, and `tb cloud setup` does the same from a
+terminal (`runner/src/cloud-setup.ts`; protocol: docs/protocol/keys.md,
+"Cloud setup").
+
+- **One token in.** Paste an org token (`fly tokens create org`), or Use
+  flyctl's sign-in makes one with the flyctl already signed in on this Mac
+  (a year long, named `threadbear-boxes`). flyctl must be installed: the
+  first step says `brew install flyctl` if it isn't. Nothing installs it.
+- **What it does**, each step checked first and done only if missing, so a
+  second run changes nothing: checks the token with `GET
+  /apps?org_slug=`; makes the app (`tb-boxes-<user>` unless named); sets
+  `FLY_API_TOKEN`, `FLY_APP` and `FLY_ORG` on the backend with this Mac's
+  deploy key, and `BOX_SEAL_KEY` only when there's none (a new one would
+  make every sealed cloud token unreadable); builds the box image from this
+  Mac's checkout on Fly's remote builder as `registry.fly.io/<app>:latest`,
+  the same Dockerfile and context `box-image.yml` uses; with `gh` signed
+  in, sets `FLY_BOX_APP` and a narrowed `FLY_BOX_IMAGE_TOKEN` on the
+  checkout's GitHub repo so that workflow keeps the image on main; makes
+  the virtual runner (`setRunnerService`); and starts a test box with no
+  boot token, which must exit 64 (`smoke.sh`'s check), then deletes it.
+- **Nothing in convex/ changed for it.** It writes what the backend
+  already reads, so a change of Mike's to how Fly is configured needs only
+  cloud-setup.ts to follow.
+- **The section** lists each virtual runner with its box size and threads
+  running and asleep, the last setup's or check's steps, and Check again,
+  Rebuild and Edit…. No cost line yet (Wayne's call), though the plan above
+  has one.
+- **Only the user.** `cloud.setup` and `cloud.rebuild` are refused from a
+  thread's key (rpc-gate.ts), as `cloudTokens.*` are: it's their account
+  and their money. `cloud.status` isn't.
+- **The token** goes to the backend's env and flyctl's environment, never
+  to an argument, the log, a step or an error, and the scrubber knows it as
+  soon as it's read.
+
+Not done yet: removing a virtual runner from the app (archive its threads,
+then delete the `runnerServices` row and unset the env vars, as
+docs/forking.md says), the "image behind main" check, and the other
+providers, which the sheet shows as "later".
+
 ## Faster starts
 
 Mike, 18 Nov, after the cold start took 159 s on Fly: "The spin up time is

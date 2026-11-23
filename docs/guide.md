@@ -1716,6 +1716,14 @@ runner that's online in it. Adding or renaming a runner is done on its own machi
 so ask an agent to do it for you. Schedules need your
 Convex backend: with no internet, they wait.
 
+To set one up, open Settings > Runners and press Add a cloud runner… under
+Cloud runners (it shows with the `virtualRunners` experiment on). Paste a
+Fly org token, or press Use flyctl's sign-in if flyctl is signed in on this
+Mac, pick a box size and press Add. Threadbear makes the Fly app, saves the
+token and keys to your backend, builds the box image and tries a test box,
+showing each step as it goes. Check again and Rebuild are there afterwards.
+`tb cloud setup` in a terminal does the same.
+
 With the `virtualRunners` experiment on and a virtual runner set up in your
 backend (docs/virtual-runners.md), Runs on also lists it after the Macs,
 for example "Cloud (Fly)": the thread gets a machine of its own in the

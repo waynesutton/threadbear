@@ -103,6 +103,10 @@ const OPTIONS = {
   'keys-checked': { type: 'boolean' },
   'lock-out': { type: 'string', multiple: true },
   purge: { type: 'boolean' },
+  // tb cloud
+  org: { type: 'string' },
+  app: { type: 'string' },
+  flyctl: { type: 'boolean' },
   lines: { type: 'string', short: 'n' },
   follow: { type: 'boolean', short: 'f' },
   since: { type: 'string' },
@@ -207,6 +211,12 @@ ${TABLES_HELP}
                                   what the old shared key could have left (tokens, keys,
                                   schedules, cards, messages, pictures), numbered; --drop
                                   takes out those rows, if the listing hasn't changed
+  tb cloud [status|check|setup|rebuild] [--json]
+                                  a Fly cloud runner, as Settings, Runners sets it up: setup takes
+                                  a Fly token on stdin (echo "$TOKEN" | tb cloud setup) or
+                                  --flyctl for flyctl's own sign-in, with [--org O] [--app A];
+                                  check reads it back; rebuild makes the box image again. Each
+                                  waits and prints its steps. The user's to run, not a thread's
   tb retitle [<threadId>...] [--dry-run] [--json]
                                   a model title for every thread still named by its first line,
                                   or for the ones given (never one named by hand)
@@ -256,6 +266,7 @@ const COMMAND_FLAGS: Record<string, string[]> = {
   export: ['out'],
   rpc: [],
   land: ['dry-run', 'despite-red', 'allow-format'],
+  cloud: ['json', 'org', 'app', 'flyctl'],
   runner: ['ssh', 'out', 'id', 'json', 'finish', 'replace', 'drop', 'snapshot', 'keys-checked', 'lock-out', 'purge'],
 };
 
@@ -469,6 +480,48 @@ async function threadFromRunner(cfg: ReturnType<typeof loadConfig>, threadId: st
   }
 }
 
+
+type CloudStep = { id: string; title: string; state: string; detail?: string };
+type CloudStatusReply = { job?: { kind: string; running: boolean; steps: CloudStep[]; error?: string }; services: { name: string; image: string; box: { cpus: number; memoryMb: number }; running: number; asleep: number }[] };
+
+// tb cloud: the same steps Settings, Runners shows (cloud-setup.ts), printed as they finish.
+async function cloudCommand(client: RunnerClient, sub: string, f: Flags): Promise<number> {
+  const mark: Record<string, string> = { ok: 'ok  ', warn: 'warn', fail: 'FAIL', skipped: 'skip', todo: '    ', doing: '... ' };
+  const print = (st: CloudStatusReply) => {
+    if (f.json) return console.log(JSON.stringify(st, null, 2));
+    for (const s of st.job?.steps ?? []) console.log(`${mark[s.state] ?? s.state} ${s.title}${s.detail ? `: ${s.detail}` : ''}`);
+    for (const r of st.services) console.log(`${r.name}: ${r.box.cpus} CPU, ${r.box.memoryMb / 1024} GB, ${r.running} running, ${r.asleep} asleep (${r.image})`);
+    if (!st.services.length && !st.job) console.log('No cloud runner yet: tb cloud setup, or Settings, Runners in the app.');
+  };
+  if (sub === 'status') {
+    print(await client.call<CloudStatusReply>('cloud.status', {}));
+    return 0;
+  }
+  if (sub === 'setup') {
+    let token: string | undefined;
+    if (!f.flyctl) {
+      if (process.stdin.isTTY) throw new Error('Give the Fly token on stdin (echo "$FLY_TOKEN" | tb cloud setup), never as an argument, or use --flyctl.');
+      const chunks: Buffer[] = [];
+      for await (const c of process.stdin) chunks.push(c as Buffer);
+      token = Buffer.concat(chunks).toString('utf8').trim() || undefined;
+    }
+    await client.call('cloud.setup', { ...(token ? { token } : {}), useFlyctl: Boolean(f.flyctl), ...(f.org ? { org: String(f.org) } : {}), ...(f.app ? { app: String(f.app) } : {}) });
+  } else if (sub === 'check' || sub === 'rebuild') {
+    await client.call(`cloud.${sub}`, {});
+  } else {
+    console.error('Usage: tb cloud [status|check|setup|rebuild]');
+    return 2;
+  }
+  let st: CloudStatusReply;
+  for (;;) {
+    st = await client.call<CloudStatusReply>('cloud.status', {});
+    if (!st.job?.running) break;
+    await new Promise((r) => setTimeout(r, 2000));
+  }
+  print(st);
+  if (st.job?.error) console.error(st.job.error);
+  return st.job?.error ? 1 : 0;
+}
 
 async function run(client: RunnerClient, cmd: string, args: string[], f: Flags): Promise<number> {
   const images = async (): Promise<ImageRef[]> => {
@@ -863,6 +916,8 @@ async function run(client: RunnerClient, cmd: string, args: string[], f: Flags):
       else printLibrarian(r.librarian);
       return 0;
     }
+    case 'cloud':
+      return cloudCommand(client, args[0] ?? 'status', f);
     case 'settings': {
       // tb settings full on|off: full sync (docs/convex-backend.md, "Full sync").
       if (args[0] === 'full') {

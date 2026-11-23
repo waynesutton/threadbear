@@ -10,6 +10,7 @@ pub mod bears_panel;
 pub mod board;
 pub mod browserbear;
 pub mod chips;
+pub mod cloud_runners;
 pub mod completion_sound;
 pub mod composer;
 pub mod confetti;
