@@ -1042,7 +1042,10 @@ terminal (`runner/src/cloud-setup.ts`; protocol: docs/protocol/keys.md,
   deploy key, and `BOX_SEAL_KEY` only when there's none (a new one would
   make every sealed cloud token unreadable); builds the box image from this
   Mac's checkout on Fly's remote builder as `registry.fly.io/<app>:latest`,
-  the same Dockerfile and context `box-image.yml` uses; with `gh` signed
+  the same Dockerfile and context `box-image.yml` uses (skipped when the
+  registry already has that tag, asked with flyctl's sign-in since the
+  registry refuses org tokens; a build that loses the builder's connection
+  is tried up to three times); with `gh` signed
   in, sets `FLY_BOX_APP` and a narrowed `FLY_BOX_IMAGE_TOKEN` on the
   checkout's GitHub repo so that workflow keeps the image on main; makes
   the virtual runner (`setRunnerService`); and starts a test box with no

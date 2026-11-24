@@ -102,6 +102,10 @@ const MB_STEP = 256;
 const FLY_SUSPEND_MAX_MB = 2048;
 // The image build: Claude Code's download and npm ci on Fly's remote builder.
 const BUILD_MS = 20 * 60_000;
+const BUILD_TRIES = 3;
+// flyctl's words when the builder or the network let go, not when the build is wrong.
+const NETWORK_BLIP = /timed out|timeout|code = Unavailable|connection reset|broken pipe|unexpected EOF|i\/o timeout|502 Bad Gateway|503 Service Unavailable|no route to host/i;
+const REGISTRY_ACCEPT = 'application/vnd.oci.image.index.v1+json, application/vnd.docker.distribution.manifest.list.v2+json, application/vnd.docker.distribution.manifest.v2+json, application/vnd.oci.image.manifest.v1+json';
 // The smoke box: no boot token, so the runner says why and exits 64 (runner/box/smoke.sh).
 const NO_BOOT_EXIT = 64;
 
@@ -378,6 +382,29 @@ export class CloudSetup {
     s.detail = done.length ? `set ${done.join(', ')}` : 'already set';
   }
 
+  // Whether registry.fly.io has the app's :latest. The registry takes flyctl's
+  // own sign-in (an org token is refused there), so that's tried after the token.
+  // Anything unclear is "no", and the image is built.
+  private async imageThere(token: string, app: string): Promise<boolean> {
+    const ask = async (t: string): Promise<number> => {
+      try {
+        const res = await this.deps.fetch(`https://registry.fly.io/v2/${app}/manifests/latest`, {
+          method: 'HEAD',
+          headers: { authorization: `Basic ${Buffer.from(`x:${t}`).toString('base64')}`, accept: REGISTRY_ACCEPT },
+          signal: AbortSignal.timeout(15_000),
+        });
+        return res.status;
+      } catch {
+        return 0;
+      }
+    };
+    const first = await ask(token);
+    if (first !== 401) return first === 200;
+    const own = await this.deps.exec('fly', ['auth', 'token'], { timeoutMs: 20_000 });
+    const t = own.ok ? tokenLine(own.out).trim() : '';
+    return t ? (await ask(t)) === 200 : false;
+  }
+
   // The image from this Mac's checkout on Fly's remote builder, the same build CI runs (box-image.yml).
   private async build(token: string, app: string, s: Step): Promise<void> {
     const runnerDir = path.join(this.deps.checkout(), 'runner');
@@ -387,14 +414,24 @@ export class CloudSetup {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'tb-fly-'));
     const config = path.join(dir, 'fly.toml');
     fs.writeFileSync(config, `app = ${JSON.stringify(app)}\n`);
-    s.detail = `building ${commit.slice(0, 9)} on Fly's builder`;
     try {
-      const r = await this.deps.exec(
-        'fly',
-        ['deploy', '--build-only', '--push', '--remote-only', '--image-label', 'latest', '--config', config, '--dockerfile', path.join(runnerDir, 'box', 'Dockerfile'), '--build-arg', `COMMIT=${commit}`, '--build-arg', `BUILT_AT=${new Date(this.deps.now()).toISOString()}`, '-a', app, runnerDir],
-        { env: { FLY_API_TOKEN: token }, cwd: runnerDir, timeoutMs: BUILD_MS },
-      );
-      if (!r.ok) throw new Error(`The build failed: ${scrub(lastLine(r.err) || lastLine(r.out) || 'no answer', token)}`);
+      // Fly's builder sometimes drops the connection part way (a read timing
+      // out, "Unavailable"): that's Fly's side, so it tries again before failing.
+      for (let tryNo = 1; ; tryNo++) {
+        s.detail = tryNo === 1 ? `building ${commit.slice(0, 9)} on Fly's builder` : `Fly's builder dropped the connection, trying again (${tryNo} of ${BUILD_TRIES})`;
+        const r = await this.deps.exec(
+          'fly',
+          ['deploy', '--build-only', '--push', '--remote-only', '--image-label', 'latest', '--config', config, '--dockerfile', path.join(runnerDir, 'box', 'Dockerfile'), '--build-arg', `COMMIT=${commit}`, '--build-arg', `BUILT_AT=${new Date(this.deps.now()).toISOString()}`, '-a', app, runnerDir],
+          { env: { FLY_API_TOKEN: token }, cwd: runnerDir, timeoutMs: BUILD_MS },
+        );
+        if (r.ok) break;
+        const why = scrub(lastLine(r.err) || lastLine(r.out) || 'no answer', token);
+        if (tryNo < BUILD_TRIES && NETWORK_BLIP.test(`${r.err}\n${r.out}`)) {
+          await (this.deps.sleep ?? ((ms: number) => new Promise((res) => setTimeout(res, ms))))(10_000);
+          continue;
+        }
+        throw new Error(NETWORK_BLIP.test(`${r.err}\n${r.out}`) ? `Fly's builder kept dropping the connection (${why}). That's on Fly's side or this network: try again in a few minutes.` : `The build failed: ${why}`);
+      }
     } finally {
       fs.rmSync(dir, { recursive: true, force: true });
     }
@@ -510,7 +547,12 @@ export class CloudSetup {
     const t = token as string;
     await this.doStep(steps, 'app', (s) => this.ensureApp(t, p.org, p.app, s, true));
     await this.doStep(steps, 'backend', async (s) => this.saveBackend(t, p.org, p.app, s));
-    await this.doStep(steps, 'image', (s) => this.build(t, p.app, s));
+    await this.doStep(steps, 'image', async (s) => {
+      // Setting up again (Edit… and Save) needn't build: the image is there, and
+      // GitHub keeps it on main. Rebuild is the button for a new one.
+      if (await this.imageThere(t, p.app)) s.detail = `registry.fly.io/${p.app}:latest is there already (Rebuild makes a new one)`;
+      else await this.build(t, p.app, s);
+    });
     await this.doStep(steps, 'updates', (s) => this.github(t, p.app, s));
     await this.doStep(steps, 'service', (s) => this.saveService(p, p.app, s));
     await this.doStep(steps, 'test', (s) => this.testBox(t, p.app, s));

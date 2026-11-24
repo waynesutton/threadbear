@@ -25,8 +25,9 @@ function checkout(): string {
   return dir;
 }
 
-function world(opts: { flyctl?: boolean; signedIn?: boolean; gh?: boolean; apps?: Set<string>; env?: Record<string, string>; exit?: number; badToken?: boolean; buildFails?: boolean; noDeployKey?: boolean; imageLateBy?: number } = {}) {
+function world(opts: { flyctl?: boolean; signedIn?: boolean; gh?: boolean; apps?: Set<string>; env?: Record<string, string>; exit?: number; badToken?: boolean; buildFails?: boolean; noDeployKey?: boolean; imageLateBy?: number; imageThere?: boolean; buildBlips?: number } = {}) {
   let late = opts.imageLateBy ?? 0;
+  let blips = opts.buildBlips ?? 0;
   const ghVars: Record<string, string> = {};
   const ghSecrets: string[] = [];
   const env: Record<string, string> = { ...opts.env };
@@ -81,6 +82,10 @@ function world(opts: { flyctl?: boolean; signedIn?: boolean; gh?: boolean; apps?
       if (cmd === 'fly' && args[0] === 'deploy') {
         assert.ok(o?.env?.FLY_API_TOKEN, 'the build gets the token in its environment');
         assert.ok(!args.join(' ').includes('fm2_'), 'never in its arguments');
+        if (blips > 0) {
+          blips--;
+          return no('Error: failed to fetch an image or build from source: error building: failed to receive status: rpc error: code = Unavailable desc = error reading from server: read tcp 192.168.1.178:58699->149.248.212.172:443: read: operation timed out\n');
+        }
         return opts.buildFails ? no(`Error: unauthorized ${TOKEN}\n`) : ok('image: registry.fly.io/x:latest\n');
       }
       if (cmd === 'git' && args.includes('remote')) return ok('https://github.com/someone/threadbear.git\n');
@@ -106,6 +111,12 @@ function world(opts: { flyctl?: boolean; signedIn?: boolean; gh?: boolean; apps?
       calls.fly.push(`${method} ${u.pathname}${u.search}`);
       const auth = (init?.headers as Record<string, string>)?.authorization;
       const json = (status: number, body: unknown) => new Response(JSON.stringify(body), { status });
+      if (u.host === 'registry.fly.io') {
+        // As Fly's registry does: org tokens are refused; flyctl's own sign-in is let in.
+        const who = Buffer.from(auth?.replace(/^Basic /, '') ?? '', 'base64').toString();
+        if (who !== 'x:me@example.com') return new Response(null, { status: 401 });
+        return new Response(null, { status: opts.imageThere ? 200 : 404 });
+      }
       if (opts.badToken || ![TOKEN, MINTED].map((t) => `Bearer ${t}`).includes(auth ?? '')) return json(401, { error: 'unauthorized' });
       const m = u.pathname.match(/^\/v1\/apps(?:\/([^/]+))?(?:\/machines(?:\/([^/]+))?)?$/);
       if (!m) return json(404, {});
@@ -442,4 +453,39 @@ test("the image token goes to the checkout's own GitHub repo once, and a second 
   assert.equal(githubRepo('git@github.com:a/b.git'), 'a/b');
   assert.equal(githubRepo('https://github.com/waynesutton/threadbear.git'), 'waynesutton/threadbear');
   assert.equal(githubRepo('https://gitlab.com/a/b.git'), undefined);
+});
+
+test('setting up again skips the build when the image is on Fly already', async () => {
+  const w = world({ imageThere: true });
+  const setup = new CloudSetup(w.deps);
+  setup.setup({ token: TOKEN, app: 'tb-boxes-again' });
+  await setup.wait();
+  const st = await setup.status();
+  const image = st.job?.steps.find((s) => s.id === 'image');
+  assert.equal(image?.state, 'ok');
+  assert.match(image?.detail ?? '', /there already/);
+  assert.ok(!w.calls.exec.some((c) => c.startsWith('fly deploy')), 'no build');
+  assert.ok(w.calls.fly.includes('HEAD /v2/tb-boxes-again/manifests/latest'));
+  await noToken(w, setup, [st.job?.error ?? '']);
+});
+
+test("the build tries again when Fly's builder drops the connection", async () => {
+  const w = world({ buildBlips: 2 });
+  const setup = new CloudSetup(w.deps);
+  setup.setup({ token: TOKEN, app: 'tb-boxes-blip' });
+  await setup.wait();
+  const st = await setup.status();
+  assert.equal(st.job?.steps.find((s) => s.id === 'image')?.state, 'ok');
+  assert.equal(w.calls.exec.filter((c) => c.startsWith('fly deploy')).length, 3);
+});
+
+test("a builder that keeps dropping says it's Fly's side, not the build", async () => {
+  const w = world({ buildBlips: 5 });
+  const setup = new CloudSetup(w.deps);
+  setup.setup({ token: TOKEN, app: 'tb-boxes-down' });
+  await setup.wait();
+  const image = (await setup.status()).job?.steps.find((s) => s.id === 'image');
+  assert.equal(image?.state, 'fail');
+  assert.match(image?.detail ?? '', /try again in a few minutes/);
+  assert.equal(w.calls.exec.filter((c) => c.startsWith('fly deploy')).length, 3);
 });
