@@ -1067,10 +1067,16 @@ terminal (`runner/src/cloud-setup.ts`; protocol: docs/protocol/keys.md,
   to an argument, the log, a step or an error, and the scrubber knows it as
   soon as it's read.
 
-Not done yet: removing a virtual runner from the app (archive its threads,
-then delete the `runnerServices` row and unset the env vars, as
-docs/forking.md says), the "image behind main" check, and other
-providers. The sheet sets up Fly only.
+- **Remove…** takes it out again (`cloud.remove`, `tb cloud remove`):
+  once its threads are archived it deletes the runner row
+  (`boxes:removeRunnerService`, API 109) and clears `FLY_API_TOKEN`,
+  `FLY_APP` and `FLY_ORG` from the backend. `BOX_SEAL_KEY` stays, as every
+  login's cloud token is sealed under it. The Fly app stays too unless its
+  checkbox is ticked (off by default), so adding it again is quick; then
+  it's deleted with its boxes and image.
+
+Not done yet: the "image behind main" check, and other providers. The
+sheet sets up Fly only.
 
 ## Faster starts
 

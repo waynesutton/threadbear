@@ -107,6 +107,7 @@ const OPTIONS = {
   org: { type: 'string' },
   app: { type: 'string' },
   flyctl: { type: 'boolean' },
+  'delete-app': { type: 'boolean' },
   lines: { type: 'string', short: 'n' },
   follow: { type: 'boolean', short: 'f' },
   since: { type: 'string' },
@@ -211,11 +212,14 @@ ${TABLES_HELP}
                                   what the old shared key could have left (tokens, keys,
                                   schedules, cards, messages, pictures), numbered; --drop
                                   takes out those rows, if the listing hasn't changed
-  tb cloud [status|check|setup|rebuild] [--json]
+  tb cloud [status|check|setup|rebuild|remove] [--json]
                                   a Fly cloud runner, as Settings, Runners sets it up: setup takes
                                   a Fly token on stdin (echo "$TOKEN" | tb cloud setup) or
                                   --flyctl for flyctl's own sign-in, with [--org O] [--app A];
-                                  check reads it back; rebuild makes the box image again. Each
+                                  check reads it back; rebuild makes the box image again;
+                                  remove takes it out (its threads archived first) and clears
+                                  the backend's Fly settings, deleting the Fly app only with
+                                  --delete-app. Each
                                   waits and prints its steps. The user's to run, not a thread's
   tb retitle [<threadId>...] [--dry-run] [--json]
                                   a model title for every thread still named by its first line,
@@ -508,8 +512,10 @@ async function cloudCommand(client: RunnerClient, sub: string, f: Flags): Promis
     await client.call('cloud.setup', { ...(token ? { token } : {}), useFlyctl: Boolean(f.flyctl), ...(f.org ? { org: String(f.org) } : {}), ...(f.app ? { app: String(f.app) } : {}) });
   } else if (sub === 'check' || sub === 'rebuild') {
     await client.call(`cloud.${sub}`, {});
+  } else if (sub === 'remove') {
+    await client.call('cloud.remove', { deleteApp: Boolean(f['delete-app']) });
   } else {
-    console.error('Usage: tb cloud [status|check|setup|rebuild]');
+    console.error('Usage: tb cloud [status|check|setup|rebuild|remove [--delete-app]]');
     return 2;
   }
   let st: CloudStatusReply;

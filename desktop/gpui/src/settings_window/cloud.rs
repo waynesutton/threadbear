@@ -8,6 +8,7 @@
 use super::{plain_note, section_with_body, SettingsWindow};
 use crate::push_button::PushButton;
 use crate::{call, icons, style};
+use gpui_kit::component::checkbox::Checkbox;
 use gpui_kit::component::input::{Input, InputState};
 use gpui_kit::component::{h_flex, v_flex, Sizable as _, StyledExt as _, WindowExt as _};
 use gpui_kit::prelude::*;
@@ -187,7 +188,7 @@ impl SettingsWindow {
 
     /// Check again or Rebuild: the button spins until the runner has it, then
     /// the steps show under the runner as they go.
-    fn start_cloud(&mut self, method: &'static str, cx: &mut Context<Self>) {
+    fn start_cloud(&mut self, method: &'static str, params: Value, cx: &mut Context<Self>) {
         if self.cloud.starting || self.cloud.status.as_ref().is_some_and(Status::running) {
             return;
         }
@@ -195,7 +196,7 @@ impl SettingsWindow {
         cx.notify();
         let client = self.client.clone();
         cx.spawn(async move |this, cx| {
-            let res = call(client, method, json!({})).await;
+            let res = call(client, method, params).await;
             this.update(cx, |this, cx| {
                 this.cloud.starting = false;
                 if let Err(e) = res {
@@ -207,6 +208,29 @@ impl SettingsWindow {
             .ok();
         })
         .detach();
+    }
+
+    /// Remove…: asks first, with the Fly app's deletion off unless ticked.
+    fn open_remove_dialog(
+        &mut self,
+        svc: rules::Service,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let settings = cx.entity().downgrade();
+        let view = cx.new(|_| RemoveConfirm {
+            settings,
+            app: rules::fly_app(&svc.image),
+            svc,
+            delete_app: false,
+        });
+        window.open_dialog(cx, move |dialog, _, _| {
+            dialog
+                .w(px(480.))
+                .close_button(false)
+                .child(view.clone())
+                .footer(div())
+        });
     }
 
     fn open_cloud_sheet(
@@ -259,7 +283,7 @@ impl SettingsWindow {
                         )
                         .child(
                             div()
-                                .min_w_0()
+                                .whitespace_nowrap()
                                 .text_color(style::secondary_label(cx))
                                 .child(rules::EMPTY),
                         )
@@ -267,7 +291,15 @@ impl SettingsWindow {
                     add,
                     cx,
                 )];
-                if let Some(job) = st.job.as_ref().filter(|j| j.error.is_some()) {
+                if let Some(job) = st.job.as_ref().filter(|j| j.kind == "remove") {
+                    // What removing it did, the Fly app's step saying how to delete it if kept.
+                    rows.extend(
+                        job.steps
+                            .iter()
+                            .filter(|s| s.state != StepState::Skipped)
+                            .map(|s| step_row(s, cx)),
+                    );
+                } else if let Some(job) = st.job.as_ref().filter(|j| j.error.is_some()) {
                     rows.extend(
                         job.steps
                             .iter()
@@ -359,8 +391,10 @@ impl SettingsWindow {
                     .render(cx, {
                         let me = me.clone();
                         move |_, _, cx| {
-                            me.update(cx, |this, cx| this.start_cloud("cloud.check", cx))
-                                .ok();
+                            me.update(cx, |this, cx| {
+                                this.start_cloud("cloud.check", json!({}), cx)
+                            })
+                            .ok();
                         }
                     }),
             )
@@ -370,18 +404,34 @@ impl SettingsWindow {
                     .render(cx, {
                         let me = me.clone();
                         move |_, _, cx| {
-                            me.update(cx, |this, cx| this.start_cloud("cloud.rebuild", cx))
-                                .ok();
+                            me.update(cx, |this, cx| {
+                                this.start_cloud("cloud.rebuild", json!({}), cx)
+                            })
+                            .ok();
                         }
                     }),
             )
             .child(
                 PushButton::new("settings-cloud-edit", rules::EDIT, rules::EDIT_TIP)
                     .disabled(busy)
+                    .render(cx, {
+                        let me = me.clone();
+                        let edit_svc = edit_svc.clone();
+                        move |_, window, cx| {
+                            let edit = edit_svc.clone();
+                            me.update(cx, |this, cx| this.open_cloud_sheet(edit, window, cx))
+                                .ok();
+                        }
+                    }),
+            )
+            .child(
+                PushButton::new("settings-cloud-remove", rules::REMOVE, rules::REMOVE_TIP)
+                    .disabled(busy || edit_svc.is_none())
                     .render(cx, move |_, window, cx| {
-                        let edit = edit_svc.clone();
-                        me.update(cx, |this, cx| this.open_cloud_sheet(edit, window, cx))
-                            .ok();
+                        if let Some(svc) = edit_svc.clone() {
+                            me.update(cx, |this, cx| this.open_remove_dialog(svc, window, cx))
+                                .ok();
+                        }
                     }),
             );
         rows.push(
@@ -405,6 +455,72 @@ impl SettingsWindow {
             "running": st.running(),
             "cost": st.cost.as_ref().map(|c| format!("{} ({})", rules::cost_amount(c), rules::cost_detail(c))),
         })
+    }
+}
+
+/// Remove…'s dialog: what goes, the Fly app's own checkbox, Cancel and Remove.
+struct RemoveConfirm {
+    settings: WeakEntity<SettingsWindow>,
+    svc: rules::Service,
+    app: Option<String>,
+    delete_app: bool,
+}
+
+impl Render for RemoveConfirm {
+    fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        let secondary = style::secondary_label(cx);
+        let mut body = v_flex()
+            .gap(px(10.))
+            .p(px(4.))
+            .text_size(px(13.))
+            .child(
+                div()
+                    .text_size(px(15.))
+                    .font_semibold()
+                    .child(rules::remove_title(&self.svc.name)),
+            )
+            .child(div().text_color(secondary).child(rules::REMOVE_ABOUT));
+        if let Some(app) = &self.app {
+            body = body.child(
+                Checkbox::new("cloud-remove-app")
+                    .label(rules::remove_app_label(app))
+                    .checked(self.delete_app)
+                    .on_click(cx.listener(|this, on: &bool, _, cx| {
+                        this.delete_app = *on;
+                        cx.notify();
+                    })),
+            );
+            if !self.delete_app {
+                body = body.child(
+                    div()
+                        .text_size(px(12.))
+                        .text_color(secondary)
+                        .child(rules::REMOVE_KEEP_APP),
+                );
+            }
+        }
+        let cancel = PushButton::new("cloud-remove-cancel", "Cancel", "Keep it")
+            .render(cx, |_, window, cx| window.close_dialog(cx));
+        let settings = self.settings.clone();
+        let params = json!({ "serviceId": self.svc.id, "deleteApp": self.delete_app });
+        let go = PushButton::new("cloud-remove-go", rules::REMOVE_GO, rules::REMOVE_GO_TIP).render(
+            cx,
+            move |_, window, cx| {
+                let params = params.clone();
+                settings
+                    .update(cx, |this, cx| this.start_cloud("cloud.remove", params, cx))
+                    .ok();
+                window.close_dialog(cx);
+            },
+        );
+        body.child(
+            h_flex()
+                .mt(px(6.))
+                .gap(px(8.))
+                .justify_end()
+                .child(cancel)
+                .child(go),
+        )
     }
 }
 

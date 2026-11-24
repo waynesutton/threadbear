@@ -2016,6 +2016,29 @@ async function dispatch(client, method, p) {
       await sleep(400);
       cloudCost = { app: 'tb-boxes-alex', monthStart: Date.UTC(new Date().getUTCFullYear(), new Date().getUTCMonth(), 1), asOf: Date.now(), usd: 1.84, hours: 12.6, boxes: 5 };
       return cloudCost;
+    case 'cloud.remove': {
+      // Removing it (cloud-setup.ts runRemove): the row and the backend's Fly settings go, the app only with deleteApp.
+      if (!VIRTUAL) throw rpcError(-32602, 'Virtual runners are an experiment that is off here.');
+      if (cloudJob?.running) throw rpcError(-32000, `A cloud ${cloudJob.kind} is already running.`);
+      const svc = cloudServices[0];
+      const app = svc ? svc.image.replace(/^registry\.fly\.io\//, '').replace(/:.*$/, '') : 'tb-boxes-alex';
+      cloudJob = { kind: 'remove', running: true, startedAt: Date.now(), steps: [['archived', 'Its threads are archived'], ['unlist', 'Cloud runner removed'], ['unset', 'Token and app cleared from your backend'], ['flyApp', 'Fly app']].map(([id, title]) => ({ id, title, state: 'todo' })) };
+      const job = cloudJob;
+      void (async () => {
+        for (const step of job.steps) {
+          step.state = 'doing';
+          await sleep(250);
+          step.state = 'ok';
+          if (step.id === 'unset') step.detail = 'cleared FLY_API_TOKEN, FLY_APP, FLY_ORG; the seal key stays';
+          if (step.id === 'flyApp') step.detail = p.deleteApp ? `${app} deleted, with its boxes and image` : `${app} is still on Fly, with nothing running. Delete it with: fly apps destroy ${app}`;
+        }
+        cloudServices.length = 0;
+        cloudCost = undefined;
+        job.running = false;
+        job.endedAt = Date.now();
+      })();
+      return { started: true };
+    }
     case 'cloud.setup':
     case 'cloud.check':
     case 'cloud.rebuild': {

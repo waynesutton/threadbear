@@ -59,6 +59,10 @@ function world(opts: { flyctl?: boolean; signedIn?: boolean; gh?: boolean; apps?
         env[name] = input ?? '';
         return ok();
       }
+      if (verb === 'remove' && name) {
+        delete env[name];
+        return ok();
+      }
       return no('?');
     },
     exec: async (cmd, args, o) => {
@@ -102,6 +106,7 @@ function world(opts: { flyctl?: boolean; signedIn?: boolean; gh?: boolean; apps?
         apps.add(body.app_name);
         return json(201, {});
       }
+      if (method === 'DELETE' && app && !u.pathname.includes('/machines')) return apps.delete(app) ? json(202, {}) : json(404, { error: 'not found' });
       if (app && !u.pathname.includes('/machines')) return apps.has(app) ? json(200, { name: app }) : json(404, { error: 'not found' });
       if (method === 'POST' && !machine && late > 0) {
         late--;
@@ -122,6 +127,12 @@ function world(opts: { flyctl?: boolean; signedIn?: boolean; gh?: boolean; apps?
     },
     call: async (kind, fn, args) => {
       if (fn === 'boxes:runnerServices') return services;
+      if (fn === 'boxes:removeRunnerService') {
+        calls.mutations.push({ removed: args.serviceId });
+        const i = services.findIndex((s) => s.serviceId === args.serviceId);
+        if (i >= 0) services.splice(i, 1);
+        return null;
+      }
       if (fn === 'boxes:setRunnerService') {
         calls.mutations.push(args);
         const id = (args.serviceId as string) ?? `s${services.length + 1}`;
@@ -134,7 +145,7 @@ function world(opts: { flyctl?: boolean; signedIn?: boolean; gh?: boolean; apps?
       throw new Error(`unexpected ${kind} ${fn}`);
     },
   };
-  return { deps, env, apps, machines, calls };
+  return { deps, env, apps, machines, calls, services };
 }
 
 function noToken(w: { calls: Calls }, setup: CloudSetup, extra: string[] = []): Promise<void> {
@@ -359,4 +370,49 @@ test('cloud.cost reads the app and token from the backend, asks Fly once, and st
   assert.deepEqual((await setup.status()).cost, c);
   const none = new CloudSetup(world().deps);
   await assert.rejects(none.cost(), /set one up first/);
+});
+
+test('remove: the runner row and the Fly settings go, the seal key stays, and the app only when asked', async () => {
+  const w = world();
+  const setup = new CloudSetup(w.deps);
+  setup.setup({ token: TOKEN, app: 'tb-boxes-r' });
+  await setup.wait();
+  const seal = w.env.BOX_SEAL_KEY;
+  setup.remove();
+  await setup.wait();
+  let st = await setup.status();
+  assert.equal(st.job?.kind, 'remove');
+  assert.equal(st.job?.error, undefined);
+  assert.equal(st.services.length, 0);
+  assert.deepEqual([w.env.FLY_API_TOKEN, w.env.FLY_APP, w.env.FLY_ORG], [undefined, undefined, undefined]);
+  assert.equal(w.env.BOX_SEAL_KEY, seal);
+  assert.ok(w.apps.has('tb-boxes-r'), 'the Fly app stays without deleteApp');
+  assert.match(st.job?.steps.find((s) => s.id === 'flyApp')?.detail ?? '', /fly apps destroy tb-boxes-r/);
+  await noToken(w, setup);
+
+  const d = world();
+  const two = new CloudSetup(d.deps);
+  two.setup({ token: TOKEN, app: 'tb-boxes-d2' });
+  await two.wait();
+  two.remove({ deleteApp: true });
+  await two.wait();
+  st = await two.status();
+  assert.equal(st.job?.error, undefined);
+  assert.ok(!d.apps.has('tb-boxes-d2'));
+  assert.ok(d.calls.fly.includes('DELETE /v1/apps/tb-boxes-d2'));
+});
+
+test('remove waits for the threads to be archived, and changes nothing until then', async () => {
+  const w = world();
+  const setup = new CloudSetup(w.deps);
+  setup.setup({ token: TOKEN, app: 'tb-boxes-busy' });
+  await setup.wait();
+  w.services[0].asleep = 2;
+  setup.remove({ deleteApp: true });
+  await setup.wait();
+  const st = await setup.status();
+  assert.match(st.job?.error ?? '', /Archive those threads first/);
+  assert.equal(st.services.length, 1);
+  assert.equal(w.env.FLY_APP, 'tb-boxes-busy');
+  assert.ok(w.apps.has('tb-boxes-busy'));
 });

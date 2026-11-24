@@ -1711,6 +1711,8 @@ async function main(): Promise<void> {
     });
   methods['cloud.check'] = () => cloudSetup.check();
   methods['cloud.rebuild'] = () => cloudSetup.rebuild();
+  methods['cloud.remove'] = (p) =>
+    cloudSetup.remove({ ...(typeof p.serviceId === 'string' ? { serviceId: p.serviceId } : {}), deleteApp: p.deleteApp === true });
   // Starting threads on other runners, and a runner key's requests for
   // that (docs/protocol/runners.md, "Asking another runner").
   // A request's mode as the card showed it: none is the default (full

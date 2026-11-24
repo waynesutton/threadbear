@@ -164,7 +164,7 @@ export type SyncConfig = {
 // 108 in this copy's backend: Mike's 81 to 97, then this copy's own 98 to
 // 108 (Prints, webhooks, Tasks, completion, Tasks and Linear, task
 // favorites; convex/version.ts).
-export const BACKEND_API_VERSION = 108;
+export const BACKEND_API_VERSION = 109;
 // Optional agent-reported task summaries on thread cards (this copy's: 85,
 // moved to 100 when Mike's release took 81 to 95, 20 Nov 2026, then to 102
 // when his took 96 and 97, 21 Nov).

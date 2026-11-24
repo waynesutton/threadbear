@@ -39,6 +39,12 @@ pub const CHECK: &str = "Check again";
 pub const CHECK_TIP: &str = "Check the token, the app, the backend's keys and the runner again";
 pub const REBUILD: &str = "Rebuild";
 pub const REBUILD_TIP: &str = "Build the box image again from this Mac's copy of Threadbear";
+pub const REMOVE: &str = "Remove…";
+pub const REMOVE_TIP: &str = "Take this cloud runner out of Threadbear";
+pub const REMOVE_ABOUT: &str = "Threadbear stops offering it in Runs on and clears the Fly token and app from your backend. Its threads must be archived first. Your seal key stays, so other cloud logins keep working.";
+pub const REMOVE_GO: &str = "Remove";
+pub const REMOVE_GO_TIP: &str = "Remove it now. You can add it again later";
+pub const REMOVE_KEEP_APP: &str = "The Fly app stays on Fly with nothing running, so adding it again is quick. Delete it any time with fly apps destroy.";
 pub const EDIT: &str = "Edit…";
 pub const EDIT_TIP: &str = "Change the name or box size, or give it a new token";
 /// What a runner too old for `cloud.*` gets, in place of the section.
@@ -208,6 +214,23 @@ impl Status {
             .as_ref()
             .is_some_and(|j| j.kind == kind && !j.running && j.error.is_none())
     }
+}
+
+/// The remove dialog's title: "Remove Cloud (Fly)?".
+pub fn remove_title(name: &str) -> String {
+    format!("Remove {name}?")
+}
+
+/// The checkbox: "Also delete the Fly app tb-boxes-x, with its boxes and image".
+pub fn remove_app_label(app: &str) -> String {
+    format!("Also delete the Fly app {app}, with its boxes and image")
+}
+
+/// The Fly app a runner's image lives in: registry.fly.io/<app>:<tag>.
+pub fn fly_app(image: &str) -> Option<String> {
+    let rest = image.strip_prefix("registry.fly.io/")?;
+    let app = rest.split([':', '@']).next()?;
+    (!app.is_empty()).then(|| app.to_owned())
 }
 
 /// "2 GB", "1.5 GB".
@@ -394,6 +417,18 @@ mod tests {
         assert_eq!(cost_amount(&some), "Under $0.01");
         assert_eq!(cost_detail(&some), "0.5 hours on 1 box");
         assert_eq!(Status::decode(&json!({ "services": [] })).cost, None);
+    }
+
+    #[test]
+    fn remove_words() {
+        assert_eq!(
+            fly_app("registry.fly.io/tb-boxes-x:latest").as_deref(),
+            Some("tb-boxes-x")
+        );
+        assert_eq!(fly_app("ghcr.io/x/y:latest"), None);
+        assert_eq!(remove_title("Cloud (Fly)"), "Remove Cloud (Fly)?");
+        assert!(remove_app_label("tb-boxes-x").contains("tb-boxes-x"));
+        assert!(!REMOVE_ABOUT.contains('\u{2014}'));
     }
 
     #[test]

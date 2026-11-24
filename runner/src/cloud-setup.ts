@@ -29,7 +29,7 @@ export const FLY_API = 'https://api.machines.dev/v1';
 
 export type Run = { ok: boolean; out: string; err: string; code?: number | null };
 
-export type StepId = 'flyctl' | 'token' | 'app' | 'backend' | 'image' | 'updates' | 'service' | 'test';
+export type StepId = 'flyctl' | 'token' | 'app' | 'backend' | 'image' | 'updates' | 'service' | 'test' | 'archived' | 'unlist' | 'unset' | 'flyApp';
 export type StepState = 'todo' | 'doing' | 'ok' | 'warn' | 'fail' | 'skipped';
 export type Step = { id: StepId; title: string; state: StepState; detail?: string };
 
@@ -49,7 +49,7 @@ export type Service = { serviceId: string; name: string; provider: string; image
 
 export type CloudStatus = {
   // The last setup, check or rebuild this runner ran, or is running.
-  job?: { kind: 'setup' | 'check' | 'rebuild'; running: boolean; steps: Step[]; startedAt: number; endedAt?: number; error?: string };
+  job?: { kind: 'setup' | 'check' | 'rebuild' | 'remove'; running: boolean; steps: Step[]; startedAt: number; endedAt?: number; error?: string };
   services: Service[];
   // The last cloud.cost this runner worked out, if any since it started.
   cost?: CloudCost;
@@ -81,7 +81,13 @@ const TITLES: Record<StepId, string> = {
   updates: 'Image follows main (GitHub)',
   service: 'Cloud runner',
   test: 'Test box: start, check, delete',
+  archived: 'Its threads are archived',
+  unlist: 'Cloud runner removed',
+  unset: 'Token and app cleared from your backend',
+  flyApp: 'Fly app',
 };
+
+export type RemoveParams = { serviceId?: string; deleteApp?: boolean };
 
 const SETUP: StepId[] = ['flyctl', 'token', 'app', 'backend', 'image', 'updates', 'service', 'test'];
 const CHECK: StepId[] = ['flyctl', 'token', 'app', 'backend', 'service'];
@@ -229,6 +235,18 @@ export class CloudSetup {
     return this.start('rebuild', ['flyctl', 'token', 'image'], (steps) => this.runRebuild(steps));
   }
 
+  /**
+   * cloud.remove: the cloud runner out of Threadbear. Its threads must be
+   * archived. Clears FLY_API_TOKEN, FLY_APP and FLY_ORG (never BOX_SEAL_KEY,
+   * which other cloud tokens are sealed under), and with deleteApp deletes the
+   * Fly app, its boxes and its image too; without it, says how to.
+   */
+  remove(p: RemoveParams = {}): { started: true } {
+    this.mustBeOn();
+    if (p.serviceId !== undefined && typeof p.serviceId !== 'string') throw bad('serviceId must be a string.');
+    return this.start('remove', ['archived', 'unlist', 'unset', 'flyApp'], (steps) => this.runRemove(p, steps));
+  }
+
   /** For tests and tb cloud: the job running now, if any. */
   wait(): Promise<void> {
     return this.going ?? Promise.resolve();
@@ -251,7 +269,7 @@ export class CloudSetup {
     return { ...p, ...(token ? { token } : { token: undefined }), org, app, name, cpus, memoryMb };
   }
 
-  private start(kind: 'setup' | 'check' | 'rebuild', ids: StepId[], body: (steps: Step[]) => Promise<void>): { started: true } {
+  private start(kind: 'setup' | 'check' | 'rebuild' | 'remove', ids: StepId[], body: (steps: Step[]) => Promise<void>): { started: true } {
     if (this.job?.running) throw new RpcError(ErrorCode.other, `A cloud ${this.job.kind} is already running. It shows in Settings, Runners.`);
     const steps: Step[] = ids.map((id) => ({ id, title: TITLES[id], state: 'todo' }));
     const job: NonNullable<CloudStatus['job']> = { kind, running: true, steps, startedAt: this.deps.now() };
@@ -505,6 +523,62 @@ export class CloudSetup {
       if (!fly.length) throw new Error('There\'s no Fly cloud runner yet.');
       s.detail = fly.map((x) => `${x.name}: ${x.running} running, ${x.asleep} asleep`).join('; ');
     });
+  }
+
+  private async runRemove(p: RemoveParams, steps: Step[]): Promise<void> {
+    const now = await this.saved();
+    const fly = (await this.services()).filter((x) => x.provider === 'fly');
+    const svc = p.serviceId ? fly.find((x) => x.serviceId === p.serviceId) : fly[0];
+    if (p.serviceId && !svc) throw new Error('There is no such cloud runner.');
+    await this.doStep(steps, 'archived', async (s) => {
+      if (!svc) {
+        s.state = 'skipped';
+        s.detail = 'no cloud runner listed';
+        return;
+      }
+      if (svc.running + svc.asleep > 0) throw new Error(`${svc.name} has ${svc.running} running and ${svc.asleep} asleep. Archive those threads first, then remove it.`);
+      s.detail = 'none running or asleep';
+    });
+    await this.doStep(steps, 'unlist', async (s) => {
+      if (!svc) {
+        s.state = 'skipped';
+        return;
+      }
+      try {
+        await this.deps.call('mutation', 'boxes:removeRunnerService', { serviceId: svc.serviceId });
+      } catch (e) {
+        const m = String((e as Error)?.message ?? e);
+        if (/Could not find (public )?function|not found.*removeRunnerService|removeRunnerService.*not found/i.test(m)) throw new Error('Your backend is too old to remove a cloud runner. It updates with the runner; try again after that.');
+        throw e;
+      }
+      s.detail = svc.name;
+    });
+    await this.doStep(steps, 'unset', async (s) => {
+      const gone: string[] = [];
+      for (const name of ['FLY_API_TOKEN', 'FLY_APP', 'FLY_ORG']) {
+        if (!this.envGet(name)) continue;
+        const r = this.deps.convex(['env', 'remove', name]);
+        if (!r.ok) throw new Error(`Clearing ${name} on your backend failed: ${scrub(r.err || 'no answer', now.token ?? '')}`);
+        gone.push(name);
+      }
+      s.detail = gone.length ? `cleared ${gone.join(', ')}; the seal key stays` : 'nothing was set';
+    });
+    await this.doStep(steps, 'flyApp', async (s) => {
+      if (!now.app) {
+        s.state = 'skipped';
+        s.detail = 'no Fly app was set';
+        return;
+      }
+      if (!p.deleteApp || !now.token) {
+        s.detail = `${now.app} is still on Fly, with nothing running. Delete it with: fly apps destroy ${now.app}`;
+        return;
+      }
+      const r = await this.fly(now.token, 'DELETE', `/apps/${encodeURIComponent(now.app)}`);
+      if (r.status === 404) s.detail = `${now.app} was already gone`;
+      else if (r.status >= 300) throw new Error(`Fly couldn't delete ${now.app} (${r.status}): ${r.text}. Delete it with: fly apps destroy ${now.app}`);
+      else s.detail = `${now.app} deleted, with its boxes and image`;
+    });
+    this.lastCost = undefined;
   }
 
   private async runRebuild(steps: Step[]): Promise<void> {

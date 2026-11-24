@@ -330,6 +330,7 @@ export const ACCESS: Record<string, Access> = {
   // its thread. boxes:exchange takes a boot token, not a key.
   runnerServices: 'owner',
   setRunnerService: 'owner',
+  removeRunnerService: 'owner',
   startThread: 'owner',
   wakePastHours: 'owner',
   setCloudToken: 'owner',

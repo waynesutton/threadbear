@@ -521,4 +521,7 @@
 //    offers Linear only from 107.
 // 108: (this copy's) task favorites. Tasks take an optional `favorite`, and
 //    tasks:update sets it. A runner sends favorite only from 108.
-export const API_VERSION = 108;
+// 109: (this copy's) boxes:removeRunnerService deletes a virtual runner once
+//    none of its boxes is left but archived ones. The runner's cloud.remove
+//    uses it only from 109.
+export const API_VERSION = 109;

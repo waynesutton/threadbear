@@ -2808,3 +2808,16 @@ test('a condemned mark is cleared only by its delete or a listing taken after it
   await later(1000, () => call(s.ctx, service.driftPage, { serviceId: s.serviceId, listed: rows, cursor: null, listedAt: Date.now() }));
   assert.equal(s.rows('boxCondemned').length, 0);
 });
+
+test('a virtual runner is removed only once none of its boxes is left but finished ones', async () => {
+  const s = await setup();
+  // The helper's own box is creating: refused, and the row stays.
+  assert.equal(await outcome(call(s.ctx, boxes.removeRunnerService, { key: OWNER, serviceId: s.serviceId })), 'badArgs');
+  assert.ok(s.rows('runnerServices').some((r) => r._id === s.serviceId));
+  // One with no boxes goes.
+  const spare = await call(s.ctx, boxes.setRunnerService, { key: OWNER, name: 'Spare', provider: 'fly', image: 'img:1', box: { cpus: 1, memoryMb: 1024 } });
+  await call(s.ctx, boxes.removeRunnerService, { key: OWNER, serviceId: spare });
+  assert.ok(!(await call(s.ctx, boxes.runnerServices, { key: OWNER })).some((x: { serviceId: string }) => x.serviceId === spare));
+  // Gone already: not found.
+  assert.equal(await outcome(call(s.ctx, boxes.removeRunnerService, { key: OWNER, serviceId: spare })), 'notFound');
+});

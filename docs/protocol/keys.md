@@ -479,6 +479,7 @@ anyone's); "any runner" is any good key. Anything not sorted is owner only.
 | `moveDropChunks` | owner only | the main Mac's own chunks for a move that ended before it was packed: deletes those no going move names and nothing else uses |
 | `runnerServices` | owner only | the virtual runners (`convex/boxes.ts`, Virtual runners), each with how many boxes are up or starting and asleep |
 | `setRunnerService` | owner only | makes a virtual runner, or changes one's name, image, box size, region and limits; its provider is its own for life |
+| `removeRunnerService` | owner only | deletes a virtual runner once none of its boxes is left but finished ones (API 109; `cloud.remove`) |
 | `startThread` | owner only | a thread on a virtual runner: its runner, box and `create` command in one step, refused past `maxBoxes` (Virtual runners) |
 | `wakePastHours` | owner only | wakes a thread's box that's waiting for tomorrow's hours, and lets it run the rest of today (Virtual runners) |
 | `setCloudToken` | owner only | a Claude login's cloud token for boxes, sealed under `BOX_SEAL_KEY` (`convex/boxes.ts`, Box keys) |
@@ -618,6 +619,15 @@ has to be on for it.
   size. Fly has no billing API, so it's an estimate: running time only, at
   the cheapest regions' price. `cloud.status` carries the last one as
   `cost`. With no `FLY_API_TOKEN` or `FLY_APP` on the backend, `-32602`.
+  `cloud.remove { serviceId?, deleteApp? }` answers `{ started: true }` and
+  runs as a job of kind `remove`, steps `archived`, `unlist`, `unset` and
+  `flyApp`: it fails while the runner has threads running or asleep
+  (archive them first); deletes the runner row with
+  `boxes:removeRunnerService` (backend API 109; an older backend says to
+  update first); removes `FLY_API_TOKEN`, `FLY_APP` and `FLY_ORG` from the
+  backend, never `BOX_SEAL_KEY`; and with `deleteApp` deletes the Fly app
+  (`DELETE /apps/<app>`, its Machines and image with it), else says how
+  (`fly apps destroy <app>`).
   From a thread's own key only `cloud.status` and `cloud.cost` are taken
   (rpc-gate.ts).
 - **Starting from the Mac.** `threads.create` with `serviceId` (a virtual

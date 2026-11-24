@@ -400,6 +400,29 @@ export const setRunnerService = mutation({
   },
 });
 
+// A box in one of these still has a thread or something on the provider:
+// every state but gone, expired, purged and failed.
+const LIVE: readonly BoxKind[] = ['needsToken', 'waitingForRoom', 'creating', 'starting', 'awake', 'saving', 'asleep', 'waking', 'archiving', 'shelved', 'destroying', 'retiring'];
+
+/**
+ * Deletes a virtual runner (API 109), once none of its boxes is LIVE:
+ * archive its threads first. The provider's app, its
+ * token and the seal key are left as they are (the runner's cloud.remove
+ * clears the env vars and, if asked, the Fly app).
+ */
+export const removeRunnerService = mutation({
+  args: { key: v.string(), serviceId: v.id('runnerServices') },
+  returns: v.null(),
+  handler: async (ctx, { key, serviceId }) => {
+    await runnerAuth(ctx, key, 'removeRunnerService');
+    const s = await ctx.db.get(serviceId);
+    if (!s) throw new ConvexError({ kind: 'notFound', message: 'no such virtual runner' });
+    if ((await countBoxes(ctx, serviceId, LIVE, 1)) > 0) throw bad(`${s.name} still has threads that aren't archived. Archive them first, then remove it.`);
+    await ctx.db.delete(serviceId);
+    return null;
+  },
+});
+
 const startArgs = {
   serviceId: v.id('runnerServices'),
   threadId: v.string(),
