@@ -361,11 +361,16 @@ export class CloudSetup {
       s.detail = 'gh isn\'t signed in here, so the image updates only when you press Rebuild.';
       return;
     }
-    const deploy = await this.deps.exec('fly', ['tokens', 'create', 'deploy', '-a', app, '--name', 'threadbear-box-image', '--expiry', '8760h'], { env: { FLY_API_TOKEN: token }, timeoutMs: 30_000 });
+    // An org token can't make other tokens (Fly: "Not authorized to access
+    // createlimitedaccesstoken"), so flyctl's own sign-in makes it when there
+    // is one, and the org token is only the fallback.
+    const args = ['tokens', 'create', 'deploy', '-a', app, '--name', 'threadbear-box-image', '--expiry', '8760h'];
+    let deploy = await this.deps.exec('fly', args, { timeoutMs: 30_000 });
+    if (!deploy.ok || !looksLikeFlyToken(cleanToken(tokenLine(deploy.out)))) deploy = await this.deps.exec('fly', args, { env: { FLY_API_TOKEN: token }, timeoutMs: 30_000 });
     const narrow = cleanToken(tokenLine(deploy.out));
     if (!deploy.ok || !looksLikeFlyToken(narrow)) {
       s.state = 'warn';
-      s.detail = `flyctl couldn't make the image's own token: ${scrub(lastLine(deploy.err) || 'no answer', token)}`;
+      s.detail = `flyctl couldn't make the image's own token, so the image updates only when you press Rebuild. Sign flyctl in (fly auth login) and press Check again. ${scrub(lastLine(deploy.err) || 'No answer', token)}`;
       return;
     }
     rememberToken(narrow);
@@ -395,10 +400,18 @@ export class CloudSetup {
   // A box from the image with no boot token: its runner starts, finds none and exits 64. Then it's deleted.
   private async testBox(token: string, app: string, s: Step): Promise<void> {
     const sleep = this.deps.sleep ?? ((ms: number) => new Promise<void>((r) => setTimeout(r, ms)));
-    const made = await this.fly<{ id: string }>(token, 'POST', `/apps/${encodeURIComponent(app)}/machines`, {
+    const body = {
       name: `tb-test-${crypto.randomBytes(3).toString('hex')}`,
       config: { image: `registry.fly.io/${app}:latest`, guest: { cpu_kind: 'shared', cpus: 1, memory_mb: 1024 }, restart: { policy: 'no' }, auto_destroy: false, metadata: { tb_test: '1' } },
-    });
+    };
+    let made = await this.fly<{ id: string }>(token, 'POST', `/apps/${encodeURIComponent(app)}/machines`, body);
+    // A just-pushed image can take a little while to reach the machines' side
+    // of Fly's registry: it answers "manifest unknown" until then.
+    for (let i = 0; i < 12 && made.status === 400 && /MANIFEST_UNKNOWN|manifest unknown/i.test(made.text); i++) {
+      s.detail = 'waiting for Fly to see the new image';
+      await sleep(5000);
+      made = await this.fly<{ id: string }>(token, 'POST', `/apps/${encodeURIComponent(app)}/machines`, body);
+    }
     if (made.status >= 300 || !made.json?.id) throw new Error(`Fly couldn't start a test box (${made.status}): ${made.text}`);
     const id = made.json.id;
     try {

@@ -622,6 +622,7 @@ impl Render for CloudSheet {
                     }),
             )
             .child(div().text_color(secondary).child(rules::SHEET_ABOUT))
+            .when(!self.started, |d| d.child(before_you_start(cx)))
             .child(label("Name"))
             .child(Input::new(&self.name).small().disabled(running))
             .child(label("Fly app for the boxes"))
@@ -693,9 +694,32 @@ impl Render for CloudSheet {
     }
 }
 
+/// The commands to run first when flyctl isn't on this Mac or signed in yet.
+fn before_you_start(cx: &App) -> impl IntoElement {
+    let secondary = style::secondary_label(cx);
+    let mono = gpui_kit::component::ActiveTheme::theme(cx).mono_font_family.clone();
+    let mut list = v_flex()
+        .gap(px(4.))
+        .p(px(8.))
+        .rounded(px(8.))
+        .bg(style::primary_opacity(cx, 0.04))
+        .text_size(px(12.))
+        .child(div().text_color(secondary).child(rules::BEFORE));
+    for (cmd, what) in rules::BEFORE_STEPS {
+        list = list.child(
+            h_flex()
+                .gap(px(8.))
+                .flex_wrap()
+                .child(div().font_family(mono.clone()).child(cmd))
+                .child(div().text_color(secondary).child(what)),
+        );
+    }
+    list.child(div().text_color(secondary).child(rules::BEFORE_AFTER))
+}
+
 /// The automation's `{"cmd":"settings", "cloudSetup": {"token": "…", "app"?: "…"}}`:
 /// opens Add a cloud runner…, types the token and app as Mike would, and
-/// presses Add.
+/// presses Add (not with `"press": false`, which only opens it).
 #[cfg(feature = "automation")]
 pub(crate) fn automation(
     app: &Entity<crate::app::Threadbear>,
@@ -727,7 +751,9 @@ pub(crate) fn automation(
         if let Some(a) = app_name {
             s.app.update(cx, |t, cx| t.set_value(a, window, cx));
         }
-        s.send(window, cx);
+        if setup["press"].as_bool() != Some(false) {
+            s.send(window, cx);
+        }
     });
     Ok(Some(json!("ok")))
 }

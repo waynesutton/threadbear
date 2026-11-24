@@ -24,7 +24,8 @@ function checkout(): string {
   return dir;
 }
 
-function world(opts: { flyctl?: boolean; signedIn?: boolean; gh?: boolean; apps?: Set<string>; env?: Record<string, string>; exit?: number; badToken?: boolean; buildFails?: boolean; noDeployKey?: boolean } = {}) {
+function world(opts: { flyctl?: boolean; signedIn?: boolean; gh?: boolean; apps?: Set<string>; env?: Record<string, string>; exit?: number; badToken?: boolean; buildFails?: boolean; noDeployKey?: boolean; imageLateBy?: number } = {}) {
+  let late = opts.imageLateBy ?? 0;
   const env: Record<string, string> = { ...opts.env };
   const apps = opts.apps ?? new Set<string>();
   const machines = new Map<string, { state: string }>();
@@ -66,8 +67,9 @@ function world(opts: { flyctl?: boolean; signedIn?: boolean; gh?: boolean; apps?
       if (cmd === 'fly' && args[0] === 'auth') return opts.signedIn === false ? no('not logged in') : ok('me@example.com\n');
       if (cmd === 'fly' && args.slice(0, 3).join(' ') === 'tokens create org') return ok(`${MINTED}\n`);
       if (cmd === 'fly' && args.slice(0, 3).join(' ') === 'tokens create deploy') {
-        assert.ok([TOKEN, MINTED].includes(String(o?.env?.FLY_API_TOKEN)));
-        return ok(`${DEPLOY}\n`);
+        // As Fly does: an org token can't make tokens; flyctl's own sign-in can.
+        if (o?.env?.FLY_API_TOKEN) return no('Error: failed creating token: Not authorized to access createlimitedaccesstoken\n');
+        return opts.signedIn === false ? no('Error: not logged in\n') : ok(`${DEPLOY}\n`);
       }
       if (cmd === 'fly' && args[0] === 'deploy') {
         assert.ok(o?.env?.FLY_API_TOKEN, 'the build gets the token in its environment');
@@ -100,6 +102,10 @@ function world(opts: { flyctl?: boolean; signedIn?: boolean; gh?: boolean; apps?
         return json(201, {});
       }
       if (app && !u.pathname.includes('/machines')) return apps.has(app) ? json(200, { name: app }) : json(404, { error: 'not found' });
+      if (method === 'POST' && !machine && late > 0) {
+        late--;
+        return json(400, { error: 'failed to get manifest registry.fly.io/x:latest: {"errors":[{"code":"MANIFEST_UNKNOWN"}]}' });
+      }
       if (method === 'POST' && !machine) {
         const id = `m${machines.size + 1}`;
         machines.set(id, { state: 'started' });
@@ -232,6 +238,32 @@ test("without gh signed in the image step still passes, and only Rebuild updates
   const st = await setup.status();
   assert.equal(st.job?.error, undefined);
   assert.equal(st.job?.steps.find((s) => s.id === 'updates')?.state, 'warn');
+});
+
+test('a test box waits for Fly to see a just-pushed image', async () => {
+  const w = world({ imageLateBy: 3 });
+  const setup = new CloudSetup(w.deps);
+  setup.setup({ token: TOKEN, app: 'tb-boxes-l' });
+  await setup.wait();
+  const st = await setup.status();
+  assert.equal(st.job?.error, undefined);
+  assert.equal(st.job?.steps.find((s) => s.id === 'test')?.state, 'ok');
+  assert.equal(w.machines.size, 0);
+});
+
+test("the image's own token comes from flyctl's sign-in, not the org token", async () => {
+  const w = world();
+  const setup = new CloudSetup(w.deps);
+  setup.setup({ token: TOKEN, app: 'tb-boxes-d' });
+  await setup.wait();
+  assert.equal((await setup.status()).job?.steps.find((s) => s.id === 'updates')?.state, 'ok');
+  const out = world({ signedIn: false });
+  const other = new CloudSetup(out.deps);
+  other.setup({ token: TOKEN, app: 'tb-boxes-e' });
+  await other.wait();
+  const st = await other.status();
+  assert.equal(st.job?.error, undefined, 'only a warning');
+  assert.match(st.job?.steps.find((s) => s.id === 'updates')?.detail ?? '', /fly auth login/);
 });
 
 test('a test box that exits otherwise fails the setup and is still deleted', async () => {
