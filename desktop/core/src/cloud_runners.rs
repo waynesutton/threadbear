@@ -384,7 +384,7 @@ mod tests {
         let st = Status::decode(
             &json!({ "services": [], "cost": { "usd": 1.234, "hours": 3.46, "boxes": 4, "asOf": 5 } }),
         );
-        let c = st.cost.clone().unwrap();
+        let c = st.cost.unwrap();
         assert_eq!(cost_amount(&c), "$1.23");
         assert_eq!(cost_detail(&c), "3.5 hours on 4 boxes");
         let tiny = Cost::decode(&json!({ "usd": 0, "hours": 0, "boxes": 2 })).unwrap();
