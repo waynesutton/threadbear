@@ -78,6 +78,10 @@ const ALLOWED_LINES: &[(&str, &str, usize)] = &[
     // A handover opens the app's own installed bundle as its second copy,
     // never anything from a thread (handover.rs).
     ("gpui/src/handover.rs", "let mut command = std::process::Command::new(\"/usr/bin/open\");", 1),
+    // Whether a new thread's folder is a repo with an origin, for the cloud
+    // runner warning: rev-parse and remote get-url only, in that folder; it
+    // opens nothing and runs nothing a thread or a link names.
+    ("gpui/src/new_thread.rs", "let out = std::process::Command::new(\"/usr/bin/git\").arg(\"-C\").arg(&dir).args(args).stdin(std::process::Stdio::null()).stderr(std::process::Stdio::null()).output().ok()?;", 1),
     ("gpui/src/app_update.rs", "let out = Command::new(\"/usr/bin/git\").args(rules::rev_parse_arguments(checkout)).stdin(Stdio::null()).output().ok()?;", 1),
     ("gpui/src/app_update.rs", "let out = Command::new(\"/usr/bin/git\").args(rules::reflog_arguments(checkout)).stdin(Stdio::null()).stderr(Stdio::null()).output().ok()?;", 1),
     ("gpui/src/app_update.rs", "let out = Command::new(\"/usr/bin/git\").args([\"-C\", checkout, \"rev-parse\", \"--verify\", \"-q\", \"refs/heads/main\"]).stdin(Stdio::null()).output().ok()?;", 1),

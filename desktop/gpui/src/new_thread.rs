@@ -600,16 +600,17 @@ impl Threadbear {
         self.new_thread.folder_repos.insert(cwd.clone(), None);
         let dir = cwd.clone();
         let task = cx.background_executor().spawn(async move {
-            let git = |args: &[&str]| {
-                std::process::Command::new("git")
+            let git = |args: &[&str]| -> Option<String> {
+                let out = std::process::Command::new("/usr/bin/git")
                     .arg("-C")
                     .arg(&dir)
                     .args(args)
+                    .stdin(std::process::Stdio::null())
+                    .stderr(std::process::Stdio::null())
                     .output()
-                    .ok()
-                    .filter(|o| o.status.success())
-                    .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_owned())
-                    .filter(|s| !s.is_empty())
+                    .ok()?;
+                let said = String::from_utf8_lossy(&out.stdout).trim().to_owned();
+                (out.status.success() && !said.is_empty()).then_some(said)
             };
             let top = git(&["rev-parse", "--show-toplevel"]);
             let origin = top
