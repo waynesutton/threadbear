@@ -1,6 +1,6 @@
 // Settings › Runners › Cloud runners, and its Add a cloud runner sheet
 // (docs/virtual-runners.md, "Setting one up"). Mike's plan has a section per
-// virtual runner here; this is it, without the cost line. The runner does
+// virtual runner here; this is it. The runner does
 // every step (`cloud.setup`, runner/src/cloud-setup.ts) and this only starts
 // them and shows them, asking `cloud.status` again while one is under way, so
 // `tb cloud` and the app always say the same. The words are
@@ -33,6 +33,10 @@ pub(crate) struct CloudDraft {
     unavailable: Option<String>,
     starting: bool,
     poll: Option<Task<()>>,
+    /// `cloud.cost` asked since the tab showed, and whether it's on its way.
+    cost_asked: bool,
+    cost_loading: bool,
+    cost_error: Option<String>,
     /// The sheet while it's open, for the automation's `cloudSetup`.
     sheet: Option<WeakEntity<CloudSheet>>,
 }
@@ -47,6 +51,7 @@ impl SettingsWindow {
 
     pub(super) fn cloud_hidden(&mut self) {
         self.cloud.asked = false;
+        self.cloud.cost_asked = false;
         self.cloud.poll = None;
     }
 
@@ -58,10 +63,19 @@ impl SettingsWindow {
                 .update(cx, |this, cx| {
                     let again = match res {
                         Ok(v) => {
-                            let st = Status::decode(&v);
+                            let mut st = Status::decode(&v);
+                            // A status without the month's cost keeps the one we have.
+                            if st.cost.is_none() {
+                                st.cost = this.cloud.status.as_ref().and_then(|s| s.cost.clone());
+                            }
                             let running = st.running();
+                            // Once each time the tab shows: one read of Fly, no polling.
+                            let cost = !st.services.is_empty() && !this.cloud.cost_asked;
                             this.cloud.status = Some(st);
                             this.cloud.unavailable = None;
+                            if cost {
+                                this.load_cost(cx);
+                            }
                             running
                         }
                         // An old runner, or virtual runners off: no section.
@@ -83,6 +97,92 @@ impl SettingsWindow {
             }
             cx.background_executor().timer(POLL).await;
         }));
+    }
+
+    /// `cloud.cost`: the runner asks Fly once and works out the month.
+    fn load_cost(&mut self, cx: &mut Context<Self>) {
+        if self.cloud.cost_loading {
+            return;
+        }
+        self.cloud.cost_asked = true;
+        self.cloud.cost_loading = true;
+        cx.notify();
+        let client = self.client.clone();
+        cx.spawn(async move |this, cx| {
+            let res = call(client, "cloud.cost", json!({})).await;
+            this.update(cx, |this, cx| {
+                this.cloud.cost_loading = false;
+                match res {
+                    Ok(v) => {
+                        this.cloud.cost_error = None;
+                        if let Some(st) = this.cloud.status.as_mut() {
+                            st.cost = rules::Cost::decode(&v);
+                        }
+                    }
+                    // A runner from before cloud.cost: no line, no fuss.
+                    Err(e) if e.code == -32601 => {}
+                    Err(e) => this.cloud.cost_error = Some(e.message),
+                }
+                cx.notify();
+            })
+            .ok();
+        })
+        .detach();
+    }
+
+    fn cost_row(&self, st: &Status, cx: &mut Context<Self>) -> AnyElement {
+        let secondary = style::secondary_label(cx);
+        // Left: the label, and under it how long the boxes ran. Right: the
+        // amount and the refresh button, so a narrow window never overlaps them.
+        let detail: Option<(String, Hsla)> = match (&st.cost, &self.cloud.cost_error) {
+            (_, Some(e)) => Some((e.clone(), style::failed_text(cx))),
+            (Some(c), None) => Some((rules::cost_detail(c), secondary)),
+            (None, None) => None,
+        };
+        let amount = st
+            .cost
+            .as_ref()
+            .filter(|_| self.cloud.cost_error.is_none())
+            .map(rules::cost_amount)
+            .unwrap_or_else(|| "…".to_owned());
+        let refresh = if self.cloud.cost_loading {
+            gpui_kit::component::spinner::Spinner::new()
+                .with_size(px(12.))
+                .color(secondary)
+                .into_any_element()
+        } else {
+            self.icon_button(
+                "settings-cloud-cost-refresh".to_owned(),
+                "arrow.clockwise",
+                rules::COST_REFRESH_TIP,
+                cx,
+                |this, _, cx| this.load_cost(cx),
+            )
+        };
+        let mut left = v_flex()
+            .min_w_0()
+            .pl(px(23.))
+            .child(crate::highlights::tipped(
+                div()
+                    .id("settings-cloud-cost")
+                    .text_color(secondary)
+                    .child(rules::COST_LABEL),
+                rules::COST_TIP,
+            ));
+        if let Some((text, colour)) = detail {
+            left = left.child(div().text_size(px(12.)).text_color(colour).child(text));
+        }
+        super::row_with(
+            left.into_any_element(),
+            h_flex()
+                .flex_none()
+                .gap(px(8.))
+                .items_center()
+                .child(div().font_semibold().child(amount))
+                .child(refresh)
+                .into_any_element(),
+            cx,
+        )
     }
 
     /// Check again or Rebuild: the button spins until the runner has it, then
@@ -236,6 +336,10 @@ impl SettingsWindow {
                 cx,
             ));
         }
+        // One line for the Fly app all the cloud runners share.
+        if !st.services.is_empty() {
+            rows.push(self.cost_row(st, cx));
+        }
         if let Some(job) = &st.job {
             rows.extend(
                 job.steps
@@ -299,6 +403,7 @@ impl SettingsWindow {
             "runners": st.services.iter().map(|s| json!({ "name": s.name, "line": rules::service_line(s), "threads": rules::threads_line(s) })).collect::<Vec<_>>(),
             "steps": st.job.as_ref().map(|j| j.steps.iter().map(rules::step_line).collect::<Vec<_>>()),
             "running": st.running(),
+            "cost": st.cost.as_ref().map(|c| format!("{} ({})", rules::cost_amount(c), rules::cost_detail(c))),
         })
     }
 }

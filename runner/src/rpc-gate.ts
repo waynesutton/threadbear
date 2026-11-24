@@ -171,8 +171,9 @@ export class CallerGate {
     // A login's cloud token, and threads on a virtual runner (a box billed by
     // the hour, holding a year-long token), are the user's own, from the app.
     if (method.startsWith('cloudTokens.')) throw new RpcError(ErrorCode.notAllowed, "A login's cloud token is the user's to set, from the card in the app.");
-    // A Fly cloud runner: the user's account, token and money (cloud-setup.ts). Its status reads are fine.
-    if (method.startsWith('cloud.') && method !== 'cloud.status') throw new RpcError(ErrorCode.notAllowed, "Setting up a cloud runner is the user's to do: Settings, Runners in the app, or tb cloud setup in their own terminal.");
+    // A Fly cloud runner: the user's account, token and money (cloud-setup.ts).
+    // cloud.status and cloud.cost only read, and cost nothing.
+    if (method.startsWith('cloud.') && method !== 'cloud.status' && method !== 'cloud.cost') throw new RpcError(ErrorCode.notAllowed, "Setting up a cloud runner is the user's to do: Settings, Runners in the app, or tb cloud setup in their own terminal.");
     if (method === 'threads.create' && p.serviceId !== undefined) throw new RpcError(ErrorCode.notAllowed, 'Starting a thread on a virtual runner is the user\'s to do, from Runs on in the app.');
     if (known?.mode === 'full') return p;
     if (GATED_READS.has(method)) return p;

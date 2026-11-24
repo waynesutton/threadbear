@@ -863,7 +863,7 @@ test("a login's cloud token and a thread on a virtual runner are the user's, fro
       started.push(p);
       return { thread: { id: 'cloud-1', runnerId: 'abcdef012345' } };
     },
-    methods: { 'cloudTokens.set': (p) => (tokens.push(p), {}), 'cloudTokens.make': (p) => (tokens.push(p), {}), 'cloud.setup': (p) => (tokens.push(p), { started: true }), 'cloud.rebuild': () => (tokens.push({}), { started: true }), 'cloud.status': () => ({ services: [] }) },
+    methods: { 'cloudTokens.set': (p) => (tokens.push(p), {}), 'cloudTokens.make': (p) => (tokens.push(p), {}), 'cloud.setup': (p) => (tokens.push(p), { started: true }), 'cloud.rebuild': () => (tokens.push({}), { started: true }), 'cloud.status': () => ({ services: [] }), 'cloud.cost': () => ({ usd: 0 }) },
   });
   const me = thread(h, 'full');
   try {
@@ -874,6 +874,7 @@ test("a login's cloud token and a thread on a virtual runner are the user's, fro
     await assert.rejects(c.call('cloud.setup', { token: 'FlyV1 x' }), (e: { code?: number; message?: string }) => refused(e) && /Settings, Runners/.test(e.message ?? ''));
     await assert.rejects(c.call('cloud.rebuild', {}), refused);
     assert.deepEqual(await c.call('cloud.status', {}), { services: [] });
+    assert.deepEqual(await c.call('cloud.cost', {}), { usd: 0 });
     await assert.rejects(c.call('threads.create', { text: 'x', serviceId: 'runnerServices:1', cwd: '/x', accountId: 'claude-3' }), (e: { code?: number; message?: string }) => refused(e) && /Runs on/.test(e.message ?? ''));
     c.close();
     assert.deepEqual([started.length, tokens.length], [0, 0]);

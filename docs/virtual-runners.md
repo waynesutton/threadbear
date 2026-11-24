@@ -1052,8 +1052,14 @@ terminal (`runner/src/cloud-setup.ts`; protocol: docs/protocol/keys.md,
   cloud-setup.ts to follow.
 - **The section** lists each virtual runner with its box size and threads
   running and asleep, the last setup's or check's steps, and Check again,
-  Rebuild and Edit…. No cost line yet (Wayne's call), though the plan above
-  has one.
+  Rebuild and Edit…, and This month: what the boxes have cost so far, with
+  a refresh button. Fly has no billing API, so the runner works it out
+  (`cloud.cost`, fly-cost.ts) from each Machine's start and stop times,
+  deleted ones too, at Fly's list price for its size. It's asked once when
+  the tab shows and when refresh is pressed, never on a timer or by an
+  agent. It counts running time only (a stopped box's disk is cents a
+  month) at the cheapest regions' price, so the bill on fly.io can be a
+  little higher.
 - **Only the user.** `cloud.setup` and `cloud.rebuild` are refused from a
   thread's key (rpc-gate.ts), as `cloudTokens.*` are: it's their account
   and their money. `cloud.status` isn't.

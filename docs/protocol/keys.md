@@ -611,7 +611,15 @@ has to be on for it.
   goes only to the backend's env and flyctl's environment, never to an
   argument, the log, a step or an error. Each needs the
   `virtualRunners` experiment and a backend of 94; otherwise `-32602`.
-  From a thread's own key only `cloud.status` is taken (rpc-gate.ts).
+  `cloud.cost {}` answers `{ app, monthStart, asOf, usd, hours, boxes }`:
+  this month's cost of the boxes (UTC), worked out by the runner
+  (fly-cost.ts) from one `GET /apps/<app>/machines?include_deleted=true`,
+  each Machine's started time from its events, at Fly's list price for its
+  size. Fly has no billing API, so it's an estimate: running time only, at
+  the cheapest regions' price. `cloud.status` carries the last one as
+  `cost`. With no `FLY_API_TOKEN` or `FLY_APP` on the backend, `-32602`.
+  From a thread's own key only `cloud.status` and `cloud.cost` are taken
+  (rpc-gate.ts).
 - **Starting from the Mac.** `threads.create` with `serviceId` (a virtual
   runner's id from `RemoteThreads.services`) starts the thread on it:
   the runner reads the repo from `cwd` on this Mac (`origin` without

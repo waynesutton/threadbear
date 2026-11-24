@@ -417,7 +417,7 @@ It comes from reading code, not from running anything, so "(unverified)" means n
 | `settings.models` | Models | Small-jobs pool, private folders | gpui-kit form and GPUI path prompts. | kit | S | `SettingsView` |
 | `settings.pools` | Pools | List, rename, order, icon, logins, folders | Drawn, with `foundation.reorder`. | build | L | `SettingsView`, `PoolsModel` |
 | `settings.runners` | Runners | Reorder, default | Drawn, with `foundation.reorder`. | build | S | `RunnersSettings` |
-| `settings.cloud` | Runners › Cloud runners | Add a cloud runner sheet, each step as it goes, Check again, Rebuild, Edit | Drawn, GPUI only (the Swift app is frozen); the steps are the runner's (`cloud.*`). | build | M | none |
+| `settings.cloud` | Runners › Cloud runners | Add a cloud runner sheet, each step as it goes, Check again, Rebuild, Edit, This month cost with refresh | Drawn, GPUI only (the Swift app is frozen); the steps are the runner's (`cloud.*`). | build | M | none |
 | `settings.devices` | Phone & browser | QR code, paired list, Revoke, Open signed in | Drawn, with a QR crate. | build | M | `DevicesSettings`, `DevicesModel` |
 | `settings.keyboard` | Keyboard | Rebinding, conflicts, Reset | Drawn capture field over GPUI key bindings, reading our own shortcut list. | build | M | `KeyboardSettings`, `AppShortcuts`, `Shortcuts` |
 | `settings.instructions` | Instructions | Standing instructions, Use These, Clear | `Textarea`. | kit | S | `InstructionsSettings`, `InstructionsModel` |

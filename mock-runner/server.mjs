@@ -466,6 +466,8 @@ if (VIRTUAL) addVirtualDemo();
 // Cloud setup's last job and its runners (none until a setup here).
 const CLOUD_STEPS = [['flyctl', 'flyctl installed'], ['token', 'Fly token works'], ['app', 'App for the boxes'], ['backend', 'Token and keys saved to your backend'], ['image', 'Box image'], ['updates', 'Image follows main (GitHub)'], ['service', 'Cloud runner'], ['test', 'Test box: start, check, delete']];
 let cloudJob;
+// The last cloud.cost, which cloud.status carries as the runner's does.
+let cloudCost;
 const cloudServices = [];
 /** The schedules (docs/protocol/projects.md, "Schedules"), soonest first. */
 let schedules = [];
@@ -2007,7 +2009,14 @@ async function dispatch(client, method, p) {
     // each step takes a moment here, as if Fly and flyctl answered at once.
     case 'cloud.status':
       if (!VIRTUAL) throw rpcError(-32602, 'Virtual runners are an experiment that is off here.');
-      return { ...(cloudJob ? { job: cloudJob } : {}), services: cloudServices };
+      return { ...(cloudJob ? { job: cloudJob } : {}), services: cloudServices, ...(cloudCost ? { cost: cloudCost } : {}) };
+    case 'cloud.cost':
+      // This month's estimate from Fly's start and stop times (fly-cost.ts), as if Fly answered.
+      if (!VIRTUAL) throw rpcError(-32602, 'Virtual runners are an experiment that is off here.');
+      if (!cloudServices.length) throw rpcError(-32602, 'There is no cloud runner on Fly yet: set one up first.');
+      await sleep(400);
+      cloudCost = { app: 'tb-boxes-alex', monthStart: Date.UTC(new Date().getUTCFullYear(), new Date().getUTCMonth(), 1), asOf: Date.now(), usd: 1.84, hours: 12.6, boxes: 5 };
+      return cloudCost;
     case 'cloud.setup':
     case 'cloud.check':
     case 'cloud.rebuild': {

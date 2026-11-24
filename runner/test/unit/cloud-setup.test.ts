@@ -8,6 +8,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import type { Logger } from '../../src/log.ts';
+import { estimate, perSecond, startedSeconds, type FlyMachine } from '../../src/fly-cost.ts';
 import { CloudSetup, cleanToken, defaultAppName, looksLikeFlyToken, type CloudDeps, type Run } from '../../src/cloud-setup.ts';
 
 const TOKEN = `FlyV1 fm2_${'Ab1x'.repeat(12)}`;
@@ -111,6 +112,7 @@ function world(opts: { flyctl?: boolean; signedIn?: boolean; gh?: boolean; apps?
         machines.set(id, { state: 'started' });
         return json(200, { id });
       }
+      if (method === 'GET' && !machine) return json(200, []);
       if (method === 'GET' && machine) return json(200, { state: 'stopped', events: [{ type: 'exit', request: { exit_event: { exit_code: opts.exit ?? 64 } } }] });
       if (method === 'DELETE' && machine) {
         machines.delete(machine);
@@ -315,4 +317,46 @@ test('token and app name helpers', () => {
   assert.ok(!looksLikeFlyToken('sk-ant-oat01-x'));
   assert.equal(defaultAppName('Wayne.Sutton'), 'tb-boxes-wayne-sutton');
   assert.equal(defaultAppName('__'), 'tb-boxes-me');
+});
+
+test("this month's cost: started time from Fly's events, priced by size, deleted boxes too", async () => {
+  const now = Date.parse('2026-11-24T12:00:00Z');
+  const hour = 3600_000;
+  const small = { cpu_kind: 'shared', cpus: 1, memory_mb: 1024 };
+  const big = { cpu_kind: 'shared', cpus: 2, memory_mb: 2048 };
+  const machines: FlyMachine[] = [
+    // Two hours, then deleted.
+    { id: 'a', state: 'destroyed', config: { guest: small }, events: [
+      { status: 'created', timestamp: now - 10 * hour }, { status: 'started', timestamp: now - 9 * hour },
+      { status: 'stopped', timestamp: now - 7 * hour }, { status: 'destroyed', timestamp: now - 6 * hour },
+    ] },
+    // Started an hour ago and still going.
+    { id: 'b', state: 'started', config: { guest: big }, events: [{ status: 'started', timestamp: now - hour }] },
+    // Last month only: nothing this month.
+    { id: 'c', state: 'stopped', config: { guest: small }, events: [
+      { status: 'started', timestamp: Date.parse('2026-10-30T00:00:00Z') }, { status: 'suspended', timestamp: Date.parse('2026-10-30T05:00:00Z') },
+    ] },
+  ];
+  const c = estimate('tb-boxes-x', machines, now);
+  assert.equal(c.boxes, 2);
+  assert.equal(c.hours, 3);
+  // 2 h of 1 CPU 1 GB ($6.69 a month) and 1 h of 2 CPUs 2 GB ($13.38 a month).
+  const want = (2 * 3600 * 6.69 + 3600 * 13.38) / (30 * 24 * 3600);
+  assert.equal(c.usd, Math.round(want * 100) / 100);
+  assert.equal(c.monthStart, Date.parse('2026-11-01T00:00:00Z'));
+  // A box across the month's start counts only from the 1st.
+  assert.equal(startedSeconds({ id: 'd', state: 'stopped', events: [{ status: 'started', timestamp: Date.parse('2026-10-31T23:00:00Z') }, { status: 'stopped', timestamp: Date.parse('2026-11-01T01:00:00Z') }] }, c.monthStart, now), 3600);
+  assert.ok(Math.abs(perSecond(small) * 30 * 24 * 3600 - 6.69) < 0.001);
+});
+
+test('cloud.cost reads the app and token from the backend, asks Fly once, and status keeps the answer', async () => {
+  const w = world({ env: { FLY_API_TOKEN: TOKEN, FLY_APP: 'tb-boxes-c' }, apps: new Set(['tb-boxes-c']) });
+  const setup = new CloudSetup(w.deps);
+  const c = await setup.cost();
+  assert.equal(c.app, 'tb-boxes-c');
+  assert.equal(w.calls.fly.filter((x) => x.startsWith('GET /v1/apps/tb-boxes-c/machines')).length, 1);
+  assert.ok(w.calls.fly.some((x) => x.includes('include_deleted=true')));
+  assert.deepEqual((await setup.status()).cost, c);
+  const none = new CloudSetup(world().deps);
+  await assert.rejects(none.cost(), /set one up first/);
 });

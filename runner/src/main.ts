@@ -1700,6 +1700,7 @@ async function main(): Promise<void> {
     now: () => Date.now(),
   });
   methods['cloud.status'] = () => cloudSetup.status();
+  methods['cloud.cost'] = () => cloudSetup.cost();
   methods['cloud.setup'] = (p) =>
     cloudSetup.setup({
       ...(typeof p.token === 'string' ? { token: p.token } : {}),

@@ -23,6 +23,7 @@ import path from 'node:path';
 import type { Logger } from './log.ts';
 import { ErrorCode, RpcError } from './protocol.ts';
 import { rememberToken } from './year-token.ts';
+import { estimate, type CloudCost, type FlyMachine } from './fly-cost.ts';
 
 export const FLY_API = 'https://api.machines.dev/v1';
 
@@ -50,6 +51,8 @@ export type CloudStatus = {
   // The last setup, check or rebuild this runner ran, or is running.
   job?: { kind: 'setup' | 'check' | 'rebuild'; running: boolean; steps: Step[]; startedAt: number; endedAt?: number; error?: string };
   services: Service[];
+  // The last cloud.cost this runner worked out, if any since it started.
+  cost?: CloudCost;
 };
 
 export type CloudDeps = {
@@ -139,6 +142,7 @@ export function tokenLine(s: string): string {
 
 export class CloudSetup {
   private job: CloudStatus['job'];
+  private lastCost: CloudCost | undefined;
   private going: Promise<void> | undefined;
   private deps: CloudDeps;
   constructor(deps: CloudDeps) {
@@ -172,7 +176,28 @@ export class CloudSetup {
   /** cloud.status: the last job and the virtual runners, never a token. */
   async status(): Promise<CloudStatus> {
     this.mustBeOn();
-    return { ...(this.job ? { job: { ...this.job, steps: this.job.steps.map((s) => ({ ...s })) } } : {}), services: await this.services() };
+    return {
+      ...(this.job ? { job: { ...this.job, steps: this.job.steps.map((s) => ({ ...s })) } } : {}),
+      services: await this.services(),
+      ...(this.lastCost ? { cost: { ...this.lastCost } } : {}),
+    };
+  }
+
+  /**
+   * cloud.cost: this month's cost of the boxes, from Fly's record of each
+   * Machine's starts and stops at list price (fly-cost.ts). Read only: one
+   * call to Fly, and only when asked (the section's refresh button).
+   */
+  async cost(): Promise<CloudCost> {
+    this.mustBeOn();
+    const token = this.envGet('FLY_API_TOKEN');
+    const app = this.envGet('FLY_APP');
+    if (!token || !app) throw new RpcError(ErrorCode.badParams, 'There is no cloud runner on Fly yet: set one up first.');
+    rememberToken(token);
+    const r = await this.fly<FlyMachine[]>(token, 'GET', `/apps/${encodeURIComponent(app)}/machines?include_deleted=true`);
+    if (r.status >= 300 || !Array.isArray(r.json)) throw new RpcError(ErrorCode.other, `Fly answered ${r.status}: ${r.text}`);
+    this.lastCost = estimate(app, r.json, this.deps.now());
+    return { ...this.lastCost };
   }
 
   private async services(): Promise<Service[]> {

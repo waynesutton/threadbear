@@ -111,10 +111,33 @@ pub struct Service {
     pub asleep: u32,
 }
 
+/// `cloud.cost`: this month's estimate, from Fly's start and stop times.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Cost {
+    pub cents: u64,
+    /// Hours the boxes ran, in tenths.
+    pub tenth_hours: u64,
+    pub boxes: u32,
+    pub as_of_ms: i64,
+}
+
+impl Cost {
+    pub fn decode(v: &Value) -> Option<Self> {
+        let usd = v["usd"].as_f64()?;
+        Some(Cost {
+            cents: (usd.max(0.0) * 100.0).round() as u64,
+            tenth_hours: (v["hours"].as_f64().unwrap_or(0.0).max(0.0) * 10.0).round() as u64,
+            boxes: n(v, "boxes"),
+            as_of_ms: v["asOf"].as_i64().unwrap_or(0),
+        })
+    }
+}
+
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct Status {
     pub job: Option<Job>,
     pub services: Vec<Service>,
+    pub cost: Option<Cost>,
 }
 
 fn s(v: &Value, k: &str) -> String {
@@ -167,7 +190,12 @@ impl Status {
                     .collect()
             })
             .unwrap_or_default();
-        Status { job, services }
+        let cost = v.get("cost").and_then(Cost::decode);
+        Status {
+            job,
+            services,
+            cost,
+        }
     }
 
     pub fn running(&self) -> bool {
@@ -216,6 +244,38 @@ pub fn threads_line(svc: &Service) -> String {
     } else {
         format!("{} running · {} asleep", svc.running, svc.asleep)
     }
+}
+
+pub const COST_LABEL: &str = "This month";
+pub const COST_TIP: &str = "An estimate at Fly's list price, from each box's start and stop times this month. Fly has no billing API, so your bill is at fly.io/dashboard. Fly is asked only when Settings opens or you press refresh, never by an agent";
+pub const COST_REFRESH_TIP: &str = "Ask Fly again";
+
+/// "$1.23", "Under $0.01" or "$0.00".
+pub fn cost_amount(c: &Cost) -> String {
+    if c.cents == 0 && c.tenth_hours > 0 {
+        "Under $0.01".to_owned()
+    } else {
+        format!("${}.{:02}", c.cents / 100, c.cents % 100)
+    }
+}
+
+/// "3.5 hours on 4 boxes", "No boxes yet".
+pub fn cost_detail(c: &Cost) -> String {
+    if c.boxes == 0 {
+        return "No boxes ran yet".to_owned();
+    }
+    let hours = if c.tenth_hours < 1 {
+        "under 0.1 hours".to_owned()
+    } else if c.tenth_hours == 10 {
+        "1 hour".to_owned()
+    } else {
+        format!("{}.{} hours", c.tenth_hours / 10, c.tenth_hours % 10)
+    };
+    format!(
+        "{hours} on {} box{}",
+        c.boxes,
+        if c.boxes == 1 { "" } else { "es" }
+    )
 }
 
 /// The badge by the name: what the last job here says of it.
@@ -317,6 +377,23 @@ mod tests {
         let check =
             Status::decode(&json!({ "job": { "kind": "check", "running": false, "steps": [] } }));
         assert_eq!(sheet_button(Some(&check), false, false), "Add");
+    }
+
+    #[test]
+    fn cost_lines() {
+        let st = Status::decode(
+            &json!({ "services": [], "cost": { "usd": 1.234, "hours": 3.46, "boxes": 4, "asOf": 5 } }),
+        );
+        let c = st.cost.clone().unwrap();
+        assert_eq!(cost_amount(&c), "$1.23");
+        assert_eq!(cost_detail(&c), "3.5 hours on 4 boxes");
+        let tiny = Cost::decode(&json!({ "usd": 0, "hours": 0, "boxes": 2 })).unwrap();
+        assert_eq!(cost_amount(&tiny), "$0.00");
+        assert_eq!(cost_detail(&tiny), "under 0.1 hours on 2 boxes");
+        let some = Cost::decode(&json!({ "usd": 0.001, "hours": 0.5, "boxes": 1 })).unwrap();
+        assert_eq!(cost_amount(&some), "Under $0.01");
+        assert_eq!(cost_detail(&some), "0.5 hours on 1 box");
+        assert_eq!(Status::decode(&json!({ "services": [] })).cost, None);
     }
 
     #[test]
