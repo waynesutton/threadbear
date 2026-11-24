@@ -134,6 +134,12 @@ function scrub(s: string, token: string | undefined): string {
   return out.replace(/FlyV1 [A-Za-z0-9_+/=,.-]{20,}/g, 'FlyV1 [REDACTED]').replace(/\bfo1_[A-Za-z0-9_-]{20,}/g, 'fo1_[REDACTED]');
 }
 
+/** owner/repo from a GitHub remote URL (https or ssh), else undefined. */
+export function githubRepo(url: string): string | undefined {
+  const m = /github\.com[:/]([A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+?)(?:\.git)?\/?$/.exec(url.trim());
+  return m?.[1];
+}
+
 function lastLine(s: string): string {
   const lines = s.trim().split('\n').map((l) => l.trim()).filter(Boolean);
   return (lines[lines.length - 1] ?? '').slice(0, 300);
@@ -404,6 +410,22 @@ export class CloudSetup {
       s.detail = 'gh isn\'t signed in here, so the image updates only when you press Rebuild.';
       return;
     }
+    // The checkout's own GitHub repo, named: a fork's checkout has Mike's as
+    // a second remote, and gh alone would ask which, or pick his.
+    const origin = (await this.deps.exec('git', ['-C', cwd, 'remote', 'get-url', 'origin'], { timeoutMs: 10_000 })).out.trim();
+    const repo = githubRepo(origin);
+    if (!repo) {
+      s.state = 'warn';
+      s.detail = `This checkout's origin (${origin || 'none'}) isn't on GitHub, so the image updates only when you press Rebuild.`;
+      return;
+    }
+    // Already set on that repo: nothing to make, so no new token each Save.
+    const vars = await this.deps.exec('gh', ['variable', 'get', 'FLY_BOX_APP', '-R', repo], { cwd, timeoutMs: 20_000 });
+    const secrets = await this.deps.exec('gh', ['secret', 'list', '-R', repo], { cwd, timeoutMs: 20_000 });
+    if (vars.ok && vars.out.trim() === app && secrets.ok && /^FLY_BOX_IMAGE_TOKEN\b/m.test(secrets.out)) {
+      s.detail = `already set on ${repo}; each push to main rebuilds it`;
+      return;
+    }
     // An org token can't make other tokens (Fly: "Not authorized to access
     // createlimitedaccesstoken"), so flyctl's own sign-in makes it when there
     // is one, and the org token is only the fallback.
@@ -417,14 +439,14 @@ export class CloudSetup {
       return;
     }
     rememberToken(narrow);
-    const v = await this.deps.exec('gh', ['variable', 'set', 'FLY_BOX_APP', '--body', app], { cwd, timeoutMs: 20_000 });
-    const sec = await this.deps.exec('gh', ['secret', 'set', 'FLY_BOX_IMAGE_TOKEN'], { cwd, input: narrow, timeoutMs: 20_000 });
+    const v = await this.deps.exec('gh', ['variable', 'set', 'FLY_BOX_APP', '--body', app, '-R', repo], { cwd, timeoutMs: 20_000 });
+    const sec = await this.deps.exec('gh', ['secret', 'set', 'FLY_BOX_IMAGE_TOKEN', '-R', repo], { cwd, input: narrow, timeoutMs: 20_000 });
     if (!v.ok || !sec.ok) {
       s.state = 'warn';
       s.detail = `GitHub refused: ${scrub(lastLine(v.err) || lastLine(sec.err), narrow)}`;
       return;
     }
-    s.detail = 'FLY_BOX_APP and FLY_BOX_IMAGE_TOKEN set; each push to main rebuilds it';
+    s.detail = `FLY_BOX_APP and FLY_BOX_IMAGE_TOKEN set on ${repo}; each push to main rebuilds it`;
   }
 
   private async saveService(p: SetupParams & { name: string }, app: string, s: Step): Promise<void> {

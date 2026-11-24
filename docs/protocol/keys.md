@@ -605,7 +605,8 @@ has to be on for it.
   would make every sealed cloud token unreadable); the image built from
   this Mac's checkout on Fly's remote builder as
   `registry.fly.io/<app>:latest`; with `gh` signed in, `FLY_BOX_APP` and
-  a narrowed `FLY_BOX_IMAGE_TOKEN` on the checkout's GitHub repo so
+  a narrowed `FLY_BOX_IMAGE_TOKEN` (made with flyctl's own sign-in) on the
+  checkout's origin repo, named with `-R` and skipped when both are there so
   `box-image.yml` keeps it up to date (else `warn`); `setRunnerService`
   (the first Fly one, or `serviceId`'s); and a test box from the image
   with no boot token, which must exit 64 and is then deleted. The token

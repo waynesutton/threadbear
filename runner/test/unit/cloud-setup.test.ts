@@ -9,7 +9,7 @@ import os from 'node:os';
 import path from 'node:path';
 import type { Logger } from '../../src/log.ts';
 import { estimate, perSecond, startedSeconds, type FlyMachine } from '../../src/fly-cost.ts';
-import { CloudSetup, cleanToken, defaultAppName, looksLikeFlyToken, type CloudDeps, type Run } from '../../src/cloud-setup.ts';
+import { CloudSetup, cleanToken, githubRepo, defaultAppName, looksLikeFlyToken, type CloudDeps, type Run } from '../../src/cloud-setup.ts';
 
 const TOKEN = `FlyV1 fm2_${'Ab1x'.repeat(12)}`;
 // As long as real ones: flyctl's org and deploy tokens run to hundreds of characters.
@@ -27,6 +27,8 @@ function checkout(): string {
 
 function world(opts: { flyctl?: boolean; signedIn?: boolean; gh?: boolean; apps?: Set<string>; env?: Record<string, string>; exit?: number; badToken?: boolean; buildFails?: boolean; noDeployKey?: boolean; imageLateBy?: number } = {}) {
   let late = opts.imageLateBy ?? 0;
+  const ghVars: Record<string, string> = {};
+  const ghSecrets: string[] = [];
   const env: Record<string, string> = { ...opts.env };
   const apps = opts.apps ?? new Set<string>();
   const machines = new Map<string, { state: string }>();
@@ -81,10 +83,19 @@ function world(opts: { flyctl?: boolean; signedIn?: boolean; gh?: boolean; apps?
         assert.ok(!args.join(' ').includes('fm2_'), 'never in its arguments');
         return opts.buildFails ? no(`Error: unauthorized ${TOKEN}\n`) : ok('image: registry.fly.io/x:latest\n');
       }
+      if (cmd === 'git' && args.includes('remote')) return ok('https://github.com/someone/threadbear.git\n');
       if (cmd === 'git') return ok('0123456789abcdef\n');
       if (cmd === 'gh' && args[0] === 'auth') return opts.gh === false ? no('not logged in') : ok();
       if (cmd === 'gh') {
-        if (args[1] === 'set' && args[0] === 'secret') assert.equal(o?.input, DEPLOY);
+        // Always the checkout's own repo, never gh's guess between remotes.
+        assert.equal(args[args.indexOf('-R') + 1], 'someone/threadbear');
+        if (args[0] === 'variable' && args[1] === 'get') return ghVars.FLY_BOX_APP ? ok(`${ghVars.FLY_BOX_APP}\n`) : no('variable FLY_BOX_APP was not found');
+        if (args[0] === 'secret' && args[1] === 'list') return ok(ghSecrets.map((n) => `${n}\t2026-11-24`).join('\n'));
+        if (args[0] === 'variable' && args[1] === 'set') ghVars[args[2]!] = args[args.indexOf('--body') + 1]!;
+        if (args[0] === 'secret' && args[1] === 'set') {
+          assert.equal(o?.input, DEPLOY);
+          ghSecrets.push(args[2]!);
+        }
         return ok();
       }
       return no(`unexpected ${cmd}`);
@@ -415,4 +426,20 @@ test('remove waits for the threads to be archived, and changes nothing until the
   assert.equal(st.services.length, 1);
   assert.equal(w.env.FLY_APP, 'tb-boxes-busy');
   assert.ok(w.apps.has('tb-boxes-busy'));
+});
+
+test("the image token goes to the checkout's own GitHub repo once, and a second Save makes no new token", async () => {
+  const w = world();
+  const setup = new CloudSetup(w.deps);
+  setup.setup({ token: TOKEN, app: 'tb-boxes-g2' });
+  await setup.wait();
+  assert.match((await setup.status()).job?.steps.find((s) => s.id === 'updates')?.detail ?? '', /someone\/threadbear/);
+  const made = w.calls.exec.filter((x) => x.startsWith('fly tokens create deploy')).length;
+  setup.setup({ app: 'tb-boxes-g2' });
+  await setup.wait();
+  assert.match((await setup.status()).job?.steps.find((s) => s.id === 'updates')?.detail ?? '', /already set/);
+  assert.equal(w.calls.exec.filter((x) => x.startsWith('fly tokens create deploy')).length, made);
+  assert.equal(githubRepo('git@github.com:a/b.git'), 'a/b');
+  assert.equal(githubRepo('https://github.com/waynesutton/threadbear.git'), 'waynesutton/threadbear');
+  assert.equal(githubRepo('https://gitlab.com/a/b.git'), undefined);
 });
