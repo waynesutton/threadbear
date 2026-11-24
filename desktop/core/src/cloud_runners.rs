@@ -336,6 +336,68 @@ pub fn step_line(step: &Step) -> String {
     }
 }
 
+/// Whether a folder can start a cloud thread, before send: a box clones the
+/// folder's repo from its origin, so it must be a git repo whose origin a box
+/// can reach (runner/src/virtual-runners.ts repoOf and boxOrigin). The runner
+/// still refuses the rest; this only says so before Send is pressed.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum FolderCheck {
+    Checking,
+    Fine,
+    /// Why not, for the line under the box and Send's tip.
+    Not(String),
+}
+
+/// An origin a box clones over https: an https address, or GitHub's ssh forms.
+pub fn box_can_clone(origin: &str) -> bool {
+    let s = origin.trim();
+    let lower = s.to_ascii_lowercase();
+    if lower.starts_with("https://") {
+        return s.len() > "https://".len();
+    }
+    let path = lower
+        .strip_prefix("ssh://git@github.com/")
+        .or_else(|| lower.strip_prefix("ssh://github.com/"))
+        .or_else(|| {
+            (!lower.contains("://"))
+                .then(|| {
+                    lower
+                        .strip_prefix("git@github.com:")
+                        .or_else(|| lower.strip_prefix("github.com:"))
+                })
+                .flatten()
+        });
+    path.is_some_and(|p| {
+        let mut parts = p.trim_end_matches('/').split('/');
+        matches!((parts.next(), parts.next(), parts.next()), (Some(o), Some(r), None) if !o.is_empty() && !r.is_empty())
+    })
+}
+
+/// What `git rev-parse --show-toplevel` and `git remote get-url origin` said
+/// (None when they failed), as the check for a cloud runner named `name`.
+pub fn folder_check(name: &str, top: Option<&str>, origin: Option<&str>) -> FolderCheck {
+    let top = top.map(str::trim).filter(|t| !t.is_empty());
+    let origin = origin.map(str::trim).filter(|o| !o.is_empty());
+    match (top, origin) {
+        (None, _) => FolderCheck::Not(not_a_repo(name)),
+        (Some(_), None) => FolderCheck::Not(format!(
+            "{name} copies this folder's repo from GitHub, and it has no origin. Push it to GitHub, or switch Runs on to This Mac."
+        )),
+        (Some(_), Some(o)) if !box_can_clone(o) => FolderCheck::Not(format!(
+            "{name} copies this folder's repo over https, and its origin isn't on GitHub or https. Pick another folder, or switch Runs on to This Mac."
+        )),
+        _ => FolderCheck::Fine,
+    }
+}
+
+/// The usual case: a folder that isn't a git repo.
+pub fn not_a_repo(name: &str) -> String {
+    format!("{name} works in a folder that's a GitHub repo. Pick one in the folder menu, or switch Runs on to This Mac.")
+}
+
+/// Short, beside the runner in Runs on.
+pub const MENU_NOT_HERE: &str = "needs a GitHub repo folder";
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -436,5 +498,38 @@ mod tests {
         assert_eq!(size_label(2, 2048), "2 CPUs, 2 GB");
         assert_eq!(memory_label(1536), "1.5 GB");
         assert!(SIZES.iter().all(|(_, mb)| *mb <= 2048 && mb % 256 == 0));
+    }
+
+    #[test]
+    fn folder_checks() {
+        let n = "Cloud (Fly)";
+        assert_eq!(folder_check(n, None, None), FolderCheck::Not(not_a_repo(n)));
+        assert!(not_a_repo(n).starts_with("Cloud (Fly) works in a folder that's a GitHub repo."));
+        assert!(
+            matches!(folder_check(n, Some("/r"), None), FolderCheck::Not(w) if w.contains("no origin"))
+        );
+        assert!(matches!(
+            folder_check(n, Some("/r"), Some("/Users/x/repo")),
+            FolderCheck::Not(_)
+        ));
+        assert_eq!(
+            folder_check(n, Some("/r"), Some("https://github.com/o/r.git\n")),
+            FolderCheck::Fine
+        );
+        assert_eq!(
+            folder_check(n, Some("/r"), Some("git@github.com:o/r.git")),
+            FolderCheck::Fine
+        );
+        assert_eq!(
+            folder_check(n, Some("/r"), Some("ssh://git@github.com/o/r")),
+            FolderCheck::Fine
+        );
+        assert!(!box_can_clone("git@gitlab.com:o/r.git"));
+        assert!(!box_can_clone("http://github.com/o/r"));
+        assert!(!box_can_clone("file:///x"));
+        assert!(!box_can_clone("git@github.com:o"));
+        for w in [not_a_repo(n), MENU_NOT_HERE.to_owned()] {
+            assert!(!w.contains('\u{2014}'));
+        }
     }
 }

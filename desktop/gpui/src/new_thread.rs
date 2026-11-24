@@ -36,6 +36,11 @@ pub(crate) struct NewThreadState {
     pub(crate) error: Option<String>,
     /// The chosen runner can't be reached, or hasn't said what logins it has.
     pub(crate) runner_problem: Option<String>,
+    /// Each folder's git top and origin, for a cloud runner's box to clone
+    /// (None while git's being asked): read once per folder, again when a
+    /// cloud runner's picked.
+    pub(crate) folder_repos:
+        std::collections::HashMap<String, Option<(Option<String>, Option<String>)>>,
     /// The box should take the cursor at the next render (⌘N, or the button).
     pub(crate) focus_pending: bool,
     /// The settings last sent to `threads.warm`, and the id the runner gave
@@ -54,6 +59,7 @@ impl NewThreadState {
             creating: false,
             error: None,
             runner_problem: None,
+            folder_repos: std::collections::HashMap::new(),
             focus_pending: false,
             warm_asked: None,
             warm: None,
@@ -253,6 +259,11 @@ impl Threadbear {
                 "Not connected to the runner, so that wasn't sent. It's still in the box."
                     .to_owned(),
             );
+            cx.notify();
+            return;
+        }
+        if let Some(why) = self.cloud_folder_problem() {
+            self.new_thread.error = Some(why);
             cx.notify();
             return;
         }
@@ -547,7 +558,74 @@ impl Threadbear {
         }
         self.new_thread.picks.service = Some(service);
         self.new_thread.runner_problem = None;
+        // A folder made a repo since it was last asked is asked again.
+        self.new_thread.folder_repos.clear();
         cx.notify();
+    }
+
+    /// Why the new thread's folder can't start on the cloud runner it's set
+    /// to (a box clones its repo), or None: fine, still being checked, or
+    /// not a cloud thread. The runner refuses it too; this says so first.
+    pub(crate) fn cloud_folder_problem(&self) -> Option<String> {
+        let service = self.new_thread.picks.service.as_deref()?;
+        if self.new_thread.picks.runner.is_some() {
+            return None;
+        }
+        self.folder_problem_for(service, &self.draft_summary().cwd)
+    }
+
+    /// The same for a cloud runner and folder, from what git said.
+    pub(crate) fn folder_problem_for(&self, service: &str, cwd: &str) -> Option<String> {
+        let (top, origin) = self.new_thread.folder_repos.get(cwd)?.as_ref()?;
+        match threadbear_core::cloud_runners::folder_check(
+            &self.service_name_of(service),
+            top.as_deref(),
+            origin.as_deref(),
+        ) {
+            threadbear_core::cloud_runners::FolderCheck::Not(why) => Some(why),
+            _ => None,
+        }
+    }
+
+    /// Asks git, off the main thread, whether the new thread's folder is a
+    /// repo with an origin, once per folder while there's a cloud runner.
+    pub(crate) fn check_cloud_folder(&mut self, cx: &mut Context<Self>) {
+        if self.new_thread.picks.runner.is_some() || self.remote.services().is_empty() {
+            return;
+        }
+        let cwd = self.draft_summary().cwd;
+        if cwd.is_empty() || self.new_thread.folder_repos.contains_key(&cwd) {
+            return;
+        }
+        self.new_thread.folder_repos.insert(cwd.clone(), None);
+        let dir = cwd.clone();
+        let task = cx.background_executor().spawn(async move {
+            let git = |args: &[&str]| {
+                std::process::Command::new("git")
+                    .arg("-C")
+                    .arg(&dir)
+                    .args(args)
+                    .output()
+                    .ok()
+                    .filter(|o| o.status.success())
+                    .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_owned())
+                    .filter(|s| !s.is_empty())
+            };
+            let top = git(&["rev-parse", "--show-toplevel"]);
+            let origin = top
+                .as_ref()
+                .and_then(|_| git(&["remote", "get-url", "origin"]));
+            (top, origin)
+        });
+        cx.spawn(async move |this, cx| {
+            let found = task.await;
+            this.update(cx, |this, cx| {
+                this.new_thread.folder_repos.insert(cwd, Some(found));
+                cx.notify();
+            })
+            .ok();
+        })
+        .detach();
     }
 
     /// A virtual runner's name, or "the cloud" for one no longer listed.
@@ -782,10 +860,21 @@ impl Threadbear {
         }
         // After the machines, one line per virtual runner: its own icon, and
         // no online word, as it's always there (docs/virtual-runners.md).
+        let cwd = self.draft_summary().cwd;
         for s in self.remote.services() {
             let on = |id: &Option<String>| id.as_deref() == Some(s.id.as_str());
+            // Still pickable (the folder can change after), with why not here.
+            let name = if self.folder_problem_for(&s.id, &cwd).is_some() {
+                format!(
+                    "{} ({})",
+                    s.name,
+                    threadbear_core::cloud_runners::MENU_NOT_HERE
+                )
+            } else {
+                s.name.clone()
+            };
             rows.push(MenuRow::runner(
-                s.name.clone(),
+                name,
                 crate::icons::VIRTUAL_RUNNER,
                 on(&service),
                 on(&default_service),
@@ -958,6 +1047,16 @@ impl Threadbear {
             .runner
             .as_deref()
             .map(|id| self.runner_name_of(id));
+        // A cloud thread from a folder its box can't clone: said here, and
+        // Send waits (the composer's cloud_block).
+        self.check_cloud_folder(cx);
+        let cloud_problem = self.cloud_folder_problem();
+        composer.update(cx, |c, cx| {
+            if c.cloud_block != cloud_problem {
+                c.cloud_block = cloud_problem.clone();
+                cx.notify();
+            }
+        });
         let now = threadbear_core::sidebar::local_now();
         let (note, note_tip, rooms) = self.with_draft(&logins, |d| {
             (
@@ -980,12 +1079,22 @@ impl Threadbear {
                 .text_center()
                 .child(draft_rules::HEADING),
         );
-        let note_text = div()
-            .id("new-thread-note")
-            .text_size(px(size::LABEL))
-            .text_color(style::faint_text(cx))
-            .child(note)
-            .tip(note_tip);
+        let note_text = match cloud_problem {
+            Some(why) => div()
+                .id("new-thread-note")
+                .px(px(24.))
+                .text_center()
+                .text_size(px(size::LABEL))
+                .text_color(style::status_warning(cx))
+                .child(why.clone())
+                .tip(why),
+            None => div()
+                .id("new-thread-note")
+                .text_size(px(size::LABEL))
+                .text_color(style::faint_text(cx))
+                .child(note)
+                .tip(note_tip),
+        };
         let error = self.new_thread.error.clone();
         let danger = cx.theme().danger;
         let notes = v_flex()

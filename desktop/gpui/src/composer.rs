@@ -57,6 +57,9 @@ pub(crate) struct PictureChip {
 
 pub struct Composer {
     /// None for the new-thread page's box.
+    /// The new thread's cloud runner can't start in its folder (not a
+    /// GitHub repo): why, set by the app (new_thread.rs). Send waits.
+    pub(crate) cloud_block: Option<String>,
     pub(crate) thread_id: Option<String>,
     pub(crate) client: Arc<Client>,
     pub(crate) app: WeakEntity<Threadbear>,
@@ -360,6 +363,7 @@ impl Composer {
             token_field: None,
             token_sub: None,
             fast_armed: false,
+            cloud_block: None,
             fast_in_flight: None,
             palette: PaletteState::default(),
             bear_gate: Default::default(),
@@ -856,7 +860,14 @@ impl Composer {
 
     /// Whether there's anything to send (ComposerView.canSend).
     fn can_send(&self, cx: &App) -> bool {
-        !self.loading_pictures(cx) && self.has_send_content(cx)
+        !self.loading_pictures(cx) && self.has_send_content(cx) && self.cloud_block().is_none()
+    }
+
+    /// Why a new thread can't go where it's set to run, if it can't.
+    fn cloud_block(&self) -> Option<&str> {
+        self.cloud_block
+            .as_deref()
+            .filter(|_| self.thread_id.is_none())
     }
 
     fn has_send_content(&self, cx: &App) -> bool {
@@ -917,6 +928,10 @@ impl Composer {
             return;
         }
         let fast = fast_override.unwrap_or(self.fast_armed) && self.fast_lane_available(cx);
+        // Its folder can't start on the cloud runner: the line under the box says why.
+        if self.cloud_block().is_some() {
+            return;
+        }
         if self.thread_id.is_none() {
             return self.send_new_thread_with_fast(fast, window, cx);
         }
@@ -2403,12 +2418,14 @@ impl Composer {
                 ))
                 .into_any_element();
         }
-        let tip = if self.fast_armed {
-            "Fast web search (Return)"
+        let tip: SharedString = if let Some(why) = self.cloud_block() {
+            why.to_owned().into()
+        } else if self.fast_armed {
+            "Fast web search (Return)".into()
         } else if running {
-            "Send (into this turn)"
+            "Send (into this turn)".into()
         } else {
-            "Send (Return)"
+            "Send (Return)".into()
         };
         let (fg, bg) = if can_send && self.fast_armed {
             (gpui_kit::white(), style::accent(cx))
@@ -2811,7 +2828,8 @@ impl Render for Composer {
         // Right-click it to send the message later (composer_send.rs).
         let send_button = self.with_send_menu(send_button, cx);
         // Fast lane icon-only bolt directly to the left of Send (fast_lane.rs).
-        let send_button = if fast_available {
+        // Not while the new thread's folder can't start on its cloud runner.
+        let send_button = if fast_available && self.cloud_block().is_none() {
             let state = if self.fast_in_flight.is_some() {
                 crate::fast_lane::ButtonState::Sending
             } else if self.fast_armed {
