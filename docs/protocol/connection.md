@@ -262,8 +262,6 @@ is done, so a client that waits for it can send big frames straight after.
 | `agents.list` | `{}` | `{ on, reason?, url?, keys: AgentKey[] }`. Outside agents (an experiment, see "Outside agents"): `url` is the backend's `/mcp`; `reason` says why none can be made (sync off) |
 | `agents.connect` | `{ name?: string, scope?: "read" \| "write", readAll?: boolean }` | `{ key: AgentKey, secret, url }`. Makes a key, `read` and own threads only unless asked. `secret` is in this reply and nowhere else |
 | `agents.revoke` | `{ id?: string }` | As `agents.list`. One key, or every key with no `id` |
-| `xSearch.status` | `{}` | `{ on: boolean, keySaved: boolean }`. X search (an experiment, see "X search"): whether it's on and an xAI key is saved |
-| `xSearch.forgetKey` | `{}` | As `xSearch.status`. Deletes the saved xAI key, so the next `x_search` asks for one |
 | `librarian.run` | `{ threadId?: string }` | `{ librarian: LibrarianStatus }`. Queues a look at the thread now (reason `asked`), or with no `threadId`, at every thread it has never looked at (a backfill, newest first) |
 | `librarian.update` | `{ paused?: boolean }` | `{ librarian: LibrarianStatus }` |
 | `pools.list` | `{}` | `{ pools: Pool[] }` (see Pools) |

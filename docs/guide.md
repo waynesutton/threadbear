@@ -2339,11 +2339,6 @@ its approvals API (plugbear's local mode); otherwise, or from the phone,
 approve it on the gateway's own page as before. The page still works, and
 a call decided there closes the card.
 
-With the X search experiment on, the panel also has X search, under Built
-into Threadbear, as it doesn't go through the gateway. It says whether
-your xAI key is saved; Forget key deletes it, and the next search asks
-for one again.
-
 When an agent runs into a service that needs signing in, it asks you in its
 reply, with a button that opens the page to do it on. That's only when the
 gateway itself says the service is signed out (or claude.ai's own sign-in

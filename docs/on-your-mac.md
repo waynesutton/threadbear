@@ -223,8 +223,6 @@ File references are where to look.
   type into an agent's secret card, one owner-only file each with a small
   script beside it that prints it for `sudo -A`, removed after 24 hours,
   and `secret-box.key` is the key your phone seals those answers to;
-  `xai-api-key`, with the X search experiment on, is the xAI key you gave
-  its first search, owner-only, until xAI turns it down;
   `made-deploy-keys` lists, by name, the deploy keys this Mac made (setup's
   and the Convex panel's), so `tb runner rotate-owner` can tell them from
   others;

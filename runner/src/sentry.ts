@@ -163,8 +163,8 @@ export const ERROR_CLASSES: ReadonlySet<string> = new Set([
   'ConvexAdminError', 'CronError', 'GaveUp', 'HeldLocal', 'KeysBusy', 'NoSwitches', 'Refused', 'RewindRefusedError',
   'RpcClientError', 'RpcError', 'RunnerJsonError', 'RunnerNotProvedError', 'SessionNotFoundError', 'SpawnRefused',
   'SpecialFile', 'StaleProcess', 'TooBig', 'Unknown', 'Waiting',
-  // Wayne's: Linear tasks, Prints, the approvals API and xAI search.
-  'LinearError', 'NoApprovalsApi', 'PageError', 'XaiKeyRejected',
+  // Wayne's: Linear tasks, Prints and the approvals API.
+  'LinearError', 'NoApprovalsApi', 'PageError',
 ]);
 const LEADING_CLASS = /^\s*(?:Uncaught\s+)?([A-Za-z][A-Za-z0-9]{0,40})\b/;
 // Codes only from the system's own errno list, so a capitals word from the

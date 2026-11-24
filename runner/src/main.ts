@@ -46,7 +46,6 @@ import { Bears, bearsMethods, bearsRoot, shiftOutOfQuiet, EXPERIMENT as BEARS } 
 import { Mentions } from './mentions.ts';
 import { Tables, tablesMethods, tablesRoot, EXPERIMENT as TABLES } from './tables.ts';
 import { HookRegistry, revokeHooksFor, webhookCommands, webhooksMethods, EXPERIMENT as WEBHOOKS } from './webhooks.ts';
-import { xSearchMethods } from './x-search.ts';
 import { AgentArchive, ARCHIVE_EXPERIMENT } from './agent-archive.ts';
 import { MemorySync } from './memory-sync.ts';
 import { Reinstaller } from './reinstall.ts';
@@ -455,8 +454,6 @@ async function main(): Promise<void> {
   let setSkillsExperiment: ((on: boolean) => void) | undefined;
   const skills = new SkillStore({ dataDir: cfg.home, accounts: () => accounts.list(), publish: (n) => publishSkills(n), log, version: RUNNER_VERSION, onChange: () => refreshSkills(), setExperiment: (on) => setSkillsExperiment?.(on) });
   skills.sync();
-  // The xSearch experiment (x-search.ts): x_search, with its key in secrets/.
-  const xSearchFor = () => (experimentOn(cfg.home, 'xSearch') ? { secretsDir: paths.secrets(cfg.home) } : undefined);
   // The pages experiment (pages.ts): one store for every thread, made the
   // first time a thread is handed the page tools.
   let pageStore: Pages | undefined;
@@ -489,13 +486,13 @@ async function main(): Promise<void> {
     claudePath: cfg.claudePath,
     registry,
     log,
-    mcpServersFor: (threadId) => ({ [SERVER_NAME]: threadbearMcpServer(router(), threadId, scheduleControl(), projectControl(), appRestarts, () => cfg.bulletReplies, pocketControl, () => cfg.oneReply, () => cfg.connectorsUrl, gatewayHealth, remoteControl, () => experimentOn(cfg.home, 'loadEndTurn'), xSearchFor, pagesFor, () => printPublisher, () => cfg.printsWhenAsked, () => experimentOn(cfg.home, 'tasks') ? nativeTasks : undefined, () => experimentOn(cfg.home, 'clearerCompletion'), () => cfg.progressPrints) }),
+    mcpServersFor: (threadId) => ({ [SERVER_NAME]: threadbearMcpServer(router(), threadId, scheduleControl(), projectControl(), appRestarts, () => cfg.bulletReplies, pocketControl, () => cfg.oneReply, () => cfg.connectorsUrl, gatewayHealth, remoteControl, () => experimentOn(cfg.home, 'loadEndTurn'), pagesFor, () => printPublisher, () => cfg.printsWhenAsked, () => experimentOn(cfg.home, 'tasks') ? nativeTasks : undefined, () => experimentOn(cfg.home, 'clearerCompletion'), () => cfg.progressPrints) }),
     oneReply: () => cfg.oneReply,
     alwaysAsk: ALWAYS_ASK_TOOLS,
     neverAsk: NEVER_ASK_TOOLS,
   });
   // The threadbear tools for an agent that isn't given them in-process.
-  const codexStyleTools = (threadId: string) => buildThreadbearTools(router(), threadId, Date.now, scheduleControl(), projectControl(), appRestarts, { provider: 'codex', bulletReplies: () => cfg.bulletReplies, oneReply: () => cfg.oneReply, pocket: pocketControl, gateway: () => cfg.connectorsUrl, gatewayHealth, remote: remoteControl, xSearch: xSearchFor, pages: pagesFor, printPublisher: () => printPublisher, printsWhenAsked: () => cfg.printsWhenAsked, tasks: () => experimentOn(cfg.home, 'tasks') ? nativeTasks : undefined, clearerCompletion: () => experimentOn(cfg.home, 'clearerCompletion'), progressPrints: () => cfg.progressPrints });
+  const codexStyleTools = (threadId: string) => buildThreadbearTools(router(), threadId, Date.now, scheduleControl(), projectControl(), appRestarts, { provider: 'codex', bulletReplies: () => cfg.bulletReplies, oneReply: () => cfg.oneReply, pocket: pocketControl, gateway: () => cfg.connectorsUrl, gatewayHealth, remote: remoteControl, pages: pagesFor, printPublisher: () => printPublisher, printsWhenAsked: () => cfg.printsWhenAsked, tasks: () => experimentOn(cfg.home, 'tasks') ? nativeTasks : undefined, clearerCompletion: () => experimentOn(cfg.home, 'clearerCompletion'), progressPrints: () => cfg.progressPrints });
   // One app-server per live Codex thread, each starting what E says is
   // current, with the same threadbear tools as dynamic tools.
   const codex = new CodexAdapter({
@@ -1588,7 +1585,7 @@ async function main(): Promise<void> {
     if (n.method === 'thread.updated') updates.threadChanged(n.params.thread.id);
     else if (n.method === 'thread.deleted') updates.threadChanged(n.params.threadId);
   });
-  const methods = { ...taskMethods(nativeTasks), ...linearMethods(linearTasks), ...profilePageMethods(publicProfile), ...restartMethods(restarter), ...scheduleMethods(scheduler), ...projectMethods(projects), ...pageMethods(pagesFor, askAboutPage, printPublisher), ...drainProjectMethods(projects), ...librarianMethods(librarian), ...connectorsMethods(connectors, { on: () => experimentOn(cfg.home, 'connectorsSetup'), start: (r) => startOwnThread(runner, r, undefined), open: openThread, local: () => experimentOn(cfg.home, 'localConnectors'), findLauncher: (l) => findLauncher(l) }, staticClients), ...recipeMethods(recipes), ...settingsMethods(settings), ...skillMethods(skills), ...instructionsMethods(instructions), ...modelMethods(models), ...devicesMethods(sync), ...agentsMethods(sync, () => experimentOn(cfg.home, OUTSIDE_AGENTS)), ...tablesMethods({ tables: () => tables, on: tablesOn }), ...bearsMethods({ bears, on: bearsOn, mention: (p) => mentions.ask(p), unseat: (id) => tables.unseatEverywhere(id), touch: () => runner.touchThreads(runner.list(['inbox', 'snoozed', 'archived']).filter((t) => bears.forCwd(t.cwd)).map((t) => t.id)), cwdOf: (id) => (runner.has(id) ? runner.get(id).cwd : undefined), revokeHooks: (folder) => (webhooksOn() ? revokeHooksFor(sync, folder) : Promise.resolve(0)) }), ...webhooksMethods({ backend: sync, registry: hookRegistry, on: webhooksOn, runnerId: syncRunnerId, needApi: WEBHOOKS_API_VERSION, modeOf: (id) => (runner.has(id) ? runner.get(id).permissionMode : undefined), bearFolder: (b) => { if (!bearsOn()) return undefined; try { return bears.get(b, { faces: false }).folder; } catch { return undefined; } } }), ...xSearchMethods({ on: () => experimentOn(cfg.home, 'xSearch'), secretsDir: paths.secrets(cfg.home) }), ...usageStatsMethods({ tally, history: usageHistory, clock: realClock }) };
+  const methods = { ...taskMethods(nativeTasks), ...linearMethods(linearTasks), ...profilePageMethods(publicProfile), ...restartMethods(restarter), ...scheduleMethods(scheduler), ...projectMethods(projects), ...pageMethods(pagesFor, askAboutPage, printPublisher), ...drainProjectMethods(projects), ...librarianMethods(librarian), ...connectorsMethods(connectors, { on: () => experimentOn(cfg.home, 'connectorsSetup'), start: (r) => startOwnThread(runner, r, undefined), open: openThread, local: () => experimentOn(cfg.home, 'localConnectors'), findLauncher: (l) => findLauncher(l) }, staticClients), ...recipeMethods(recipes), ...settingsMethods(settings), ...skillMethods(skills), ...instructionsMethods(instructions), ...modelMethods(models), ...devicesMethods(sync), ...agentsMethods(sync, () => experimentOn(cfg.home, OUTSIDE_AGENTS)), ...tablesMethods({ tables: () => tables, on: tablesOn }), ...bearsMethods({ bears, on: bearsOn, mention: (p) => mentions.ask(p), unseat: (id) => tables.unseatEverywhere(id), touch: () => runner.touchThreads(runner.list(['inbox', 'snoozed', 'archived']).filter((t) => bears.forCwd(t.cwd)).map((t) => t.id)), cwdOf: (id) => (runner.has(id) ? runner.get(id).cwd : undefined), revokeHooks: (folder) => (webhooksOn() ? revokeHooksFor(sync, folder) : Promise.resolve(0)) }), ...webhooksMethods({ backend: sync, registry: hookRegistry, on: webhooksOn, runnerId: syncRunnerId, needApi: WEBHOOKS_API_VERSION, modeOf: (id) => (runner.has(id) ? runner.get(id).permissionMode : undefined), bearFolder: (b) => { if (!bearsOn()) return undefined; try { return bears.get(b, { faces: false }).folder; } catch { return undefined; } } }), ...usageStatsMethods({ tally, history: usageHistory, clock: realClock }) };
   // runner.status carries the CLI statuses too (protocol, "runner.status").
   const restartStatus = methods['runner.status'];
   methods['runner.status'] = (p) => {

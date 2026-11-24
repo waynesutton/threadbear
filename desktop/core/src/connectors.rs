@@ -654,32 +654,6 @@ pub fn empty_line(s: Option<&ConnectorsStatus>) -> Option<String> {
     }
 }
 
-/// xSearch.status (docs/protocol.md, "X search"): whether X search is on
-/// and an xAI key is saved. Never the key.
-#[derive(Clone, Copy, Debug, Default, PartialEq)]
-pub struct XSearchStatus {
-    pub on: bool,
-    pub key_saved: bool,
-}
-
-impl XSearchStatus {
-    pub fn decode(v: &Value) -> XSearchStatus {
-        XSearchStatus {
-            on: v["on"].as_bool().unwrap_or(false),
-            key_saved: v["keySaved"].as_bool().unwrap_or(false),
-        }
-    }
-
-    /// The row's second line.
-    pub fn line(&self) -> &'static str {
-        if self.key_saved {
-            "xAI key saved"
-        } else {
-            "Asks for an xAI key on the first search"
-        }
-    }
-}
-
 /// The gateway's machine, as its owner calls it: "bruce" for
 /// bruce.example.ts.net.
 pub fn host(s: Option<&ConnectorsStatus>) -> Option<String> {
@@ -904,22 +878,6 @@ mod tests {
             }),
             "Needs more love"
         );
-    }
-
-    #[test]
-    fn x_search_says_whether_a_key_is_saved() {
-        let saved = XSearchStatus::decode(&json!({ "on": true, "keySaved": true }));
-        assert_eq!(
-            saved,
-            XSearchStatus {
-                on: true,
-                key_saved: true
-            }
-        );
-        assert_eq!(saved.line(), "xAI key saved");
-        let odd = XSearchStatus::decode(&json!({ "on": "yes" }));
-        assert!(!odd.on && !odd.key_saved);
-        assert_eq!(odd.line(), "Asks for an xAI key on the first search");
     }
 
     #[test]

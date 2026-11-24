@@ -19,9 +19,7 @@ use gpui_kit::*;
 // The zoom-aware px (style.rs), in place of GPUI's.
 use crate::style::px;
 use serde_json::{json, Value};
-use threadbear_core::connectors::{
-    self as rules, ConnectorService, ConnectorsStatus, XSearchStatus,
-};
+use threadbear_core::connectors::{self as rules, ConnectorService, ConnectorsStatus};
 
 /// The Connectors panel's state in the app (`Threadbear::connectors_panel`).
 #[derive(Default)]
@@ -34,11 +32,6 @@ pub(crate) struct ConnectorsPanelState {
     pub(crate) status: Option<ConnectorsStatus>,
     /// The refresh button's look at the gateway is on its way.
     pub(crate) refreshing: bool,
-    /// X search (an experiment): whether an xAI key is saved, from
-    /// `xSearch.status`. None from a runner without it.
-    pub(crate) x_search: Option<XSearchStatus>,
-    /// Forget key is on its way.
-    pub(crate) forgetting_key: bool,
     pub(crate) setup: crate::connectors_setup::SetupState,
     pub(crate) scroll: ScrollHandle,
 }
@@ -63,54 +56,7 @@ impl Threadbear {
             cx.notify();
         }
         self.fetch_connectors(true, shown, cx);
-        self.load_x_search(cx);
         self.load_outside_agents(cx);
-    }
-
-    /// `loadXSearch`: X search is built into Threadbear, not the gateway, so
-    /// it's asked for apart. A runner without it has no row.
-    fn load_x_search(&mut self, cx: &mut Context<Self>) {
-        let client = self.client.clone();
-        cx.spawn(async move |this, cx| {
-            let res = call(client, "xSearch.status", json!({})).await;
-            this.update(cx, |t, cx| {
-                match res {
-                    Ok(v) => t.connectors_panel.x_search = Some(XSearchStatus::decode(&v)),
-                    Err(e) if e.code == -32601 => t.connectors_panel.x_search = None,
-                    Err(_) => {}
-                }
-                cx.notify();
-            })
-            .ok();
-        })
-        .detach();
-    }
-
-    /// `forgetXaiKey`: deletes the saved key, so the next search asks again.
-    /// The button spins until the runner says so.
-    fn forget_xai_key(&mut self, cx: &mut Context<Self>) {
-        if self.connectors_panel.forgetting_key {
-            return;
-        }
-        self.connectors_panel.forgetting_key = true;
-        cx.notify();
-        let client = self.client.clone();
-        cx.spawn(async move |this, cx| {
-            let res = call(client, "xSearch.forgetKey", json!({})).await;
-            this.update(cx, |t, cx| {
-                t.connectors_panel.forgetting_key = false;
-                match res {
-                    Ok(v) => {
-                        t.connectors_panel.x_search = Some(XSearchStatus::decode(&v));
-                        t.flash_done("xAI key forgotten", cx);
-                    }
-                    Err(e) => t.show_error(e.message, cx),
-                }
-                cx.notify();
-            })
-            .ok();
-        })
-        .detach();
     }
 
     fn fetch_connectors(&mut self, refresh: bool, shown: bool, cx: &mut Context<Self>) {
@@ -249,16 +195,6 @@ impl Threadbear {
             children.push(self.render_connector_row(service, cx));
         }
         children.extend(self.render_connector_sections(window, cx));
-        if let Some(x) = self.connectors_panel.x_search.filter(|x| x.on) {
-            children.push(
-                div()
-                    .h(px(1.))
-                    .my(px(2.))
-                    .bg(style::hairline(cx))
-                    .into_any_element(),
-            );
-            children.push(self.render_x_search(x, cx));
-        }
         if let Some(menu) = self.render_hidden_connectors(cx) {
             children.push(menu);
         }
@@ -268,58 +204,6 @@ impl Threadbear {
             .overflow_y_scroll()
             .track_scroll(&self.connectors_panel.scroll)
             .child(v_flex().w_full().p(px(16.)).gap(px(12.)).children(children))
-            .into_any_element()
-    }
-
-    /// `XSearchSection`: built into Threadbear, not the gateway, so it sits
-    /// apart. Whether an xAI key is saved, and Forget key.
-    fn render_x_search(&mut self, x: XSearchStatus, cx: &mut Context<Self>) -> AnyElement {
-        let (fg, secondary) = (style::label_text(cx), style::secondary_text(cx));
-        // The gateway rows' mark: filled grey when ready, never the accent.
-        let mark = secondary.opacity(if x.key_saved { 0.7 } else { 0.3 });
-        let words = tipped(
-            v_flex()
-                .id("x-search-words")
-                .flex_1()
-                .min_w_0()
-                .gap(px(2.))
-                .child(text_line("X search", 12., fg).truncate())
-                .child(text_line(x.line(), 11., secondary)),
-            "Agents search X through xAI's Grok with x_search, billed to your xAI credit",
-        );
-        let mut row = h_flex().items_start().gap(px(8.)).child(
-            h_flex()
-                .flex_1()
-                .min_w_0()
-                .items_start()
-                .gap(px(8.))
-                .when(x.key_saved, |s| s.mt(px(2.)))
-                .child(
-                    div()
-                        .flex_none()
-                        .h(px(15.))
-                        .flex()
-                        .items_center()
-                        .child(dot(mark).mt(px(1.))),
-                )
-                .child(words),
-        );
-        if x.key_saved {
-            let busy = self.connectors_panel.forgetting_key;
-            row = row.child(push_button(
-                "x-search-forget",
-                "Forget key",
-                "Delete the saved xAI key. The next search asks for one again",
-                true,
-                busy,
-                cx,
-                |t, _, cx| t.forget_xai_key(cx),
-            ));
-        }
-        v_flex()
-            .gap(px(10.))
-            .child(small_heading("Built into Threadbear", cx))
-            .child(row)
             .into_any_element()
     }
 
@@ -507,14 +391,6 @@ impl Threadbear {
             {
                 lines.push(format!("  {message}"));
             }
-        }
-        if let Some(x) = self.connectors_panel.x_search.filter(|x| x.on) {
-            lines.push("Built into Threadbear".to_owned());
-            lines.push(format!(
-                "X search: {}{}",
-                x.line(),
-                if x.key_saved { " [Forget key]" } else { "" }
-            ));
         }
         lines.extend(self.connector_setup_lines());
         json!({ "shown": self.activity_panel_showing(shell::CONNECTORS, cx), "lines": lines })

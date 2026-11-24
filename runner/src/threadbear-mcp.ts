@@ -50,7 +50,6 @@ import { SECRET_TIMEOUT_DEFAULT_MIN, SECRET_TIMEOUT_MAX_MIN } from './secrets.ts
 import { cutSafely, firstLineSafely } from './safe-cut.ts';
 import { pickRunner } from './moves.ts';
 import { MAX_RECIPE, MAX_SUMMARY, MAX_TITLE, PAGE_KINDS, printLink, publishPage, unpublishPage, type PagePublisher, type PageRecord, type Pages } from './pages.ts';
-import { MAX_HANDLES, XaiKeyRejected, forgetXaiKey, formatXSearch, readXaiKey, saveXaiKey, xSearch, xSearchProblem } from './x-search.ts';
 import { FINDINGS_REFUSALS, FINDINGS_REFUSED, MAX_FINDINGS, findingsProblem, refusalsThisTurn } from './runner/lab-review.ts';
 
 // What the tools drive: the Runner itself, or during a handover
@@ -171,8 +170,7 @@ const accessName = (t: Authority): string => MODE_NAMES[t.mode];
 export const ALWAYS_ASK_TOOLS = new Set([`mcp__${SERVER_NAME}__delete_thread`]);
 // Never asked about, whatever the mode: they read, end the turn, take a
 // pin out of this thread's Highlights, ask Mike for a secret (his
-// typing it is the yes), search X (x_search: it only reads, like web
-// search, and its key card was his yes to the cost), or make a reply button (his press is the yes, and
+// typing it is the yes), or make a reply button (his press is the yes, and
 // the runner keeps it within this thread's access: runner/buttons.ts). "Ask before edits" asking for end_turn held every
 // turn on an Allow card with no reply under it yet (6 Nov 2026). The rest
 // still ask outside full access, as they change something or act
@@ -185,7 +183,7 @@ export const ALWAYS_ASK_TOOLS = new Set([`mcp__${SERVER_NAME}__delete_thread`]);
 // Restart to Update asks only wake or file this thread, with the runner's
 // words, and the turn they start runs in its mode then, so they stay in.
 export const NEVER_ASK_TOOLS = new Set(
-  ['end_turn', 'list_tasks', 'list_threads', 'read_thread', 'list_accounts', 'list_schedules', 'list_projects', 'read_project', 'unpin', 'ask_secret', 'add_button', 'x_search', 'list_prints', 'read_print', 'list_pages', 'read_page'].map(
+  ['end_turn', 'list_tasks', 'list_threads', 'read_thread', 'list_accounts', 'list_schedules', 'list_projects', 'read_project', 'unpin', 'ask_secret', 'add_button', 'list_prints', 'read_print', 'list_pages', 'read_page'].map(
     (n) => `mcp__${SERVER_NAME}__${n}`,
   ),
 );
@@ -289,9 +287,6 @@ export function buildThreadbearTools(
     gateway?: () => string | undefined;
     gatewayHealth?: () => Promise<ConnectorService[] | undefined>;
     remote?: () => RemoteControl | undefined;
-    // The xSearch experiment (x-search.ts): x_search is only handed out
-    // while it's on; the runner's secrets folder, where its key is kept.
-    xSearch?: () => { secretsDir: string; fetch?: typeof fetch } | undefined;
     // The pages experiment (pages.ts): the page tools are only handed out
     // while it's on.
     pages?: () => Pages | undefined;
@@ -940,55 +935,6 @@ export function buildThreadbearTools(
             }
             if (a.status === 'declined') return `The user declined${a.message ? `: ${a.message}` : '.'} Don't ask again unless they say so.`;
             return `No answer: ${a.message ?? 'the request ended.'} Ask again if you still need it.`;
-          }),
-        ),
-      ]
-    : [];
-
-  // The xSearch experiment (x-search.ts). With no key yet, the first call
-  // asks for one in a secret card and keeps it in the runner's secrets.
-  const xs = opts.xSearch?.();
-  const xSearchTools = xs
-    ? [
-        tool(
-          'x_search',
-          "Searches X (Twitter) through xAI's Grok and returns its answer with links to the posts it used, and what the call cost. Use it for what people are posting about something, or what an account said; your web search can't read X. Each call is billed to the user's xAI credit, often $0.10 to $0.30, so search once with a good question rather than many times.",
-          {
-            query: z.string().trim().min(1).max(2000).describe('What to find out, as a question.'),
-            handles: z.array(z.string()).max(MAX_HANDLES).optional().describe('Keep to posts from these accounts, without @. Sources from others are listed apart.'),
-            excludeHandles: z.array(z.string()).max(MAX_HANDLES).optional().describe('Leave these accounts out. Not with handles.'),
-            from: z.string().optional().describe('First day, YYYY-MM-DD (UTC).'),
-            to: z.string().optional().describe('The day after the last, YYYY-MM-DD.'),
-          },
-          handle(async (args, extra) => {
-            const problem = xSearchProblem(args);
-            if (problem) throw new Error(problem);
-            let key = readXaiKey(xs.secretsDir);
-            if (!key) {
-              if (!askSecret) throw new Error("There's no xAI API key yet, and this thread can't ask for one. Ask the user to run x_search from a thread on their Mac.");
-              const a = await askSecret(selfId, {
-                label: 'xAI API key',
-                reason: 'For X search. Make one at console.x.ai under API Keys. Threadbear keeps it in its secrets folder for every thread, and each search is billed to your xAI credit, often $0.10 to $0.30.',
-                placeholder: 'xai-...',
-                ...(extra?.signal ? { signal: extra.signal } : {}),
-              });
-              if (a.status !== 'saved') return a.status === 'declined' ? `The user declined to give an xAI key${a.message ? `: ${a.message}` : '.'} Don't ask again unless they say so.` : `No key: ${a.message ?? 'the request ended.'}`;
-              try {
-                saveXaiKey(xs.secretsDir, fs.readFileSync(a.file, 'utf8'));
-              } finally {
-                fs.rmSync(a.file, { force: true });
-                fs.rmSync(a.askpass, { force: true });
-              }
-              key = readXaiKey(xs.secretsDir);
-              if (!key) throw new Error('The key was empty. Call x_search again to enter it.');
-            }
-            try {
-              return formatXSearch(await xSearch(args, key, { fetch: xs.fetch, ...(extra?.signal ? { signal: extra.signal } : {}) }), args.handles);
-            } catch (e) {
-              if (!(e instanceof XaiKeyRejected)) throw e;
-              forgetXaiKey(xs.secretsDir);
-              throw new Error(`${e.message} Threadbear forgot it: call x_search again and the user can enter a new one.`);
-            }
           }),
         ),
       ]
@@ -2255,7 +2201,6 @@ export function buildThreadbearTools(
     ...buttonTools,
     ...highlightTools,
     ...secretTools,
-    ...xSearchTools,
     ...pageTools,
     ...pocketTools,
     ...(opts.tasks?.() ? [
@@ -2812,13 +2757,13 @@ async function taskAgent(control: ThreadControl, selfId: string): Promise<{ kind
     return { kind: 'agent', name: 'Agent' };
   }
 }
-export function threadbearMcpServer(control: ThreadControl, selfId: string, schedules?: ScheduleControl, projects?: ProjectControl, appRestarts?: AppRestartControl, bulletReplies: () => boolean = () => true, pocket?: () => PocketControl | undefined, oneReply: () => boolean = () => false, gateway?: () => string | undefined, gatewayHealth?: () => Promise<ConnectorService[] | undefined>, remote?: () => RemoteControl | undefined, loadEndTurn?: () => boolean, xSearch?: () => { secretsDir: string } | undefined, pages?: () => Pages | undefined, printPublisher?: () => PagePublisher | undefined, printsWhenAsked?: () => boolean, tasks?: () => import('./tasks.ts').Tasks | undefined, clearerCompletion?: () => boolean, progressPrints?: () => boolean): McpSdkServerConfigWithInstance {
+export function threadbearMcpServer(control: ThreadControl, selfId: string, schedules?: ScheduleControl, projects?: ProjectControl, appRestarts?: AppRestartControl, bulletReplies: () => boolean = () => true, pocket?: () => PocketControl | undefined, oneReply: () => boolean = () => false, gateway?: () => string | undefined, gatewayHealth?: () => Promise<ConnectorService[] | undefined>, remote?: () => RemoteControl | undefined, loadEndTurn?: () => boolean, pages?: () => Pages | undefined, printPublisher?: () => PagePublisher | undefined, printsWhenAsked?: () => boolean, tasks?: () => import('./tasks.ts').Tasks | undefined, clearerCompletion?: () => boolean, progressPrints?: () => boolean): McpSdkServerConfigWithInstance {
   const one = oneReply();
   const server = createSdkMcpServer({
     name: SERVER_NAME,
     version: RUNNER_VERSION,
     instructions: serverInstructions(selfId, { one, bulletReplies: bulletReplies(), pocket: Boolean(pocket?.()), projects: Boolean(projects) }),
-    tools: buildThreadbearTools(control, selfId, Date.now, schedules, projects, appRestarts, { bulletReplies, pocket, oneReply: () => one, gateway, gatewayHealth, remote, xSearch, pages, printPublisher, printsWhenAsked, tasks, clearerCompletion, progressPrints, loadEndTurn }),
+    tools: buildThreadbearTools(control, selfId, Date.now, schedules, projects, appRestarts, { bulletReplies, pocket, oneReply: () => one, gateway, gatewayHealth, remote, pages, printPublisher, printsWhenAsked, tasks, clearerCompletion, progressPrints, loadEndTurn }),
   });
   server.tools = [...ALWAYS_ASK_TOOLS].map((name) => ({ name: name.split('__').at(-1)!, permission_policy: 'always_ask' as const }));
   return server;

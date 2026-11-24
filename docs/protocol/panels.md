@@ -603,19 +603,6 @@ phone and website have no way to. A gateway on another Mac gets no
 `clientSetup`: the Add thread's Slack steps open the same link and take
 the keys through `ask_secret`.
 
-### X search
-
-An experiment (`xSearch`). Every thread's agent gets the `x_search`
-threadbear tool, which asks xAI's Grok to search X
-(`runner/src/x-search.ts`). Its xAI key is the user's own: the first call
-asks for it in a secret card and keeps it in `<home>/secrets/xai-api-key`
-(owner-only, masked like every file there), and a key xAI turns down is
-deleted. The app's Connectors panel shows an X search row while it's on,
-from `xSearch.status` (asked when the panel opens): whether a key is
-saved, and Forget key (`xSearch.forgetKey`). Neither ever sends the key.
-An older runner answers neither (method not found) and the row isn't
-shown.
-
 ### Outside agents
 
 An experiment (`outsideAgents`). An agent that runs in the cloud, like
