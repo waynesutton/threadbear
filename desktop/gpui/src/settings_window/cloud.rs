@@ -697,7 +697,9 @@ impl Render for CloudSheet {
 /// The commands to run first when flyctl isn't on this Mac or signed in yet.
 fn before_you_start(cx: &App) -> impl IntoElement {
     let secondary = style::secondary_label(cx);
-    let mono = gpui_kit::component::ActiveTheme::theme(cx).mono_font_family.clone();
+    let mono = gpui_kit::component::ActiveTheme::theme(cx)
+        .mono_font_family
+        .clone();
     let mut list = v_flex()
         .gap(px(4.))
         .p(px(8.))

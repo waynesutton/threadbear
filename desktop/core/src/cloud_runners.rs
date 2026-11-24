@@ -25,8 +25,14 @@ pub const FLYCTL_TIP: &str =
 /// not yet on this Mac or not signed in.
 pub const BEFORE: &str = "Before you start, in Terminal:";
 pub const BEFORE_STEPS: [(&str, &str); 2] = [
-    ("brew install flyctl", "installs flyctl, Fly's command line tool"),
-    ("fly auth login", "signs it in to your Fly account in the browser"),
+    (
+        "brew install flyctl",
+        "installs flyctl, Fly's command line tool",
+    ),
+    (
+        "fly auth login",
+        "signs it in to your Fly account in the browser",
+    ),
 ];
 pub const BEFORE_AFTER: &str = "Then press Set up with flyctl's sign-in. Or paste an org token from fly tokens create org personal (or fly.io/dashboard/personal/tokens) and press Add.";
 pub const CHECK: &str = "Check again";
