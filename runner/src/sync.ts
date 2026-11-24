@@ -3618,6 +3618,10 @@ export class ConvexSync {
       for (const name of lists) {
         const list = this.lists[name];
         if (!list) continue;
+        // A box sends no logins, projects or schedules: its key can't
+        // (BOX_CALLS), and a refusal here would hold back its thread's
+        // messages behind it, for ever. The service set its login.
+        if (this.deps.box) continue;
         if (name === 'schedules' && this.deps.schedules?.inBackend()) continue;
         if (name === 'projects') {
           await this.sendProjects(list as Project[], v);

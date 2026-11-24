@@ -767,6 +767,42 @@ test("a fresh box's first flush goes all the way under a box key (no prune, whic
   assert.deepEqual(refusedCalls.splice(0), []);
 });
 
+test("a box with logins and projects listed sends neither, so its thread's messages still go up", async () => {
+  const h = makeHarness();
+  h.runner.boxThread = THREAD;
+  h.runner.create({ text: 'hi', cwd: h.cfg.defaults.cwd, accountId: 'claude-main', id: THREAD });
+  // As main.ts gives a box: the runner's own lists, which only the owner's key may write.
+  const runner = Object.assign(Object.create(h.runner) as typeof h.runner, {
+    listAccounts: () => [{ id: 'claude-main', provider: 'claude', email: 'me@example.com' }],
+    listProjects: () => [{ id: 'p1', title: 'Threadbear' }],
+  });
+  const calls: string[] = [];
+  const sync = new ConvexSync({
+    config: { enabled: true, url: URL, name: 'box', runnerId: 'box0thread01' },
+    key: BOX_KEY,
+    home: h.home,
+    runner: runner as never,
+    version: '0.1.0+test',
+    startedAt: '2026-11-19T00:00:00.000Z',
+    clock: h.clock,
+    log: nullLogger,
+    post: onlyBoxCalls(async (_kind, fn) => {
+      calls.push(fn);
+      if (fn === 'sync:heartbeat') return { apiVersion: 109 };
+      if (fn === 'sync:messageHeads') return [];
+      return null;
+    }),
+    subscriber: { subscribe: () => () => {}, close: () => {} },
+    box: { superseded: () => {} },
+  });
+  sync.start();
+  await tick(10);
+  await sync.flushAll();
+  assert.deepEqual(refusedCalls.splice(0), [], 'nothing a box key would be refused');
+  assert.ok(calls.includes('sync:appendMessages'), "the thread's messages went up");
+  await sync.stop();
+});
+
 test("a box keeps no schedules: every way to make, change or run one is refused, and nothing arms a timer or writes schedules.json", async () => {
   const h = makeHarness();
   const t = h.runner.create({ text: 'hi', cwd: h.cfg.defaults.cwd, accountId: 'claude-main' }).thread;
