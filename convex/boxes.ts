@@ -415,10 +415,10 @@ export const removeRunnerService = mutation({
   returns: v.null(),
   handler: async (ctx, { key, serviceId }) => {
     await runnerAuth(ctx, key, 'removeRunnerService');
-    const s = await ctx.db.get(serviceId);
+    const s = await ctx.db.get('runnerServices', serviceId);
     if (!s) throw new ConvexError({ kind: 'notFound', message: 'no such virtual runner' });
     if ((await countBoxes(ctx, serviceId, LIVE, 1)) > 0) throw bad(`${s.name} still has threads that aren't archived. Archive them first, then remove it.`);
-    await ctx.db.delete(serviceId);
+    await ctx.db.delete('runnerServices', serviceId);
     return null;
   },
 });
