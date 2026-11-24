@@ -1080,21 +1080,59 @@ impl Threadbear {
                 .text_center()
                 .child(draft_rules::HEADING),
         );
+        // The note always names the folder; a cloud thread its box can't
+        // clone adds why under it, with the two ways out beside the words.
+        let note_line = div()
+            .id("new-thread-note")
+            .text_size(px(size::LABEL))
+            .text_color(style::faint_text(cx))
+            .child(note)
+            .tip(note_tip);
         let note_text = match cloud_problem {
-            Some(why) => div()
-                .id("new-thread-note")
-                .px(px(24.))
-                .text_center()
-                .text_size(px(size::LABEL))
-                .text_color(style::status_warning(cx))
-                .child(why.clone())
-                .tip(why),
-            None => div()
-                .id("new-thread-note")
-                .text_size(px(size::LABEL))
-                .text_color(style::faint_text(cx))
-                .child(note)
-                .tip(note_tip),
+            Some(why) => {
+                use threadbear_core::cloud_runners as cloud;
+                let choose = crate::activity_panels::text_button(
+                    "new-thread-cloud-choose-folder",
+                    cloud::CHOOSE_FOLDER,
+                    cloud::CHOOSE_FOLDER_TIP,
+                    size::LABEL,
+                    true,
+                    false,
+                    cx,
+                    |this, window, cx| {
+                        if let Some(composer) = this.new_thread.composer.clone() {
+                            composer.update(cx, |c, cx| c.choose_folder(window, cx));
+                        }
+                    },
+                );
+                let this_mac = crate::activity_panels::text_button(
+                    "new-thread-cloud-this-mac",
+                    cloud::USE_THIS_MAC,
+                    cloud::USE_THIS_MAC_TIP,
+                    size::LABEL,
+                    true,
+                    false,
+                    cx,
+                    |this, _, cx| this.choose_new_thread_runner(None, true, cx),
+                );
+                v_flex()
+                    .items_center()
+                    .gap(px(6.))
+                    .px(px(24.))
+                    .child(note_line)
+                    .child(
+                        div()
+                            .id("new-thread-cloud-warning")
+                            .text_center()
+                            .text_size(px(size::LABEL))
+                            .text_color(style::status_warning(cx))
+                            .child(why.clone())
+                            .tip(why),
+                    )
+                    .child(h_flex().gap(px(16.)).child(choose).child(this_mac))
+                    .into_any_element()
+            }
+            None => note_line.into_any_element(),
         };
         let error = self.new_thread.error.clone();
         let danger = cx.theme().danger;

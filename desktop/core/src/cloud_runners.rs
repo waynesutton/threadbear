@@ -381,10 +381,10 @@ pub fn folder_check(name: &str, top: Option<&str>, origin: Option<&str>) -> Fold
     match (top, origin) {
         (None, _) => FolderCheck::Not(not_a_repo(name)),
         (Some(_), None) => FolderCheck::Not(format!(
-            "{name} copies this folder's repo from GitHub, and it has no origin. Push it to GitHub, or switch Runs on to This Mac."
+            "{name} copies this folder's repo from GitHub, and it has no origin. Push it to GitHub first."
         )),
         (Some(_), Some(o)) if !box_can_clone(o) => FolderCheck::Not(format!(
-            "{name} copies this folder's repo over https, and its origin isn't on GitHub or https. Pick another folder, or switch Runs on to This Mac."
+            "{name} copies this folder's repo over https, and its origin isn't on GitHub or https."
         )),
         _ => FolderCheck::Fine,
     }
@@ -392,11 +392,18 @@ pub fn folder_check(name: &str, top: Option<&str>, origin: Option<&str>) -> Fold
 
 /// The usual case: a folder that isn't a git repo.
 pub fn not_a_repo(name: &str) -> String {
-    format!("{name} works in a folder that's a GitHub repo. Pick one in the folder menu, or switch Runs on to This Mac.")
+    format!("{name} works in a folder that's a GitHub repo.")
 }
 
 /// Short, beside the runner in Runs on.
 pub const MENU_NOT_HERE: &str = "needs a GitHub repo folder";
+
+/// The warning's two ways out, beside it: another folder for this thread,
+/// or this thread on this Mac instead.
+pub const CHOOSE_FOLDER: &str = "Choose folder…";
+pub const CHOOSE_FOLDER_TIP: &str = "Pick a folder that's a GitHub repo for this thread";
+pub const USE_THIS_MAC: &str = "Use This Mac";
+pub const USE_THIS_MAC_TIP: &str = "Run this thread on this Mac instead, in the folder it has";
 
 #[cfg(test)]
 mod tests {
@@ -528,8 +535,27 @@ mod tests {
         assert!(!box_can_clone("http://github.com/o/r"));
         assert!(!box_can_clone("file:///x"));
         assert!(!box_can_clone("git@github.com:o"));
-        for w in [not_a_repo(n), MENU_NOT_HERE.to_owned()] {
+        for w in [
+            not_a_repo(n),
+            MENU_NOT_HERE.to_owned(),
+            CHOOSE_FOLDER.to_owned(),
+            CHOOSE_FOLDER_TIP.to_owned(),
+            USE_THIS_MAC.to_owned(),
+            USE_THIS_MAC_TIP.to_owned(),
+        ] {
             assert!(!w.contains('\u{2014}'));
         }
+    }
+
+    #[test]
+    fn the_warning_names_no_way_out_the_buttons_give() {
+        // The buttons beside it say what to do, so the words don't repeat them.
+        let n = "Cloud (Fly)";
+        assert_eq!(
+            not_a_repo(n),
+            "Cloud (Fly) works in a folder that's a GitHub repo."
+        );
+        assert!(CHOOSE_FOLDER.ends_with('…'));
+        assert_eq!(USE_THIS_MAC, "Use This Mac");
     }
 }
