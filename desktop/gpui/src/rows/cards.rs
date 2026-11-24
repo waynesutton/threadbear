@@ -496,6 +496,7 @@ impl ThreadPane {
     ) -> Div {
         let id = item.request.approval_id.clone();
         let start = item.is_start_request();
+        let print = item.is_print_request();
         // Another runner asking for a thread: Start it or Don't, once its
         // request has been read.
         let options: Vec<ApprovalOption> = if start {
@@ -528,6 +529,17 @@ impl ThreadPane {
                         "Start this thread with this brief",
                         0,
                     ),
+                    ApprovalOption::Allow if print => (
+                        "Make it",
+                        "allow",
+                        true,
+                        if returns {
+                            "Make this print (Return)"
+                        } else {
+                            "Make this print"
+                        },
+                        0,
+                    ),
                     ApprovalOption::Allow => (
                         "Allow",
                         "allow",
@@ -538,6 +550,13 @@ impl ThreadPane {
                             "Let it do this once"
                         },
                         0,
+                    ),
+                    ApprovalOption::AllowAlways if print => (
+                        "Always make",
+                        "allowAlways",
+                        false,
+                        "Make this one, and any more prints for the rest of this thread",
+                        1,
                     ),
                     ApprovalOption::AllowAlways => (
                         "Always allow",
@@ -551,6 +570,13 @@ impl ThreadPane {
                         "deny",
                         false,
                         "Don't start it; the asking thread is told no",
+                        2,
+                    ),
+                    ApprovalOption::Deny if print => (
+                        "Cancel",
+                        "deny",
+                        false,
+                        "Don't make this print; the agent is told",
                         2,
                     ),
                     ApprovalOption::Deny => (

@@ -491,6 +491,13 @@ impl ApprovalItem {
         self.request.name == StartRequest::CARD_NAME
     }
 
+    /// The agent asking to make a Print it wasn't asked for (Settings' Only
+    /// make Prints when I ask). Its buttons read Make it or Cancel: Deny
+    /// reads like the agent did something wrong (Wayne, 23 Nov 2026).
+    pub fn is_print_request(&self) -> bool {
+        self.request.name.ends_with("__create_print")
+    }
+
     /// The agent's other calls waiting behind this one. Always empty on
     /// another runner's start request: a queue on the card swapped the
     /// request this Mac's runner read for the owning runner's own
