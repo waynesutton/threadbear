@@ -370,7 +370,7 @@ export class CloudSetup {
     const narrow = cleanToken(tokenLine(deploy.out));
     if (!deploy.ok || !looksLikeFlyToken(narrow)) {
       s.state = 'warn';
-      s.detail = `flyctl couldn't make the image's own token, so the image updates only when you press Rebuild. Sign flyctl in (fly auth login) and press Check again. ${scrub(lastLine(deploy.err) || 'No answer', token)}`;
+      s.detail = `flyctl couldn't make the image's own token, so the image updates only when you press Rebuild. Sign flyctl in (fly auth login), then press Edit… and Save. ${scrub(lastLine(deploy.err) || 'No answer', token)}`;
       return;
     }
     rememberToken(narrow);
