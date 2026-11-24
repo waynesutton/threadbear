@@ -596,10 +596,12 @@ impl Render for CloudSheet {
             .disabled(running)
             .render(cx, {
                 let me = me.clone();
-                move |_, _, cx| {
+                // One press sets it up: flyctl makes the token, so there's
+                // nothing more to fill in.
+                move |_, window, cx| {
                     me.update(cx, |this, cx| {
-                        this.flyctl = !this.flyctl;
-                        cx.notify();
+                        this.flyctl = true;
+                        this.send(window, cx);
                     })
                     .ok();
                 }

@@ -18,9 +18,9 @@ pub const ADD: &str = "Add a cloud runner…";
 pub const ADD_TIP: &str = "Set up a cloud runner on Fly from one token";
 pub const TOKEN_TIP: &str =
     "An org token from fly tokens create org, or fly.io/tokens. It goes only to your backend";
-pub const FLYCTL: &str = "Use flyctl's sign-in";
+pub const FLYCTL: &str = "Set up with flyctl's sign-in";
 pub const FLYCTL_TIP: &str =
-    "Make a token with flyctl on this Mac, which must be signed in (fly auth login)";
+    "Start now, with a token flyctl makes on this Mac. It must be signed in: fly auth login";
 pub const CHECK: &str = "Check again";
 pub const CHECK_TIP: &str = "Check the token, the app, the backend's keys and the runner again";
 pub const REBUILD: &str = "Rebuild";

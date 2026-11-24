@@ -1717,9 +1717,9 @@ so ask an agent to do it for you. Schedules need your
 Convex backend: with no internet, they wait.
 
 To set one up, open Settings > Runners and press Add a cloud runner… under
-Cloud runners (it shows with the `virtualRunners` experiment on). Paste a
-Fly org token, or press Use flyctl's sign-in if flyctl is signed in on this
-Mac, pick a box size and press Add. Threadbear makes the Fly app, saves the
+Cloud runners (it shows with the `virtualRunners` experiment on). Pick a box
+size, then paste a Fly org token and press Add, or, if flyctl is signed in on
+this Mac, press Set up with flyctl's sign-in, which starts it right away. Threadbear makes the Fly app, saves the
 token and keys to your backend, builds the box image and tries a test box,
 showing each step as it goes. Check again and Rebuild are there afterwards.
 `tb cloud setup` in a terminal does the same.
