@@ -3,6 +3,7 @@
 // them. The runner hands each Claude session its own in-process MCP server
 // ("threadbear"), built with that session's thread id, so "this thread" is
 // always the caller and nothing has to go over the WebSocket.
+import { completionOpen } from './completion.ts';
 import { wakeNote } from './wake-note.ts';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -27,7 +28,7 @@ import { SAID_MAX } from './wake-when.ts';
 
 export { parseWhen, relativeFuture, relativeTime };
 import { RUNNER_VERSION, expandHome } from './config.ts';
-import { askWhenFromTool, jobsNudge, jobsNudged, heldNudge, heldNudged, droppedOpenLines, OPEN_GONE, ALREADY_ENDED, ARCHIVE_ADDED, MAX_UNTIL, MAX_WAIT_FOR, SNOOZE_ADDED, snoozeFromTool, endTurnDescription, endTurnForm, endTurnMisfit, endTurnTaken, strayAskFields, strayAskProblem, openCardsNote, END_TURN_TOOL, BULLETS_ONLY, ENDED, takenEndTurn, MAX_BYLINE, NARRATION_ONLY, NO_REPLY, needsFromTool, oneReplyAccepted, handsOverAStep, oneReplyAlreadyWritten, summaryFromTool, triedFirstNudged, tryFirstNudge, projectStepNudge, projectStepNudged, unansweredItems, deadEndNudge, deadEndNudged, hasDeadEnd, plainCardNudge, plainCardNudged, wantsPlainCard, turnReply, unreadMessageRefusal, type TurnReply } from './needs.ts';
+import { askWhenFromTool, jobsNudge, jobsNudged, heldNudge, heldNudged, droppedOpenLines, OPEN_GONE, ALREADY_ENDED, ARCHIVE_ADDED, MAX_UNTIL, MAX_WAIT_FOR, SNOOZE_ADDED, snoozeFromTool, endTurnDescription, endTurnForm, endTurnMisfit, endTurnTaken, strayAskFields, strayAskProblem, openCardsNote, END_TURN_TOOL, BULLETS_ONLY, ENDED, takenEndTurn, MAX_BYLINE, NARRATION_ONLY, NO_REPLY, needsFromTool, oneReplyAccepted, handsOverAStep, oneReplyAlreadyWritten, summaryFromTool, triedFirstNudged, tryFirstNudge, projectStepNudge, projectStepNudged, unansweredItems, deadEndNudge, deadEndNudged, hasDeadEnd, plainCardNudge, COMPLETION_LINE, completionNudge, completionNudged, owesCompletion, plainCardNudged, wantsPlainCard, turnReply, unreadMessageRefusal, type TurnReply } from './needs.ts';
 
 // end_turn's needs, both forms: "done" meant this turn's step until 11 Nov
 // 2026, when thread 0222c475 said nothing with three draft PRs unmerged in
@@ -1940,10 +1941,26 @@ export function buildThreadbearTools(
       removeIds: z.array(z.string().trim().min(1).max(64)).max(30).optional(),
     }).optional().describe('Report tasks for the whole request, with stable IDs across turns. Updates merge; omitted tasks stay. removeIds explicitly removes work no longer in scope. Completed means finished, including required checks. Use read_thread to recover the ledger. Never infer completion from a turn ending.'),
   } : {};
+  // Once a turn by the events, and by the turn it last went to, as a
+  // sub-agent's call never reaches the events (projectNotedTurn, above).
+  // Not for a review's verdict or a quiet bear run, which have no tasks to list.
+  const completionLine = opts.clearerCompletion?.() ? COMPLETION_LINE : '';
+  let completionNotedTurn: number | undefined;
+  const checkCompletion = async (input: Record<string, unknown>, events: PersistedEvent[]): Promise<void> => {
+    if (!opts.clearerCompletion?.() || input.completion || input.findings || input.quiet) return;
+    // A tool built with the experiment off has no field to fill in.
+    if (!('completion' in completionArgs)) return;
+    const turn = events.findLast((e) => e.type === 'turn.started')?.seq;
+    if ((turn !== undefined && turn === completionNotedTurn) || completionNudged(events)) return;
+    const me = await inTime((async () => control.get(selfId))(), ID_LIST_TIMEOUT_MS, "couldn't read the thread").catch(() => undefined);
+    if (!owesCompletion(events, completionOpen(me?.completion))) return;
+    completionNotedTurn = turn;
+    throw new Error(completionNudge());
+  };
   const oneReplyEndTurn = () =>
     tool(
       END_TURN_TOOL,
-      endTurnDescription(codex ? 'codex' : 'claude', bulletReplies(), true),
+      endTurnDescription(codex ? 'codex' : 'claude', bulletReplies(), true) + completionLine,
       {
         ...completionArgs,
         headline: z.string().optional().describe('One line, at most 80 characters, for the sidebar and notifications: the result, or what you need from them.'),
@@ -2022,6 +2039,7 @@ export function buildThreadbearTools(
         if (needs === 'you' && hasDeadEnd(asks) && !deadEndNudged(events)) throw new Error(deadEndNudge(asks));
         if (opts.plainCardNote !== false && needs === 'you' && wantsPlainCard(asks) && !plainCardNudged(events)) throw new Error(plainCardNudge());
         await checkJobs(input, needs, events);
+        await checkCompletion(input, events);
         const projectNote = await projectStepNote(input, needs, parsed?.next, events);
         if (projectNote) throw new Error(projectNote);
         let restart = '';
@@ -2058,7 +2076,7 @@ export function buildThreadbearTools(
   const bulletsEndTurn = () =>
     tool(
       END_TURN_TOOL,
-      endTurnDescription(codex ? 'codex' : 'claude', bulletReplies()),
+      endTurnDescription(codex ? 'codex' : 'claude', bulletReplies()) + completionLine,
       {
         ...completionArgs,
         needs: z.enum(['you', 'nothing']).optional().describe(`"you" when the user has to do something before this can go on; "nothing" when it is done. ${WHOLE_JOB} Left out, it follows the asks.`),
@@ -2160,6 +2178,7 @@ export function buildThreadbearTools(
         if (needs === 'you' && hasDeadEnd(asks ?? []) && !deadEndNudged(events)) throw new Error(deadEndNudge(asks ?? []));
         if (opts.plainCardNote !== false && needs === 'you' && wantsPlainCard(asks ?? []) && !plainCardNudged(events)) throw new Error(plainCardNudge());
         await checkJobs(args, needs, events);
+        await checkCompletion(args, events);
         const projectNote = await projectStepNote(args, needs, parsed?.next, events);
         if (projectNote) throw new Error(projectNote);
         // Asking Mike to Restart to Update means wanting to know when he

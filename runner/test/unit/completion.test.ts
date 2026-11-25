@@ -7,6 +7,7 @@ import { mergeCompletion, completionOpen } from '../../src/completion.ts';
 import { makeHarness, tmpDir } from '../helpers/fakes.ts';
 import { patiently } from '../helpers/patience.ts';
 import { buildThreadbearTools } from '../../src/threadbear-mcp.ts';
+import { COMPLETION_LINE, COMPLETION_NUDGE } from '../../src/needs.ts';
 import { ThreadStore } from '../../src/store.ts';
 
 const task = (id: string, status: 'pending' | 'completed' | 'blocked' = 'pending') => ({ id, title: `Task ${id}`, status });
@@ -125,5 +126,51 @@ test('Highlights carry the task ledger with the experiment on, after a reply and
     h.runner.update({ threadId: id, archived: true });
     assert.equal(h.runner.get(id).completion, undefined, 'the summary drops the card once archived');
     assert.deepEqual(h.runner.highlights(id).completion?.tasks, [task('a', 'completed'), task('b')], 'Highlights keep it as the record');
+  }
+});
+
+test('a working turn that leaves the task list out is asked for it once, for Claude and Codex in both forms', async () => {
+  for (const provider of ['claude', 'codex'] as const) {
+    for (const oneReply of [true, false]) {
+      const run = async (o: { on?: boolean; calls?: number; own?: boolean; open?: boolean; completion?: unknown }) => {
+        const h = setup(o.on ?? true);
+        const id = h.runner.create({ text: 'Do two things' }).thread.id;
+        if (o.open) {
+          finish(h, id, { tasks: [task('a')] });
+          h.runner.send(id, 'Carry on');
+        }
+        const s = h.adapter.sessions.filter(s => s.opts.threadId === id).at(-1)!;
+        s.init();
+        const call = (itemId: string, name: string, input: Record<string, unknown> = {}) =>
+          s.out({ kind: 'event', event: { type: 'tool.call', itemId, name, kind: 'other', title: name, input } });
+        for (let i = 0; i < (o.calls ?? 0); i++) call(`c${i}`, o.own ? 'mcp__threadbear__list_threads' : 'Bash');
+        s.text('m1', 'Did the work.');
+        const tool = buildThreadbearTools(h.runner, id, Date.now, undefined, undefined, undefined, { provider, oneReply: () => oneReply, clearerCompletion: () => o.on ?? true, sleep: async () => undefined }).find(t => t.name === 'end_turn')!;
+        const args = { needs: 'nothing', ...(oneReply ? { headline: 'Did it' } : { summary: ['Did it.'] }), ...(o.completion ? { completion: o.completion } : {}) };
+        const end = async (itemId: string) => {
+          call(itemId, 'mcp__threadbear__end_turn', args);
+          const r = (await tool.handler(args as never, {})) as { content: { text: string }[]; isError?: boolean };
+          const text = r.content.map(c => c.text).join('');
+          s.out({ kind: 'event', event: { type: 'tool.result', itemId, ok: !r.isError, text, truncated: false, images: [] } });
+          return { text, error: Boolean(r.isError) };
+        };
+        return { end, description: tool.description };
+      };
+      const label = `${provider} oneReply=${oneReply}`;
+      const worked = await run({ calls: 5 });
+      assert.ok(worked.description.endsWith(COMPLETION_LINE), label);
+      const first = await worked.end('e1');
+      assert.ok(first.error && first.text.startsWith(COMPLETION_NUDGE), `${label}: ${first.text}`);
+      const second = await worked.end('e2');
+      assert.equal(second.error, false, `${label}: ${second.text}`);
+      const open = await (await run({ open: true })).end('e1');
+      assert.ok(open.text.startsWith(COMPLETION_NUDGE), `${label}: an open list is always owed: ${open.text}`);
+      for (const fine of [{ calls: 4 }, { calls: 9, own: true }, { calls: 9, completion: { tasks: [task('a', 'completed')] } }, { calls: 9, on: false }]) {
+        const r = await run(fine);
+        if (fine.on === false) assert.doesNotMatch(r.description, /pass completion/);
+        const ended = await r.end('e1');
+        assert.equal(ended.error, false, `${label} ${JSON.stringify(fine)}: ${ended.text}`);
+      }
+    }
   }
 });

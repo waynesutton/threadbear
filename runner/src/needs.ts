@@ -795,6 +795,31 @@ export function wantsPlainCard(asks: Ask[]): boolean {
   return asks.some((a) => (a.options?.length ?? 0) > 0);
 }
 
+// Experiment clearerCompletion: the task list is an optional field, and Codex
+// left it out of all 21 end_turn calls in four sessions (20 to 25 Nov 2026),
+// so its threads only ever got the plain Done card. Added to the description
+// with the experiment on, for an agent that goes by that alone.
+export const COMPLETION_LINE =
+  ' When the turn worked on a request, pass completion with every task in it and where each stands, finished ones too; leave it out for a plain question or chat.';
+
+// And once a turn, to a working turn that left it out. Called again, it's
+// taken as it is: only the agent knows whether it had tasks to report.
+export const COMPLETION_NUDGE = 'Not ended: this turn has no task list.';
+export const COMPLETION_WORK_CALLS = 5;
+export function completionNudge(): string {
+  return `${COMPLETION_NUDGE} If it worked on the user's request, call end_turn again with completion: every task in the whole request, each completed, pending or blocked, keeping the ids of tasks already listed. If it only answered a question, call end_turn again as it was. This note comes once a turn.`;
+}
+export function completionNudged(events: PersistedEvent[]): boolean {
+  return nudgedSince(events, COMPLETION_NUDGE);
+}
+// Whether the turn worked enough to owe a list: a sub-agent's calls aren't
+// counted, nor Threadbear's own tools (naming a thread, reading a print).
+export function owesCompletion(events: PersistedEvent[], open: boolean): boolean {
+  if (open) return true;
+  const start = events.findLastIndex((e) => e.type === 'turn.started') + 1;
+  return events.slice(start).filter((e) => e.type === 'tool.call' && !e.itemId.includes('/') && !e.name.startsWith('mcp__threadbear__')).length >= COMPLETION_WORK_CALLS;
+}
+
 // A change only Mike can judge, left as a soft line at the end of a done
 // reply. On 6 Nov 2026 (thread 524cd997) two turns in a row put Whisper
 // dictation on his phone with needs "nothing" and ended "I haven't heard how

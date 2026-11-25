@@ -283,6 +283,8 @@ To omit automatic PR reminders for particular GitHub repository owners,
 set `looseEndsIgnoredPrOwners` in runner.json to their owner names. This
 keeps unpushed commits and other local-work warnings. The preference applies
 when the runner next starts; agents should also respect it in their replies.
+An agent that worked on something and left the list out is reminded once
+before its turn ends, whichever model it is.
 Action buttons such as It works and Archive keep their neutral fill with
 a thin amber left edge. Archive stays manual. A thread without reported
 tasks keeps its usual card; turning the experiment off restores that view.
