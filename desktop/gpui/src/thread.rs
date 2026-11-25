@@ -1,6 +1,8 @@
 // One thread: its transcript (rows come from the reducer in threadbear-core),
 // its cards and the composer. Reads the newest page of events, then subscribes
 // from the last of them, as the Mac app's ThreadSession does.
+mod find;
+
 use crate::composer::Composer;
 use crate::rows::list::{transcript_list, TranscriptList};
 use crate::{call, RT};
@@ -367,6 +369,8 @@ pub struct ThreadPane {
     /// Its last messages' PRs are still to be read ahead, waiting for the
     /// reply streaming in to be whole (`preload_recent_prs`).
     prs_to_preload: bool,
+    /// The find bar over the transcript, while it's up (find.rs).
+    pub(crate) find: Option<find::ThreadFind>,
     _subs: Vec<Subscription>,
 }
 
@@ -377,6 +381,7 @@ impl ThreadPane {
         composer: Entity<Composer>,
         cx: &mut Context<Self>,
     ) -> Self {
+        find::bind_keys(cx);
         let scroller = cx.new(|cx| TranscriptList::new(0, cx));
         // Any scroll or layout change: older rows may be due and where the
         // view is reading is remembered for when the thread is left.
@@ -408,6 +413,7 @@ impl ThreadPane {
             kept_zoom: None,
             prs_to_preload: false,
             entering: Default::default(),
+            find: None,
             _subs: vec![scrolled],
         };
         // Messages still on their way to it from before it was last open.
@@ -456,6 +462,7 @@ impl ThreadPane {
             kept_zoom: None,
             prs_to_preload: false,
             entering: Default::default(),
+            find: None,
             _subs: vec![],
         };
         pane._subs.extend(crate::rich_boxes::watch(cx));
@@ -635,6 +642,7 @@ impl ThreadPane {
                         this.scroller
                             .update(cx, |s, cx| s.reset(this.feed.model().rows().len(), cx));
                         this.scroller.update(cx, |s, cx| s.scroll_to_end(cx));
+                        this.find_rows_changed(cx);
                     }
                     Err(e) if e.code == -32006 && first => {
                         this.move_load(LoadEvent::NoRecord, cx);
@@ -848,6 +856,7 @@ impl ThreadPane {
                 this.scroller
                     .update(cx, |s, cx| s.reset(this.feed.model().rows().len(), cx));
                 this.restore_memory(memory, cx);
+                this.find_rows_changed(cx);
                 this.mark_seen();
                 this.prs_to_preload = !this.preload_recent_prs(cx);
                 // Paging older rows in is driven by the view reaching the
@@ -992,7 +1001,7 @@ impl ThreadPane {
         }
     }
 
-    /// With the inlinePrs experiment, reads ahead the PRs its last few
+    /// Reads ahead the PRs its last few
     /// messages link to, as the thread shows and as a turn ends: those are
     /// the ones likely to be clicked, and a read takes a second or more
     /// (Mike, 19 Nov). Each is read once while the app runs, from the
@@ -1030,9 +1039,6 @@ impl ThreadPane {
         let app = self.app.clone();
         cx.defer(move |cx| {
             let Some(app) = app.upgrade() else { return };
-            if !crate::pr_view::on(app.read(cx)) {
-                return;
-            }
             let side = app.read(cx).side.clone();
             side.update(cx, |side, cx| {
                 urls.iter().for_each(|url| side.preload_pr(url, cx))
@@ -1357,6 +1363,7 @@ impl ThreadPane {
                 s.remeasure_items(i..i + 1, cx);
             }
         });
+        self.find_rows_changed(cx);
         cx.notify();
     }
 
@@ -2047,6 +2054,7 @@ impl ThreadPane {
             }
         }
         self.keep_outbox(cx);
+        self.find_rows_changed(cx);
         cx.notify();
         if let Some(memory) = self.rows.pending_restore.take() {
             // Keeps paging if its row isn't here yet (`restore_memory`).
@@ -2371,7 +2379,7 @@ impl ThreadPane {
             c.map(|c| json!({ "seq": c.seq, "count": c.ends.len() }))
         };
         let loose_ends = json!({ "summary": ends(self.summary.loose_ends_check().as_ref()), "transcript": ends(self.feed.model().loose_ends()) });
-        json!({ "threadId": self.summary.id, "state": self.load_state(), "error": self.error, "atBottom": scroller.at_bottom(), "hasMoreAbove": self.has_more_above(), "spinner": self.load.view() == View::Spinner, "timing": self.timing_json(), "looseEnds": loose_ends, "rows": rows })
+        json!({ "threadId": self.summary.id, "state": self.load_state(), "error": self.error, "atBottom": scroller.at_bottom(), "hasMoreAbove": self.has_more_above(), "spinner": self.load.view() == View::Spinner, "timing": self.timing_json(), "looseEnds": loose_ends, "threadFind": self.find_dump(), "rows": rows })
     }
 
     /// The Swift dump's names, a failure with its message.
@@ -2556,6 +2564,7 @@ impl ThreadPane {
                     this.older.newest_read();
                     this.scroller
                         .update(cx, |s, cx| s.reset(this.feed.model().rows().len(), cx));
+                    this.find_rows_changed(cx);
                     cx.notify();
                 }
             })
@@ -2659,6 +2668,7 @@ impl Render for ThreadPane {
         v_flex()
             .relative()
             .size_full()
+            .map(|el| Self::find_keys(el, cx)) // ⌘F, ⌘G and ⇧⌘G (find.rs)
             // This pane is cached. A platform drag changes App's drag state,
             // not the pane, so typing could leave its drop layer unmounted
             // for the whole drag. Hear the first move even over selectable
@@ -2737,8 +2747,9 @@ impl Render for ThreadPane {
             .when_some(self.error.clone(), |s, e| {
                 s.child(self.render_error_line(e, danger, muted, cx))
             })
-            // Which thread started it, above the transcript (nested threads).
-            .children(self.render_started_strip(cx))
+            // Which thread started it (nested threads), then the find bar
+            // while it's up (find.rs), above the transcript.
+            .children(self.above_transcript(cx))
             .map(|s| match view {
                 // No record of it is a plain note, not something that failed.
                 View::NoRecord => s.child(

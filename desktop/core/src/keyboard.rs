@@ -11,16 +11,18 @@ use crate::shortcuts::{ShortcutBindings, ShortcutCommand, ShortcutKey};
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Group {
     Threads,
+    Edit,
     Go,
     View,
 }
 
 impl Group {
-    pub const ALL: [Group; 3] = [Group::Threads, Group::Go, Group::View];
+    pub const ALL: [Group; 4] = [Group::Threads, Group::Edit, Group::Go, Group::View];
 
     pub fn title(self) -> &'static str {
         match self {
             Group::Threads => "Threads",
+            Group::Edit => "Edit",
             Group::Go => "Go",
             Group::View => "View",
         }
@@ -56,11 +58,14 @@ pub fn group(command: ShortcutCommand) -> Group {
         NewThread | Archive | Hibernate | Stop | CopyTranscript | ChooseModel | AttachFiles => {
             Group::Threads
         }
-        Back | Forward | NextInboxThread | OpenAnything | OpenAnythingAlso | ShowInbox
-        | ShowScheduled | ShowProjects | ShowLibrarian | ShowHibernating | ShowArchived
-        | ShowSkills | ShowNotes | ShowTasks | PreviousTab | NextTab | Settings => Group::Go,
+        FindInThread => Group::Edit,
+        Back | Forward | NextInboxThread | OpenAnything | OpenAnythingAlso
+        | OpenAnythingPalette | FocusMessageBox | ShowInbox | ShowScheduled | ShowProjects
+        | ShowLibrarian | ShowHibernating | ShowArchived | ShowSkills | ShowNotes | ShowTasks
+        | Settings => Group::Go,
         ZoomIn | ZoomOut | ActualSize | ToggleThreads | TogglePanels | ToggleTerminal
-        | ResetPanelLayout | CollapseThreads | CollapseSidebar | ToggleSidebarPanels => Group::View,
+        | ToggleTerminalAlso | ToggleThreadsAlso | ResetPanelLayout | CollapseThreads
+        | CollapseSidebar | ToggleSidebarPanels => Group::View,
     }
 }
 
@@ -537,6 +542,7 @@ mod tests {
                 "Attach Images or Markdown"
             ]
         );
+        assert_eq!(titles(Group::Edit), ["Find in Thread"]);
         assert_eq!(
             titles(Group::Go)[..3],
             ["Back", "Forward", "Next Inbox Thread"]

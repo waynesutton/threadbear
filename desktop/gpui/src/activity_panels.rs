@@ -38,7 +38,7 @@ impl PanelView {
         // On show and gone again, as the dock has it: a tab behind another
         // isn't on show, as the Swift view isn't drawn there either.
         let dock_changed = cx.observe(dock, |this: &mut Self, dock, cx| {
-            let showing = dock.read(cx).controller.is_showing(this.panel);
+            let showing = dock.read(cx).is_showing(this.panel);
             if showing != this.showing {
                 this.showing = showing;
                 this.tell_app(showing, cx);
@@ -144,7 +144,7 @@ impl Threadbear {
     pub(crate) fn activity_panel_showing(&self, panel: &str, cx: &App) -> bool {
         // Folded away with ⌥⇧⌘B it's off screen, so its icon isn't lit.
         let folded = self.sidebar_collapsed() && crate::shell::UNDER_THREADS.contains(&panel);
-        !folded && self.dock.read(cx).controller.is_showing(panel)
+        !folded && self.dock.read(cx).is_showing(panel)
     }
 }
 

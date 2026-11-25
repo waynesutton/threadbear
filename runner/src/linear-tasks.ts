@@ -15,7 +15,7 @@ import { helperForAgent, helperHeaders, parseRpc } from './notion-tasks.ts';
 import { credentialUrlProblem } from './secure-url.ts';
 import type { NativeTask, TaskLink, TaskPriority } from './tasks.ts';
 
-export const LINEAR_API = 107;
+export const LINEAR_API = 109;
 const CALL_MS = 60_000;
 // A held call waits 45 seconds at the gateway; approval can take a day.
 const APPROVAL_MS = 24 * 3600_000;

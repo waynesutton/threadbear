@@ -393,7 +393,11 @@ impl Threadbear {
             }
         }
         lines.extend(self.connector_setup_lines());
-        json!({ "shown": self.activity_panel_showing(shell::CONNECTORS, cx), "lines": lines })
+        json!({
+            "shown": self.activity_panel_showing(shell::CONNECTORS, cx),
+            "docked": self.dock.read(cx).layout().contains(shell::CONNECTORS),
+            "lines": lines
+        })
     }
 }
 

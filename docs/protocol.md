@@ -38,15 +38,15 @@ It was all this one file once. Work made on that comes across by itself in `tb l
 | this page | Ordering and reconnects, Older and newer clients, Native Tasks (experiment, backend API 100; Doing and saved orders 101), Tasks RPC contract, Tasks columns and thread launch (API 103), Tasks issue fields, sub-tasks, links and activity (API 104), Task favorites (API 108), Tasks and Linear (API 107) |
 | [connection.md](protocol/connection.md) | Auth, Requests (app to runner), Warm start, Models and effort across providers, Notifications (runner to app) |
 | [types.md](protocol/types.md) | Types |
-| [events.md](protocol/events.md) | Events, Design reviews, Reviews on the phone, Reply buttons |
-| [needs-you.md](protocol/needs-you.md) | Needs you, The reply phase |
+| [events.md](protocol/events.md) | Events, Design reviews, Marks: the canvas (the `reviewCanvas` experiment), Reviews on the phone, Reply buttons |
+| [needs-you.md](protocol/needs-you.md) | Needs you, The reply phase, Wait state |
 | [updates.md](protocol/updates.md) | Runner updates, Mike's releases, Your changes to the old app, Restarts, App restarts, Handovers, Stopped background work, Stuck background jobs, Background wait loops, A thread's CLI, Frozen CLIs, A dialog on a Mac's screen |
 | [settings.md](protocol/settings.md) | ACP agents, Settings and models, Standing instructions, Shared memory, Explain, Hibernate in words, Usage history, Sandboxed threads (taken out), Pools |
-| [threads.md](protocol/threads.md) | Pictures in a message, Queued calls, Plan first, Slash commands, Context breakdown, Editing a message, Who started a thread, Who archived a thread, Search, What Mike last asked, What Mike first asked, Loose ends, Nested threads, Clearer completion, A quiet inbox, Inbox guess, Secrets |
+| [threads.md](protocol/threads.md) | Pictures in a message, Queued calls, Plan first, Slash commands, Context breakdown, Editing a message, Who started a thread, Who archived a thread, Search, Searching Agent Archive, What Mike last asked, What Mike first asked (taken out), Loose ends, Nested threads, Clearer completion, A quiet inbox, Inbox guess, Secrets |
 | [patches.md](protocol/patches.md) | Patches, The Convex panel, The Git panel, Plans as files, Skills |
 | [trust.md](protocol/trust.md) | Trusting a folder's patches, What changed, Trusting a folder's Claude Code hooks |
 | [panels.md](protocol/panels.md) | Highlights, Worktrees, Showing panels, The Browser panel, Profile page, Pull requests, Connectors, Gateway approvals, Connectors setup, Outside agents, Bears, Tables, Webhooks |
-| [projects.md](protocol/projects.md) | Projects, Project tasks, Prints, Schedules, Recipes |
+| [projects.md](protocol/projects.md) | Projects, Project tasks, Prints, Schedules, Recipes, Habits |
 | [runners.md](protocol/runners.md) | Other runners' threads, Other runners' threads through the backend, Asking another runner, Sharing |
 | [moves.md](protocol/moves.md) | Moving a thread to another runner, Sync, Devices |
 | [keys.md](protocol/keys.md) | Runner keys, Virtual runners |

@@ -4,10 +4,8 @@
 // web panel's page is, but it lives in the sealed pages' request context (no
 // network, keeps nothing: sealed.rs) and every request it makes is answered
 // here or cancelled.
-use super::panel::Shared;
-use crate::panel_rules::Event;
 use crate::preview_rules::{
-    may_browse, may_request, opens_in_browser, own_path, policy, PreviewSite,
+    asked_address, may_browse, may_request, opens_in_browser, own_path, policy, PreviewSite,
 };
 use cef::*;
 use std::os::raw::c_int;
@@ -16,7 +14,8 @@ use std::sync::{Arc, Mutex};
 wrap_request_handler! {
     pub(crate) struct PreviewRequests {
         preview: PreviewSite,
-        shared: Arc<Shared>,
+        on_print: OnLink,
+        on_leave: OnLink,
     }
 
     impl RequestHandler {
@@ -29,7 +28,7 @@ wrap_request_handler! {
             // A todo list's box or a board's arrow, clicked: the app's to act
             // on, and never followed.
             if main && user_gesture == 1 && url.starts_with("threadbear-print:") {
-                self.shared.send(Event::Print(url));
+                (self.on_print)(url);
                 return 1;
             }
             if may_browse(&url, &self.preview, main) {
@@ -37,7 +36,7 @@ wrap_request_handler! {
             } else {
                 // A web link, clicked: the browser, and the page stays.
                 if opens_in_browser(&url, main, user_gesture == 1, is_redirect == 1) {
-                    self.shared.leave(url);
+                    (self.on_leave)(url);
                 }
                 1
             }
@@ -80,7 +79,10 @@ wrap_resource_request_handler! {
         fn resource_handler(&self, _browser: Option<&mut Browser>, _frame: Option<&mut Frame>, request: Option<&mut Request>) -> Option<ResourceHandler> {
             let url = request.map(|r| CefString::from(&r.url()).to_string()).unwrap_or_default();
             let path = own_path(&url, &self.preview.origin)?;
-            Some(Served::new(self.preview.clone(), path, Arc::new(Mutex::new(Answer::default()))))
+            // The address as asked, query and all, for the preview's budget
+            // (Site::serve_asked): `big.png?1` and `big.png?2` are two.
+            let asked = asked_address(&url, &self.preview.origin)?;
+            Some(Served::new(self.preview.clone(), asked, path, Arc::new(Mutex::new(Answer::default()))))
         }
 
         // Nothing of the page's is kept, sent or read back as a cookie.
@@ -108,13 +110,14 @@ wrap_cookie_access_filter! {
 struct Answer {
     status: i32,
     mime: String,
-    data: Vec<u8>,
+    data: Arc<[u8]>,
     sent: usize,
 }
 
 wrap_resource_handler! {
     struct Served {
         preview: PreviewSite,
+        asked: String,
         path: String,
         answer: Arc<Mutex<Answer>>,
     }
@@ -124,9 +127,9 @@ wrap_resource_handler! {
         // page of many megabytes is read for what it names (the Swift app's
         // serving held the app until it moved off the main thread).
         fn open(&self, _request: Option<&mut Request>, handle_request: Option<&mut c_int>, _callback: Option<&mut Callback>) -> c_int {
-            let answer = match self.preview.site.serve(&self.path) {
+            let answer = match self.preview.site.serve_asked(&self.asked, &self.path) {
                 Some(served) => Answer { status: 200, mime: served.mime, data: served.data, sent: 0 },
-                None => Answer { status: 404, mime: "text/plain".into(), data: b"Not available to this preview.".to_vec(), sent: 0 },
+                None => Answer { status: 404, mime: "text/plain".into(), data: Arc::from(&b"Not available to this preview."[..]), sent: 0 },
             };
             if let Ok(mut now) = self.answer.lock() {
                 *now = answer;
@@ -181,9 +184,20 @@ wrap_resource_handler! {
     }
 }
 
+/// What a preview does when its page closes: the panel fails the calls still
+/// waiting on it. A callback rather than the panel's own state, so this file
+/// needn't know the panel (deslop-please's module-cycle).
+pub(crate) type OnClose = Arc<dyn Fn(&str) + Send + Sync>;
+
+/// What a preview does with a link: a Prints link clicked on its page goes to
+/// the app, a web link clicked goes to the browser. Callbacks for the same
+/// reason as `OnClose`.
+pub(crate) type OnLink = Arc<dyn Fn(String) + Send + Sync>;
+
 wrap_life_span_handler! {
     pub(crate) struct PreviewLife {
-        shared: Arc<Shared>,
+        on_close: OnClose,
+        on_leave: OnLink,
     }
 
     impl LifeSpanHandler {
@@ -207,7 +221,7 @@ wrap_life_span_handler! {
         ) -> c_int {
             let url = target_url.map(|u| u.to_string()).unwrap_or_default();
             if opens_in_browser(&url, true, user_gesture == 1, false) {
-                self.shared.leave(url);
+                (self.on_leave)(url);
             }
             1
         }
@@ -218,7 +232,7 @@ wrap_life_span_handler! {
         }
 
         fn on_before_close(&self, _browser: Option<&mut Browser>) {
-            self.shared.fail_calls("its page closed");
+            (self.on_close)("its page closed");
         }
     }
 }

@@ -9,6 +9,7 @@ import type { RunnerPart } from './part.ts';
 import type { LooseEnd } from '../protocol.ts';
 import { completionOpen } from '../completion.ts';
 import { experimentOn } from '../experiments.ts';
+import { WAIT_STATES } from '../wait-state.ts';
 import { childLooseEnds, editedLooseEnds, runningLooseEnds, scheduleLooseEnds, worktreeLooseEnds, type ChildThread } from '../loose-ends.ts';
 
 // Opening a thread checks again at most this often: a click between
@@ -58,17 +59,13 @@ export const looseEndsPart = {
       const o = other.rec;
       if (o.startedBy?.threadId !== st.rec.id || o.archivedAt || other.rt.deleted) continue;
       const s = this.summary(other);
-      // Hibernating to wait on its own work (other threads, the app
-      // restarting onto what it landed) is still working, as the sidebar has it.
-      // So is hibernating until something it watches for with its commits not on main yet.
-      const waiting = Boolean(s.waitingOn?.some((w) => !w.done) || s.awaitingAppRestart || (s.wakeWhen?.agent && s.wakeWhen.topic && s.looseEnds?.ends.some((e) => e.kind === 'unlanded')));
-      // So is one with a job still going in the background, unless its card
-      // asks Mike for something: the sidebar has it under Running too
-      // (inbox.rs, section_of). On 20 Nov a review-window fix whose turn
-      // ended with its second review round running in a shell sat under
-      // Running, but its starter's done card said it "is waiting for you".
-      const background = Boolean(s.background?.length) && s.needs !== 'you';
-      children.push({ id: o.id, title: o.title, working: o.status === 'running' || o.status === 'starting' || waiting || background || (completionOpen(o.completion) && experimentOn(this.cfg.home, 'clearerCompletion')), needsYou: s.needsYou && s.needs !== 'nothing' });
+      // As its row has it: under Running is still working (a turn, a job,
+      // waiting on other threads, to land or for the app), and a card, a
+      // review or an ask is waiting on Mike (wait-state.ts). With
+      // clearerCompletion on, an open task list keeps it working too.
+      const state = s.waitState ?? 'done';
+      const working = WAIT_STATES[state].section === 'running' || (completionOpen(o.completion) && experimentOn(this.cfg.home, 'clearerCompletion'));
+      children.push({ id: o.id, title: o.title, working, needsYou: state === 'card' || state === 'review' || state === 'needsYou' });
     }
     return childLooseEnds(children);
   },

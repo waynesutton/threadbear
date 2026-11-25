@@ -265,9 +265,15 @@ impl Composer {
         cx: &mut Context<Self>,
     ) -> bool {
         let text = self.input.read(cx).value().to_string();
-        // Partway through a message, a closed palette leaves the keys alone.
+        // Partway through a message, a closed palette leaves the keys alone,
+        // to the # thread picker if that's open (thread_palette.rs).
         let Some(view) = self.palette_open(&text, cx) else {
-            return false;
+            // Left and Right are the slash palette's categories only: the
+            // picker leaves them to move the caret.
+            if matches!(key, PaletteKey::Left | PaletteKey::Right) {
+                return false;
+            }
+            return self.thread_picker_key(key, window, cx);
         };
         let matches = slash::matches(&view.all, &view.query, self.palette.category, &view.recent);
         // Return with nothing to pick sends what's typed, as words.

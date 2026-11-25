@@ -17,6 +17,7 @@ import { handleMcp, MCP_BODY_MAX } from './mcpRpc';
 import { handleHook, HOOK_BODY_MAX } from './hookHttp';
 import { takeUpload } from './uploads';
 import { safeDecode, withCard } from './shareCard';
+import { promoteRoute } from './boxImage';
 
 const http = httpRouter();
 
@@ -106,6 +107,10 @@ http.route({
     return new Response(JSON.stringify({ ok }), { status: ok ? 200 : 404, headers: { 'Content-Type': 'application/json' } });
   }),
 });
+
+// The box-image workflow promoting the image a new box boots, with a GitHub
+// Actions OIDC token (boxImage.ts says what it checks).
+http.route({ path: '/box-image/promote', method: 'POST', handler: promoteRoute });
 
 // The three upload routes below take their one-use ticket the same way
 // (uploads.ts takeUpload): claimed before the body is read, the body read

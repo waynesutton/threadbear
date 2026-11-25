@@ -28,6 +28,9 @@ function checkout(): string {
 function world(opts: { flyctl?: boolean; signedIn?: boolean; gh?: boolean; apps?: Set<string>; env?: Record<string, string>; exit?: number; badToken?: boolean; buildFails?: boolean; noDeployKey?: boolean; imageLateBy?: number; imageThere?: boolean; buildBlips?: number } = {}) {
   let late = opts.imageLateBy ?? 0;
   let blips = opts.buildBlips ?? 0;
+  // What the registry has as :latest: a digest, which each build moves on.
+  let digest = opts.imageThere ? `sha256:${'a'.repeat(64)}` : undefined;
+  let builds = 0;
   const ghVars: Record<string, string> = {};
   const ghSecrets: string[] = [];
   const env: Record<string, string> = { ...opts.env };
@@ -86,7 +89,10 @@ function world(opts: { flyctl?: boolean; signedIn?: boolean; gh?: boolean; apps?
           blips--;
           return no('Error: failed to fetch an image or build from source: error building: failed to receive status: rpc error: code = Unavailable desc = error reading from server: read tcp 192.168.1.178:58699->149.248.212.172:443: read: operation timed out\n');
         }
-        return opts.buildFails ? no(`Error: unauthorized ${TOKEN}\n`) : ok('image: registry.fly.io/x:latest\n');
+        if (opts.buildFails) return no(`Error: unauthorized ${TOKEN}\n`);
+        builds++;
+        digest = `sha256:${String(builds).repeat(64)}`;
+        return ok('image: registry.fly.io/x:latest\n');
       }
       if (cmd === 'git' && args.includes('remote')) return ok('https://github.com/someone/threadbear.git\n');
       if (cmd === 'git') return ok('0123456789abcdef\n');
@@ -115,7 +121,7 @@ function world(opts: { flyctl?: boolean; signedIn?: boolean; gh?: boolean; apps?
         // As Fly's registry does: org tokens are refused; flyctl's own sign-in is let in.
         const who = Buffer.from(auth?.replace(/^Basic /, '') ?? '', 'base64').toString();
         if (who !== 'x:me@example.com') return new Response(null, { status: 401 });
-        return new Response(null, { status: opts.imageThere ? 200 : 404 });
+        return digest ? new Response(null, { status: 200, headers: { 'docker-content-digest': digest } }) : new Response(null, { status: 404 });
       }
       if (opts.badToken || ![TOKEN, MINTED].map((t) => `Bearer ${t}`).includes(auth ?? '')) return json(401, { error: 'unauthorized' });
       const m = u.pathname.match(/^\/v1\/apps(?:\/([^/]+))?(?:\/machines(?:\/([^/]+))?)?$/);
@@ -190,7 +196,8 @@ test('a pasted token sets up everything once, and a second run changes nothing',
   assert.equal(w.env.FLY_APP, 'tb-boxes-wayne');
   assert.equal(w.env.FLY_ORG, 'personal');
   assert.equal(Buffer.from(w.env.BOX_SEAL_KEY ?? '', 'base64').length, 32);
-  assert.deepEqual(w.calls.mutations[0], { name: 'Cloud (Fly)', provider: 'fly', image: 'registry.fly.io/tb-boxes-wayne:latest', box: { cpus: 1, memoryMb: 2048 } });
+  // Pinned to the digest it pushed: a box never boots a tag (convex/boxImage.ts).
+  assert.deepEqual(w.calls.mutations[0], { name: 'Cloud (Fly)', provider: 'fly', image: `registry.fly.io/tb-boxes-wayne@sha256:${'1'.repeat(64)}`, box: { cpus: 1, memoryMb: 2048 } });
   assert.equal(w.machines.size, 0, 'the test box is deleted');
   assert.deepEqual(st.services.map((s) => s.name), ['Cloud (Fly)']);
   await noToken(w, setup);
@@ -297,8 +304,10 @@ test("the image's own token comes from flyctl's sign-in, not the org token", asy
   other.setup({ token: TOKEN, app: 'tb-boxes-e' });
   await other.wait();
   const st = await other.status();
-  assert.equal(st.job?.error, undefined, 'only a warning');
-  assert.match(st.job?.steps.find((s) => s.id === 'updates')?.detail ?? '', /fly auth login/);
+  // Signed out, the registry won't name the image's digest, and a box only
+  // boots a pinned one (convex/boxImage.ts): it says to sign in.
+  assert.match(st.job?.error ?? '', /fly auth login/);
+  assert.equal(out.services.length, 0, 'no runner row on a tag');
 });
 
 test('a test box that exits otherwise fails the setup and is still deleted', async () => {
@@ -488,4 +497,21 @@ test("a builder that keeps dropping says it's Fly's side, not the build", async 
   assert.equal(image?.state, 'fail');
   assert.match(image?.detail ?? '', /try again in a few minutes/);
   assert.equal(w.calls.exec.filter((c) => c.startsWith('fly deploy')).length, 3);
+});
+
+test('Rebuild pins the cloud runner to the new image, and setting up again keeps the one there', async () => {
+  const w = world({ imageThere: true });
+  const setup = new CloudSetup(w.deps);
+  setup.setup({ token: TOKEN, app: 'tb-boxes-pin' });
+  await setup.wait();
+  assert.equal((await setup.status()).job?.error, undefined);
+  assert.equal(w.services[0]?.image, `registry.fly.io/tb-boxes-pin@sha256:${'a'.repeat(64)}`, 'the digest already there');
+  setup.rebuild();
+  await setup.wait();
+  const st = await setup.status();
+  assert.equal(st.job?.error, undefined, st.job?.error ?? '');
+  assert.deepEqual(st.job?.steps.map((s) => `${s.id}:${s.state}`), ['flyctl:ok', 'token:ok', 'image:ok', 'service:ok']);
+  assert.equal(w.services.length, 1);
+  assert.equal(w.services[0]?.image, `registry.fly.io/tb-boxes-pin@sha256:${'1'.repeat(64)}`, 'the digest the build pushed');
+  await noToken(w, setup);
 });

@@ -1996,15 +1996,17 @@ function gitNewEnough(): boolean {
     const m = /git version (\d+)\.(\d+)/.exec(execFileSync('git', ['--version'], { stdio: ['ignore', 'pipe', 'ignore'], timeout: 20_000 }).toString());
     ok = !!m && (Number(m[1]) > 2 || (Number(m[1]) === 2 && Number(m[2]) >= 31));
   } catch {
-    ok = false;
+    // Not kept: a git that was only slow (a busy Mac) is asked again next
+    // time, rather than read as too old for ten minutes.
+    return false;
   }
   gitVersion = { at: Date.now(), ok };
   return ok;
 }
 
 // git config --list --show-scope -z: scope, then key and value.
-// A long timeout: on a loaded Mac git took over 5s to start, and the
-// repo was refused as unreadable (7 Nov).
+// 20 s, not 5: on a busy Mac (load 25) git took longer, and a timeout
+// refuses the command. Refusing is safe, so waiting only costs time.
 function gitConfig(cwd: string, env: Record<string, string | undefined> = process.env): { scope: string; key: string; value?: string }[] {
   const out = execFileSync('git', ['config', '--list', '--show-scope', '--includes', '-z'], { cwd, env: env as NodeJS.ProcessEnv, stdio: ['ignore', 'pipe', 'pipe'], timeout: 20_000, maxBuffer: 4 * 1024 * 1024 }).toString();
   const items = out.split('\0');

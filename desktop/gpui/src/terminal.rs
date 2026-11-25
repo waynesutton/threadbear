@@ -190,12 +190,7 @@ pub(crate) fn panel_view(cx: &mut App) -> AnyElement {
 /// up under the thread (a third of its height, as VS Code opens its own) with
 /// the thread's shell, started if it has none, and gives it the keyboard.
 pub(crate) fn toggle(app: &mut Threadbear, window: &mut Window, cx: &mut Context<Threadbear>) {
-    if app
-        .dock
-        .read(cx)
-        .controller
-        .is_showing(crate::shell::TERMINAL)
-    {
+    if app.dock.read(cx).is_showing(crate::shell::TERMINAL) {
         app.dock
             .update(cx, |m, cx| m.close(crate::shell::TERMINAL, cx));
         return;
@@ -214,12 +209,7 @@ pub(crate) fn toggle(app: &mut Threadbear, window: &mut Window, cx: &mut Context
 /// Shows the panel with nothing started in it (the automation's `show`, for
 /// what the panel says before a shell is asked for).
 fn show_panel(app: &mut Threadbear, cx: &mut Context<Threadbear>) {
-    if !app
-        .dock
-        .read(cx)
-        .controller
-        .is_showing(crate::shell::TERMINAL)
-    {
+    if !app.dock.read(cx).is_showing(crate::shell::TERMINAL) {
         bring_up(app, cx);
     }
 }
@@ -389,12 +379,7 @@ pub(crate) fn put_in_terminal(
         return None;
     }
     let target = target_of(app);
-    if !app
-        .dock
-        .read(cx)
-        .controller
-        .is_showing(crate::shell::TERMINAL)
-    {
+    if !app.dock.read(cx).is_showing(crate::shell::TERMINAL) {
         bring_up(app, cx);
     }
     let terminals = terminals(cx)?;
@@ -3519,7 +3504,7 @@ pub(crate) fn dump(app: &Threadbear, cx: &App) -> Value {
         .map(|r| r.field.read(cx).value().to_string());
     shells.sort();
     json!({
-        "shown": app.dock.read(cx).controller.is_showing(crate::shell::TERMINAL),
+        "shown": app.dock.read(cx).is_showing(crate::shell::TERMINAL),
         "cwd": target.cwd,
         "note": target.note,
         "shell": session.map_or("none", |s| if s.exited { "exited" } else { "running" }),

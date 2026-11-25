@@ -7,10 +7,14 @@
 // What it writes is what Mike's backend already reads: FLY_API_TOKEN,
 // FLY_APP and FLY_ORG as Convex env vars (convex/boxProviders/fly.ts
 // flyFromEnv), BOX_SEAL_KEY only when it isn't set (a new one would make
-// every sealed cloud token unreadable, convex/boxes.ts), the box image at
-// registry.fly.io/<app>:latest (boxes.ts defaultBoxImage), and a
-// runnerServices row through boxes:setRunnerService. Nothing in convex/
-// changes for it.
+// every sealed cloud token unreadable, convex/boxes.ts), the box image
+// built here and pushed as registry.fly.io/<app>:latest, and a
+// runnerServices row through boxes:setRunnerService naming that image by
+// its digest. A box only boots an image pinned by digest (Mike's
+// convex/boxImage.ts, 25 Nov 2026 release): a row left on :latest follows
+// main, which boots only what main's box-image workflow promoted, and this
+// Mac can't promote. So the row is pinned to the digest this Mac pushed,
+// and Rebuild pins it to the new one. Nothing in convex/ changes for it.
 //
 // The Fly token goes to the backend's env, to flyctl's environment for the
 // build, and nowhere else: not to disk, the log or an error. It's handed to
@@ -26,6 +30,12 @@ import { rememberToken } from './year-token.ts';
 import { estimate, type CloudCost, type FlyMachine } from './fly-cost.ts';
 
 export const FLY_API = 'https://api.machines.dev/v1';
+// A registry digest, as boxProviders/types.ts PINNED_IMAGE wants after the @.
+const IMAGE_DIGEST = /^sha256:[0-9a-f]{64}$/;
+/** The app's image named by digest, the only form a box boots (convex/boxImage.ts). */
+export function pinned(app: string, digest: string): string {
+  return `registry.fly.io/${app}@${digest}`;
+}
 
 export type Run = { ok: boolean; out: string; err: string; code?: number | null };
 
@@ -242,7 +252,7 @@ export class CloudSetup {
   /** cloud.rebuild: the box image again, from this Mac's checkout. */
   rebuild(): { started: true } {
     this.mustBeOn();
-    return this.start('rebuild', ['flyctl', 'token', 'image'], (steps) => this.runRebuild(steps));
+    return this.start('rebuild', ['flyctl', 'token', 'image', 'service'], (steps) => this.runRebuild(steps));
   }
 
   /**
@@ -382,27 +392,46 @@ export class CloudSetup {
     s.detail = done.length ? `set ${done.join(', ')}` : 'already set';
   }
 
-  // Whether registry.fly.io has the app's :latest. The registry takes flyctl's
-  // own sign-in (an org token is refused there), so that's tried after the token.
-  // Anything unclear is "no", and the image is built.
-  private async imageThere(token: string, app: string): Promise<boolean> {
-    const ask = async (t: string): Promise<number> => {
+  // The digest registry.fly.io has for the app's :latest (sha256:...), or
+  // none. The registry takes flyctl's own sign-in (an org token is refused
+  // there), so that's tried after the token. Anything unclear is none, and
+  // the image is built.
+  private async imageDigest(token: string, app: string): Promise<string | undefined> {
+    const ask = async (t: string): Promise<{ status: number; digest?: string }> => {
       try {
         const res = await this.deps.fetch(`https://registry.fly.io/v2/${app}/manifests/latest`, {
           method: 'HEAD',
           headers: { authorization: `Basic ${Buffer.from(`x:${t}`).toString('base64')}`, accept: REGISTRY_ACCEPT },
           signal: AbortSignal.timeout(15_000),
         });
-        return res.status;
+        const digest = res.headers.get('docker-content-digest')?.trim();
+        return { status: res.status, ...(digest && IMAGE_DIGEST.test(digest) ? { digest } : {}) };
       } catch {
-        return 0;
+        return { status: 0 };
       }
     };
     const first = await ask(token);
-    if (first !== 401) return first === 200;
+    if (first.status !== 401) return first.status === 200 ? first.digest : undefined;
     const own = await this.deps.exec('fly', ['auth', 'token'], { timeoutMs: 20_000 });
     const t = own.ok ? tokenLine(own.out).trim() : '';
-    return t ? (await ask(t)) === 200 : false;
+    if (!t) return undefined;
+    const second = await ask(t);
+    return second.status === 200 ? second.digest : undefined;
+  }
+
+  // The image step: :latest's digest, built first when there's none. Throws
+  // when the registry won't name a digest even after a build, as no box
+  // boots a tag (convex/boxImage.ts).
+  private async pinnedImage(token: string, app: string, s: Step, build: boolean): Promise<string> {
+    let digest = build ? undefined : await this.imageDigest(token, app);
+    if (digest) s.detail = `registry.fly.io/${app}:latest is there already (Rebuild makes a new one)`;
+    else {
+      await this.build(token, app, s);
+      digest = await this.imageDigest(token, app);
+    }
+    // Fly's registry lets in flyctl's own sign-in, not an org token.
+    if (!digest) throw new Error(`Fly's registry didn't give the digest of registry.fly.io/${app}:latest, and a box only boots an image pinned by digest. Sign flyctl in (fly auth login) and try again.`);
+    return pinned(app, digest);
   }
 
   // The image from this Mac's checkout on Fly's remote builder, the same build CI runs (box-image.yml).
@@ -460,7 +489,7 @@ export class CloudSetup {
     const vars = await this.deps.exec('gh', ['variable', 'get', 'FLY_BOX_APP', '-R', repo], { cwd, timeoutMs: 20_000 });
     const secrets = await this.deps.exec('gh', ['secret', 'list', '-R', repo], { cwd, timeoutMs: 20_000 });
     if (vars.ok && vars.out.trim() === app && secrets.ok && /^FLY_BOX_IMAGE_TOKEN\b/m.test(secrets.out)) {
-      s.detail = `already set on ${repo}; each push to main rebuilds it`;
+      s.detail = `already set on ${repo}; each push to main builds and checks an image there, and Rebuild moves the cloud runner onto a new one`;
       return;
     }
     // An org token can't make other tokens (Fly: "Not authorized to access
@@ -483,16 +512,16 @@ export class CloudSetup {
       s.detail = `GitHub refused: ${scrub(lastLine(v.err) || lastLine(sec.err), narrow)}`;
       return;
     }
-    s.detail = `FLY_BOX_APP and FLY_BOX_IMAGE_TOKEN set on ${repo}; each push to main rebuilds it`;
+    s.detail = `FLY_BOX_APP and FLY_BOX_IMAGE_TOKEN set on ${repo}; each push to main builds and checks an image there, and Rebuild moves the cloud runner onto a new one`;
   }
 
-  private async saveService(p: SetupParams & { name: string }, app: string, s: Step): Promise<void> {
+  private async saveService(p: SetupParams & { name: string }, image: string, s: Step): Promise<void> {
     const existing = (await this.services()).find((x) => (p.serviceId ? x.serviceId === p.serviceId : x.provider === 'fly'));
     const id = (await this.deps.call('mutation', 'boxes:setRunnerService', {
       ...(existing ? { serviceId: existing.serviceId } : {}),
       name: p.name,
       provider: 'fly',
-      image: `registry.fly.io/${app}:latest`,
+      image,
       box: { cpus: p.cpus ?? existing?.box.cpus ?? 1, memoryMb: p.memoryMb ?? existing?.box.memoryMb ?? FLY_SUSPEND_MAX_MB },
     })) as string;
     s.detail = existing ? `${p.name}, updated` : `${p.name}, added`;
@@ -500,11 +529,11 @@ export class CloudSetup {
   }
 
   // A box from the image with no boot token: its runner starts, finds none and exits 64. Then it's deleted.
-  private async testBox(token: string, app: string, s: Step): Promise<void> {
+  private async testBox(token: string, app: string, image: string, s: Step): Promise<void> {
     const sleep = this.deps.sleep ?? ((ms: number) => new Promise<void>((r) => setTimeout(r, ms)));
     const body = {
       name: `tb-test-${crypto.randomBytes(3).toString('hex')}`,
-      config: { image: `registry.fly.io/${app}:latest`, guest: { cpu_kind: 'shared', cpus: 1, memory_mb: 1024 }, restart: { policy: 'no' }, auto_destroy: false, metadata: { tb_test: '1' } },
+      config: { image, guest: { cpu_kind: 'shared', cpus: 1, memory_mb: 1024 }, restart: { policy: 'no' }, auto_destroy: false, metadata: { tb_test: '1' } },
     };
     let made = await this.fly<{ id: string }>(token, 'POST', `/apps/${encodeURIComponent(app)}/machines`, body);
     // A just-pushed image can take a little while to reach the machines' side
@@ -547,15 +576,15 @@ export class CloudSetup {
     const t = token as string;
     await this.doStep(steps, 'app', (s) => this.ensureApp(t, p.org, p.app, s, true));
     await this.doStep(steps, 'backend', async (s) => this.saveBackend(t, p.org, p.app, s));
+    // Setting up again (Edit… and Save) needn't build: the image is there.
+    // Rebuild is the button for a new one.
+    let image = '';
     await this.doStep(steps, 'image', async (s) => {
-      // Setting up again (Edit… and Save) needn't build: the image is there, and
-      // GitHub keeps it on main. Rebuild is the button for a new one.
-      if (await this.imageThere(t, p.app)) s.detail = `registry.fly.io/${p.app}:latest is there already (Rebuild makes a new one)`;
-      else await this.build(t, p.app, s);
+      image = await this.pinnedImage(t, p.app, s, false);
     });
     await this.doStep(steps, 'updates', (s) => this.github(t, p.app, s));
-    await this.doStep(steps, 'service', (s) => this.saveService(p, p.app, s));
-    await this.doStep(steps, 'test', (s) => this.testBox(t, p.app, s));
+    await this.doStep(steps, 'service', (s) => this.saveService(p, image, s));
+    await this.doStep(steps, 'test', (s) => this.testBox(t, p.app, image, s));
     this.deps.log.info('cloud runner set up', { app: p.app, org: p.org });
   }
 
@@ -653,7 +682,20 @@ export class CloudSetup {
       await this.checkToken(now.token, now.org);
       s.detail = `org ${now.org}`;
     });
-    await this.doStep(steps, 'image', (s) => this.build(now.token as string, now.app as string, s));
+    let image = '';
+    await this.doStep(steps, 'image', async (s) => {
+      image = await this.pinnedImage(now.token as string, now.app as string, s, true);
+    });
+    // New boxes boot the new image: the cloud runner's row is pinned to it.
+    await this.doStep(steps, 'service', async (s) => {
+      const existing = (await this.services()).find((x) => x.provider === 'fly');
+      if (!existing) {
+        s.detail = 'no cloud runner to move onto it yet; Save sets one up';
+        return;
+      }
+      await this.saveService({ serviceId: existing.serviceId, name: existing.name, cpus: existing.box.cpus, memoryMb: existing.box.memoryMb }, image, s);
+      s.detail = `${existing.name}, now on ${image.slice(image.indexOf('@') + 1, image.indexOf('@') + 20)}`;
+    });
   }
 }
 

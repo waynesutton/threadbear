@@ -62,11 +62,15 @@ Built 28 Oct 2026 (thread 66935d23).
 ## Sharing
 
 A thread can be shared by link (docs/protocol/runners.md, "Sharing"): from the
-share button beside the Mac app's ... menu, or from the website, where
+share button beside the Mac app's ... menu, Share… in a thread's menu in the
+iPhone and Android apps, or from the website, where
 Mike's own thread page and the shared page (when he's signed in) have a
 Share button: Share with a link, Copy, Stop sharing, and on his thread
 page New link. Those queue a `share` command (`phone:share`) the runner
-applies, as the Mac's button does. Built 28-29 Oct 2026 (thread ec75fe8b,
+applies, as the Mac's button does. The phones (since 22 Nov:
+`ios/Threadbear/ShareThreadSheet.swift`, Android's `ShareThreadSheet.kt`)
+add the system share sheet to Copy, and build the link from `phone:me`'s
+`site`. Built 28-29 Oct 2026 (thread ec75fe8b,
 backend APIs 7 and 8).
 
 A published Print has a page of its own too, `<site>/p/<slug>` (`web/src/print.tsx`, no sign-in): its HTML from `prints:view`, drawn in a frame with an empty `sandbox` behind the reply pages' Content-Security-Policy (`web/src/print-doc.ts`), under a one-line header with its title, kind and version. docs/protocol.md, "Prints", has the rest.
@@ -201,4 +205,5 @@ checkout's in for the upload and delete it after.
 - Signing in from a browser without the Mac to hand (e.g. approve a new
   browser from the iPhone app). A QR code for another device's browser is
   still `npm run web:sign-in -- --qr`.
-- Sharing from the iPhone app or an agent's tools.
+- Sharing from an agent's tools (the iPhone and Android apps have it,
+  from a thread's menu).

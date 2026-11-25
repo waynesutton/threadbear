@@ -330,23 +330,21 @@ Scenarios passing: Swift: not run, Mac: not run, Windows: not run, Linux: not ru
 | `projects.home` Projects home | pending | pending | pending | pending |
 | `projects.list` Projects list | pending | pending | pending | pending |
 | `projects.page` Project page | pending | pending | pending | pending |
-| `projects.decisions` Decisions on the Projects page | pending | pending | pending | pending |
 | `projects.parts` Parts of a project | pending | pending | pending | pending |
-| `projects.tabs` Project page tabs | pending | pending | pending | pending |
 | `projects.newthread` New thread in project | pending | pending | pending | pending |
 | `profile.page` Profile page | pending | pending | pending | pending |
 | `librarian.customize` Customize Librarian | pending | pending | pending | pending |
-| `librarian.page` Librarian page | pending | pending | pending | pending |
+| `librarian.page` Librarian page | pass | pass | pending | pass |
 | `looks.scheduled` Customize the Scheduled page | pending | pending | pending | pending |
 | `looks.projects` Customize the Projects page | pending | pending | pending | pending |
-| `librarian.log` Librarian log | pending | pending | pending | pending |
+| `librarian.log` Librarian log | pass | pass | pending | pass |
 | `tasks.page` Tasks page | pending | pending | pending | pending |
 | `tasks.detail` Task page | pending | pending | pending | pending |
 | `notes.page` Notes page | pending | pending | pending | pending |
 | `skills.page` Skills page | pending | pending | pending | pending |
-| `schedule.page` Scheduled page | pending | pending | pending | pending |
-| `schedule.list` Scheduled list | pending | pending | pending | pending |
-| `schedule.editor` Schedule editor | pending | pending | pending | pending |
+| `schedule.page` Scheduled page | pass | pass | pending | pass |
+| `schedule.list` Scheduled list | pass | pass | pending | pass |
+| `schedule.editor` Schedule editor | pass | pass | pending | pass |
 | `usage.spend` Usage spend | pending | pending | pending | pending |
 | `usage.pools` Usage pools | pending | pending | pending | pending |
 | `usage.sign-in` Usage sign-ins | pending | pending | pending | pending |

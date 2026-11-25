@@ -41,7 +41,7 @@ test('one claim per due time: notifies, sends, and never repeats', async () => {
   let claimed = false;
   const r = new TaskReminders({
     enabled: () => true,
-    apiVersion: () => 88,
+    apiVersion: () => 107,
     now: () => at('2026-11-20T09:30:30'),
     call: async (op) => {
       calls.push(op);
@@ -64,7 +64,7 @@ test('another Mac claimed it first: nothing shows here', async () => {
   const notified: string[] = [];
   const r = new TaskReminders({
     enabled: () => true,
-    apiVersion: () => 88,
+    apiVersion: () => 107,
     now: () => at('2026-11-20T09:31:00'),
     call: async (op) => (op === 'list' ? { items: [task()], next: null } : op === 'preferences' ? {} : false),
     notify: (p) => notified.push(p.id),
@@ -75,6 +75,6 @@ test('another Mac claimed it first: nothing shows here', async () => {
 });
 
 test('an older backend is left alone', async () => {
-  const r = new TaskReminders({ enabled: () => true, apiVersion: () => 87, call: async () => assert.fail('no calls'), notify: () => {}, send: () => {} });
+  const r = new TaskReminders({ enabled: () => true, apiVersion: () => 106, call: async () => assert.fail('no calls'), notify: () => {}, send: () => {} });
   assert.equal(await r.tick(), 0);
 });

@@ -1,4 +1,9 @@
 {
+  "convex/boxImage.ts": {
+    "@convex-dev/no-process-env": {
+      "count": 4
+    }
+  },
   "convex/boxMachine.ts": {
     "@typescript-eslint/no-explicit-any": {
       "count": 2
@@ -42,7 +47,7 @@
   },
   "convex/devices.ts": {
     "@convex-dev/explicit-table-ids": {
-      "count": 6
+      "count": 8
     },
     "@convex-dev/no-collect-in-query": {
       "count": 1
@@ -187,7 +192,7 @@
   },
   "convex/sync.ts": {
     "@convex-dev/explicit-table-ids": {
-      "count": 114
+      "count": 113
     },
     "@convex-dev/no-collect-in-query": {
       "count": 17
@@ -238,11 +243,6 @@
   "relay/convex/relay.ts": {
     "@convex-dev/explicit-table-ids": {
       "count": 12
-    }
-  },
-  "runner/src/adapters/acp/mcp-http.ts": {
-    "@eslint-community/eslint-comments/require-description": {
-      "count": 1
     }
   },
   "runner/src/adapters/claude/normalize.ts": {
@@ -298,6 +298,11 @@
       "count": 3
     }
   },
+  "runner/src/module-scan.ts": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 1
+    }
+  },
   "runner/src/patch-commands.ts": {
     "@typescript-eslint/no-explicit-any": {
       "count": 1
@@ -305,9 +310,6 @@
   },
   "runner/src/patch-trust.ts": {
     "@eslint-community/eslint-comments/require-description": {
-      "count": 1
-    },
-    "@typescript-eslint/no-explicit-any": {
       "count": 1
     }
   },
@@ -653,9 +655,24 @@
       "count": 1
     }
   },
+  "runner/test/unit/perf-lock-groups.test.ts": {
+    "mikecann-lint/no-sleep-in-tests": {
+      "count": 1
+    }
+  },
+  "runner/test/unit/perf-lock-probe.test.ts": {
+    "mikecann-lint/no-sleep-in-tests": {
+      "count": 2
+    }
+  },
+  "runner/test/unit/perf-lock-queue.test.ts": {
+    "mikecann-lint/no-sleep-in-tests": {
+      "count": 3
+    }
+  },
   "runner/test/unit/perf-lock.test.ts": {
     "mikecann-lint/no-sleep-in-tests": {
-      "count": 6
+      "count": 1
     }
   },
   "runner/test/unit/proc.test.ts": {
@@ -682,11 +699,6 @@
   "runner/test/unit/provider-switch.test.ts": {
     "@typescript-eslint/no-explicit-any": {
       "count": 1
-    }
-  },
-  "runner/test/unit/push-clear.test.ts": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 3
     }
   },
   "runner/test/unit/push-hold.test.ts": {
@@ -928,6 +940,9 @@
   "web/src/App.tsx": {
     "react-hooks/exhaustive-deps": {
       "count": 3
+    },
+    "react-hooks/set-state-in-effect": {
+      "count": 1
     }
   },
   "web/src/inbox.tsx": {

@@ -10,7 +10,9 @@ import type { NativeTask } from './tasks.ts';
 export type ReminderChannel = 'none' | 'email' | 'slack';
 export type Reminders = { mac: boolean; channel: ReminderChannel; to: string; lead: number };
 export const DEFAULT_REMINDERS: Reminders = { mac: true, channel: 'none', to: '', lead: 0 };
-export const REMINDERS_API = 88;
+// Task due times (backend 107; it was 88, then 105, as Mike's releases
+// took the numbers below it, the last on 25 Nov 2026).
+export const REMINDERS_API = 107;
 // A reminder missed while the Mac slept still goes out late, but not one a
 // day old: turning reminders on shouldn't send last week's.
 const LATE_LIMIT_MS = 24 * 60 * 60 * 1000;

@@ -27,7 +27,7 @@ pub const CDN: &str = "https://cef-builds.spotifycdn.com";
 
 /// One system's build, pinned. `sha1` is what Spotify's index.json (and the
 /// `.sha1` file beside the archive) says; `sha256` was worked out from the
-/// file that matched it, on 23 Nov 2026, so a download is checked against a
+/// file that matched it, on 24 Nov 2026, so a download is checked against a
 /// hash that isn't SHA-1 alone.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Archive {

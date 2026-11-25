@@ -101,12 +101,7 @@ pub struct Saved {
     /// week ("Weekly Fable"). None is on.
     #[serde(rename = "usage.showModelWeeks")]
     pub usage_show_model_weeks: Option<bool>,
-    /// `projectsList.openRows`: the sidebar's folded project rows that are
-    /// open (the projectDecisions experiment), by project id, "-" for Not in
-    /// a project.
-    #[serde(rename = "projectsList.openRows")]
-    pub projects_open_rows: Option<Vec<String>>,
-    /// `threadsCollapsed`: ⌘B folded the Threads panel away (thread_panels.rs).
+    /// `threadsCollapsed`: ⌘/ folded the Threads panel away (thread_panels.rs).
     /// None is no.
     pub threads_collapsed: Option<bool>,
     /// `sidebarCollapsed`: ⌥⇧⌘B folded the whole left sidebar away, the
@@ -193,6 +188,10 @@ pub struct Saved {
     /// `looks_once`): once, apart from the rest, which had already come
     /// across on most Macs before this app had looks.
     pub swift_look_import: Option<String>,
+    /// The Canvas page's board (thread_canvas.rs, the `threadCanvas`
+    /// experiment): each project's area, where each thread sits and the
+    /// camera, as `threadbear_core::thread_canvas::Layout` saves it.
+    pub thread_canvas: Option<Value>,
     /// Fields this build doesn't know (a newer build's), kept as they are,
     /// so going back a version and forward again loses nothing.
     #[serde(flatten)]
