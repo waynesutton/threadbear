@@ -134,7 +134,13 @@ export function acpAsker(deps: AcpAskerDeps): Asker {
         if (set?.configOptions?.find((o) => o.category === 'mode')?.currentValue !== want) return fail(`${name} didn't go into its read-only mode.`);
       }
       const model = options.find((o) => o.category === 'model');
-      if (req.model && model?.id) await proc.request('session/set_config_option', { sessionId, configId: model.id, value: req.model });
+      // A named model or nothing: the agent's own default may be a paid one.
+      if (req.model) {
+        if (!model?.id) return fail(`${name} has no models to pick from.`);
+        const set = await proc.request<{ configOptions?: Option[] | null }>('session/set_config_option', { sessionId, configId: model.id, value: req.model });
+        const now = set?.configOptions?.find((o) => o.category === 'model')?.currentValue;
+        if (now !== req.model) return fail(`${name} didn't go to ${req.model}.`);
+      }
       const r = await proc.request<{ stopReason?: string }>('session/prompt', { sessionId, prompt: promptBlocks(req) }, null);
       if (r?.stopReason === 'error' && failure && outOfUsage(failure)) return { ok: false, timedOut: false, limit: true, message: `${req.account.id} is out of ${name} usage (${failure.message}).` };
       if (r?.stopReason !== 'end_turn' && r?.stopReason !== undefined) return fail(`${name} stopped early (${failure?.message ?? r.stopReason}).`);

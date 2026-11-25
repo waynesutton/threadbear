@@ -6,9 +6,11 @@ use crate::style;
 use crate::style::px;
 use crate::tips::Tip as _;
 use gpui_kit::base::TestSupportExt as _;
+use gpui_kit::component::menu::{ContextMenuExt as _, PopupMenu, PopupMenuItem};
 use gpui_kit::component::{h_flex, Icon, Sizable as _};
 use gpui_kit::prelude::*;
 use gpui_kit::*;
+use serde_json::{json, Value};
 use std::time::Duration;
 
 /// Experiment id checked against `Threadbear::experiment_on`.
@@ -31,6 +33,7 @@ pub(crate) enum ButtonState {
 pub(crate) fn beside_send(
     send: AnyElement,
     state: ButtonState,
+    menu: Option<(Choices, WeakEntity<crate::app::Threadbear>)>,
     on_toggle: impl Fn(&ClickEvent, &mut Window, &mut App) + 'static,
     cx: &mut App,
 ) -> AnyElement {
@@ -49,9 +52,9 @@ pub(crate) fn beside_send(
         ButtonState::Off => (
             "Fast web search",
             if cfg!(target_os = "macos") {
-                "Fast web search (click or Option + Enter)"
+                "Fast web search (click or Option + Enter, right-click to choose who answers)"
             } else {
-                "Fast web search (click or Alt + Enter)"
+                "Fast web search (click or Alt + Enter, right-click to choose who answers)"
             },
         ),
         ButtonState::Armed => ("Fast web search on", "Fast web search on (click to cancel)"),
@@ -107,6 +110,15 @@ pub(crate) fn beside_send(
         ),
     };
 
+    let circle = match menu {
+        Some((choices, app)) => div()
+            .id("composer-fast-lane-menu")
+            .flex_none()
+            .child(circle)
+            .context_menu(move |menu, _, _| choice_menu(menu, &choices, &app))
+            .into_any_element(),
+        None => circle.into_any_element(),
+    };
     let wrapped = div().relative().flex_none().children(halo).child(circle);
     h_flex()
         .gap(px(6.))
@@ -114,6 +126,63 @@ pub(crate) fn beside_send(
         .child(wrapped)
         .child(send)
         .into_any_element()
+}
+
+/// Who answers Fast lane, as the runner's settings list them
+/// (`Settings.fastLane`).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct Choices {
+    picked: String,
+    all: Vec<(String, String, String)>,
+}
+
+impl Choices {
+    /// None from a runner from before there was a choice.
+    pub(crate) fn read(settings: Option<&Value>) -> Option<Self> {
+        let lane = &settings?["fastLane"];
+        let all: Vec<_> = lane["choices"]
+            .as_array()?
+            .iter()
+            .filter_map(|c| {
+                Some((
+                    c["id"].as_str()?.to_string(),
+                    c["title"].as_str()?.to_string(),
+                    c["detail"].as_str().unwrap_or_default().to_string(),
+                ))
+            })
+            .collect();
+        (!all.is_empty()).then(|| Self {
+            picked: lane["model"].as_str().unwrap_or_default().to_string(),
+            all,
+        })
+    }
+}
+
+/// The bolt's right-click menu. The pick is the runner's setting, so it holds
+/// for every thread until it's changed.
+fn choice_menu(
+    mut menu: PopupMenu,
+    choices: &Choices,
+    app: &WeakEntity<crate::app::Threadbear>,
+) -> PopupMenu {
+    for (id, title, detail) in &choices.all {
+        let (app, id) = (app.clone(), id.clone());
+        let label = if detail.is_empty() {
+            title.clone()
+        } else {
+            format!("{title}: {detail}")
+        };
+        menu = menu.item(
+            PopupMenuItem::new(label)
+                .checked(id == choices.picked)
+                .on_click(move |_, _, cx| {
+                    let change = json!({ "fastLane": { "model": id } });
+                    app.update(cx, |app, cx| app.update_runner_settings(change, cx))
+                        .ok();
+                }),
+        );
+    }
+    menu
 }
 
 fn halo_ring(color: Hsla) -> Div {
@@ -126,4 +195,23 @@ fn halo_ring(color: Hsla) -> Div {
         .rounded_full()
         .border(px(2.5))
         .border_color(color)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::Choices;
+    use serde_json::json;
+
+    #[test]
+    fn choices_come_from_the_runner_and_an_older_one_has_none() {
+        assert_eq!(Choices::read(None), None);
+        assert_eq!(Choices::read(Some(&json!({}))), None);
+        let got = Choices::read(Some(&json!({ "fastLane": { "model": "hy4", "choices": [
+            { "id": "exa", "title": "Exa", "detail": "Quickest" },
+            { "id": "hy4", "title": "Hy4 Flash Free" },
+        ] } })))
+        .unwrap();
+        assert_eq!(got.picked, "hy4");
+        assert_eq!(got.all.len(), 2);
+    }
 }

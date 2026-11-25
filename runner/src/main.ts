@@ -54,6 +54,8 @@ import { MacScreen } from './mac-screen.ts';
 import { Tasks, relatedFor, taskMethods } from './tasks.ts';
 import { LinearTasks, linearCaller, linearHelper, linearMethods } from './linear-tasks.ts';
 import { fastLaneFromConfig } from './fast-lane.ts';
+import { DEFAULT_FAST_LANE_CHOICE, HY4_MODEL } from './fast-lane-models.ts';
+import { cliDir } from './models/claude-pool.ts';
 import { Projects, drainProjectMethods, projectMethods } from './projects.ts';
 import { Librarian, librarianMethods } from './librarian.ts';
 import { ConnectorsMonitor, connectorsMethods, findLauncher, gatewayBase, gatewayIsLocal, readLocalIds, type StaticClientDeps } from './connectors.ts';
@@ -76,7 +78,7 @@ import { ConvexUseTally } from './convex-use.ts';
 import { CodexAdapter } from './adapters/codex/adapter.ts';
 import { AcpAdapter } from './adapters/acp/adapter.ts';
 import { ACP_AGENTS, ACP_PROVIDERS, type AcpProvider } from './adapters/acp/agents.ts';
-import { acpAsker } from './models/acp-oneshot.ts';
+import { acpAsker, type Asker } from './models/acp-oneshot.ts';
 import { PROVIDER_INFO } from './providers.ts';
 import { resolveCodexBinary } from './adapters/codex/appserver.ts';
 import { checkSurface, testedVersion } from './adapters/codex/surface.ts';
@@ -566,6 +568,7 @@ async function main(): Promise<void> {
       }),
     ]),
   );
+  const askers: Partial<Record<AcpProvider, Asker>> = Object.fromEntries(ACP_PROVIDERS.filter((p) => PROVIDER_INFO[p].smallJobs).map((p) => [p, acpAsker({ agent: ACP_AGENTS[p], binary: acpBinary(p), registry, log, dataDir: cfg.home })]));
   // The runner's own small-model calls, on the settings' Claude pool.
   const models = new Models({
     home: cfg.home,
@@ -574,7 +577,7 @@ async function main(): Promise<void> {
     settings: () => cfg.models,
     claudePath: cfg.claudePath,
     registry,
-    askers: Object.fromEntries(ACP_PROVIDERS.filter((p) => PROVIDER_INFO[p].smallJobs).map((p) => [p, acpAsker({ agent: ACP_AGENTS[p], binary: acpBinary(p), registry, log, dataDir: cfg.home })])),
+    askers,
     poolHost: { pool: (id) => runner.smallModelPool(id), ranDry: (id) => runner.noteRanDry(id) },
   });
   const projects = new Projects({ home: cfg.home, clock: realClock, log });
@@ -630,7 +633,25 @@ async function main(): Promise<void> {
       if (!appRestarts.isWatching(threadId)) appRestarts.watch(threadId);
     },
     awaitingAppRestart: (threadId) => appRestarts.isWatching(threadId),
-    fastLane: fastLaneFromConfig(cfg.connectorsClient, cfg.fastLane, log),
+    fastLane: fastLaneFromConfig(cfg.connectorsClient, cfg.fastLane, log, {
+      choice: () => cfg.fastLane?.model ?? DEFAULT_FAST_LANE_CHOICE,
+      writers: {
+        // Not marked out of room when the free model is: the login's other
+        // models still work.
+        hy4: async ({ system, user, timeoutMs }) => {
+          const account = runner.usableAccounts().find((a) => a.provider === 'opencode');
+          if (!account || !askers.opencode) throw new Error('No OpenCode login on this Mac.');
+          const res = await askers.opencode({ account, model: HY4_MODEL, system, user, cwd: cliDir(cfg.home), timeoutMs });
+          if (!res.ok) throw new Error(res.message);
+          return res.text;
+        },
+        haiku: async ({ system, user, timeoutMs }) => {
+          const res = await models.generate({ feature: 'fast-lane', system, prompt: user, timeoutMs, claudeOnly: true });
+          if (!res.ok) throw new Error(res.message);
+          return res.value;
+        },
+      },
+    }),
     appRestartWant: (threadId) => appRestarts.waitingFor(threadId),
   });
   publishSkills = (n) => runner.publish(n);

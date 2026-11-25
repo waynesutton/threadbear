@@ -57,8 +57,9 @@ type Common = { feature: string; cwd?: string };
 export type ClassifyParams = Common & { text: string; labels: string[]; instructions?: string };
 export type ExtractParams = Common & { text: string; fields: Record<string, string> };
 export type SummarizeParams = Common & { text: string; maxWords?: number };
-// strong: Opus (ROUTES.decide) rather than Haiku.
-export type GenerateParams = Common & { prompt: string; system?: string; maxTokens?: number; strong?: boolean };
+// strong: Opus (ROUTES.decide) rather than Haiku. claudeOnly: no answer
+// rather than another provider's default model.
+export type GenerateParams = Common & { prompt: string; system?: string; maxTokens?: number; strong?: boolean; timeoutMs?: number; claudeOnly?: boolean };
 
 // pool: the pool whose Claude logins answer; null for none (no small jobs).
 export type ModelSettings = { privateFolders: string[]; pool?: string | null };
@@ -112,6 +113,8 @@ type Attempt<T> = {
   system?: string;
   user: string;
   maxTokens?: number;
+  timeoutMs?: number;
+  claudeOnly?: boolean;
   jsonSchema?: { name: string; schema: Record<string, unknown> };
   read: (text: string) => T | undefined;
 };
@@ -216,7 +219,7 @@ export class Models {
   }
 
   generate(p: GenerateParams): Promise<ModelResult<string>> {
-    return this.run(p.strong ? 'decide' : 'generate', p, { system: p.system, user: p.prompt, maxTokens: p.maxTokens ?? 500, read: (t) => t.trim() || undefined });
+    return this.run(p.strong ? 'decide' : 'generate', p, { system: p.system, user: p.prompt, maxTokens: p.maxTokens ?? 500, timeoutMs: p.timeoutMs, claudeOnly: p.claudeOnly, read: (t) => t.trim() || undefined });
   }
 
   private async run<T>(job: ModelJob, p: Common, a: Attempt<T>): Promise<ModelResult<T>> {
@@ -236,6 +239,7 @@ export class Models {
     // Before taking a slot: a pool nothing can answer on says so at once.
     const askable = this.providerToAsk();
     if (!askable || !this.askFor(askable)) return skip('off', 'Pool calls are off in this runner.');
+    if (a.claudeOnly && askable !== 'claude') return skip('no-pool', 'The small jobs pool has no Claude login.');
     await this.acquirePool();
     try {
       const tried: string[] = [];
@@ -257,7 +261,7 @@ export class Models {
           user: a.user,
           jsonSchema: a.jsonSchema?.schema,
           cwd: cliDir(this.opts.home),
-          timeoutMs: this.opts.poolTimeoutMs ?? POOL_TIMEOUT_MS,
+          timeoutMs: a.timeoutMs ?? this.opts.poolTimeoutMs ?? POOL_TIMEOUT_MS,
         });
         const value = res.ok ? a.read(res.text) : undefined;
         const unreadable = res.ok && value === undefined ? 'unreadable answer' : undefined;

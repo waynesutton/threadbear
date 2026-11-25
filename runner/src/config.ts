@@ -12,6 +12,7 @@ import { credentialUrlProblem } from './secure-url.ts';
 import { reviewerLists, type LabReviewer } from './lab-reviewers.ts';
 import { findGatewayClient } from './notion-tasks.ts';
 import type { FastLaneConfig } from './fast-lane.ts';
+import { isFastLaneChoice } from './fast-lane-models.ts';
 import { onPath } from './adapters/acp/agents.ts';
 import { dataDirFor, exeName, logFileFor } from './platform.ts';
 import { CLI_POLICIES, isEffortLevel, isProvider, type CliPolicy, type EffortLevel, type PermissionMode, type Provider } from './protocol.ts';
@@ -569,6 +570,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env, opts: { readOnl
 function fastLaneConfig(raw: RunnerJson['fastLane']): FastLaneConfig | undefined {
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return undefined;
   const out: FastLaneConfig = {};
+  if (isFastLaneChoice(raw.model)) out.model = raw.model;
   if (typeof raw.timeoutMs === 'number' && Number.isFinite(raw.timeoutMs)) out.timeoutMs = raw.timeoutMs;
   if (nonEmpty(raw.endpointId)) out.endpointId = nonEmpty(raw.endpointId);
   if (nonEmpty(raw.headersHelper)) out.headersHelper = nonEmpty(raw.headersHelper);

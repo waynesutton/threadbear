@@ -1,5 +1,6 @@
 // settings.get and settings.update (docs/protocol.md): the runner's side
 // of the Settings window. Everything lives in runner.json.
+import { DEFAULT_FAST_LANE_CHOICE, FAST_LANE_CHOICES, isFastLaneChoice, type FastLaneChoice } from './fast-lane-models.ts';
 import { DEFAULT_LAB_REVIEWERS, labReviewerProblem, parseLabReviewers, ticked, type LabReviewer } from './lab-reviewers.ts';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -34,6 +35,8 @@ export type Settings = {
   printsWhenAsked: boolean;
   // Progress prints for long tasks (threadbear-mcp.ts, create_print).
   progressPrints: boolean;
+  // Who answers Fast lane, and who could (fast-lane-models.ts).
+  fastLane: { model: FastLaneChoice; choices: { id: FastLaneChoice; title: string; detail: string }[] };
   // Who reviews, in order (lab-reviewers.ts): runner.json's list, or the
   // default when it has none.
   labReviewers: LabReviewer[];
@@ -71,6 +74,7 @@ export type SettingsUpdate = {
   labReview?: boolean;
   printsWhenAsked?: boolean;
   progressPrints?: boolean;
+  fastLane?: { model: FastLaneChoice };
   labReviewers?: LabReviewer[];
   labPanel?: LabReviewer[];
   keepAwake?: boolean;
@@ -115,6 +119,7 @@ export class SettingsService {
       labReview: this.cfg.labReview,
       printsWhenAsked: this.cfg.printsWhenAsked,
       progressPrints: this.cfg.progressPrints,
+      fastLane: { model: this.cfg.fastLane?.model ?? DEFAULT_FAST_LANE_CHOICE, choices: FAST_LANE_CHOICES.map((c) => ({ ...c })) },
       labReviewers: (this.cfg.labReviewers ?? DEFAULT_LAB_REVIEWERS).map((r) => ({ ...r })),
       labPanel: (this.cfg.labPanel ?? []).map((r) => ({ ...r })),
       labPanelLines: this.cfg.labPanelLines,
@@ -172,6 +177,10 @@ export class SettingsService {
     if (u.labReview !== undefined) json.labReview = this.cfg.labReview = u.labReview;
     if (u.printsWhenAsked !== undefined) json.printsWhenAsked = this.cfg.printsWhenAsked = u.printsWhenAsked;
     if (u.progressPrints !== undefined) json.progressPrints = this.cfg.progressPrints = u.progressPrints;
+    if (u.fastLane !== undefined) {
+      json.fastLane = { ...json.fastLane, model: u.fastLane.model };
+      this.cfg.fastLane = { ...this.cfg.fastLane, model: u.fastLane.model };
+    }
     if (u.labReviewers !== undefined) {
       this.cfg.labReviewers = u.labReviewers.map((r) => ({ ...r }));
       json.labReviewers = u.labReviewers;
@@ -243,6 +252,11 @@ export function settingsMethods(s: SettingsService): Record<string, (p: Record<s
       if (p.progressPrints !== undefined) {
         if (typeof p.progressPrints !== 'boolean') throw bad('progressPrints must be a boolean');
         u.progressPrints = p.progressPrints;
+      }
+      if (p.fastLane !== undefined) {
+        const model = (p.fastLane as { model?: unknown } | null)?.model;
+        if (!isFastLaneChoice(model)) throw bad(`fastLane.model must be one of ${FAST_LANE_CHOICES.map((c) => c.id).join(', ')}`);
+        u.fastLane = { model };
       }
       if (p.labReviewers !== undefined) {
         if (!Array.isArray(p.labReviewers)) throw bad('labReviewers must be a list');

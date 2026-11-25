@@ -4,6 +4,22 @@
 // local Connectors gateway (reusing the `helperForAgent` pattern from
 // linear-tasks.ts / notion-tasks.ts), with an optional direct Exa fallback
 // configured in `runner.json`.
+import {
+  DEFAULT_FAST_LANE_CHOICE,
+  fastLaneOrder,
+  fastLaneTitle,
+  MIN_STEP_MS,
+  parseSearch,
+  readWriter,
+  SEARCH_TIMEOUT_MS,
+  SEARCHES,
+  TOTAL_TIMEOUT_MS,
+  WRITER_TIMEOUT_MS,
+  writerPrompt,
+  type FastLaneChoice,
+  type FastSource,
+  type FastWriter,
+} from './fast-lane-models.ts';
 import type { Logger } from './log.ts';
 import { waitingFor } from './linear-tasks.ts';
 import { helperForAgent, helperHeaders, parseRpc } from './notion-tasks.ts';
@@ -20,6 +36,8 @@ const MAX_CITATIONS = 20;
 const MAX_HANDOFF_CHARS = 2_500;
 
 export type FastLaneConfig = {
+  // Who answers (fast-lane-models.ts); Exa when left out.
+  model?: FastLaneChoice;
   timeoutMs?: number;
   endpointId?: string;
   headersHelper?: string;
@@ -85,11 +103,14 @@ function isAbortError(err: unknown): boolean {
   return err instanceof Error && (err.name === 'AbortError' || err.name === 'TimeoutError');
 }
 
+/** treg can't be reached at all (signed out, waiting for approval), so no other call through it is worth trying. */
+class TregDown extends Error {}
+
 /** The gateway leaves a signed-out service's tools out, so the call comes back as an unknown tool. */
 function connectorsError(message: string, mcpUrl: string): Error {
   if (!/unknown tool:\s*treg__call\b/i.test(message)) return new Error(message);
   const page = `${new URL(mcpUrl).origin}/admin/connect/treg`;
-  return new Error(`Fast web search can't reach treg. Sign in to it in Connectors (${page}), then send this again.`);
+  return new TregDown(`Fast web search can't reach treg. Sign in to it in Connectors (${page}), then send this again.`);
 }
 
 type Json = Record<string, unknown>;
@@ -229,6 +250,9 @@ export type FastLaneLookupOptions = {
     url?: string;
   };
   timeoutMs?: number;
+  // Read for each question, so a new choice takes effect at once.
+  choice?: () => FastLaneChoice;
+  writers?: Partial<Record<FastLaneChoice, FastWriter>>;
   fetch?: typeof fetch;
   log?: Logger;
   now?: () => number;
@@ -236,7 +260,8 @@ export type FastLaneLookupOptions = {
 
 /**
  * Creates a read-only Fast lane lookup function.
- * Primary: local Connectors gateway `treg__call` (`exa.web.answer`).
+ * Primary: the chosen answerer (fast-lane-models.ts), then the others in turn.
+ * Exa is the local Connectors gateway's `treg__call` (`exa.web.answer`).
  * Optional fallback: direct Exa Answer API when `fastLane.exaApiKey` is configured in `runner.json`.
  */
 export function createFastLaneLookup(opts: FastLaneLookupOptions): FastLookup {
@@ -247,7 +272,8 @@ export function createFastLaneLookup(opts: FastLaneLookupOptions): FastLookup {
   let rpcId = 0;
   let useMainHelper = false;
 
-  async function callConnectors(query: string, signal?: AbortSignal): Promise<{ answer: string; citations: FastCitation[] }> {
+  // One treg endpoint through the Connectors gateway; its reply's text.
+  async function callTreg(endpoint: string, params: Record<string, unknown>, ms: number, signal?: AbortSignal): Promise<string> {
     const conn = opts.connectors;
     if (!conn) throw new Error('Connectors is not configured on this Mac.');
     const problem = credentialUrlProblem(conn.mcpUrl);
@@ -277,13 +303,13 @@ export function createFastLaneLookup(opts: FastLaneLookupOptions): FastLookup {
           params: {
             name: 'treg__call',
             arguments: {
-              endpoint_id: endpointId,
-              params: { query, text: true },
+              endpoint_id: endpoint,
+              params,
             },
           },
         }),
         redirect: 'error',
-        signal: combinedSignal(timeoutMs, signal),
+        signal: combinedSignal(ms, signal),
       });
 
     let res = await post(await loadHeaders());
@@ -291,6 +317,8 @@ export function createFastLaneLookup(opts: FastLaneLookupOptions): FastLookup {
       useMainHelper = true;
       res = await post(await conn.fallback());
     }
+    // Connectors itself refusing: every other treg call would be refused too.
+    if (res.status === 401 || res.status === 403) throw new TregDown(`Connectors gateway answered ${res.status}.`);
     if (!res.ok) throw new Error(`Connectors gateway answered ${res.status}.`);
     const msg = parseRpc(await res.text());
     if (msg.error) throw connectorsError(msg.error.message ?? 'Connectors gateway returned an error.', conn.mcpUrl);
@@ -301,12 +329,12 @@ export function createFastLaneLookup(opts: FastLaneLookupOptions): FastLookup {
     if (msg.result?.isError) throw connectorsError(text.slice(0, 300) || 'Fast web search failed at Connectors.', conn.mcpUrl);
     const held = waitingFor(text);
     if (held) {
-      throw new Error(`Connectors asked for approval before running fast web search (${held.url}).`);
+      throw new TregDown(`Connectors asked for approval before running fast web search (${held.url}).`);
     }
-    return parseExaAnswer(text);
+    return text;
   }
 
-  async function callDirectExa(query: string, signal?: AbortSignal): Promise<{ answer: string; citations: FastCitation[] }> {
+  async function callDirectExa(query: string, ms: number, signal?: AbortSignal): Promise<{ answer: string; citations: FastCitation[] }> {
     const exa = opts.exa;
     if (!exa?.apiKey) throw new Error('No direct Exa fallback key is configured.');
     const url = exa.url?.trim() || DEFAULT_EXA_ANSWER_URL;
@@ -321,10 +349,44 @@ export function createFastLaneLookup(opts: FastLaneLookupOptions): FastLookup {
       },
       body: JSON.stringify({ query, text: true }),
       redirect: 'error',
-      signal: combinedSignal(timeoutMs, signal),
+      signal: combinedSignal(ms, signal),
     });
     if (!res.ok) throw new Error(`Exa answered ${res.status}.`);
     return parseExaAnswer(await res.text());
+  }
+
+  // Exa: treg's, else the direct key.
+  async function askExa(query: string, ms: () => number, signal: AbortSignal | undefined, tregDown: () => boolean): Promise<FastAnswer> {
+    let first: unknown;
+    if (opts.connectors && !tregDown()) {
+      try {
+        return { ...parseExaAnswer(await callTreg(endpointId, { query, text: true }, ms(), signal)), source: 'Exa' };
+      } catch (err) {
+        if (signal?.aborted) throw err;
+        first = err;
+        opts.log?.warn('fast-lane: Connectors lookup failed', { error: err instanceof Error ? err.message : String(err) });
+      }
+    }
+    // The direct key gets its own go however treg failed.
+    if (opts.exa?.apiKey) return { ...(await callDirectExa(query, ms(), signal)), source: 'Exa direct' };
+    throw first ?? new Error('Fast web search needs local Connectors (treg) or fastLane.exaApiKey in runner.json.');
+  }
+
+  async function search(query: string, ms: () => number, signal: AbortSignal | undefined): Promise<FastSource[]> {
+    let last: unknown = new Error('Connectors is not configured on this Mac.');
+    for (const s of opts.connectors ? SEARCHES : []) {
+      if (ms() < MIN_STEP_MS) break;
+      try {
+        const found = parseSearch(await callTreg(s.endpointId, s.params(query), Math.min(SEARCH_TIMEOUT_MS, ms()), signal));
+        if (found.length) return found;
+        last = new Error('The web search found nothing.');
+      } catch (err) {
+        if (signal?.aborted || err instanceof TregDown) throw err;
+        last = err;
+        opts.log?.warn('fast-lane: search failed', { endpoint: s.endpointId, error: err instanceof Error ? err.message : String(err) });
+      }
+    }
+    throw last;
   }
 
   return async (query: string, callOpts?: { signal?: AbortSignal }): Promise<FastLookupResult> => {
@@ -332,40 +394,61 @@ export function createFastLaneLookup(opts: FastLaneLookupOptions): FastLookup {
     if (!clean) throw new Error('Fast web search needs a question.');
     const startedAt = now();
     const signal = callOpts?.signal;
-    let connectorsErr: unknown;
+    const choice = opts.choice?.() ?? DEFAULT_FAST_LANE_CHOICE;
+    const order = fastLaneOrder(choice).filter((c) => c === 'exa' || opts.writers?.[c]);
+    // With someone to step in, Exa isn't waited on for its full time.
+    const exaMs = order.length > 1 && opts.timeoutMs === undefined ? WRITER_TIMEOUT_MS : timeoutMs;
+    const totalMs = Math.max(TOTAL_TIMEOUT_MS, exaMs);
+    const left = () => totalMs - (now() - startedAt);
+    // One search for however many models get asked.
+    let sources: Promise<FastSource[]> | undefined;
+    let down = false;
+    const errors: { who: FastLaneChoice; err: unknown }[] = [];
 
-    if (opts.connectors) {
+    for (const who of order) {
+      if (errors.length && left() < MIN_STEP_MS) break;
       try {
-        const { answer, citations } = await callConnectors(clean, signal);
-        return { answer, citations, source: 'Exa', durationMs: Math.max(0, now() - startedAt) };
+        const answer =
+          who === 'exa'
+            ? await askExa(clean, () => (errors.length ? Math.max(1, Math.min(exaMs, left())) : exaMs), signal, () => down)
+            : await write(who);
+        const instead = who !== choice && opts.writers ? ` (${fastLaneTitle(choice)} didn't answer)` : '';
+        return { ...answer, source: `${answer.source}${instead}`, durationMs: Math.max(0, now() - startedAt) };
       } catch (err) {
         if (signal?.aborted) throw err;
-        connectorsErr = err;
-        opts.log?.warn('fast-lane: Connectors lookup failed', { error: err instanceof Error ? err.message : String(err) });
+        if (err instanceof TregDown) down = true;
+        errors.push({ who, err });
+        opts.log?.warn('fast-lane: no answer', { who, error: err instanceof Error ? err.message : String(err) });
       }
     }
 
-    if (opts.exa?.apiKey) {
-      try {
-        const { answer, citations } = await callDirectExa(clean, signal);
-        return { answer, citations, source: 'Exa direct', durationMs: Math.max(0, now() - startedAt) };
-      } catch (err) {
-        if (signal?.aborted) throw err;
-        if (isAbortError(err)) {
-          throw new Error(`Fast web search timed out after ${Math.round(timeoutMs / 1000)}s.`);
-        }
-        throw err;
-      }
+    async function write(who: FastLaneChoice): Promise<FastAnswer> {
+      if (down) throw new Error('No web search to answer from.');
+      const found = await (sources ??= search(clean, left, signal));
+      const ms = Math.min(WRITER_TIMEOUT_MS, left());
+      if (ms < MIN_STEP_MS) throw new Error('Fast web search ran out of time.');
+      const text = await within(opts.writers![who]!({ ...writerPrompt(clean, found, new Date(now()).toISOString().slice(0, 10)), timeoutMs: ms }), ms, signal);
+      return { ...readWriter(text, found), source: fastLaneTitle(who) };
     }
 
-    if (connectorsErr) {
-      if (isAbortError(connectorsErr)) {
-        throw new Error(`Fast web search timed out after ${Math.round(timeoutMs / 1000)}s.`);
-      }
-      throw connectorsErr;
-    }
-    throw new Error('Fast web search needs local Connectors (treg) or fastLane.exaApiKey in runner.json.');
+    // What to do about it (sign in, approve) beats how the last backup failed.
+    const err = (errors.find((e) => e.err instanceof TregDown) ?? errors[0])?.err;
+    if (isAbortError(err)) throw new Error(`Fast web search timed out after ${Math.round((now() - startedAt) / 1000)}s.`);
+    throw err;
   };
+}
+
+type FastAnswer = { answer: string; citations: FastCitation[]; source: string };
+
+/** `work`, or a rejection at `ms` or Stop. The model's process ends at its own timeout. */
+function within<T>(work: Promise<T>, ms: number, signal?: AbortSignal): Promise<T> {
+  const stop = combinedSignal(ms, signal);
+  return new Promise<T>((resolve, reject) => {
+    const onStop = () => reject(stop.reason instanceof Error ? stop.reason : new Error('Stopped.'));
+    if (stop.aborted) return onStop();
+    stop.addEventListener('abort', onStop, { once: true });
+    work.then(resolve, reject).finally(() => stop.removeEventListener('abort', onStop));
+  });
 }
 
 /** Builds the live runner's Fast lane lookup from runner config (Connectors + optional runner.json fallback). */
@@ -373,6 +456,7 @@ export function fastLaneFromConfig(
   connectorsClient: { mcpUrl: string; headersHelper: string } | undefined,
   fastLaneCfg: FastLaneConfig | undefined,
   log?: Logger,
+  models: Pick<FastLaneLookupOptions, 'choice' | 'writers'> = {},
 ): FastLookup {
   const helperCmd = connectorsClient ? fastLaneHelper(connectorsClient.headersHelper, fastLaneCfg?.headersHelper) : undefined;
   const connectors = connectorsClient
@@ -391,5 +475,6 @@ export function fastLaneFromConfig(
     ...(exa ? { exa } : {}),
     ...(fastLaneCfg?.timeoutMs !== undefined ? { timeoutMs: fastLaneCfg.timeoutMs } : {}),
     ...(log ? { log } : {}),
+    ...models,
   });
 }

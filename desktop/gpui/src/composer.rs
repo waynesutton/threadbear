@@ -912,6 +912,19 @@ impl Composer {
                 .is_some_and(|a| a.read(cx).experiment_on(crate::fast_lane::EXPERIMENT))
     }
 
+    /// The bolt's menu, for a thread this Mac's runner answers.
+    fn fast_lane_choices(
+        &self,
+        cx: &mut Context<Self>,
+    ) -> Option<(crate::fast_lane::Choices, WeakEntity<Threadbear>)> {
+        if self.chip_data(cx).away.is_some() {
+            return None;
+        }
+        let app = self.app.upgrade()?;
+        let choices = crate::fast_lane::Choices::read(app.read(cx).runner_settings.as_ref())?;
+        Some((choices, self.app.clone()))
+    }
+
     /// Flip Fast lane arming for the next turn.
     pub(crate) fn toggle_fast_armed(&mut self, cx: &mut Context<Self>) {
         if !self.fast_lane_available(cx) {
@@ -2880,6 +2893,7 @@ impl Render for Composer {
             crate::fast_lane::beside_send(
                 send_button,
                 state,
+                self.fast_lane_choices(cx),
                 move |_, _, cx| {
                     if let Some(c) = composer.upgrade() {
                         c.update(cx, |c, cx| c.toggle_fast_armed(cx));

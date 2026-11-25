@@ -714,6 +714,10 @@ type Settings = {
                         // "Progress prints"): false, create_print refuses
                         // one and says to carry on. On by default; absent
                         // from an older runner, so a client hides the switch
+  fastLane?: { model: string, choices: { id, title, detail }[] } // who answers
+                        // Fast lane (experiment fastLane): "exa" (default),
+                        // "hy4" or "haiku"; the others step in when it can't.
+                        // Absent from an older runner: no menu on the bolt
   printsWhenAsked?: boolean // Prints only when the user asks: create_print
                         // after a message that doesn't ask for one puts an
                         // approval card up first (Prints, "Only when asked").
