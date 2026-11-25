@@ -1,5 +1,5 @@
 {
-  "about": "What a link in a reply opens inside the app (docs/protocol.md, \"Links into the thread\"): work:<words> a step of the turn's working, thread:<id> another thread, review:<id> a design review, button:<id> a reply button; anything else (a web page) is null here. The scheme in any case; the rest percent-decoded and trimmed. expect is null or {kind, value}. The desktop app (desktop/core/src/reply_links.rs thread_link), the iPhone (ThreadLinks.target), Android (ThreadLinks.target) and the website (web/src/thread-links.ts readLink). Android and the website only open reviews on the Mac, so they keep no review id: there only the kind is compared.",
+  "about": "What a link in a reply opens inside the app (docs/protocol.md, \"Links into the thread\"): work:<words> a step of the turn's working, thread:<id> another thread, review:<id> a design review, button:<id> a reply button, print:<id> a Print (the desktop app only); anything else (a web page) is null here. The scheme in any case; the rest percent-decoded and trimmed. expect is null or {kind, value}. The desktop app (desktop/core/src/reply_links.rs thread_link), the iPhone (ThreadLinks.target), Android (ThreadLinks.target) and the website (web/src/thread-links.ts readLink). Android and the website only open reviews on the Mac, so they keep no review id: there only the kind is compared.",
   "platforms": ["desktop", "ios", "android", "web"],
   "cases": [
     {"name": "a work link quotes a step", "input": "work:Commit,%20land,%20retire%20the%20old%20shared%20simulator", "expect": {"kind": "step", "value": "Commit, land, retire the old shared simulator"}},
@@ -7,6 +7,7 @@
     {"name": "a thread link names its thread", "input": "thread:a1b2c3d4", "expect": {"kind": "thread", "value": "a1b2c3d4"}},
     {"name": "a review link names its review", "input": "review:abc", "expect": {"kind": "review", "value": "abc"}},
     {"name": "a button link names its button", "input": "button:abcd1234", "expect": {"kind": "button", "value": "abcd1234"}},
+    {"name": "a print link names its print", "input": "print:pg_release_progress", "expect": {"kind": "print", "value": "pg_release_progress"}, "differs": {"ios": "Reads it as no link: prints open from their card.", "android": "Reads it as no link: prints open from their card.", "web": "Reads it as no link: prints open from their card."}},
     {"name": "the scheme is read in any case", "input": "THREAD:a1b2c3d4", "expect": {"kind": "thread", "value": "a1b2c3d4"}},
     {"name": "a web page isn't a link into the thread", "input": "https://a.b", "expect": null},
     {"name": "an empty button link is no link", "input": "button:", "expect": null},

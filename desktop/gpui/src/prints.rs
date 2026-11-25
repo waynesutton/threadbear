@@ -116,6 +116,38 @@ impl Threadbear {
             .or_else(|| self.prints.deleted.iter().find(|p| p.id == id))
     }
 
+    /// The one Print a `print:` link names, by its id or a prefix only it
+    /// has, as `thread:` links find their thread.
+    pub(crate) fn print_named(&self, id: &str) -> Result<String, usize> {
+        if let Some(page) = self.print(id) {
+            return Ok(page.id.clone());
+        }
+        let found: Vec<&Page> = self
+            .prints
+            .list
+            .iter()
+            .filter(|p| !id.is_empty() && p.id.starts_with(id))
+            .collect();
+        match found.as_slice() {
+            [only] => Ok(only.id.clone()),
+            more => Err(more.len()),
+        }
+    }
+
+    /// A `print:<id>` link in a reply: the Print beside the thread, or why not.
+    pub(crate) fn open_print_link(
+        &mut self,
+        id: &str,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        match self.print_named(id) {
+            Ok(id) => self.open_print_here(&id, window, cx),
+            Err(0) => self.show_error(format!("There's no print {id} on this computer."), cx),
+            Err(_) => self.show_error(format!("More than one print starts {id}."), cx),
+        }
+    }
+
     /// The list after hello; `pages.updated` keeps it current from then on.
     pub(crate) fn load_prints(&mut self, cx: &mut Context<Self>) {
         if !self.prints_on() {

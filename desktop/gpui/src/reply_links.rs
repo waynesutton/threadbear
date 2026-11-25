@@ -335,7 +335,7 @@ impl ThreadPane {
                     crate::rows::markdown::percent_decode(rest.strip_prefix("?p=").unwrap_or(rest));
                 Some(LinkTarget::File(self.find_file(&text)))
             }
-            Some("work" | "thread" | "review" | "tbchip" | "button") => None,
+            Some("work" | "thread" | "review" | "tbchip" | "button" | "print") => None,
             // `Foo.swift:12` reads as a scheme, but it's a file and a line.
             Some(s) if s.contains('.') && file_refs::strip_line(url) != url => {
                 Some(LinkTarget::File(self.find_file(url)))
@@ -354,6 +354,21 @@ impl ThreadPane {
                 _ => None,
             },
         }
+    }
+
+    /// A `print:<id>` link, which agents write for the progress print they
+    /// keep: it opens beside the thread as the print's card does. Before
+    /// this, it fell to the system opener: "Nothing on this computer opens
+    /// print: links" (24 Nov).
+    fn open_print_link(&mut self, id: &str, window: &mut Window, cx: &mut Context<Self>) {
+        let Some(app) = self.composer.read(cx).app.upgrade() else {
+            return;
+        };
+        let id = id.trim().to_owned();
+        // After this click is handled: opening it reads this pane.
+        window.defer(cx, move |window, cx| {
+            app.update(cx, |a, cx| a.open_print_link(&id, window, cx))
+        });
     }
 
     /// A link's whole path, and the lines after it (`/w/a.ts:12-18`), unless
@@ -449,6 +464,7 @@ impl ThreadPane {
             }
             Some(rules::ThreadLink::Thread(id)) => return self.open_thread_link(&id, window, cx),
             Some(rules::ThreadLink::Review(id)) => return self.open_review_link(&id, window, cx),
+            Some(rules::ThreadLink::Print(id)) => return self.open_print_link(&id, window, cx),
             Some(rules::ThreadLink::Button(_)) | None => {}
         }
         match self.link_target(url) {

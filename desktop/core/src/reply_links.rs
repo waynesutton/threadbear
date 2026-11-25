@@ -550,14 +550,17 @@ pub fn host(url: &str) -> Option<String> {
 
 /// A link back into the thread (docs/protocol.md, "Links into the thread"):
 /// `work:<words>` quotes a step of the turn's working, `thread:<id>` is
-/// another thread, `review:<id>` a design review, and `button:<id>` a reply
-/// button (reply_buttons.rs), which its pill presses rather than a click.
+/// another thread, `review:<id>` a design review, `button:<id>` a reply
+/// button (reply_buttons.rs), which its pill presses rather than a click, and
+/// `print:<id>` a Print, which agents link a progress print with.
+/// Desktop only: the phones and the website read it as no link.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum ThreadLink {
     Step(String),
     Thread(String),
     Review(String),
     Button(String),
+    Print(String),
 }
 
 /// What a link in a reply opens in the app, or None for anything else (a
@@ -572,6 +575,7 @@ pub fn thread_link(url: &str) -> Option<ThreadLink> {
         "thread" => Some(ThreadLink::Thread(percent_decode(rest))),
         "review" => Some(ThreadLink::Review(percent_decode(rest))),
         "button" => crate::reply_buttons::id_of(url).map(|id| ThreadLink::Button(id.to_owned())),
+        "print" => Some(ThreadLink::Print(percent_decode(rest))),
         _ => None,
     }
 }
@@ -954,6 +958,7 @@ mod tests {
                 ThreadLink::Thread(v) => ("thread", v),
                 ThreadLink::Review(v) => ("review", v),
                 ThreadLink::Button(v) => ("button", v),
+                ThreadLink::Print(v) => ("print", v),
             });
             let want = case["expect"].as_object().map(|e| {
                 (
