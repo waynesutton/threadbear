@@ -398,6 +398,8 @@ export type RelayDeps = {
   // Deletes an archived thread of a virtual runner in the backend
   // (boxes:deleteThread, on the main Mac's key). Left out: not possible.
   deleteBoxThread?: (threadId: string) => Promise<unknown>;
+  // This Mac's own runner id: a box's thread runs on one of its logins (logins).
+  ownRunnerId?: () => string;
   clock: Clock;
   log: Logger;
 };
@@ -874,7 +876,10 @@ export class Relay {
   }
 
   private runnerName(runnerId: string): string {
-    return this.runner(runnerId)?.name ?? 'the other runner';
+    const r = this.runner(runnerId);
+    // A box's own name is its machine's id: its virtual runner's ("Cloud (Fly)") says where it is.
+    const service = r?.box?.service ? this.deps.remote().services?.find((s) => s.id === r.box?.service)?.name : undefined;
+    return service ?? r?.name ?? 'the other runner';
   }
 
   private watch(threadId: string): Watch {
@@ -1927,8 +1932,15 @@ export class Relay {
 
   /** Another runner's logins for the new-thread pickers, from the backend's accounts rows. */
   async logins(runnerId: string): Promise<{ accounts: unknown[]; pools: unknown[]; defaults: Record<string, unknown> }> {
-    const rows = (await this.read('relay:remoteAccounts', { runnerId })) as { id: string; provider: string; runnerId?: string }[];
-    const accounts = rows.map(({ runnerId: _r, ...a }) => ({ ...a, configDir: '' }));
+    // A box lists no logins of its own (its key can't, BOX_CALLS): it runs
+    // on this Mac's login its cloud token is for, so that one is shown,
+    // with its models, from this Mac's own rows.
+    const box = this.runner(runnerId)?.box;
+    const own = box ? this.deps.ownRunnerId?.() : undefined;
+    const rows = (await this.read('relay:remoteAccounts', { runnerId: own ?? runnerId })) as { id: string; provider: string; email?: string; runnerId?: string }[];
+    const login = box?.login?.toLowerCase();
+    const mine = own ? rows.filter((a) => a.provider === 'claude' && (!login || a.email?.toLowerCase() === login)) : rows;
+    const accounts = mine.map(({ runnerId: _r, ...a }) => ({ ...a, configDir: '' }));
     const recent = this.deps.remote().threads.filter((t) => t.runnerId === runnerId).sort((a, b) => b.lastActivityAt.localeCompare(a.lastActivityAt))[0];
     return { accounts, pools: [], defaults: { cwd: recent?.cwd ?? '', accountId: recent?.accountId ?? accounts[0]?.id ?? '', models: {}, efforts: {} } };
   }

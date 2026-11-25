@@ -1714,6 +1714,7 @@ async function main(): Promise<void> {
     subscribed: (threadId) => rpcServer?.isSubscribed(threadId) ?? false,
     publish: (n) => rpcServer?.notifyClients(n),
     deleteBoxThread: (threadId) => sync.ownerCall('mutation', 'boxes:deleteThread', { threadId }),
+    ownRunnerId: () => syncRunnerId,
     clock: realClock,
     log,
   }));

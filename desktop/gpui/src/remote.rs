@@ -427,12 +427,16 @@ impl Threadbear {
     }
 
     /// `runnerName(of:)`: "bruce" for another runner's thread.
+    /// A thread on a virtual runner is named after it ("Cloud (Fly)"):
+    /// its box's own name is only its machine's id.
     pub(crate) fn runner_name_of(&self, runner_id: &str) -> String {
-        self.remote
-            .runners
-            .iter()
-            .find(|r| r.id == runner_id)
-            .map_or_else(|| "another Mac".to_owned(), |r| r.name.clone())
+        let Some(r) = self.remote.runners.iter().find(|r| r.id == runner_id) else {
+            return "another Mac".to_owned();
+        };
+        match r.runner_box.as_ref().and_then(|b| b.service.as_deref()) {
+            Some(service) => self.service_name_of(service),
+            None => r.name.clone(),
+        }
     }
 
     /// `runnerLabel(of:)`: the runner's name on a sidebar row ("m5",
