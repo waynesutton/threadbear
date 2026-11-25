@@ -9,8 +9,6 @@ Status and gap list: prds/prints-status.md
 
 ## In Progress
 
-- [ ] Land the verified Terminal shortcut fix and check the automatic app update. prds/terminal-shortcut-reopen.md
-
 - [ ] 2026-11-21 02:30 UTC Tasks and Linear (API 105): send, link, import and per-task sync from Linear. Convex, runner (19 unit + 7 local-backend integration tests) and web done; Mac app UI in progress. prds/tasks-linear.md
 
 - [ ] 2026-11-20 18:33 UTC Land approved lint fixes and login-refresh regression coverage on top of the separately approved slot-22 release landing. Preserve its merge resolutions; restore the upstream suppression baseline. Verify .diff links stay in the pane after the app updates. prds/bring-in-2026-11-20-verification.md
@@ -29,6 +27,8 @@ Status and gap list: prds/prints-status.md
 - [ ] Land verified Settings review fixes when the Mac is quiet, then verify the installed update.
 
 ## Completed
+
+- [x] 2026-11-25 22:55 UTC Land Terminal shortcut fix `2f0ef927f` (216-second landing check) and verify the automatic installation through release metadata, running process and startup log. Shortcut behavior passed in the headless build; no keys were injected into the live release. prds/terminal-shortcut-reopen.md
 
 - [x] 2026-11-25 22:40 UTC Fix repeated Command-J Terminal toggling in `desktop/gpui/src/terminal.rs`; add `features/terminal.feature` regression coverage and update the guide. Verified: 35 Terminal scenarios (664 steps), automation build, Rust formatting, feature pairing, feature TypeScript check and reopened-panel screenshot. Landing and installed verification are separate. prds/terminal-shortcut-reopen.md
 
