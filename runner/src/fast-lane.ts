@@ -16,7 +16,7 @@ export const DEFAULT_FAST_LANE_TIMEOUT_MS = 15_000;
 export const DEFAULT_EXA_ANSWER_URL = 'https://api.exa.ai/answer';
 const MIN_TIMEOUT_MS = 2_000;
 const MAX_TIMEOUT_MS = 60_000;
-const MAX_CITATIONS = 8;
+const MAX_CITATIONS = 20;
 const MAX_HANDOFF_CHARS = 2_500;
 
 export type FastLaneConfig = {
@@ -30,6 +30,9 @@ export type FastLaneConfig = {
 export type FastCitation = {
   title: string;
   url: string;
+  // Its places in the list Exa gave, which the answer's [n] markers count by.
+  // More than one when Exa listed the same page twice.
+  numbers: number[];
   publishedDate?: string;
 };
 
@@ -82,6 +85,13 @@ function isAbortError(err: unknown): boolean {
   return err instanceof Error && (err.name === 'AbortError' || err.name === 'TimeoutError');
 }
 
+/** The gateway leaves a signed-out service's tools out, so the call comes back as an unknown tool. */
+function connectorsError(message: string, mcpUrl: string): Error {
+  if (!/unknown tool:\s*treg__call\b/i.test(message)) return new Error(message);
+  const page = `${new URL(mcpUrl).origin}/admin/connect/treg`;
+  return new Error(`Fast web search can't reach treg. Sign in to it in Connectors (${page}), then send this again.`);
+}
+
 type Json = Record<string, unknown>;
 
 function asObject(value: unknown): Json | undefined {
@@ -130,18 +140,24 @@ function extractCitations(payload: Json): FastCitation[] {
       : Array.isArray(payload.results)
         ? payload.results
         : [];
-  const seen = new Set<string>();
+  const seen = new Map<string, FastCitation>();
   const out: FastCitation[] = [];
-  for (const entry of list) {
+  for (const [index, entry] of list.entries()) {
     const item = asObject(entry);
     if (!item) continue;
     const url = typeof item.url === 'string' ? item.url.trim() : '';
-    if (!url || !/^https?:\/\//i.test(url) || seen.has(url)) continue;
-    seen.add(url);
+    if (!url || !/^https?:\/\//i.test(url) ) continue;
+    const earlier = seen.get(url);
+    if (earlier) {
+      earlier.numbers.push(index + 1);
+      continue;
+    }
+    if (out.length >= MAX_CITATIONS) continue;
     const rawTitle = typeof item.title === 'string' && item.title.trim() ? item.title.trim() : url;
     const publishedDate = formatIsoDate(item.publishedDate ?? item.published_date ?? item.date);
-    out.push({ title: rawTitle, url, ...(publishedDate ? { publishedDate } : {}) });
-    if (out.length >= MAX_CITATIONS) break;
+    const citation = { title: rawTitle, url, numbers: [index + 1], ...(publishedDate ? { publishedDate } : {}) };
+    seen.set(url, citation);
+    out.push(citation);
   }
   return out;
 }
@@ -171,10 +187,14 @@ export function parseExaAnswer(rawText: string): { answer: string; citations: Fa
 export function formatFastAnswer(answer: string, citations: FastCitation[]): string {
   const body = answer.trim();
   if (!citations.length) return body;
+  // Bullets with the marker written out, not a Markdown list: Markdown would
+  // renumber past a gap. An answer with no markers gets plain bullets.
+  const marked = /\[\d+\]/.test(body);
   const links = citations.map((c) => {
     const cleanTitle = c.title.replace(/[[\]]/g, '').replace(/\s+/g, ' ').trim() || c.url;
     const date = c.publishedDate ? ` (${c.publishedDate})` : '';
-    return `- [${cleanTitle}](${c.url})${date}`;
+    const marker = marked ? `${c.numbers.map((n) => `[${n}]`).join('')} ` : '';
+    return `- ${marker}[${cleanTitle}](${c.url})${date}`;
   });
   return `${body}\n\n${links.join('\n')}`;
 }
@@ -273,12 +293,12 @@ export function createFastLaneLookup(opts: FastLaneLookupOptions): FastLookup {
     }
     if (!res.ok) throw new Error(`Connectors gateway answered ${res.status}.`);
     const msg = parseRpc(await res.text());
-    if (msg.error) throw new Error(msg.error.message ?? 'Connectors gateway returned an error.');
+    if (msg.error) throw connectorsError(msg.error.message ?? 'Connectors gateway returned an error.', conn.mcpUrl);
     const text = (msg.result?.content ?? [])
       .filter((c) => c.type === 'text')
       .map((c) => c.text ?? '')
       .join('\n');
-    if (msg.result?.isError) throw new Error(text.slice(0, 300) || 'Fast web search failed at Connectors.');
+    if (msg.result?.isError) throw connectorsError(text.slice(0, 300) || 'Fast web search failed at Connectors.', conn.mcpUrl);
     const held = waitingFor(text);
     if (held) {
       throw new Error(`Connectors asked for approval before running fast web search (${held.url}).`);

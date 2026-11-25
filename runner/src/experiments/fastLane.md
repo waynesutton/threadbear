@@ -4,7 +4,7 @@ name: Fast lane
 title: Fast lane: answer quick web queries in seconds without starting a CLI
 added: 2026-11-21
 on: false
-reminder: 00000000
+reminder: 105651fc
 ---
 
 ## What it does

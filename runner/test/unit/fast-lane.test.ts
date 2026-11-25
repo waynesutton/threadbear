@@ -66,6 +66,7 @@ test('fast-lane: parseExaAnswer and formatFastAnswer handle wrapped JSON, dated 
   assert.deepEqual(parsed.citations[0], {
     title: 'National [Weather] Service',
     url: 'https://weather.gov/sf',
+    numbers: [1, 2],
     publishedDate: '2026-11-21',
   });
   const formatted = formatFastAnswer(parsed.answer, parsed.citations);
@@ -77,6 +78,34 @@ test('fast-lane: parseExaAnswer and formatFastAnswer handle wrapped JSON, dated 
   const plain = parseExaAnswer('Just a plain text answer.');
   assert.deepEqual(plain, { answer: 'Just a plain text answer.', citations: [] });
   assert.throws(() => parseExaAnswer('   '), /empty answer/i);
+});
+
+test('fast-lane: sources carry the numbers the answer cites them by', () => {
+  const { answer, citations } = parseExaAnswer(JSON.stringify({
+    answer: 'It rained [1][2], then cleared [4].',
+    citations: [
+      { title: 'A', url: 'https://a.example' },
+      { title: 'A again', url: 'https://a.example' },
+      { title: 'No link' },
+      { title: 'B', url: 'https://b.example', publishedDate: '2026-11-21' },
+    ],
+  }));
+  assert.equal(
+    formatFastAnswer(answer, citations),
+    'It rained [1][2], then cleared [4].\n\n- [1][2] [A](https://a.example)\n- [4] [B](https://b.example) (2026-11-21)',
+  );
+});
+
+test('fast-lane: a signed-out treg says to sign in, other errors stay as they were', async () => {
+  const lookup = (body: unknown) => createFastLaneLookup({
+    connectors: { mcpUrl: 'http://127.0.0.1:8795/mcp', headers: async () => ({}) },
+    fetch: async () => new Response(JSON.stringify({ jsonrpc: '2.0', id: 1, ...(body as object) })),
+  })('weather');
+  const unknown = "Unknown tool: treg__call. Call tools/list (or connectors__status) to see what's available.";
+  const signIn = /Sign in to it in Connectors \(http:\/\/127\.0\.0\.1:8795\/admin\/connect\/treg\)/;
+  await assert.rejects(lookup({ error: { message: unknown } }), signIn);
+  await assert.rejects(lookup({ result: { isError: true, content: [{ type: 'text', text: unknown }] } }), signIn);
+  await assert.rejects(lookup({ error: { message: 'No credit left.' } }), /^Error: No credit left\.$/);
 });
 
 test('fast-lane: fastLaneHelper swaps agent id to threadbear or respects override', () => {
@@ -209,7 +238,7 @@ test('fast-lane: Runner executes fast create and /web turns without CLI and pres
       queries.push(query);
       return {
         answer: `Answer for ${query}`,
-        citations: [{ title: 'Source One', url: 'https://example.com/1', publishedDate: '2026-11-21' }],
+        citations: [{ title: 'Source One', url: 'https://example.com/1', numbers: [1], publishedDate: '2026-11-21' }],
         source: 'Exa',
         durationMs: 1_850,
       };
