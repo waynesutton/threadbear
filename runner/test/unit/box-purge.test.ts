@@ -206,3 +206,33 @@ test("a thread that isn't archived, or another key's ask, deletes nothing", asyn
   assert.equal(w.scheduled.length, 0);
   assert.equal(w.rows('boxes').length, 2);
 });
+
+test("a thread whose unarchive failed is archived, then deleted, and what waited for its box fails", async () => {
+  process.env.RUNNER_KEY = 'owner-key';
+  const w = await world();
+  const failed = await w.box(1, { kind: 'failed', at: Date.now(), error: 'No box image has been promoted' });
+  await fitIndex(w);
+  w.scheduled.length = 0;
+  await call(w.ctx, boxes.deleteThread, { key: 'owner-key', threadId: failed.threadId });
+  assert.equal(w.rows('boxes')[0]?.boxState.kind, 'destroying');
+  assert.equal(w.rows('threadIndex').find((r) => r.threadId === failed.threadId)?.deleted, true);
+  // It waits while the box is put away, then carries on once it's gone.
+  await deleteAll(w);
+  assert.equal(w.rows('boxes')[0]?.boxState.kind, 'destroying');
+  await w.ctx.db.patch(failed.id, { boxState: { kind: 'gone', at: Date.now() } });
+  await call(w.ctx, boxService.deleteNow, { boxId: failed.id, tries: 1 });
+  await deleteAll(w);
+  assert.equal(w.rows('boxes').length, 0);
+  assert.ok(!w.rows('threads').some((r) => r.runnerId === failed.runnerId));
+});
+
+test("a failed box whose thread isn't archived is left alone", async () => {
+  process.env.RUNNER_KEY = 'owner-key';
+  const w = await world();
+  const failed = await w.box(1, { kind: 'failed', at: Date.now(), error: 'x' });
+  const t = w.rows('threads').find((r) => r.threadId === failed.threadId)!;
+  await w.ctx.db.patch(t._id, { view: 'inbox' });
+  w.scheduled.length = 0;
+  await assert.rejects(call(w.ctx, boxes.deleteThread, { key: 'owner-key', threadId: failed.threadId }), (e: { data?: { message?: string } }) => /Archive it first/.test(e?.data?.message ?? ''));
+  assert.equal(w.rows('boxes')[0]?.boxState.kind, 'failed');
+});

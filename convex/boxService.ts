@@ -1803,12 +1803,17 @@ const DELETE_TRIES = 15;
  * purged without the second wait (each run carries `deleted` to purgeStep).
  */
 export const deleteNow = machines.internalMutation({
-  args: { boxId: v.id('boxes') },
+  // `tries`: how often it has waited for a box being put away (one that had failed is archived first).
+  args: { boxId: v.id('boxes'), tries: v.optional(v.number()) },
   returns: v.null(),
-  handler: async (machineCtx, { boxId }) => {
+  handler: async (machineCtx, { boxId, tries = 0 }) => {
     const ctx = machineCtx as unknown as MutationCtx;
     const row = await ctx.db.get('boxes', boxId);
     if (!row) return null;
+    if (row.boxState.kind === 'archiving' || row.boxState.kind === 'destroying') {
+      if (tries < DELETE_TRIES) await ctx.scheduler.runAfter(DELETE_AGAIN_MS, internal.boxService.deleteNow, { boxId, tries: tries + 1 });
+      return null;
+    }
     if (row.boxState.kind === 'gone' || row.boxState.kind === 'shelved') {
       const save = row.save?.storageId;
       if ((await boxMachine.send(machineCtx, boxId, { type: 'EXPIRE' })).status !== 'done') return null;
