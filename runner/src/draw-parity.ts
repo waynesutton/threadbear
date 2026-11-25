@@ -123,6 +123,7 @@ export const DRAWN: Record<string, DrawRow> = {
   'link.work': { what: 'Link to a step of the working', ios: 'yes', android: 'yes', web: 'yes', sign: { ios: 'workLink', android: 'workLink', web: 'findStep' } },
   'link.thread': { what: 'Link to another thread', ios: 'yes', android: 'yes', web: 'yes', sign: { ios: 'pushThread', android: 'LocalPushThread', web: 'threadPath' } },
   'link.review': { what: 'Link to a design review', ios: 'yes', android: NOT_YET, web: NOT_YET, sign: { ios: 'designReviewShown' } },
+  'link.print': { what: 'Link to a Print', ios: { no: 'Shows prints as their cards; desktop only for now.' }, android: { no: 'Shows prints as their cards; desktop only for now.' }, web: { no: 'Shows prints as their cards; desktop only for now.' } },
   'link.button': { what: 'Reply button', ios: 'yes', android: 'yes', web: 'yes', sign: { ios: 'ReplyButtonPill', android: 'ReplyButtonPill', web: 'ReplyButton' } },
   'mark.Working': { what: 'Working', ios: NOT_YET, android: NOT_YET, web: NOT_YET },
   'mark.NeedsYou': { what: 'Needs you', ios: NOT_YET, android: NOT_YET, web: NOT_YET },

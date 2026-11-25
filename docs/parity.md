@@ -189,6 +189,7 @@ pasted (`Desktop only for now.` for all three) is left out of this table.
 | Link to another thread | `link.thread` | Yes | Yes | Yes |
 | Reply button | `link.button` | Yes | Yes | Yes |
 | Link to a design review | `link.review` | Yes | No: Not drawn yet. | No: Not drawn yet. |
+| Link to a Print | `link.print` | No: Shows prints as their cards; desktop only for now. | No: Shows prints as their cards; desktop only for now. | No: Shows prints as their cards; desktop only for now. |
 
 ## A thread link's mark (LinkMark, link_marks.rs)
 
