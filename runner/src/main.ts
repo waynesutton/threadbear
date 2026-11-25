@@ -1619,6 +1619,7 @@ async function main(): Promise<void> {
       if (live) void runner.send(live, text, [], { queue: true });
       else remindersThread.set(startOwnThread(runner, { text, title: 'Task reminders', why: 'Send a due task reminder by email or Slack, as set in Tasks' }, undefined));
     },
+    warn: (msg, fields) => log.warn(msg, fields),
   });
   taskReminders.start();
   const linearTasks = new LinearTasks({

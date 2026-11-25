@@ -24,6 +24,16 @@ use threadbear_core::logins::RunnerLogins;
 use threadbear_core::new_thread::{self as draft_rules, Draft, NewThreadPicks, RoomCard, RoomLook};
 use threadbear_core::reducer::ImageRef;
 
+/// What git said of a folder, for a cloud runner's box to clone it: its
+/// top and origin (None: not a repo, or none), and for one that isn't a
+/// repo, the names of the repos directly inside it.
+#[derive(Clone, Debug, Default)]
+pub(crate) struct FolderRepo {
+    pub(crate) top: Option<String>,
+    pub(crate) origin: Option<String>,
+    pub(crate) inside: Vec<String>,
+}
+
 /// Everything about the new thread being written; the app holds one.
 pub(crate) struct NewThreadState {
     /// The page's message box, made the first time the page shows.
@@ -39,8 +49,7 @@ pub(crate) struct NewThreadState {
     /// Each folder's git top and origin, for a cloud runner's box to clone
     /// (None while git's being asked): read once per folder, again when a
     /// cloud runner's picked.
-    pub(crate) folder_repos:
-        std::collections::HashMap<String, Option<(Option<String>, Option<String>)>>,
+    pub(crate) folder_repos: std::collections::HashMap<String, Option<FolderRepo>>,
     /// The box should take the cursor at the next render (⌘N, or the button).
     pub(crate) focus_pending: bool,
     /// The settings last sent to `threads.warm`, and the id the runner gave
@@ -576,11 +585,13 @@ impl Threadbear {
 
     /// The same for a cloud runner and folder, from what git said.
     pub(crate) fn folder_problem_for(&self, service: &str, cwd: &str) -> Option<String> {
-        let (top, origin) = self.new_thread.folder_repos.get(cwd)?.as_ref()?;
+        let found = self.new_thread.folder_repos.get(cwd)?.as_ref()?;
         match threadbear_core::cloud_runners::folder_check(
             &self.service_name_of(service),
-            top.as_deref(),
-            origin.as_deref(),
+            cwd,
+            found.top.as_deref(),
+            found.origin.as_deref(),
+            &found.inside,
         ) {
             threadbear_core::cloud_runners::FolderCheck::Not(why) => Some(why),
             _ => None,
@@ -616,7 +627,26 @@ impl Threadbear {
             let origin = top
                 .as_ref()
                 .and_then(|_| git(&["remote", "get-url", "origin"]));
-            (top, origin)
+            // For a folder that isn't a repo: the repos directly inside it,
+            // which is usually the one meant (read only, a few names).
+            let mut inside = Vec::new();
+            if top.is_none() {
+                if let Ok(entries) = std::fs::read_dir(&dir) {
+                    let mut names: Vec<String> = entries
+                        .flatten()
+                        .filter(|e| e.path().join(".git").exists())
+                        .filter_map(|e| e.file_name().into_string().ok())
+                        .collect();
+                    names.sort();
+                    names.truncate(threadbear_core::cloud_runners::INSIDE_MAX);
+                    inside = names;
+                }
+            }
+            FolderRepo {
+                top,
+                origin,
+                inside,
+            }
         });
         cx.spawn(async move |this, cx| {
             let found = task.await;
@@ -1081,7 +1111,8 @@ impl Threadbear {
                 .child(draft_rules::HEADING),
         );
         // The note always names the folder; a cloud thread its box can't
-        // clone adds why under it, with the two ways out beside the words.
+        // clone adds why under it. The + menu is the one way to another
+        // folder, so the words point there and nothing else is offered.
         let note_line = div()
             .id("new-thread-note")
             .text_size(px(size::LABEL))
@@ -1089,49 +1120,21 @@ impl Threadbear {
             .child(note)
             .tip(note_tip);
         let note_text = match cloud_problem {
-            Some(why) => {
-                use threadbear_core::cloud_runners as cloud;
-                let choose = crate::activity_panels::text_button(
-                    "new-thread-cloud-choose-folder",
-                    cloud::CHOOSE_FOLDER,
-                    cloud::CHOOSE_FOLDER_TIP,
-                    size::LABEL,
-                    true,
-                    false,
-                    cx,
-                    |this, window, cx| {
-                        if let Some(composer) = this.new_thread.composer.clone() {
-                            composer.update(cx, |c, cx| c.choose_folder(window, cx));
-                        }
-                    },
-                );
-                let this_mac = crate::activity_panels::text_button(
-                    "new-thread-cloud-this-mac",
-                    cloud::USE_THIS_MAC,
-                    cloud::USE_THIS_MAC_TIP,
-                    size::LABEL,
-                    true,
-                    false,
-                    cx,
-                    |this, _, cx| this.choose_new_thread_runner(None, true, cx),
-                );
-                v_flex()
-                    .items_center()
-                    .gap(px(6.))
-                    .px(px(24.))
-                    .child(note_line)
-                    .child(
-                        div()
-                            .id("new-thread-cloud-warning")
-                            .text_center()
-                            .text_size(px(size::LABEL))
-                            .text_color(style::status_warning(cx))
-                            .child(why.clone())
-                            .tip(why),
-                    )
-                    .child(h_flex().gap(px(16.)).child(choose).child(this_mac))
-                    .into_any_element()
-            }
+            Some(why) => v_flex()
+                .items_center()
+                .gap(px(6.))
+                .px(px(24.))
+                .child(note_line)
+                .child(
+                    div()
+                        .id("new-thread-cloud-warning")
+                        .text_center()
+                        .text_size(px(size::LABEL))
+                        .text_color(style::status_warning(cx))
+                        .child(why.clone())
+                        .tip(why),
+                )
+                .into_any_element(),
             None => note_line.into_any_element(),
         };
         let error = self.new_thread.error.clone();

@@ -82,6 +82,7 @@ export type ReminderDeps = {
   notify: (p: { id: string; title: string; dueDate: string; dueTime: string; when: string }) => void;
   // Queues the brief on the reminders thread, starting one if it's gone.
   send: (text: string) => void;
+  warn?: (msg: string, fields: Record<string, unknown>) => void;
   now?: () => number;
 };
 
@@ -101,7 +102,9 @@ export class TaskReminders {
   }
   start(): void {
     if (this.timer) return;
-    this.timer = setInterval(() => void this.tick(), TICK_MS);
+    this.timer = setInterval(() => {
+      this.tick().catch((e: unknown) => this.deps.warn?.('task reminders: tick failed', { error: e instanceof Error ? e.message : String(e) }));
+    }, TICK_MS);
     this.timer.unref?.();
   }
   stop(): void {
@@ -113,7 +116,16 @@ export class TaskReminders {
     this.running = true;
     try {
       const now = (this.deps.now ?? Date.now)();
-      if (this.dirty || now - this.readAt > REFRESH_MS) await this.read(now);
+      if (this.dirty || now - this.readAt > REFRESH_MS) {
+        // Offline or a busy backend: try again next tick. This runs on a timer,
+        // so a rejection here would be unhandled and restart the runner.
+        try {
+          await this.read(now);
+        } catch (e) {
+          this.deps.warn?.('task reminders: could not read tasks', { error: e instanceof Error ? e.message : String(e) });
+          return 0;
+        }
+      }
       const r = this.reminders;
       const email = r.channel !== 'none' && r.to !== '';
       if (!r.mac && !email) return 0;

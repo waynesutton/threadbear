@@ -414,7 +414,7 @@ impl Composer {
     }
 
     /// "+" > Folder > Choose… (ThreadSettings.chooseFolder).
-    pub(crate) fn choose_folder(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+    fn choose_folder(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         let paths = cx.prompt_for_paths(PathPromptOptions {
             files: false,
             directories: true,
