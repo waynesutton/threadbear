@@ -344,24 +344,6 @@ Feature: The Terminal
     Then the Terminal is put away
     And the transcript shows my message "Great. Clear out the old build folders too"
 
-  @terminal.panel @rail.right
-  Scenario: The optional rail button opens the same terminal as the keyboard
-    Given the thread "Rename the Settings tabs" works in a folder of its own
-    When I open the thread "Rename the Settings tabs"
-    Then the right rail has no "Terminal" button
-    When I open Settings on "general"
-    And I press "Add a Terminal button to the rail" in Settings
-    And I close the slash settings window
-    Then the right rail has a "Terminal" button
-    When I click "Terminal" in the right rail
-    Then the Terminal is showing a shell in the thread's folder
-    And the "Terminal" button in the right rail is lit
-    When I type "printf 'rail-kept-shell\n'" and press Return in the Terminal
-    Then the Terminal shows the line "rail-kept-shell"
-    When I press ⌘J
-    And I click "Terminal" in the right rail
-    Then the Terminal shows the line "rail-kept-shell"
-
   # Terminal.app's keys and comforts, where Threadbear's own keys don't
   # already have them (⌘K is Open Anything, so ⌘L clears). The GPUI app's;
   # the frozen Swift app doesn't get new features.

@@ -77,8 +77,6 @@ pub struct Saved {
     pub slash_return_runs: Option<bool>,
     /// Use the full palette for skills named inside a message (default on).
     pub inline_skill_palette: Option<bool>,
-    /// An optional rail button for the existing Terminal drawer, off by default.
-    pub rail_terminal: Option<bool>,
     /// `activityLog` (ActivityRecorder): Settings > General's Keep an
     /// activity log (activity.rs). Off until it's turned on.
     pub activity_log: Option<bool>,

@@ -846,7 +846,6 @@ impl SettingsWindow {
             self.files_section(cx),
             self.slash_section(cx),
             self.turn_modes_section(cx),
-            self.terminal_section(cx),
             self.quitting_section(cx),
             self.look_section(cx),
             self.notifications_section(cx),
@@ -1476,21 +1475,6 @@ impl SettingsWindow {
             rows,
             cx,
         )
-    }
-
-    /// The rail button opens the very same drawer as the Terminal shortcut.
-    fn terminal_section(&mut self, cx: &mut Context<Self>) -> AnyElement {
-        let on = self
-            .app
-            .upgrade()
-            .is_some_and(|a| a.read(cx).settings.saved.rail_terminal.unwrap_or(false));
-        let switch = self.switch("settings-rail-terminal", on, "Add a Terminal button to the rail beside Files. The keyboard shortcut works either way", cx, |this, on, cx| {
-            this.app.update(cx, |app, cx| {
-                app.settings.saved.rail_terminal = Some(on);
-                app.save_settings_soon(cx);
-            }).ok();
-        });
-        section("settings-terminal", "Terminal", "The Terminal opens under the thread. Add a button on the right-hand rail to open that same terminal with a click.", "change how the Terminal opens or looks.", vec![row("Show Terminal on the right-hand rail", switch, cx)], cx)
     }
 
     /// Show Notes (notes_page.rs), as the first row of Experiments: the

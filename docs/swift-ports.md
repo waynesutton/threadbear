@@ -29,7 +29,7 @@ editor and delivery were checked against their 18 runner tests.
 | 20 | 59336820 | Return allows the oldest waiting card | done |
 | 22 | 5e07e0c4 | Return fills a slash command in the box; a setting makes Return run it | done |
 | 23 | 7cd127cd | A close button on the slash palette | done |
-| 25 | aa01270d | Palette search field, Left/Right through categories, palette or list; optional Terminal rail button | done |
+| 25 | aa01270d | Palette search field, Left/Right through categories, palette or list; the optional Terminal rail button was later taken out, as Mike's app has none | done |
 | 12 | ae1dd28a | Store skills listed by plain name | done |
 | 14 | d3c96861 | Every listed skill turns blue in the box and links to its SKILL.md | done |
 | 92 | 0a003c67 | Files open ready to type, autosave switch, unsaved dot, Save prompt | done |
@@ -39,8 +39,8 @@ editor and delivery were checked against their 18 runner tests.
 | 79 | 55498864 | Settings > Keyboard list full height | done: fills embedded Settings, fixed search/footer |
 
 The approval and slash palette batch passed 33 UI scenarios and 24 core checks.
-Item 25 also has its optional Terminal rail button, opening the same drawer as
-the keyboard shortcut.
+Item 25's optional Terminal rail button has since been taken out: Mike's app
+has none, and ⌘J or ⌘` opens the same drawer.
 
 ## Terminal
 
@@ -196,7 +196,7 @@ against the GPUI app.
 | b79385cb | Web addresses in inline code are links | done: inline-code web links, common domains, file-path priority, fenced code unchanged |
 | ba5d5cfc | Standing instructions for every session | already: General instructions editor and runner standing-instruction delivery |
 | 58151848 | New Skill | done: write/edit with save errors retained |
-| 52e060a3 | Files and Terminal on the rail | done: Files rail; optional Terminal rail opens the same drawer |
+| 52e060a3 | Files and Terminal on the rail | done: Files rail; no Terminal rail button, as in Mike's app |
 | 0f5c08f0 | Notes, and Voice/skills/notes switches | done: Notes and Skills; Voice skipped |
 | 3d531d54 | Skills page | done: behind skillsStore; import, suggested, Always on, New Skill and Edit, remove |
 | f9f3c8e4 | Settings over the main panel | done: in the main panel, X/Esc/Back/gear closes; no own-window option |

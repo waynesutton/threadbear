@@ -931,18 +931,6 @@ impl Threadbear {
                 |this, _, cx| this.click_rail(shell::FILES, cx),
                 cx,
             ));
-            if self.settings.saved.rail_terminal.unwrap_or(false) {
-                column.push(rail_button(
-                    RailButton::new(
-                        "rail-terminal",
-                        "terminal",
-                        "Terminal",
-                        self.dock.read(cx).controller.is_showing(shell::TERMINAL),
-                    ),
-                    crate::terminal::toggle,
-                    cx,
-                ));
-            }
         }
         // Every Print, under Files (Wayne, 11 Nov), with how many.
         if self.shows_prints_rail(&thread) {
@@ -1074,9 +1062,6 @@ impl Threadbear {
             }
             if !project_page {
                 right.push(json!({ "title": "Files", "active": showing(shell::FILES) }));
-                if self.settings.saved.rail_terminal.unwrap_or(false) {
-                    right.push(json!({ "title": "Terminal", "active": showing(shell::TERMINAL) }));
-                }
             }
             if self.shows_prints_rail(&thread) {
                 right.push(json!({ "title": "Prints", "badge": threadbear_core::prints::rows::all(&self.prints.list).len(), "active": showing(shell::PRINTS) }));
