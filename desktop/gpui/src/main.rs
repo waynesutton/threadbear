@@ -41,6 +41,8 @@ mod bear_picker;
 mod bears;
 mod bears_panel;
 mod bears_sheets;
+#[cfg(unix)]
+mod browserbear_start;
 mod chips;
 mod code_colours;
 mod colour_space;

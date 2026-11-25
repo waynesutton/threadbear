@@ -431,6 +431,13 @@ Show window (which brings its real window to the front), and Select on page
 you use the page in its own window. An address typed at the top opens a new
 page in the agents' browser.
 
+You don't need Helium. Without it the agents' browser is Google Chrome with a
+folder and sign-ins of its own, apart from your profiles, and it needs no
+extension. If BrowserBear isn't running, the open pane starts it. If that fails
+the pane says so, with Try again. The pane can only start a BrowserBear whose
+`scripts/install.sh` has written `browserbear-service`, so an older install
+needs it run once more.
+
 Select on page pins the current thread, brings that page's real window forward,
 and turns on a temporary picker overlay in the page. Hover outlines an element,
 click picks it without navigating or submitting forms, scrolling keeps working

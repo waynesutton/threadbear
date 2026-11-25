@@ -1,5 +1,5 @@
 // The Browser pane: the pages a thread's agents are using through BrowserBear,
-// in the agents' own browser (Helium, in real windows behind Mike's) or in his
+// in the agents' own browser (Helium or Chrome, in real windows behind Mike's) or in his
 // own Chrome profiles. A port of the Swift app's AgentBrowserPanel.swift,
 // BrowserBearPipe.swift and BrowserBear.swift (docs/protocol/panels.md, "The Browser
 // panel"). Each row has a still of the page and Show window, which brings the
@@ -72,6 +72,20 @@ fn scripted() -> bool {
 /// BrowserBear's socket, when it's there.
 fn socket() -> Option<PathBuf> {
     HOME.as_deref().map(bear::socket).filter(|s| s.exists())
+}
+
+#[cfg(unix)]
+use crate::browserbear_start::{can_start, Starter};
+#[cfg(not(unix))]
+#[derive(Default)]
+struct Starter;
+#[cfg(not(unix))]
+impl Starter {
+    fn forget(&self) {}
+}
+#[cfg(not(unix))]
+fn can_start(_: &Path) -> bool {
+    false
 }
 
 /// tabs.json's bytes and what they say, when they differ from `last`. Only a
@@ -229,7 +243,7 @@ struct Slot {
 impl Pipe {
     /// Starts connecting; requests queue meanwhile. A failure shows as `dead`.
     #[cfg(unix)]
-    fn connect(path: PathBuf) -> Option<Pipe> {
+    fn connect(path: PathBuf, home: PathBuf, starter: Arc<Starter>, start: bool) -> Option<Pipe> {
         use std::io::{Read as _, Write as _};
         let waiting: Arc<Mutex<HashMap<u64, oneshot::Sender<Answer>>>> = Arc::default();
         let dead: Arc<Mutex<Option<String>>> = Arc::default();
@@ -253,12 +267,15 @@ impl Pipe {
         std::thread::Builder::new()
             .name("browserbear-write".into())
             .spawn(move || {
-                let connected = std::os::unix::net::UnixStream::connect(&path)
-                    .and_then(|s| Ok((s.try_clone()?, s.try_clone()?, s)));
+                let gone = || shared.lock().unwrap_or_else(|e| e.into_inner()).closed;
+                let connected = starter.connect(&home, &path, start, gone).and_then(|s| {
+                    let copy = || s.try_clone().map_err(|e| e.to_string());
+                    Ok((copy()?, copy()?, s))
+                });
                 still_connecting.store(false, std::sync::atomic::Ordering::SeqCst);
                 let (mut writing, mut reader, kept) = match connected {
                     Ok(c) => c,
-                    Err(e) => return die(format!("Couldn't reach BrowserBear: {e}")),
+                    Err(why) => return die(why),
                 };
                 {
                     let mut slot = shared.lock().unwrap_or_else(|e| e.into_inner());
@@ -346,7 +363,7 @@ impl Pipe {
     }
 
     #[cfg(not(unix))]
-    fn connect(_path: PathBuf) -> Option<Pipe> {
+    fn connect(_: PathBuf, _: PathBuf, _: Arc<Starter>, _: bool) -> Option<Pipe> {
         None
     }
 
@@ -451,6 +468,12 @@ pub(crate) struct AgentBrowser {
     profile_tabs: Vec<AgentTab>,
     port: i64,
     socket_there: bool,
+    /// Its service can be started, so the pane shows with no socket yet.
+    startable: bool,
+    /// A Browser pane was on show at the last read. Kept, as `showing` reads
+    /// the app's own entity and a request can come from inside its update.
+    on_show: bool,
+    starter: Arc<Starter>,
     pub(crate) browser_name: String,
     pub(crate) error: Option<String>,
     request_error: Option<String>,
@@ -542,7 +565,11 @@ impl AgentBrowser {
             profile_tabs: vec![],
             port: 0,
             socket_there: false,
-            browser_name: "Helium".into(),
+            startable: false,
+            on_show: false,
+            starter: Arc::default(),
+            // Until its host says which: Helium, or Google Chrome without it.
+            browser_name: "the agents' browser".into(),
             error: None,
             request_error: None,
             active_pick: None,
@@ -567,7 +594,7 @@ impl AgentBrowser {
 
     /// BrowserBear is on this Mac: the rail's Browser button shows.
     pub(crate) fn available(&self) -> bool {
-        self.port != 0 || self.socket_there
+        self.port != 0 || self.socket_there || self.startable
     }
 
     pub(crate) fn tabs_for(&self, thread: &str) -> Vec<AgentTab> {
@@ -581,12 +608,15 @@ impl AgentBrowser {
 
     fn read(&mut self, cx: &mut Context<Self>) {
         let Some(home) = HOME.clone() else { return };
-        if let Some(thread) = self.showing.as_ref().and_then(|f| f(cx)) {
+        let shown = self.showing.as_ref().and_then(|f| f(cx));
+        self.on_show = shown.is_some();
+        if let Some(thread) = shown {
             self.want_stills(&thread, cx);
         }
         let there = bear::socket(&home).exists();
-        if there != self.socket_there {
-            self.socket_there = there;
+        let startable = can_start(&home);
+        if (there, startable) != (self.socket_there, self.startable) {
+            (self.socket_there, self.startable) = (there, startable);
             self.generation += 1;
             cx.notify();
         }
@@ -652,7 +682,22 @@ impl AgentBrowser {
         self.merge(cx);
     }
 
-    fn connection(&mut self) -> Option<&mut Pipe> {
+    /// Try again, under an error: starts BrowserBear now if it's down.
+    pub(crate) fn retry(&mut self, cx: &mut Context<Self>) {
+        self.starter.forget();
+        self.on_show = true;
+        self.request_error = None;
+        self.set_error(None, cx);
+        if self.pipe.as_ref().is_some_and(|p| p.dead().is_some()) {
+            self.pipe = None;
+            self.polling = false;
+        }
+        self.poll_profiles(cx);
+    }
+
+    /// `start`: something on show or asked for needs it, so a service that's
+    /// down is started. A pane nobody has open never starts one.
+    fn connection(&mut self, start: bool) -> Option<&mut Pipe> {
         if self.pipe.is_none() {
             // One dropped while its connect was stuck: wait for that to return.
             if self
@@ -662,8 +707,12 @@ impl AgentBrowser {
             {
                 return None;
             }
-            let path = socket()?;
-            self.pipe = Pipe::connect(path);
+            let home = HOME.clone()?;
+            let path = bear::socket(&home);
+            if !self.socket_there && !start {
+                return None;
+            }
+            self.pipe = Pipe::connect(path, home, self.starter.clone(), start);
             self.pipe_serial += 1;
         }
         self.pipe.as_mut()
@@ -678,7 +727,9 @@ impl AgentBrowser {
         cx: &mut Context<Self>,
         done: impl FnOnce(&mut Self, Answer, &mut Context<Self>) + 'static,
     ) -> bool {
-        let Some(pipe) = self.connection() else {
+        let polled = matches!(cmd, "panelState" | "panelStill" | "panelPickLook");
+        let start = !polled || self.on_show;
+        let Some(pipe) = self.connection(start) else {
             return false;
         };
         let (_, rx) = pipe.request(cmd, args, thread);
@@ -923,7 +974,7 @@ impl AgentBrowser {
                 if b.pick_serial != serial || b.active_pick.is_none() {
                     return None;
                 }
-                let pipe = b.connection()?;
+                let pipe = b.connection(false)?;
                 let (_, rx) = pipe.request(
                     "panelPickLook",
                     json!({ "captureId": capture_id }),
@@ -1258,6 +1309,22 @@ impl SidePane {
                                     .text_color(p.secondary),
                             ),
                     ),
+            );
+        }
+        if error.is_some() {
+            let retry_model = model.clone();
+            pane = pane.child(
+                h_flex().flex_none().px(px(10.)).pb(px(6.)).child(
+                    PushButton::new(
+                        "browser-retry",
+                        "Try again",
+                        "Connect to BrowserBear again, starting it if it isn't running",
+                    )
+                    .small()
+                    .render(cx, move |_, _, cx| {
+                        retry_model.update(cx, |b, cx| b.retry(cx))
+                    }),
+                ),
             );
         }
         if tabs.is_empty() {
