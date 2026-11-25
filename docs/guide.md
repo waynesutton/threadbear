@@ -445,9 +445,12 @@ with. With it on, Show window and Select on page put the page's window next to
 Threadbear's, on whichever side of the screen has more room, and after a pick
 (or Escape in the page) Threadbear comes back to the front on the thread you
 picked for. Move or resize the page's window and it opens that way from then
-on. If there's no room beside Threadbear's window, or it's full screen, the
-page's window stays where it is. Only windows in the agents' own browser are
-moved, never your own Chrome's.
+on. If Threadbear's window leaves no room (it fills the screen, say), it's
+made narrower, its left edge staying where it is, and the page takes the space
+that opens up on the right; Threadbear's window isn't widened again after. On a
+screen too small for both, or when Threadbear is full screen, the page's window
+stays where it is. Only windows in the agents' own browser are moved, never
+your own Chrome's.
 
 Select on page pins the current thread, brings that page's real window forward,
 and turns on a temporary picker overlay in the page. Hover outlines an element,

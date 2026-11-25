@@ -530,8 +530,10 @@ pub(crate) fn model(cx: &App) -> Option<Entity<AgentBrowser>> {
     cx.try_global::<Browsers>().map(|b| b.0.clone())
 }
 
-/// Where a page's window goes beside this one, if there's room on its screen.
-fn place_beside(window: &Window, cx: &App) -> Option<bear::Place> {
+/// Where a page's window goes beside this one. With no room on its screen
+/// (it's as wide as the screen, say), this window is narrowed to make some,
+/// its left edge staying put; it isn't widened again after.
+fn place_beside(window: &mut Window, cx: &App) -> Option<bear::Place> {
     let place = |b: Bounds<Pixels>| bear::Place {
         left: f64::from(f32::from(b.origin.x)),
         top: f64::from(f32::from(b.origin.y)),
@@ -541,8 +543,17 @@ fn place_beside(window: &Window, cx: &App) -> Option<bear::Place> {
     if window.is_fullscreen() {
         return None;
     }
-    let screen = window.display(cx)?.bounds();
-    bear::beside(place(window.bounds()), place(screen))
+    let screen = place(window.display(cx)?.bounds());
+    let bounds = place(window.bounds());
+    if let Some(found) = bear::beside(bounds, screen) {
+        return Some(found);
+    }
+    let (width, found) = bear::make_room(bounds, screen)?;
+    // `resize` takes the content's size: narrow it by what the window loses.
+    let content = window.viewport_size();
+    let less = (bounds.width - width) as f32;
+    window.resize(gpui_kit::size(content.width - px(less), content.height));
+    Some(found)
 }
 
 pub(crate) const OPENING_KEY: &str = "open";

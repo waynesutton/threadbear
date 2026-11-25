@@ -298,6 +298,39 @@ pub fn beside(window: Place, screen: Place) -> Option<Place> {
     })
 }
 
+/// The narrowest the app's window is made to fit a page's beside it (its own
+/// least width).
+pub const APP_MIN_WIDTH: f64 = 760.;
+
+/// When `beside` has no room: how wide the app's `window` should become (its
+/// left edge kept) and where the page's window then goes, to its right. The
+/// page gets a little under half of what the two share. None when the screen
+/// can't hold both at a usable width, or the numbers make no sense.
+pub fn make_room(window: Place, screen: Place) -> Option<(f64, Place)> {
+    let left = window.left.max(screen.left);
+    let span = screen.left + screen.width - left;
+    if !(window.left.is_finite() && window.width.is_finite() && span.is_finite())
+        || span < APP_MIN_WIDTH + BESIDE_MIN_WIDTH
+    {
+        return None;
+    }
+    let page = (span * 0.45)
+        .clamp(BESIDE_MIN_WIDTH, BESIDE_MAX_WIDTH)
+        .min(span - APP_MIN_WIDTH)
+        .floor();
+    // The app's window fills what's left, but never grows.
+    let app = (span - page).min(window.width);
+    let place = beside(
+        Place {
+            left,
+            width: app,
+            ..window
+        },
+        screen,
+    )?;
+    Some((app, place))
+}
+
 impl Place {
     /// As BrowserBear takes it (`place` in panelShow and panelPick).
     pub fn json(&self) -> Value {
@@ -366,6 +399,84 @@ mod beside_tests {
         )
         .unwrap();
         assert_eq!((got.left, got.width), (1000., BESIDE_MAX_WIDTH));
+    }
+
+    #[test]
+    fn makes_room_when_the_app_fills_the_screen() {
+        let full = Place {
+            left: 0.,
+            top: 33.,
+            width: 1512.,
+            height: 949.,
+        };
+        let screen = Place {
+            left: 0.,
+            top: 0.,
+            width: 1512.,
+            height: 982.,
+        };
+        assert_eq!(beside(full, screen), None);
+        let (app, page) = make_room(full, screen).unwrap();
+        assert_eq!(app, 832.);
+        assert_eq!(
+            page,
+            Place {
+                left: 832.,
+                top: 33.,
+                width: 680.,
+                height: 949.
+            }
+        );
+        // Both still fit on the smallest screen that can hold them.
+        let small = Place {
+            width: 1240.,
+            ..screen
+        };
+        let (app, page) = make_room(
+            Place {
+                width: 1240.,
+                ..full
+            },
+            small,
+        )
+        .unwrap();
+        assert_eq!((app, page.left, page.width), (760., 760., 480.));
+        // And not on one that can't.
+        let tiny = Place {
+            width: 1200.,
+            ..screen
+        };
+        assert_eq!(
+            make_room(
+                Place {
+                    width: 1200.,
+                    ..full
+                },
+                tiny
+            ),
+            None
+        );
+        assert_eq!(
+            make_room(
+                Place {
+                    left: f64::NAN,
+                    ..full
+                },
+                screen
+            ),
+            None
+        );
+    }
+
+    #[test]
+    fn makes_room_from_where_the_window_starts() {
+        // 300 free on each side: too little for a page, so the app narrows
+        // and keeps its left edge.
+        let (app, page) = make_room(win(300., 1128.), SCREEN).unwrap();
+        assert_eq!(page.width, 642.);
+        assert_eq!(app, 1428. - 642.);
+        assert_eq!(page.left, 300. + app);
+        assert_eq!(page.left + page.width, 1728.);
     }
 
     #[test]

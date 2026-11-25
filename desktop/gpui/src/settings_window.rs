@@ -1373,7 +1373,7 @@ impl SettingsWindow {
         let switch = self.switch(
             "settings-browser-beside",
             on,
-            "Open an agent's page beside this window, and come back here after picking from it",
+            "Open an agent's page beside this window, narrowing this window if it leaves no room, and come back here after picking from it",
             cx,
             |this, on, cx| {
                 this.app
