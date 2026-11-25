@@ -1796,6 +1796,8 @@ export const purgeExpiredBoxes = internalMutation({
 // the provider deletes its kept box; past that the 6-hourly cron has it.
 const DELETE_AGAIN_MS = 20_000;
 const DELETE_TRIES = 15;
+// Long enough for a box archived at Delete to save or time out (SAVE_MS, ten minutes).
+const PUT_AWAY_TRIES = 40;
 
 /**
  * A deleted thread's box (boxes.ts deleteThread): expired now, its save
@@ -1803,15 +1805,15 @@ const DELETE_TRIES = 15;
  * purged without the second wait (each run carries `deleted` to purgeStep).
  */
 export const deleteNow = machines.internalMutation({
-  // `tries`: how often it has waited for a box being put away (one that had failed is archived first).
+  // `tries`: how often it has waited for a box being put away (deleteThread archives one still up).
   args: { boxId: v.id('boxes'), tries: v.optional(v.number()) },
   returns: v.null(),
   handler: async (machineCtx, { boxId, tries = 0 }) => {
     const ctx = machineCtx as unknown as MutationCtx;
     const row = await ctx.db.get('boxes', boxId);
     if (!row) return null;
-    if (row.boxState.kind === 'archiving' || row.boxState.kind === 'destroying') {
-      if (tries < DELETE_TRIES) await ctx.scheduler.runAfter(DELETE_AGAIN_MS, internal.boxService.deleteNow, { boxId, tries: tries + 1 });
+    if (row.boxState.kind === 'archiving' || row.boxState.kind === 'destroying' || row.boxState.kind === 'retiring') {
+      if (tries < PUT_AWAY_TRIES) await ctx.scheduler.runAfter(DELETE_AGAIN_MS, internal.boxService.deleteNow, { boxId, tries: tries + 1 });
       return null;
     }
     if (row.boxState.kind === 'gone' || row.boxState.kind === 'shelved') {

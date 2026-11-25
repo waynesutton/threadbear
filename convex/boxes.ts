@@ -1108,10 +1108,10 @@ export const archiveUnstarted = internalMutation({
   },
 });
 
-// The states an archived thread's box rests in: only from these is it
-// deleted. `failed` too (an unarchive whose new box couldn't start leaves
-// it there, its thread still archived): it's archived first.
-const DELETABLE: readonly string[] = ['gone', 'shelved', 'expired', 'failed'];
+// The states an archived thread's box is put away in already (or on its
+// way to), so deleting it doesn't archive it again: deleteNow waits out
+// archiving and destroying.
+const PUT_AWAY: readonly string[] = ['gone', 'shelved', 'expired', 'archiving', 'destroying'];
 
 /**
  * An archived thread on a virtual runner was deleted from the app. No box
@@ -1121,6 +1121,10 @@ const DELETABLE: readonly string[] = ['gone', 'shelved', 'expired', 'failed'];
  * its save, any kept box, its rows and its runner follow at once rather
  * than after deleteAfterDays twice over (boxService.ts deleteNow, whose
  * runs carry `deleted` to purgeStep). The main Mac's key only.
+ *
+ * Its box may still be up: archiving leaves it a minute (ARCHIVE_GRACE_MS)
+ * before archiveIfStill puts it away, and an unarchive that failed leaves
+ * it failed. It's archived here, and deleteNow waits for it.
  */
 export const deleteThread = mutation({
   args: { key: v.string(), threadId: v.string() },
@@ -1129,13 +1133,9 @@ export const deleteThread = mutation({
     await runnerAuth(ctx, key, 'deleteThread');
     const row = await boxOf(ctx, threadId);
     const thread = await ctx.db.query('threads').withIndex('by_threadId', (q) => q.eq('threadId', threadId)).unique();
-    const archived = !thread || thread.view === 'den';
-    if (!DELETABLE.includes(row.boxState.kind) || !archived) {
-      const putAway = archived && ['archiving', 'destroying'].includes(row.boxState.kind);
-      throw conflict(putAway ? 'Its machine is still being put away. Try again in a minute.' : 'Archive it first, then delete it.');
-    }
+    if (thread && thread.view !== 'den') throw conflict('Archive it first, then delete it.');
     await failExpiredRun(ctx, row.runnerId);
-    if (row.boxState.kind === 'failed' && !(await archive(ctx, row))) throw conflict('Its machine is still being put away. Try again in a minute.');
+    if (!PUT_AWAY.includes(row.boxState.kind) && !(await archive(ctx, row))) throw conflict('Its machine is still being put away. Try again in a minute.');
     const index = await ctx.db.query('threadIndex').withIndex('by_runner_thread', (q) => q.eq('runnerId', row.runnerId).eq('threadId', threadId)).unique();
     if (index && !index.deleted) await ctx.db.patch('threadIndex', index._id, { deleted: true, updatedMs: Date.now() });
     await ctx.scheduler.runAfter(0, internal.boxService.deleteNow, { boxId: row._id });

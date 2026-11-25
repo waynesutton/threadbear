@@ -200,6 +200,8 @@ test("a thread that isn't archived, or another key's ask, deletes nothing", asyn
   const w = await world();
   const asleep = await w.box(1, { kind: 'asleep', since: Date.now() });
   const gone = await w.box(2, { kind: 'gone', at: Date.now() });
+  const t = w.rows('threads').find((r) => r.threadId === asleep.threadId)!;
+  await w.ctx.db.patch(t._id, { view: 'inbox' });
   w.scheduled.length = 0;
   await assert.rejects(call(w.ctx, boxes.deleteThread, { key: 'owner-key', threadId: asleep.threadId }), (e: { data?: { message?: string } }) => /Archive it first/.test(e?.data?.message ?? ''));
   await assert.rejects(call(w.ctx, boxes.deleteThread, { key: 'not-the-owner', threadId: gone.threadId }));
@@ -236,3 +238,30 @@ test("a failed box whose thread isn't archived is left alone", async () => {
   await assert.rejects(call(w.ctx, boxes.deleteThread, { key: 'owner-key', threadId: failed.threadId }), (e: { data?: { message?: string } }) => /Archive it first/.test(e?.data?.message ?? ''));
   assert.equal(w.rows('boxes')[0]?.boxState.kind, 'failed');
 });
+
+// Archiving leaves the box up for a minute (boxHooks.ts ARCHIVE_GRACE_MS)
+// before it's put away, so Delete straight after Archive found it awake or
+// asleep and said "Archive it first, then delete it." of a thread that was
+// archived (Wayne's fork, 25 Nov 2026). It's put away there and then instead.
+for (const [state, after] of [
+  [{ kind: 'asleep', since: 1 }, 'destroying'],
+  [{ kind: 'awake', since: 1, leaseUntil: Date.now() + 300_000 }, 'archiving'],
+  [{ kind: 'retiring', since: 1, attempts: [] }, 'retiring'],
+] as const) {
+  test(`an archived thread whose box is still ${state.kind} is put away, then deleted`, async () => {
+    process.env.RUNNER_KEY = 'owner-key';
+    const w = await world();
+    const b = await w.box(1, state);
+    await fitIndex(w);
+    w.scheduled.length = 0;
+    await call(w.ctx, boxes.deleteThread, { key: 'owner-key', threadId: b.threadId });
+    assert.equal(w.rows('boxes')[0]?.boxState.kind, after);
+    assert.equal(w.rows('threadIndex').find((r) => r.threadId === b.threadId)?.deleted, true);
+    await deleteAll(w);
+    assert.equal(w.rows('boxes').length, 1, 'it waits while the box is put away');
+    await w.ctx.db.patch(b.id, { boxState: { kind: 'gone', at: Date.now() } });
+    await call(w.ctx, boxService.deleteNow, { boxId: b.id, tries: 1 });
+    await deleteAll(w);
+    assert.equal(w.rows('boxes').length, 0);
+  });
+}
