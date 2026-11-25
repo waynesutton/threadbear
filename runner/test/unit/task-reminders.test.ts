@@ -85,7 +85,7 @@ test('offline: a failed read never rejects, and the next tick tries again', asyn
   const notified: string[] = [];
   const r = new TaskReminders({
     enabled: () => true,
-    apiVersion: () => 88,
+    apiVersion: () => 107,
     now: () => at('2026-11-20T09:30:30'),
     call: async (op) => {
       if (!online) throw new Error('fetch failed (ENOTFOUND)');
