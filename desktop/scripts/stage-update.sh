@@ -86,7 +86,10 @@ echo $$ >"$LOCK/pid"
 PHASE="$CACHE/phase"
 rm -f "$PHASE"
 KEEP_PHASE=""
-set_phase() { printf '%s\n' "$*" >"$PHASE.tmp" && mv -f "$PHASE.tmp" "$PHASE"; }
+# A temp file of each writer's own: the watcher below and the script both
+# write the phase, and one's mv must never find the other's tmp gone.
+PHASE_TMP="$PHASE.tmp"
+set_phase() { printf '%s\n' "$*" >"$PHASE_TMP" && mv -f "$PHASE_TMP" "$PHASE"; }
 trap '[[ -n "$KEEP_PHASE" ]] || rm -f "$PHASE"; rm -rf "$LOCK"' EXIT
 
 MAIN="$(git -C "$CHECKOUT" rev-parse --verify -q refs/heads/main)" || { echo "$CHECKOUT has no main branch." >&2; exit 2; }
@@ -168,8 +171,12 @@ if [[ -n "$HOSTS" ]]; then
   # run says. A queued run (try 0) is queued until the host starts it, with
   # how many runs the host's lock says are ahead; a try is building at once,
   # as it either has the host or gives up.
+  # Its stop is taken between writes, never during one: killed mid-write it
+  # left an orphan mv that landed a stale phase after the script's own (25
+  # Nov, under load). The sleep is waited on so the stop needn't wait 5s.
   watch_phase() {
-    local started="" ahead line
+    local started="" ahead line nap="" PHASE_TMP="$PHASE.tmp.watch"
+    trap '[[ -z "$nap" ]] || kill "$nap" 2>/dev/null; exit 0' TERM
     while :; do
       if [[ -z "$started" ]] && { [[ "$2" == 1 ]] || grep -q '^BUILD_STARTED' "$out" 2>/dev/null; }; then
         started=1
@@ -180,7 +187,10 @@ if [[ -n "$HOSTS" ]]; then
         [[ -f "$PHASE" ]] && read -r _ _ since _ <"$PHASE" 2>/dev/null || since="$(date +%s)"
         set_phase queued "$1" "${since:-$(date +%s)}" "${ahead:-0}"
       fi
-      sleep 5
+      sleep 5 &
+      nap=$!
+      wait "$nap" || true
+      nap=""
     done
   }
   # build_on <host> <try>: 1 tries the leases and gives up (75) if busy, 0
