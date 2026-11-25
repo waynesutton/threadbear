@@ -4490,7 +4490,7 @@ export class ConvexSync {
   private boxSuperseded(): void {
     if (this.superseded) return;
     this.superseded = true;
-    this.deps.log.warn("convex turned down this box's key: a newer box has the thread, so this one stops", { runnerId: this.runnerId });
+    this.deps.log.warn("convex turned down this box's key (its thread was archived, or a newer box has it), so this one stops", { runnerId: this.runnerId });
     this.heartbeatTimer?.cancel();
     this.deps.box?.superseded();
   }

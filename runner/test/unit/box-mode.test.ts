@@ -486,7 +486,7 @@ test('the real runner in box mode: its kept key, its machine in the heartbeat, a
   });
   server.close();
   assert.equal(code, 0, out.slice(-3000));
-  assert.match(out, /a newer box has the thread/);
+  assert.match(out, /a newer box has it/);
   // No second exchange: the boot token was used up by the first start.
   assert.equal(seen.filter((c) => c.path === 'boxes:exchange').length, 0);
   const hb = seen.find((c) => c.path === 'sync:heartbeat');

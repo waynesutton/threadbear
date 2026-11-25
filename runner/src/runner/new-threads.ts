@@ -24,6 +24,9 @@ import { cutSafely } from '../safe-cut.ts';
 import { experimentOn } from '../experiments.ts';
 import { parseFastQuery } from '../fast-lane.ts';
 
+// What a box's thread says when it was made again (boxThreadLost).
+export const BOX_THREAD_LOST_NOTE = "This thread's earlier messages are gone: its last cloud machine stopped before it saved them. It carries on here in a fresh copy of the repo.";
+
 export const newThreadsPart = {
   create(this: Runner, params: {
     text: string;
@@ -118,6 +121,30 @@ export const newThreadsPart = {
     if (loginNote) this.emit(st, { type: 'system.note', text: loginNote, login: true }, st.rt.turn?.turnId ?? turnId);
     if (!st.rec.titleSet && params.text?.trim()) void this.titleFromModel(st, params.text);
     return { thread: this.summary(st), turnId };
+  },
+
+  // Box mode: the box's thread never reached it. Its last box stopped
+  // before it saved anything, so this one started with nothing to restore,
+  // and the create was that box's. Before, it said there was nothing to
+  // save every time it was asked, so it never slept and ran until its
+  // day's hours were up. The thread is made again here as it was named,
+  // with no turn and a note saying what was lost, so it saves and sleeps,
+  // and the next message carries on from it.
+  boxThreadLost(this: Runner, params: { id: string; cwd: string; title?: string; model?: string; permissionMode?: PermissionMode }): ThreadSummary {
+    const { st } = this.makeThread({
+      text: params.title?.trim() || 'Cloud thread',
+      id: params.id,
+      cwd: params.cwd,
+      accountId: 'claude-main',
+      ...(params.title?.trim() ? { title: params.title } : {}),
+      ...(params.model ? { model: params.model } : {}),
+      ...(params.permissionMode ? { permissionMode: params.permissionMode } : {}),
+      worktree: false,
+      keepPick: true,
+    });
+    this.emit(st, { type: 'system.note', text: BOX_THREAD_LOST_NOTE });
+    this.markDirty(st);
+    return this.summary(st);
   },
 
   // A quick ask the phone already answered out loud (docs/protocol/moves.md, Sync,

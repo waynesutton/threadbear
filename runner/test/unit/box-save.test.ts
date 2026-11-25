@@ -695,3 +695,28 @@ test("a save's hold stops a patch's live poll from running its functions and the
   await q;
   assert.equal(h.runner['patchReads'].size, 0, 'no read of its patches outlives the stop');
 });
+
+// A box started for a thread its last box never saved: nothing to restore,
+// and the create was the last box's. Before, every save it was asked for
+// failed ("The box's thread isn't here"), so it never slept and ran until its
+// day's hours were up (Wayne's fork, 25 Nov 2026). The thread is made again,
+// under its title, with a note; it saves, and the next box restores it.
+test("a box whose thread never reached it makes it again, so it saves and the next box has it", async () => {
+  const origin = originRepo();
+  const a = await boxOn(origin, null);
+  assert.throws(() => a.h.runner.get(THREAD));
+  a.h.runner.boxThreadLost({ id: THREAD, cwd: a.folder.cwd, title: 'Test message', permissionMode: 'full' });
+  const t = a.h.runner.get(THREAD);
+  assert.equal(t.title, 'Test message');
+  assert.equal(t.cwd, a.folder.cwd);
+  assert.equal(a.h.adapter.sessions.length, 0, 'no turn runs');
+  const backend = fakeBackend();
+  await save(a.h, a, backend);
+  assert.deepEqual(backend.calls.map((c) => c.fn), ['sync:iconUploadUrl', 'boxes:boxSaved']);
+  const [url, sealed] = [...backend.stored][0]!;
+  const b = await boxOn(origin, { url, at: Date.now(), bytes: sealed.length }, backend.stored);
+  assert.equal(b.folder.restored, true);
+  assert.equal(b.h.runner.get(THREAD).title, 'Test message');
+  const events = b.h.runner.events(THREAD, {}).events as { type: string; text?: string }[];
+  assert.ok(events.some((e) => e.type === 'system.note' && /earlier messages are gone/.test(e.text ?? '')), 'it says what was lost');
+});

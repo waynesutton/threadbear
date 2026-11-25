@@ -984,7 +984,7 @@ async function main(): Promise<void> {
   const boxSuperseded = () => {
     if (supersededWanted) return;
     supersededWanted = true;
-    log.warn("box: the backend turned this box's key down, so a newer box has the thread; stopping");
+    log.warn("box: the backend turned this box's key down (its thread was archived, or a newer box has it); stopping");
     stopRef?.('superseded');
   };
   // The backend's `save` (box-save.ts): its own calls, on the box key. Once
@@ -1040,6 +1040,15 @@ async function main(): Promise<void> {
     if (!box || !boxPost || !saveHold || threadId !== box.secrets.threadId) throw new Error("That isn't this box's thread.");
     // A degraded box saves nothing: what it has may be all there is of the work.
     if (box.broken) throw new Error(`This box can't save its thread: ${box.broken}`);
+    // Its thread never reached it (its last box stopped before saving):
+    // made again from its row, so there's something to save and it sleeps.
+    if (!runner.threads.has(threadId)) {
+      const rows = (await boxPost('query', 'sync:threadsOf', { key: box.secrets.boxKey, runnerId: box.secrets.runnerId }).catch(() => [])) as { threadId?: string; title?: string; model?: string; permissionMode?: string }[];
+      const row = Array.isArray(rows) ? rows.find((r) => r.threadId === threadId) : undefined;
+      const mode = row?.permissionMode === 'full' || row?.permissionMode === 'ask' || row?.permissionMode === 'auto' ? row.permissionMode : undefined;
+      runner.boxThreadLost({ id: threadId, cwd: box.cwd, ...(row?.title ? { title: row.title } : {}), ...(row?.model ? { model: row.model } : {}), ...(mode ? { permissionMode: mode } : {}) });
+      log.warn("box: its thread wasn't here (its last box never saved it), so it was made again to save", { threadId });
+    }
     try {
       return await saveThread({ home: cfg.home, claudeDir: cfg.claudeMainDir, threadId, threadKey: box.threadKey, boxKey: box.secrets.boxKey, quiesce: (id) => runner.quiesceForSave(id, { stopOthers }), hold: saveHold, asSave, beforeSaved: () => sync.flushAll(), post: boxPost, upload: convexUploader() });
     } catch (e) {
