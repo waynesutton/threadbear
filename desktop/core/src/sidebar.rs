@@ -172,6 +172,24 @@ impl RowAction {
         !(self == RowAction::Delete && t.is_remote())
     }
 
+    /// `enabled`, knowing whether the thread is on a virtual runner
+    /// (`RemoteRunner.box`): an archived one of those can be deleted from
+    /// here, as there's no Mac to delete it on. The backend deletes its
+    /// save, any kept machine and its rows (convex/boxes.ts deleteThread).
+    pub fn enabled_on(self, t: &ThreadSummary, on_box: bool) -> bool {
+        self.enabled(t) || (self == RowAction::Delete && on_box)
+    }
+
+    /// What the dialog says Delete does: a virtual runner's thread has no
+    /// trash to go to.
+    pub fn delete_warning(on_box: bool) -> &'static str {
+        if on_box {
+            "This removes the chat, its saved copy and its cloud machine. It can't be undone."
+        } else {
+            "This removes the chat from Threadbear and moves it to the runner's trash. It can't be undone in the app."
+        }
+    }
+
     /// Its SF Symbol, which `gpui/src/icons.rs` maps to the bundled icon.
     pub fn symbol(self, t: &ThreadSummary) -> &'static str {
         match self {
@@ -1911,6 +1929,13 @@ mod tests {
             "Delete it on the Mac it runs on"
         );
         assert_eq!(RowAction::Delete.tip(&plain), "Delete chat…");
+        // A virtual runner's thread has no Mac to delete it on: the backend
+        // deletes it, so its trash works. Nothing else changes for it.
+        assert!(RowAction::Delete.enabled_on(&elsewhere, true));
+        assert!(!RowAction::Delete.enabled_on(&elsewhere, false));
+        assert!(RowAction::Delete.enabled_on(&plain, false));
+        assert!(RowAction::delete_warning(true).contains("cloud machine"));
+        assert!(RowAction::delete_warning(false).contains("trash"));
     }
 
     #[test]

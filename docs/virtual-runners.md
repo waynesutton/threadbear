@@ -62,6 +62,9 @@ end says what moved and why.
   with a line in the transcript saying so and what (if anything) was lost.
 - Archiving the thread deletes its box and, after `deleteAfterDays`, its
   save.
+- Deleting an archived thread from the Mac app deletes its save, any box
+  kept for it, and its rows at once (`boxes:deleteThread`, the main Mac's
+  key only), rather than after `deleteAfterDays` twice over.
 - **Move to** works both ways between a Mac and a virtual runner, with the
   same transcript, branch and uncommitted changes as any other move.
 - Settings › Runners has a section per virtual runner: the provider, the

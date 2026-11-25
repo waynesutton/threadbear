@@ -48,7 +48,7 @@ export const THREAD_REQUESTS: Record<string, Row> = {
   'threads.contextUsage': { what: 'What fills its context', relay: { no: "Asked of the CLI on that Mac; the ring's popover there shows the totals only." }, phone: { no: 'Not on the phone.' } },
   'threads.tickAsk': { what: 'Ticking an ask on the card', relay: { no: 'Ticks stay on that Mac.' }, phone: { no: 'The phone sends picks with its answer instead.' } },
   'threads.edit': { what: 'Editing a message', relay: { no: 'It undoes file changes on that Mac, so it waits for a way to show what it undid.' }, phone: { no: 'Not on the phone.' } },
-  'threads.delete': { what: 'Deleting it', relay: { no: 'Done on that Mac.' }, phone: { no: 'Not on the phone.' } },
+  'threads.delete': { what: 'Deleting it', relay: { no: "Done on that Mac. A virtual runner's archived thread is deleted by the backend (boxes:deleteThread)." }, phone: { no: 'Not on the phone.' } },
   'threads.highlights': { what: 'Its highlights', relay: { no: 'Highlights are files on that Mac.' }, phone: { no: 'Not on the phone.' } },
   'threads.removeHighlight': { what: 'Removing a highlight', relay: { no: 'Highlights are files on that Mac.' }, phone: { no: 'Not on the phone.' } },
   'threads.explain': { what: 'Explain', relay: { no: 'Runs a model on that Mac.' }, phone: { no: 'Not on the phone.' } },

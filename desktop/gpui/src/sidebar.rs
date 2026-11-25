@@ -1279,11 +1279,16 @@ impl Threadbear {
     /// Delete on another runner's thread names the Mac to delete it on.
     pub(crate) fn row_action_tip(&self, action: RowAction, t: &ThreadSummary) -> String {
         match t.runner_id.as_deref() {
-            Some(runner) if !action.enabled(t) => {
+            Some(runner) if !action.enabled_on(t, self.on_box(t)) => {
                 format!("Delete it on {}", self.runner_name_of(runner))
             }
             _ => action.tip(t).to_owned(),
         }
+    }
+
+    /// Whether the thread is on a virtual runner (`RemoteRunner.box`).
+    fn on_box(&self, t: &ThreadSummary) -> bool {
+        self.remote.box_of(t.runner_id.as_deref()).is_some()
     }
 
     /// Delete from the sidebar, only for an archived chat, after asking
@@ -1297,7 +1302,8 @@ impl Threadbear {
         let Some(thread) = self.threads.get(&id) else {
             return;
         };
-        if !thread.is_archived() || !RowAction::Delete.enabled(thread) {
+        let on_box = self.on_box(thread);
+        if !thread.is_archived() || !RowAction::Delete.enabled_on(thread, on_box) {
             return;
         }
         let title = format!("Delete \u{201C}{}\u{201D}?", thread.title);
@@ -1306,9 +1312,13 @@ impl Threadbear {
             let (entity, id, busy_key) = (entity.clone(), id.clone(), busy_key.clone());
             alert
                 .title(title.clone())
-                .description("This removes the chat from Threadbear and moves it to the runner's trash. It can't be undone in the app.")
+                .description(RowAction::delete_warning(on_box))
                 .show_cancel(true)
-                .button_props(DialogButtonProps::default().ok_text("Delete").show_cancel(true))
+                .button_props(
+                    DialogButtonProps::default()
+                        .ok_text("Delete")
+                        .show_cancel(true),
+                )
                 .on_ok(move |_, _, cx| {
                     let (id, busy_key) = (id.clone(), busy_key.clone());
                     entity
@@ -1563,7 +1573,8 @@ impl Threadbear {
             ));
             // Another runner's thread can't be deleted through Convex
             // (runner/src/parity.ts): greyed out, naming where it can be.
-            match t.runner_id.as_deref() {
+            // A virtual runner's thread has no such Mac: the backend deletes it.
+            match t.runner_id.as_deref().filter(|_| !self.on_box(t)) {
                 Some(runner) => rows.push(
                     MenuRow::item(
                         format!("Delete on {}", self.runner_name_of(runner)),
@@ -3379,7 +3390,12 @@ impl Threadbear {
         let id = t.id.clone();
         let mut row = h_flex().gap(px(2.));
         for action in actions {
-            let tip = action.tip(t);
+            // A virtual runner's thread is deleted from here (`enabled_on`).
+            let tip = if *action == RowAction::Delete && self.on_box(t) {
+                "Delete chat…"
+            } else {
+                action.tip(t)
+            };
             let symbol = action.symbol(t);
             let key = ElementId::Name(format!("{tip}:{id}").into());
             let button: AnyElement = match action {
@@ -3457,7 +3473,7 @@ impl Threadbear {
                 }
                 RowAction::Delete => {
                     let busy_key = format!("delete:{id}");
-                    if !action.enabled(t) {
+                    if !action.enabled_on(t, self.on_box(t)) {
                         // Greyed out, no click: the tip says where it can be deleted.
                         tipped!(
                             div()

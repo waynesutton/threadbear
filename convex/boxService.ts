@@ -1792,12 +1792,58 @@ export const purgeExpiredBoxes = internalMutation({
   },
 });
 
+// How often, and how many times, a deleted thread's purge looks again while
+// the provider deletes its kept box; past that the 6-hourly cron has it.
+const DELETE_AGAIN_MS = 20_000;
+const DELETE_TRIES = 15;
+
+/**
+ * A deleted thread's box (boxes.ts deleteThread): expired now, its save
+ * deleted in the same step as pruneSaves does at deleteAfterDays, then
+ * purged without the second wait (purgeStep reads deletedAt).
+ */
+export const deleteNow = machines.internalMutation({
+  args: { boxId: v.id('boxes') },
+  returns: v.null(),
+  handler: async (machineCtx, { boxId }) => {
+    const ctx = machineCtx as unknown as MutationCtx;
+    const row = await ctx.db.get('boxes', boxId);
+    if (!row || row.deletedAt === undefined) return null;
+    if (row.boxState.kind === 'gone' || row.boxState.kind === 'shelved') {
+      const save = row.save?.storageId;
+      if ((await boxMachine.send(machineCtx, boxId, { type: 'EXPIRE' })).status !== 'done') return null;
+      if (save) await deleteIfUnused(ctx, save);
+    }
+    await ctx.scheduler.runAfter(0, internal.boxService.purgeDeleted, { boxId, tries: 0 });
+    return null;
+  },
+});
+
+/** The deleted thread's rows, as purgeExpiredBoxes does an expired one's: its kept box first, looked at again until it's gone. */
+export const purgeDeleted = internalMutation({
+  args: { boxId: v.id('boxes'), tries: v.number() },
+  returns: v.null(),
+  handler: async (ctx, { boxId, tries }) => {
+    const row = await ctx.db.get('boxes', boxId);
+    if (!row || row.deletedAt === undefined) return null;
+    const next = await purgeStep(ctx, row, Date.now());
+    if (next === 'purge') {
+      await ctx.scheduler.runAfter(0, internal.boxService.purgeBox, { boxId });
+      return null;
+    }
+    if (next === 'destroy' && tries === 0) await ctx.scheduler.runAfter(0, internal.boxService.destroyBox, { boxId });
+    if (tries < DELETE_TRIES) await ctx.scheduler.runAfter(DELETE_AGAIN_MS, internal.boxService.purgeDeleted, { boxId, tries: tries + 1 });
+    return null;
+  },
+});
+
 // What becomes of an expired box now: nothing yet, its provider box deleted
 // first, or purged.
 async function purgeStep(ctx: MutationCtx, row: Doc<'boxes'>, now: number): Promise<'wait' | 'destroy' | 'purge'> {
   if (row.boxState.kind !== 'expired' || (row.op && row.op.until > now)) return 'wait';
   const days = (await ctx.db.get('runnerServices', row.serviceId))?.limits.deleteAfterDays ?? BOX_LIMITS.deleteAfterDays;
-  if (row.boxState.at > now - days * DAY_MS) return 'wait';
+  // A thread Mike deleted doesn't wait out its days (boxes.ts deleteThread).
+  if (row.deletedAt === undefined && row.boxState.at > now - days * DAY_MS) return 'wait';
   if (row.providerBoxId !== undefined) return 'destroy';
   // Seen running lately (an unadopted machine): the reaper deletes it first.
   if (row.seenRunningAt !== undefined && row.seenRunningAt > now - DAY_MS) return 'wait';

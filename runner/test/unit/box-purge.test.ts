@@ -132,3 +132,76 @@ test('nothing expired, nothing scheduled', async () => {
   assert.equal(w.scheduled.length, 0);
   assert.equal(w.rows('boxes').length, 1);
 });
+
+// Deleting an archived thread on a virtual runner from the app (boxes.ts
+// deleteThread): before, Delete was greyed out for it ("Delete it on the Mac
+// it runs on", and there's no such Mac), so it stayed in Archived for its
+// virtual runner's deleteAfterDays twice over (Wayne's fork, 24 Nov 2026).
+// world()'s sidebar rows carry a thread row's fields; one that's patched must fit the schema.
+async function fitIndex(w: Awaited<ReturnType<typeof world>>) {
+  for (const r of w.rows('threadIndex')) await w.ctx.db.patch(r._id, { lastActivityMs: undefined, needsYou: false, unread: false } as never);
+}
+
+const DELETE_RUNS = /deleteNow|purgeDeleted|purgeBox|forgetBox|dropThreadRows|failExpired/;
+
+async function deleteAll(w: Awaited<ReturnType<typeof world>>) {
+  w.destroys = [];
+  for (let runs = 0; runs < 200; runs++) {
+    for (const x of w.scheduled as { fn: string; args: Record<string, unknown> }[]) if (/destroyBox/.test(x.fn)) w.destroys.push(x.args.boxId as string);
+    for (let j = w.scheduled.length - 1; j >= 0; j--) if (/destroyBox|storage|deleteIfUnused/i.test((w.scheduled[j] as any).fn) && !DELETE_RUNS.test((w.scheduled[j] as any).fn)) w.scheduled.splice(j, 1);
+    const i = w.scheduled.findIndex((x: any) => DELETE_RUNS.test(x.fn));
+    if (i < 0) return runs;
+    const [next] = w.scheduled.splice(i, 1) as { fn: string; args: Record<string, unknown> }[];
+    await call(w.ctx, fnFor(next!.fn), next!.args);
+  }
+  throw new Error('the delete never finished');
+}
+
+test('deleting an archived thread on a virtual runner takes its rows and runner at once, and no other', async () => {
+  process.env.RUNNER_KEY = 'owner-key';
+  const w = await world();
+  const now = Date.now();
+  const mine = await w.box(1, { kind: 'gone', at: now - 60_000 });
+  const other = await w.box(2, { kind: 'gone', at: now - 60_000 });
+  await fitIndex(w);
+  w.scheduled.length = 0;
+  await call(w.ctx, boxes.deleteThread, { key: 'owner-key', threadId: mine.threadId });
+  // Its sidebar row is a tombstone at once, so the app drops it before the rest goes.
+  assert.equal(w.rows('threadIndex').find((r) => r.threadId === mine.threadId)?.deleted, true);
+  await deleteAll(w);
+  assert.deepEqual(w.rows('boxes').map((r) => r._id), [other.id]);
+  assert.deepEqual(w.rows('runners').map((r) => r.runnerId).sort(), ['mac000000001', other.runnerId].sort());
+  for (const table of ['threads', 'threadIndex', 'messages'] as const) {
+    assert.ok(!w.rows(table).some((r) => r.runnerId === mine.runnerId), `its ${table} went`);
+    assert.ok(w.rows(table).some((r) => r.runnerId === other.runnerId), `the other thread's ${table} stayed`);
+  }
+});
+
+test('a deleted thread whose box was kept has that box deleted first', async () => {
+  process.env.RUNNER_KEY = 'owner-key';
+  const w = await world();
+  const kept = await w.box(1, { kind: 'shelved', at: Date.now() - 60_000 }, { providerBoxId: 'm-kept' });
+  await fitIndex(w);
+  w.scheduled.length = 0;
+  await call(w.ctx, boxes.deleteThread, { key: 'owner-key', threadId: kept.threadId });
+  await deleteAll(w);
+  assert.ok(w.destroys.includes(kept.id), 'the provider is asked to delete its box');
+  assert.equal(w.rows('boxes')[0]?.boxState.kind, 'expired');
+  // The provider says it's gone (DESTROYED clears providerBoxId): the next look purges it.
+  await w.ctx.db.patch(kept.id, { providerBoxId: undefined });
+  await call(w.ctx, boxService.purgeDeleted, { boxId: kept.id, tries: 1 });
+  await deleteAll(w);
+  assert.equal(w.rows('boxes').length, 0);
+});
+
+test("a thread that isn't archived, or another key's ask, deletes nothing", async () => {
+  process.env.RUNNER_KEY = 'owner-key';
+  const w = await world();
+  const asleep = await w.box(1, { kind: 'asleep', since: Date.now() });
+  const gone = await w.box(2, { kind: 'gone', at: Date.now() });
+  w.scheduled.length = 0;
+  await assert.rejects(call(w.ctx, boxes.deleteThread, { key: 'owner-key', threadId: asleep.threadId }), (e: any) => /Archive it first/.test(e?.data?.message ?? ''));
+  await assert.rejects(call(w.ctx, boxes.deleteThread, { key: 'not-the-owner', threadId: gone.threadId }));
+  assert.equal(w.scheduled.length, 0);
+  assert.equal(w.rows('boxes').length, 2);
+});

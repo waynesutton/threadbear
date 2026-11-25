@@ -1713,6 +1713,7 @@ async function main(): Promise<void> {
     readPicture: (file) => readShareImage(file, paths.inbox(cfg.home)),
     subscribed: (threadId) => rpcServer?.isSubscribed(threadId) ?? false,
     publish: (n) => rpcServer?.notifyClients(n),
+    deleteBoxThread: (threadId) => sync.ownerCall('mutation', 'boxes:deleteThread', { threadId }),
     clock: realClock,
     log,
   }));

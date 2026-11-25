@@ -31,7 +31,7 @@ and "iPhone" read every thread through Convex, with the same functions (convex/p
 | What fills its context | `threads.contextUsage` | No: Asked of the CLI on that Mac; the ring's popover there shows the totals only. | No: Not on the phone. | No: Not on the phone. | No: Not on the phone. |
 | Ticking an ask on the card | `threads.tickAsk` | No: Ticks stay on that Mac. | No: The phone sends picks with its answer instead. | No: The phone sends picks with its answer instead. | No: The phone sends picks with its answer instead. |
 | Editing a message | `threads.edit` | No: It undoes file changes on that Mac, so it waits for a way to show what it undid. | No: Not on the phone. | No: Not on the phone. | No: Not on the phone. |
-| Deleting it | `threads.delete` | No: Done on that Mac. | No: Not on the phone. | No: Not on the phone. | No: Not on the phone. |
+| Deleting it | `threads.delete` | No: Done on that Mac. A virtual runner's archived thread is deleted by the backend (boxes:deleteThread). | No: Not on the phone. | No: Not on the phone. | No: Not on the phone. |
 | Its highlights | `threads.highlights` | No: Highlights are files on that Mac. | No: Not on the phone. | No: Not on the phone. | No: Not on the phone. |
 | Removing a highlight | `threads.removeHighlight` | No: Highlights are files on that Mac. | No: Not on the phone. | No: Not on the phone. | No: Not on the phone. |
 | Explain | `threads.explain` | No: Runs a model on that Mac. | No: Not on the phone. | No: Not on the phone. | No: Not on the phone. |

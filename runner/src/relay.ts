@@ -395,6 +395,9 @@ export type RelayDeps = {
   readPicture?: ReadPicture;
   // Whether an app connection is subscribed to the thread (rpc.ts).
   subscribed: (threadId: string) => boolean;
+  // Deletes an archived thread of a virtual runner in the backend
+  // (boxes:deleteThread, on the main Mac's key). Left out: not possible.
+  deleteBoxThread?: (threadId: string) => Promise<unknown>;
   clock: Clock;
   log: Logger;
 };
@@ -1818,6 +1821,21 @@ export class Relay {
       }
       case 'threads.subagent':
         return this.unsupported(w, "Reading a sub-agent's work");
+      case 'threads.delete': {
+        // A virtual runner's thread only: no Mac has its files and its box
+        // is gone once it's archived, so the backend deletes it (boxes.ts
+        // deleteThread): its save, any kept box and its rows. Another Mac's
+        // is still deleted there (parity.ts).
+        const del = this.deps.deleteBoxThread;
+        if (!del || !this.runner(w.runnerId)?.box) return this.unsupported(w, describe(method));
+        try {
+          await del(threadId);
+        } catch (e) {
+          throw new RpcError(ErrorCode.other, sayWhy(e));
+        }
+        this.made.delete(threadId);
+        return {};
+      }
       default:
         return this.unsupported(w, describe(method));
     }
@@ -1952,6 +1970,13 @@ function inputKey(name: string, line: string): string {
 function reqStr(x: unknown, name: string): string {
   if (typeof x !== 'string' || !x.trim() || x.length > 200) throw new RpcError(ErrorCode.badParams, `${name} must be a short string`);
   return x;
+}
+
+// What the backend said (a ConvexError's `message`), or the error's own words.
+function sayWhy(e: unknown): string {
+  const data = (e as { data?: { message?: unknown } } | null)?.data;
+  if (typeof data?.message === 'string') return data.message;
+  return (e as Error)?.message ?? String(e);
 }
 
 function num(x: unknown): number | undefined {
