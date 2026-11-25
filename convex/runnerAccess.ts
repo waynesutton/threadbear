@@ -340,6 +340,8 @@ export const ACCESS: Record<string, Access> = {
   boxCloudToken: 'own',
   mintBootToken: 'owner',
   archiveBox: 'owner',
+  // Deleting an archived thread on a virtual runner, from the Mac app.
+  deleteThread: 'owner',
   boxSaved: 'own',
 };
 

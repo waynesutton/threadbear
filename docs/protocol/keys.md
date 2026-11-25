@@ -514,6 +514,7 @@ anyone's); "any runner" is any good key. Anything not sorted is owner only.
 | `boxCloudToken` | its own | a box's key only: its login's cloud token while it's valid, for a box waiting after a refusal (API 94, Box mode) |
 | `mintBootToken` | owner only | a boot token for a thread's booting box: returned once, only its hash kept, 10 minutes |
 | `archiveBox` | owner only | the thread's box goes to `destroying`, and its key stops working |
+| `deleteThread` | owner only | an archived thread on a virtual runner is deleted: its save, any kept box, its rows and its runner go at once |
 | `boxSaved` | its own | a box's key only: its thread's save, a file its runner uploaded and nothing else uses; replaces the last save |
 
 `boxes:exchange` takes no key: a box's boot token, once (Box keys).

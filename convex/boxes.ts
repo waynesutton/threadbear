@@ -1117,7 +1117,7 @@ const DELETABLE: readonly string[] = ['gone', 'shelved', 'expired'];
  * thread's sidebar row goes now (a tombstone, as a runner's own delete
  * leaves), and its save, any kept box, its rows and its runner follow at
  * once rather than after deleteAfterDays twice over (boxService.ts
- * deleteNow, purgeStep). The main Mac's key only (not in ACCESS).
+ * deleteNow, whose runs carry `deleted` to purgeStep). The main Mac's key only (not in ACCESS).
  */
 export const deleteThread = mutation({
   args: { key: v.string(), threadId: v.string() },
@@ -1129,7 +1129,6 @@ export const deleteThread = mutation({
       const putAway = ['archiving', 'destroying'].includes(row.boxState.kind);
       throw conflict(putAway ? "Its machine is still being put away. Try again in a minute." : 'Archive it first, then delete it.');
     }
-    if (row.deletedAt === undefined) await ctx.db.patch(row._id, { deletedAt: Date.now() });
     const index = await ctx.db.query('threadIndex').withIndex('by_runner_thread', (q) => q.eq('runnerId', row.runnerId).eq('threadId', threadId)).unique();
     if (index && !index.deleted) await ctx.db.patch('threadIndex', index._id, { deleted: true, updatedMs: Date.now() });
     await ctx.scheduler.runAfter(0, internal.boxService.deleteNow, { boxId: row._id });

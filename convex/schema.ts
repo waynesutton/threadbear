@@ -419,9 +419,6 @@ export const appSchema = defineSchema({
     // isn't in a running state: it counts toward maxBoxes then (invariant M).
     observedAt: v.optional(v.array(v.object({ providerBoxId: v.string(), at: v.number() }))),
     seenRunningAt: v.optional(v.number()),
-    // When its archived thread was deleted from the app (boxes.ts
-    // deleteThread): its save and rows go now, not after deleteAfterDays.
-    deletedAt: v.optional(v.number()),
     createdAt: v.number(),
   })
     .index('by_threadId', ['threadId'])

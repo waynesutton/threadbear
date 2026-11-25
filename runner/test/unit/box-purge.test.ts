@@ -148,8 +148,9 @@ async function deleteAll(w: Awaited<ReturnType<typeof world>>) {
   w.destroys = [];
   for (let runs = 0; runs < 200; runs++) {
     for (const x of w.scheduled as { fn: string; args: Record<string, unknown> }[]) if (/destroyBox/.test(x.fn)) w.destroys.push(x.args.boxId as string);
-    for (let j = w.scheduled.length - 1; j >= 0; j--) if (/destroyBox|storage|deleteIfUnused/i.test((w.scheduled[j] as any).fn) && !DELETE_RUNS.test((w.scheduled[j] as any).fn)) w.scheduled.splice(j, 1);
-    const i = w.scheduled.findIndex((x: any) => DELETE_RUNS.test(x.fn));
+    const queued = w.scheduled as { fn: string }[];
+    for (let j = queued.length - 1; j >= 0; j--) if (/destroyBox/.test(queued[j]!.fn)) queued.splice(j, 1);
+    const i = queued.findIndex((x) => DELETE_RUNS.test(x.fn));
     if (i < 0) return runs;
     const [next] = w.scheduled.splice(i, 1) as { fn: string; args: Record<string, unknown> }[];
     await call(w.ctx, fnFor(next!.fn), next!.args);
@@ -200,7 +201,7 @@ test("a thread that isn't archived, or another key's ask, deletes nothing", asyn
   const asleep = await w.box(1, { kind: 'asleep', since: Date.now() });
   const gone = await w.box(2, { kind: 'gone', at: Date.now() });
   w.scheduled.length = 0;
-  await assert.rejects(call(w.ctx, boxes.deleteThread, { key: 'owner-key', threadId: asleep.threadId }), (e: any) => /Archive it first/.test(e?.data?.message ?? ''));
+  await assert.rejects(call(w.ctx, boxes.deleteThread, { key: 'owner-key', threadId: asleep.threadId }), (e: { data?: { message?: string } }) => /Archive it first/.test(e?.data?.message ?? ''));
   await assert.rejects(call(w.ctx, boxes.deleteThread, { key: 'not-the-owner', threadId: gone.threadId }));
   assert.equal(w.scheduled.length, 0);
   assert.equal(w.rows('boxes').length, 2);

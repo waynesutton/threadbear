@@ -1800,7 +1800,7 @@ const DELETE_TRIES = 15;
 /**
  * A deleted thread's box (boxes.ts deleteThread): expired now, its save
  * deleted in the same step as pruneSaves does at deleteAfterDays, then
- * purged without the second wait (purgeStep reads deletedAt).
+ * purged without the second wait (each run carries `deleted` to purgeStep).
  */
 export const deleteNow = machines.internalMutation({
   args: { boxId: v.id('boxes') },
@@ -1808,7 +1808,7 @@ export const deleteNow = machines.internalMutation({
   handler: async (machineCtx, { boxId }) => {
     const ctx = machineCtx as unknown as MutationCtx;
     const row = await ctx.db.get('boxes', boxId);
-    if (!row || row.deletedAt === undefined) return null;
+    if (!row) return null;
     if (row.boxState.kind === 'gone' || row.boxState.kind === 'shelved') {
       const save = row.save?.storageId;
       if ((await boxMachine.send(machineCtx, boxId, { type: 'EXPIRE' })).status !== 'done') return null;
@@ -1825,10 +1825,10 @@ export const purgeDeleted = internalMutation({
   returns: v.null(),
   handler: async (ctx, { boxId, tries }) => {
     const row = await ctx.db.get('boxes', boxId);
-    if (!row || row.deletedAt === undefined) return null;
-    const next = await purgeStep(ctx, row, Date.now());
+    if (!row) return null;
+    const next = await purgeStep(ctx, row, Date.now(), true);
     if (next === 'purge') {
-      await ctx.scheduler.runAfter(0, internal.boxService.purgeBox, { boxId });
+      await ctx.scheduler.runAfter(0, internal.boxService.purgeBox, { boxId, deleted: true });
       return null;
     }
     if (next === 'destroy' && tries === 0) await ctx.scheduler.runAfter(0, internal.boxService.destroyBox, { boxId });
@@ -1839,11 +1839,11 @@ export const purgeDeleted = internalMutation({
 
 // What becomes of an expired box now: nothing yet, its provider box deleted
 // first, or purged.
-async function purgeStep(ctx: MutationCtx, row: Doc<'boxes'>, now: number): Promise<'wait' | 'destroy' | 'purge'> {
+async function purgeStep(ctx: MutationCtx, row: Doc<'boxes'>, now: number, deleted = false): Promise<'wait' | 'destroy' | 'purge'> {
   if (row.boxState.kind !== 'expired' || (row.op && row.op.until > now)) return 'wait';
   const days = (await ctx.db.get('runnerServices', row.serviceId))?.limits.deleteAfterDays ?? BOX_LIMITS.deleteAfterDays;
   // A thread Mike deleted doesn't wait out its days (boxes.ts deleteThread).
-  if (row.deletedAt === undefined && row.boxState.at > now - days * DAY_MS) return 'wait';
+  if (!deleted && row.boxState.at > now - days * DAY_MS) return 'wait';
   if (row.providerBoxId !== undefined) return 'destroy';
   // Seen running lately (an unadopted machine): the reaper deletes it first.
   if (row.seenRunningAt !== undefined && row.seenRunningAt > now - DAY_MS) return 'wait';
@@ -1863,34 +1863,37 @@ async function purgeStep(ctx: MutationCtx, row: Doc<'boxes'>, now: number): Prom
  * which go as purgeRunner deletes them.
  */
 export const purgeBox = internalMutation({
-  args: { boxId: v.id('boxes') },
+  // `deleted`: its thread was deleted from the app (purgeDeleted), so it doesn't wait out its days.
+  args: { boxId: v.id('boxes'), deleted: v.optional(v.boolean()) },
   returns: v.null(),
-  handler: async (ctx, { boxId }) => {
+  handler: async (ctx, { boxId, deleted }) => {
     const row = await ctx.db.get('boxes', boxId);
-    if (!row || (await purgeStep(ctx, row, Date.now())) !== 'purge') return null;
-    if (await purgeRunnerRows(ctx, row.runnerId)) await ctx.scheduler.runAfter(0, internal.boxService.forgetBox, { boxId });
-    else await ctx.scheduler.runAfter(0, internal.boxService.purgeBox, { boxId });
+    if (!row || (await purgeStep(ctx, row, Date.now(), deleted)) !== 'purge') return null;
+    const again = { boxId, ...(deleted ? { deleted } : {}) };
+    if (await purgeRunnerRows(ctx, row.runnerId)) await ctx.scheduler.runAfter(0, internal.boxService.forgetBox, again);
+    else await ctx.scheduler.runAfter(0, internal.boxService.purgeBox, again);
     return null;
   },
 });
 
 /** The box's own row last, once its runner's rows are gone: PURGE, to purged, and deleted. */
 export const forgetBox = machines.internalMutation({
-  args: { boxId: v.id('boxes') },
+  args: { boxId: v.id('boxes'), deleted: v.optional(v.boolean()) },
   returns: v.null(),
-  handler: async (machineCtx, { boxId }) => {
+  handler: async (machineCtx, { boxId, deleted }) => {
     const ctx = machineCtx as unknown as MutationCtx;
     const row = await ctx.db.get('boxes', boxId);
-    if (!row || (await purgeStep(ctx, row, Date.now())) !== 'purge') return null;
+    if (!row || (await purgeStep(ctx, row, Date.now(), deleted)) !== 'purge') return null;
+    const again = { boxId, ...(deleted ? { deleted } : {}) };
     // Anything of its runner written since (it can't be: no key works for it): back to purgeBox.
     if (await ctx.db.query('runners').withIndex('by_runnerId', (q) => q.eq('runnerId', row.runnerId)).first()) {
-      await ctx.scheduler.runAfter(0, internal.boxService.purgeBox, { boxId });
+      await ctx.scheduler.runAfter(0, internal.boxService.purgeBox, again);
       return null;
     }
     const condemned = await ctx.db.query('boxCondemned').withIndex('by_box_attempt', (q) => q.eq('boxId', boxId)).take(PRUNE_BATCH);
     for (const c of condemned) await ctx.db.delete('boxCondemned', c._id);
     if (condemned.length === PRUNE_BATCH) {
-      await ctx.scheduler.runAfter(0, internal.boxService.forgetBox, { boxId });
+      await ctx.scheduler.runAfter(0, internal.boxService.forgetBox, again);
       return null;
     }
     if ((await boxMachine.send(machineCtx, boxId, { type: 'PURGE' })).status !== 'done') return null;
