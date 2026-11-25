@@ -1038,6 +1038,13 @@ impl Threadbear {
             .update(cx, |d, cx| d.set_options(options, cx));
     }
 
+    /// Settings > General's Open pages beside Threadbear.
+    pub(crate) fn set_browser_beside(&mut self, on: bool, cx: &mut Context<Self>) {
+        self.settings.saved.browser_beside = Some(on);
+        self.save_settings_soon(cx);
+        cx.notify();
+    }
+
     /// Settings > General's Move panels by their background.
     pub(crate) fn set_panel_background_drag(&mut self, on: bool, cx: &mut Context<Self>) {
         self.settings.saved.panel_background_drag = Some(on);

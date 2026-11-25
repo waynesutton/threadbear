@@ -843,6 +843,7 @@ impl SettingsWindow {
         let mut sections = vec![
             self.appearance_section(cx),
             self.panels_section(cx),
+            self.browser_section(cx),
             self.files_section(cx),
             self.slash_section(cx),
             self.turn_modes_section(cx),
@@ -1358,6 +1359,34 @@ impl SettingsWindow {
             "To move a panel, drag its title or tab. With this on, pressing and holding anywhere on a panel picks it up too. A panel with its title hidden can always be moved that way, as it has nothing else to drag it by.",
             "change it for you.",
             vec![row("Move panels by their background", switch, cx)],
+            cx,
+        )
+    }
+
+    /// Whether Show window and Select on page put the page's window beside
+    /// this one (`browserBeside`, off to begin with).
+    fn browser_section(&mut self, cx: &mut Context<Self>) -> AnyElement {
+        let on = self
+            .app
+            .upgrade()
+            .is_some_and(|a| a.read(cx).settings.browser_beside());
+        let switch = self.switch(
+            "settings-browser-beside",
+            on,
+            "Open an agent's page beside this window, and come back here after picking from it",
+            cx,
+            |this, on, cx| {
+                this.app
+                    .update(cx, |app, cx| app.set_browser_beside(on, cx))
+                    .ok();
+            },
+        );
+        section(
+            "settings-browser",
+            "Browser",
+            "With this on, Show window and Select on page put the page's window next to Threadbear's, on the side with more room, and Threadbear comes back to the front on the thread you picked for. Move or resize the page's window and it opens that way from then on. Only windows in the agents' own browser are moved, never your own Chrome's.",
+            "change it for you.",
+            vec![row("Open pages beside Threadbear", switch, cx)],
             cx,
         )
     }

@@ -254,6 +254,164 @@ pub struct PanelState {
 
 /// The agents' browser's pages and the Chrome profiles' (`mergeTabs`): one
 /// each, a profile's winning a clash, in tab order.
+/// A window's place on the screens, in points from the main screen's top left.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Place {
+    pub left: f64,
+    pub top: f64,
+    pub width: f64,
+    pub height: f64,
+}
+
+/// The narrowest a page's window is worth placing beside the app's.
+pub const BESIDE_MIN_WIDTH: f64 = 480.;
+/// And the widest, as BrowserBear opens them.
+pub const BESIDE_MAX_WIDTH: f64 = 1280.;
+
+/// Where a page's window goes beside the app's `window` on its `screen`
+/// (Settings > General > Browser): against whichever side has more room, as
+/// tall as the app's window. None when neither side has room for a usable
+/// page (the app's window is wide or full screen): then nothing's asked, and
+/// the page's window stays where it is rather than the app's being moved.
+pub fn beside(window: Place, screen: Place) -> Option<Place> {
+    let right = screen.left + screen.width - (window.left + window.width);
+    let left = window.left - screen.left;
+    let room = right.max(left);
+    if !room.is_finite() || room < BESIDE_MIN_WIDTH {
+        return None;
+    }
+    let width = room.min(BESIDE_MAX_WIDTH).floor();
+    let top = window.top.max(screen.top);
+    let height = (window.top + window.height).min(screen.top + screen.height) - top;
+    if height.is_nan() || height < 300. {
+        return None;
+    }
+    Some(Place {
+        left: if right >= left {
+            window.left + window.width
+        } else {
+            window.left - width
+        },
+        top,
+        width,
+        height: height.floor(),
+    })
+}
+
+impl Place {
+    /// As BrowserBear takes it (`place` in panelShow and panelPick).
+    pub fn json(&self) -> Value {
+        json!({ "left": self.left.round(), "top": self.top.round(), "width": self.width, "height": self.height })
+    }
+}
+
+#[cfg(test)]
+mod beside_tests {
+    use super::*;
+    const SCREEN: Place = Place {
+        left: 0.,
+        top: 25.,
+        width: 1728.,
+        height: 1092.,
+    };
+    fn win(left: f64, width: f64) -> Place {
+        Place {
+            left,
+            top: 60.,
+            width,
+            height: 900.,
+        }
+    }
+
+    #[test]
+    fn goes_against_the_side_with_more_room() {
+        let got = beside(win(40., 1000.), SCREEN).unwrap();
+        assert_eq!(
+            got,
+            Place {
+                left: 1040.,
+                top: 60.,
+                width: 688.,
+                height: 900.
+            }
+        );
+        let got = beside(win(700., 1000.), SCREEN).unwrap();
+        assert_eq!(
+            got,
+            Place {
+                left: 0.,
+                top: 60.,
+                width: 700.,
+                height: 900.
+            }
+        );
+    }
+
+    #[test]
+    fn is_no_wider_than_browserbear_opens_them() {
+        let wide = Place {
+            left: 0.,
+            top: 0.,
+            width: 3440.,
+            height: 1440.,
+        };
+        let got = beside(
+            Place {
+                left: 0.,
+                top: 0.,
+                width: 1000.,
+                height: 1440.,
+            },
+            wide,
+        )
+        .unwrap();
+        assert_eq!((got.left, got.width), (1000., BESIDE_MAX_WIDTH));
+    }
+
+    #[test]
+    fn asks_nothing_without_room_or_sense() {
+        assert_eq!(beside(win(100., 1500.), SCREEN), None);
+        assert_eq!(beside(SCREEN, SCREEN), None);
+        assert_eq!(beside(win(f64::NAN, 800.), SCREEN), None);
+        let short = Place {
+            left: 0.,
+            top: 900.,
+            width: 800.,
+            height: 2000.,
+        };
+        assert_eq!(beside(short, SCREEN), None);
+    }
+
+    #[test]
+    fn works_on_a_second_screen_to_the_left() {
+        let second = Place {
+            left: -1920.,
+            top: 0.,
+            width: 1920.,
+            height: 1080.,
+        };
+        let got = beside(
+            Place {
+                left: -1900.,
+                top: 40.,
+                width: 900.,
+                height: 2000.,
+            },
+            second,
+        )
+        .unwrap();
+        assert_eq!(
+            got,
+            Place {
+                left: -1000.,
+                top: 40.,
+                width: 1000.,
+                height: 1040.
+            }
+        );
+    }
+}
+
 pub fn merge(agent: &[AgentTab], profiles: &[AgentTab]) -> Vec<AgentTab> {
     let mut all: std::collections::HashMap<String, AgentTab> = std::collections::HashMap::new();
     for tab in agent.iter().take(MAX_TABS).chain(

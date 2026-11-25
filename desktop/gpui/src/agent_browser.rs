@@ -458,6 +458,9 @@ pub(crate) struct ActivePick {
     pub(crate) tab_key: String,
     pub(crate) tab_title: String,
     pub(crate) mode: String,
+    /// Bring the app back to the front on its thread when the pick ends
+    /// (Settings > General > Browser).
+    pub(crate) come_back: bool,
 }
 
 /// Reads the agent host's tabs.json and asks BrowserBear for the pages in
@@ -506,6 +509,7 @@ pub(crate) struct AgentBrowser {
     /// The thread whose Browser pane is on show, if one is: its rows' stills
     /// are asked for as they come due.
     showing: Option<Box<dyn Fn(&App) -> Option<String>>>,
+    come_back: Option<Box<dyn Fn(String, &mut App)>>,
     _poll: Task<()>,
 }
 
@@ -524,6 +528,21 @@ pub(crate) fn install(cx: &mut App) -> Entity<AgentBrowser> {
 
 pub(crate) fn model(cx: &App) -> Option<Entity<AgentBrowser>> {
     cx.try_global::<Browsers>().map(|b| b.0.clone())
+}
+
+/// Where a page's window goes beside this one, if there's room on its screen.
+fn place_beside(window: &Window, cx: &App) -> Option<bear::Place> {
+    let place = |b: Bounds<Pixels>| bear::Place {
+        left: f64::from(f32::from(b.origin.x)),
+        top: f64::from(f32::from(b.origin.y)),
+        width: f64::from(f32::from(b.size.width)),
+        height: f64::from(f32::from(b.size.height)),
+    };
+    if window.is_fullscreen() {
+        return None;
+    }
+    let screen = window.display(cx)?.bounds();
+    bear::beside(place(window.bounds()), place(screen))
 }
 
 pub(crate) const OPENING_KEY: &str = "open";
@@ -588,6 +607,7 @@ impl AgentBrowser {
             generation: 0,
             stills_asked: HashMap::new(),
             showing: None,
+            come_back: None,
             _poll: poll,
         }
     }
@@ -599,6 +619,18 @@ impl AgentBrowser {
 
     pub(crate) fn tabs_for(&self, thread: &str) -> Vec<AgentTab> {
         bear::for_thread(&self.tabs, thread)
+    }
+
+    /// How to bring the app's window forward on a thread, after a pick.
+    pub(crate) fn on_come_back(&mut self, back: impl Fn(String, &mut App) + 'static) {
+        self.come_back = Some(Box::new(back));
+    }
+
+    /// The pick that just ended was for `thread`: back to it, if asked.
+    fn came_back(&self, pick: Option<ActivePick>, cx: &mut Context<Self>) {
+        if let (Some(pick), Some(back)) = (pick.filter(|p| p.come_back), &self.come_back) {
+            back(pick.thread_id, cx);
+        }
     }
 
     /// How to tell which thread's pane is on show (the window's dock).
@@ -839,10 +871,21 @@ impl AgentBrowser {
     }
 
     /// Show window: brings the page's real window to the front.
-    pub(crate) fn show(&mut self, tab: &AgentTab, thread: &str, cx: &mut Context<Self>) {
+    /// `place`: where it should go, beside the app's window (`place_beside`).
+    pub(crate) fn show(
+        &mut self,
+        tab: &AgentTab,
+        thread: &str,
+        place: Option<bear::Place>,
+        cx: &mut Context<Self>,
+    ) {
+        let mut args = json!({ "tab": tab.tab_id, "profile": tab.profile_id() });
+        if let Some(place) = place {
+            args["place"] = place.json();
+        }
         self.action(
             "panelShow",
-            json!({ "tab": tab.tab_id, "profile": tab.profile_id() }),
+            args,
             Some(thread),
             pending_key("panelShow", tab),
             cx,
@@ -867,6 +910,8 @@ impl AgentBrowser {
         tab: &AgentTab,
         thread: &str,
         mode: &str,
+        // Where its window goes, and whether the app comes back after.
+        (place, come_back): (Option<bear::Place>, bool),
         client: Arc<Client>,
         cx: &mut Context<Self>,
     ) {
@@ -899,14 +944,18 @@ impl AgentBrowser {
             tab_key,
             tab_title: tab.shown_title(),
             mode: mode.to_owned(),
+            come_back,
         });
         cx.notify();
-        let args = json!({
+        let mut args = json!({
             "tab": tab.tab_id,
             "profile": tab.profile_id(),
             "captureId": capture_id,
             "mode": mode,
         });
+        if let Some(place) = place {
+            args["place"] = place.json();
+        }
         let key_cb = key.clone();
         let sent = self.send("panelPick", args, Some(thread), cx, move |b, got, cx| {
             b.answered(&key_cb, request);
@@ -1017,16 +1066,19 @@ impl AgentBrowser {
                                 true
                             }
                             PickState::Done => {
-                                b.active_pick = None;
+                                let pick = b.active_pick.take();
                                 b.pick_task = None;
                                 if let Some(capture) = reply.capture {
                                     crate::composer_captures::insert(capture, client.clone(), cx);
                                 }
+                                b.came_back(pick, cx);
                                 cx.notify();
                                 false
                             }
                             PickState::Cancelled => {
-                                b.active_pick = None;
+                                // Escape in the page: back here too.
+                                let pick = b.active_pick.take();
+                                b.came_back(pick, cx);
                                 b.pick_task = None;
                                 b.pick_note = None;
                                 cx.notify();
@@ -1449,6 +1501,12 @@ impl SidePane {
                     .child(action.clone()),
             );
         }
+        // Only the agents' own browser's windows are placed.
+        let beside = tab.profile_id() == bear::AGENTS_BROWSER
+            && self
+                .app
+                .upgrade()
+                .is_some_and(|a| a.read(cx).settings.browser_beside());
         let (show_tab, show_thread, show_model) = (tab.clone(), thread.to_owned(), model.clone());
         let show = PushButton::new(
             SharedString::from(format!("browser-show-{}", tab.id())),
@@ -1460,8 +1518,9 @@ impl SidePane {
         )
         .small()
         .busy(b.pending.contains(&pending_key("panelShow", tab)))
-        .render(cx, move |_, _, cx| {
-            show_model.update(cx, |b, cx| b.show(&show_tab, &show_thread, cx))
+        .render(cx, move |_, window, cx| {
+            let place = beside.then(|| place_beside(window, cx)).flatten();
+            show_model.update(cx, |b, cx| b.show(&show_tab, &show_thread, place, cx))
         });
         let picking_this = b
             .active_pick
@@ -1488,12 +1547,20 @@ impl SidePane {
         )
         .small()
         .busy(b.pending.contains(&pending_key("panelPick", tab)))
-        .render(cx, move |_, _, cx| {
+        .render(cx, move |_, window, cx| {
+            let place = beside.then(|| place_beside(window, cx)).flatten();
             pick_model.update(cx, |b, cx| {
                 if picking_this {
                     b.cancel_pick(cx);
                 } else {
-                    b.start_pick(&pick_tab, &pick_thread, "element", pick_client.clone(), cx);
+                    b.start_pick(
+                        &pick_tab,
+                        &pick_thread,
+                        "element",
+                        (place, beside),
+                        pick_client.clone(),
+                        cx,
+                    );
                 }
             })
         });

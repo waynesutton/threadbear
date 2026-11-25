@@ -432,6 +432,26 @@ impl Threadbear {
                 .then(|| app.pane_thread().map(|t| t.id))?
             })
         });
+        // After a pick with "Open pages beside Threadbear" on: this window to
+        // the front, on the thread the pick was for. Deferred, as it's asked
+        // from inside the browser model's own update.
+        let (back_app, back_window) = (cx.entity().downgrade(), window.window_handle());
+        browser.update(cx, |b, _| {
+            b.on_come_back(move |thread, cx| {
+                let app = back_app.clone();
+                cx.defer(move |cx| {
+                    cx.activate(true);
+                    let _ = back_window.update(cx, |_, window, cx| {
+                        window.activate_window();
+                        let _ = app.update(cx, |app, cx| {
+                            if app.pane_thread().map(|t| t.id).as_deref() != Some(&thread) {
+                                app.open_thread_link(&thread, window, cx);
+                            }
+                        });
+                    });
+                });
+            })
+        });
         let browser_watch = cx.observe(&browser, |this, browser, cx| {
             // Only the pages and whether BrowserBear is here are drawn by the
             // window (the rail); the pane watches the rest itself.

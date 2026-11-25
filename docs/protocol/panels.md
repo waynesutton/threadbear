@@ -274,6 +274,12 @@ profiles.
   ordinary BrowserBear commands associated with threads. Pages in the agents'
   browser come from `agent/tabs.json` in BrowserBear's folder, which also names
   the browser (`browser`).
+- `panelShow` and `panelPick` take an optional `place` in `args`
+  (`{left, top, width, height}`, screen points from the main screen's top
+  left): where the app would like the page's window, beside its own, sent only
+  with Settings > General > Browser's switch on (`browserBeside` in
+  desktop-settings.json) and only for the agents' browser. BrowserBear keeps a
+  window the user has moved where they put it. An older BrowserBear ignores it.
 - `{cmd:"panelStill",thread,args:{tab,profile,width}}` returns
   `{data,at}`: a small base64 JPEG of the page, or `data: null` when there's
   none just now. BrowserBear refreshes it at most every 3 s in the agents'

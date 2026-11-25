@@ -130,6 +130,11 @@ pub struct Saved {
     /// 13 Nov). A panel with its title hidden moves from its background
     /// either way. The GPUI app's own.
     pub panel_background_drag: Option<bool>,
+    /// `browserBeside`: Settings > General > Browser's switch. A page's window
+    /// in the agents' browser opens beside this app's for Show window and
+    /// Select on page, and the app comes back to the front after a pick.
+    /// None is off, as it moves another app's window. The GPUI app's own.
+    pub browser_beside: Option<bool>,
     /// `filesEditLikeAnEditor` (FileEditorMode): Settings > General > Files'
     /// Edit files like an editor. A text file opens in the pane ready to
     /// type in, with a status bar, and what's typed waits for ⌘S, Save or
@@ -363,6 +368,10 @@ impl Settings {
             .completion_sound_volume
             .unwrap_or(completion_sound::DEFAULT_VOLUME)
             .clamp(0.1, 1.)
+    }
+
+    pub fn browser_beside(&self) -> bool {
+        self.saved.browser_beside.unwrap_or(false)
     }
 
     pub fn panel_background_drag(&self) -> bool {
