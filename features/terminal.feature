@@ -66,6 +66,26 @@ Feature: The Terminal
     And the thread's shell is still running
 
   @terminal.panel @windows-pending
+  Scenario: ⌘J reopens the same shell after hiding Terminal
+    Given the thread "Rename the Settings tabs" works in a folder of its own
+    When I open the thread "Rename the Settings tabs"
+    And I press ⌘J
+    And I type "TB_REOPEN_MARKER=retained" and press Return in the Terminal
+    And I press ⌘J
+    Then the Terminal is put away
+    And the thread's shell is still running
+    When I press ⌘J
+    Then the Terminal is showing a shell in the thread's folder
+    And the Terminal has the keyboard
+    When I type "printf 'reopened-%s\n' \"$TB_REOPEN_MARKER\"" and press Return in the Terminal
+    Then the Terminal shows the line "reopened-retained"
+    When I press ⌘J
+    Then the Terminal is put away
+    When I press ⌘J
+    Then the Terminal is showing a shell in the thread's folder
+    And the Terminal has the keyboard
+
+  @terminal.panel @windows-pending
   Scenario: What a program prints shows in the Terminal
     Given the thread "Rename the Settings tabs" works in a folder of its own
     When I open the thread "Rename the Settings tabs"

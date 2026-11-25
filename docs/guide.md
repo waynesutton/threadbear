@@ -1139,7 +1139,8 @@ started. Threadbear remembers your layout between launches.
 ### Terminal
 <!-- slug: terminal -->
 
-⌘J (or ⌘`) opens a terminal under the thread, and the same key again hides it. It's a real
+⌘J (or ⌘`) opens a terminal under the thread, and the same key again hides it.
+Press it again to return to the same running shell. It's a real
 one, with your login shell, its colours and full-screen programs like vim
 or htop, and it takes the keyboard as it opens. Each thread has a shell
 of its own, started in the thread's folder (its worktree, when it has

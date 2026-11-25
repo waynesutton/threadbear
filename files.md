@@ -1,5 +1,11 @@
 # Files
 
+## Terminal shortcut
+
+- `desktop/gpui/src/terminal.rs`: shell sessions and Terminal controls, including focus when the panel hides.
+- `features/terminal.feature`: Terminal behavior, repeated shortcut toggling and retained shell state.
+- `prds/terminal-shortcut-reopen.md`: scope and verification for reopening Terminal from the keyboard.
+
 ## Cloud runners setup
 
 - `runner/src/cloud-setup.ts`: sets up a Fly virtual runner from one token (flyctl, the Fly app, backend env, box image, GitHub variables, the runner row, a test box), and checks or rebuilds it; `cloud.*` RPC methods in `runner/src/main.ts`, `tb cloud` in `runner/src/cli.ts`.

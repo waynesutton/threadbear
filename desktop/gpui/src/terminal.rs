@@ -193,6 +193,9 @@ pub(crate) fn toggle(app: &mut Threadbear, window: &mut Window, cx: &mut Context
     if app.dock.read(cx).is_showing(crate::shell::TERMINAL) {
         app.dock
             .update(cx, |m, cx| m.close(crate::shell::TERMINAL, cx));
+        // The shell stays alive, but its hidden focus handle cannot route shortcuts.
+        window.focus(&app.root_focus, cx);
+        crate::web_panels::keyboard_to_app(window);
         return;
     }
     bring_up(app, cx);
