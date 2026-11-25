@@ -162,7 +162,7 @@ export const ERROR_CLASSES: ReadonlySet<string> = new Set([
   'AcpExitedError', 'AcpRpcError', 'AmbiguousPeer', 'BoxBootRefused', 'BoxFolderBroken', 'CheckRefused', 'CodexExitedError', 'CodexRpcError',
   'ConvexAdminError', 'CronError', 'ForeignPeer', 'GaveUp', 'HeldLocal', 'KeysBusy', 'NoSwitches', 'Refused', 'RewindRefusedError',
   'RpcClientError', 'RpcError', 'RunnerJsonError', 'RunnerNotProvedError', 'SessionNotFoundError', 'SpawnRefused',
-  'SpecialFile', 'StaleProcess', 'TooBig', 'Unknown', 'UnresolvedPeer', 'Waiting',
+  'SpecialFile', 'StaleProcess', 'TooBig', 'TregDown', 'Unknown', 'UnresolvedPeer', 'Waiting',
   // Wayne's: Linear tasks, Prints and the approvals API.
   'LinearError', 'NoApprovalsApi', 'PageError',
 ]);
