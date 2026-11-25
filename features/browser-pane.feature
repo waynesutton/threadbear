@@ -20,7 +20,7 @@ Feature: The Browser pane
     When I open the thread "Morning brief"
     Then the right rail's Browser button shows 1 page
     When I click the right rail's Browser button
-    Then the Browser pane lists "Example Domain" from "example.com" with "Show window"
+    Then the Browser pane lists "Example Domain" from "example.com" with "Show window, Select on page"
 
   @browserbear @windows-pending @browser.show @swift-pending
   Scenario: Show window asks BrowserBear to bring the page's window forward
@@ -36,10 +36,40 @@ Feature: The Browser pane
     When I open the thread "Morning brief"
     And the agent hands "Sign in" to me
     Then the dock has the "browser" panel
-    And the Browser pane lists "Sign in" from "login.example.com" with "Show window, Done"
+    And the Browser pane lists "Sign in" from "login.example.com" with "Show window, Select on page, Done"
     When I press "Done" on "Sign in"
     Then BrowserBear was told I'm done with "Sign in"
-    And the Browser pane lists "Sign in" from "login.example.com" with "Show window"
+    And the Browser pane lists "Sign in" from "login.example.com" with "Show window, Select on page"
+
+  @browserbear @windows-pending @browser.pick @swift-pending
+  Scenario: Select on page lands in the pinned thread's composer with a sanitized URL, even after switching threads
+    Given BrowserBear has "Example Domain" at "https://example.com/?tab=docs&access_token=secret123" open for "Morning brief"
+    When I open the thread "Morning brief"
+    And I click the right rail's Browser button
+    And I press "Select on page" on "Example Domain"
+    Then BrowserBear was asked to start a pick on "Example Domain" for "Morning brief"
+    When I open the thread "Rename the Settings tabs"
+    And BrowserBear finishes the pick with element "Launch" from "https://example.com/?tab=docs&access_token=secret123" and quote "Selected text"
+    Then the composer has no page capture preview
+    When I open the thread "Morning brief"
+    Then the composer has a page capture preview for "Example Domain" at "https://example.com/?tab=docs" with quote "Selected text" and image
+
+  @browserbear @windows-pending @browser.pick @swift-pending
+  Scenario: A page capture preview can be discarded and cancelling a pick leaves the composer empty
+    Given BrowserBear has "Example Domain" at "https://example.com/" open for "Morning brief"
+    When I open the thread "Morning brief"
+    And I click the right rail's Browser button
+    And I press "Select on page" on "Example Domain"
+    Then BrowserBear was asked to start a pick on "Example Domain" for "Morning brief"
+    When I press "Cancel pick" on "Example Domain"
+    Then BrowserBear was asked to cancel the pick
+    And the composer has no page capture preview
+    When I press "Select on page" on "Example Domain"
+    Then BrowserBear was asked to start a pick on "Example Domain" for "Morning brief"
+    When BrowserBear finishes the pick with element "Launch" from "https://example.com/" and quote "Quoted line"
+    Then the composer has a page capture preview for "Example Domain" at "https://example.com/" with quote "Quoted line" and image
+    When I discard the page capture preview
+    Then the composer has no page capture preview
 
   @browserbear @windows-pending @browser.handoff @panel.requests @swift-pending
   Scenario: show_panel for the browser brings the Browser pane up

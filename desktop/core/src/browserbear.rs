@@ -441,6 +441,650 @@ pub fn empty_note(error: Option<&str>, available: bool) -> String {
     }
 }
 
+// ---------------------------------------------------------------- Add from page
+
+/// Conservative cap for a decoded pick screenshot when no tighter runner limit
+/// rejects it first (`media.import` still enforces the runner's own cap).
+pub const MAX_PICK_SCREENSHOT_BYTES: usize = 16 * 1024 * 1024;
+pub const MAX_PICK_QUOTE_CHARS: usize = 4000;
+const MAX_URL_LEN: usize = 2000;
+
+const SECRET_KEYS: &[&str] = &[
+    "token",
+    "auth",
+    "authorization",
+    "code",
+    "session",
+    "sid",
+    "key",
+    "apikey",
+    "password",
+    "pwd",
+    "pass",
+    "passwd",
+    "secret",
+    "signature",
+    "sig",
+    "jwt",
+    "otp",
+    "state",
+    "nonce",
+    "sessionid",
+    "authtoken",
+    "bearer",
+    "credential",
+    "credentials",
+    "api_key",
+    "access_key",
+    "private_key",
+    "secret_key",
+    "auth_key",
+];
+
+const SECRET_WORDS: &[&str] = &[
+    "token",
+    "secret",
+    "password",
+    "passwd",
+    "pwd",
+    "signature",
+    "credential",
+    "credentials",
+    "session",
+    "sessionid",
+    "phpsessid",
+    "jsessionid",
+    "apikey",
+    "auth",
+    "authorization",
+    "jwt",
+    "otp",
+    "bearer",
+    "csrf",
+    "xsrf",
+];
+
+const SECRET_KEY_PREFIXES: &[&str] = &[
+    "api", "access", "secret", "private", "auth", "session", "client", "signing",
+];
+
+fn normalize_param_key(name: &str) -> String {
+    let mut out = String::with_capacity(name.len() + 4);
+    let mut prev_alnum_lower = false;
+    let mut prev_sep = false;
+    for ch in name.chars() {
+        if ch.is_ascii_uppercase() {
+            if prev_alnum_lower && !prev_sep {
+                out.push('_');
+            }
+            out.push(ch.to_ascii_lowercase());
+            prev_alnum_lower = false;
+            prev_sep = false;
+        } else if ch.is_ascii_alphanumeric() {
+            out.push(ch);
+            prev_alnum_lower = ch.is_ascii_lowercase() || ch.is_ascii_digit();
+            prev_sep = false;
+        } else if !prev_sep && !out.is_empty() {
+            out.push('_');
+            prev_alnum_lower = false;
+            prev_sep = true;
+        }
+    }
+    out.trim_matches('_').to_owned()
+}
+
+fn is_secret_key(name: &str) -> bool {
+    let key = normalize_param_key(name);
+    if SECRET_KEYS.contains(&key.as_str()) {
+        return true;
+    }
+    let words: Vec<&str> = key.split('_').filter(|w| !w.is_empty()).collect();
+    if words.iter().any(|w| SECRET_WORDS.contains(w)) {
+        return true;
+    }
+    for pair in words.windows(2) {
+        if SECRET_KEY_PREFIXES.contains(&pair[0]) && pair[1] == "key" {
+            return true;
+        }
+    }
+    words
+        .iter()
+        .any(|w| w.ends_with("key") && SECRET_KEY_PREFIXES.contains(&&w[..w.len() - 3]))
+}
+
+fn percent_decode_key(raw: &str) -> String {
+    let bytes = raw.as_bytes();
+    let mut out = Vec::with_capacity(bytes.len());
+    let mut i = 0;
+    while i < bytes.len() {
+        if bytes[i] == b'%' && i + 2 < bytes.len() {
+            let hi = (bytes[i + 1] as char).to_digit(16);
+            let lo = (bytes[i + 2] as char).to_digit(16);
+            if let (Some(h), Some(l)) = (hi, lo) {
+                out.push(((h << 4) | l) as u8);
+                i += 3;
+                continue;
+            }
+        }
+        out.push(if bytes[i] == b'+' { b' ' } else { bytes[i] });
+        i += 1;
+    }
+    String::from_utf8_lossy(&out).into_owned()
+}
+
+/// Strips credentials, token-bearing query parameters, and query-like fragments
+/// from a captured page URL. Non-http(s) addresses come back empty.
+/// Returns `(sanitized_url, removed_something)`.
+pub fn sanitize_url(raw: &str) -> (String, bool) {
+    let trimmed = raw.trim();
+    if trimmed.is_empty() {
+        return (String::new(), false);
+    }
+    let Some((scheme, rest)) = trimmed.split_once("://") else {
+        return (String::new(), true);
+    };
+    let scheme_lower = scheme.to_ascii_lowercase();
+    if scheme_lower != "http" && scheme_lower != "https" {
+        return (String::new(), true);
+    }
+    let (without_hash, hash) = match rest.split_once('#') {
+        Some((before, h)) => (before, Some(h)),
+        None => (rest, None),
+    };
+    let (before_query, query) = match without_hash.split_once('?') {
+        Some((before, q)) => (before, Some(q)),
+        None => (without_hash, None),
+    };
+    let (authority, path) = match before_query.split_once('/') {
+        Some((a, p)) => (a, format!("/{p}")),
+        None => (before_query, String::new()),
+    };
+    if authority.is_empty() {
+        return (String::new(), true);
+    }
+    let (clean_authority, mut removed) = match authority.rsplit_once('@') {
+        Some((_, host_port)) => (host_port, true),
+        None => (authority, false),
+    };
+    if clean_authority.is_empty() {
+        return (String::new(), true);
+    }
+    let origin_path = format!("{scheme_lower}://{clean_authority}{path}");
+    let mut kept_query = Vec::new();
+    if let Some(q) = query {
+        for pair in q.split('&') {
+            if pair.is_empty() {
+                continue;
+            }
+            let key_raw = pair.split_once('=').map_or(pair, |(k, _)| k);
+            let key_decoded = percent_decode_key(key_raw);
+            if is_secret_key(&key_decoded) {
+                removed = true;
+            } else {
+                kept_query.push(pair);
+            }
+        }
+    }
+    let mut out = origin_path.clone();
+    if !kept_query.is_empty() {
+        out.push('?');
+        out.push_str(&kept_query.join("&"));
+    }
+    if let Some(h) = hash {
+        if h.contains('=') || h.contains('&') {
+            removed = true;
+        } else if !h.is_empty() {
+            out.push('#');
+            out.push_str(h);
+        }
+    }
+    if out.len() > MAX_URL_LEN {
+        out = origin_path.chars().take(MAX_URL_LEN).collect();
+        removed = true;
+    }
+    (out, removed)
+}
+
+fn cap_text(value: Option<&str>, max_chars: usize) -> Option<String> {
+    let s = value?.trim();
+    if s.is_empty() {
+        return None;
+    }
+    Some(s.chars().take(max_chars).collect())
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum PickImageFormat {
+    Png,
+    Jpeg,
+}
+
+impl PickImageFormat {
+    pub fn extension(self) -> &'static str {
+        match self {
+            PickImageFormat::Png => "png",
+            PickImageFormat::Jpeg => "jpg",
+        }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct PickScreenshot {
+    pub bytes: Vec<u8>,
+    pub format: PickImageFormat,
+    pub width: Option<u32>,
+    pub height: Option<u32>,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct PickStyles {
+    pub font: Option<String>,
+    pub color: Option<String>,
+    pub background: Option<String>,
+    pub radius: Option<String>,
+    pub padding: Option<String>,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct PickTarget {
+    pub tag: Option<String>,
+    pub role: Option<String>,
+    pub name: Option<String>,
+    pub selector: Option<String>,
+    pub styles: Option<PickStyles>,
+}
+
+/// One captured element, region, or quote from BrowserBear, already sanitized
+/// and validated against its pinned thread and `capture_id`.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct PickCapture {
+    pub capture_id: String,
+    pub thread: String,
+    pub created_at: Option<i64>,
+    pub kind: String,
+    pub source_title: String,
+    pub source_url: String,
+    pub screenshot: Option<PickScreenshot>,
+    pub quote: Option<String>,
+    pub target: Option<PickTarget>,
+    pub warnings: Vec<String>,
+}
+
+impl PickCapture {
+    pub fn source_host(&self) -> String {
+        host(&self.source_url).unwrap_or_else(|| self.source_url.clone())
+    }
+
+    pub fn display_title(&self) -> String {
+        if !self.source_title.is_empty() {
+            self.source_title.clone()
+        } else if !self.source_url.is_empty() {
+            self.source_host()
+        } else {
+            "Page capture".to_owned()
+        }
+    }
+
+    /// One compact line describing the picked target for collapsed metadata.
+    pub fn metadata_summary(&self) -> Option<String> {
+        let t = self.target.as_ref()?;
+        let what = t.role.as_deref().or(t.tag.as_deref()).unwrap_or("element");
+        let mut parts = vec![match &t.name {
+            Some(name) => format!("{what} \"{name}\""),
+            None => what.to_owned(),
+        }];
+        if let Some(sel) = &t.selector {
+            parts.push(sel.clone());
+        }
+        Some(parts.join(" · "))
+    }
+
+    /// Plain-text key/value rows for the expanded metadata section.
+    pub fn metadata_details(&self) -> Vec<(String, String)> {
+        let Some(t) = self.target.as_ref() else {
+            return vec![];
+        };
+        let mut rows = vec![];
+        if let Some(tag) = &t.tag {
+            rows.push(("Tag".into(), tag.clone()));
+        }
+        if let Some(role) = &t.role {
+            rows.push(("Role".into(), role.clone()));
+        }
+        if let Some(name) = &t.name {
+            rows.push(("Name".into(), name.clone()));
+        }
+        if let Some(sel) = &t.selector {
+            rows.push(("Selector".into(), sel.clone()));
+        }
+        if let Some(styles) = &t.styles {
+            let mut style_parts = vec![];
+            if let Some(f) = &styles.font {
+                style_parts.push(format!("font {f}"));
+            }
+            if let Some(c) = &styles.color {
+                style_parts.push(format!("color {c}"));
+            }
+            if let Some(bg) = &styles.background {
+                style_parts.push(format!("bg {bg}"));
+            }
+            if let Some(r) = &styles.radius {
+                style_parts.push(format!("radius {r}"));
+            }
+            if let Some(p) = &styles.padding {
+                style_parts.push(format!("padding {p}"));
+            }
+            if !style_parts.is_empty() {
+                rows.push(("Styles".into(), style_parts.join(", ")));
+            }
+        }
+        rows
+    }
+
+    /// Plain-word notices explaining target limitations (not including the
+    /// always-shown screenshot secret warning).
+    pub fn target_notes(&self) -> Vec<&'static str> {
+        let mut out = vec![];
+        for w in &self.warnings {
+            let note = match w.as_str() {
+                "iframe_unreadable" => {
+                    "Can't select inside this embedded frame. Showing what is visible without its page details."
+                }
+                "closed_shadow_root" => {
+                    "Can't target the inside of this control. Showing the host element, or pick again with Region."
+                }
+                "url_query_removed" => {
+                    "Sensitive parameters were removed from the source address."
+                }
+                "cropped_to_view" => "Cropped to what was visible on screen.",
+                "quote_truncated" => "Selected text was shortened to fit.",
+                _ => continue,
+            };
+            if !out.contains(&note) {
+                out.push(note);
+            }
+        }
+        out
+    }
+
+    pub fn has_secret_warning(&self) -> bool {
+        self.screenshot.is_some()
+            || self
+                .warnings
+                .iter()
+                .any(|w| w == "may_contain_visible_secrets")
+    }
+
+    /// Formats the capture as plain Markdown context attached when the user
+    /// presses Send. Never executes or emits raw captured HTML.
+    pub fn message_block(&self) -> String {
+        let mut lines = vec![];
+        let header = match (self.source_title.is_empty(), self.source_url.is_empty()) {
+            (false, false) => format!("From page: [{}]({})", self.source_title, self.source_url),
+            (true, false) => format!("From page: {}", self.source_url),
+            (false, true) => format!("From page: {}", self.source_title),
+            (true, true) => "From page:".to_owned(),
+        };
+        lines.push(header);
+        if let Some(summary) = self.metadata_summary() {
+            lines.push(format!("Element: {summary}"));
+        }
+        if let Some(quote) = &self.quote {
+            let quoted = quote
+                .lines()
+                .map(|line| format!("> {line}"))
+                .collect::<Vec<_>>()
+                .join("\n");
+            lines.push(quoted);
+        }
+        lines.join("\n")
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum PickState {
+    Picking,
+    Done,
+    Cancelled,
+    Gone,
+    Replaced,
+    Abandoned,
+    Timeout,
+    Failed,
+    Unknown,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct PickReply {
+    pub capture_id: String,
+    pub state: PickState,
+    pub mode: Option<String>,
+    pub note: Option<String>,
+    pub capture: Option<PickCapture>,
+}
+
+fn parse_target(v: &Value) -> Option<PickTarget> {
+    let obj = v.as_object()?;
+    let styles = obj.get("styles").and_then(Value::as_object).and_then(|s| {
+        let styles = PickStyles {
+            font: cap_text(s.get("font").and_then(Value::as_str), 80),
+            color: cap_text(s.get("color").and_then(Value::as_str), 80),
+            background: cap_text(s.get("background").and_then(Value::as_str), 80),
+            radius: cap_text(s.get("radius").and_then(Value::as_str), 40),
+            padding: cap_text(s.get("padding").and_then(Value::as_str), 40),
+        };
+        (styles.font.is_some()
+            || styles.color.is_some()
+            || styles.background.is_some()
+            || styles.radius.is_some()
+            || styles.padding.is_some())
+        .then_some(styles)
+    });
+    let target = PickTarget {
+        tag: cap_text(obj.get("tag").and_then(Value::as_str), 40),
+        role: cap_text(obj.get("role").and_then(Value::as_str), 40),
+        name: cap_text(obj.get("name").and_then(Value::as_str), 80),
+        selector: cap_text(obj.get("selector").and_then(Value::as_str), 300),
+        styles,
+    };
+    (target.tag.is_some()
+        || target.role.is_some()
+        || target.name.is_some()
+        || target.selector.is_some()
+        || target.styles.is_some())
+    .then_some(target)
+}
+
+fn parse_screenshot(v: &Value) -> Option<PickScreenshot> {
+    use base64::Engine as _;
+    let obj = v.as_object()?;
+    let data = obj.get("data").and_then(Value::as_str)?;
+    // Reject absurd base64 payloads before decoding.
+    if data.len() > MAX_PICK_SCREENSHOT_BYTES * 2 {
+        return None;
+    }
+    let bytes = base64::engine::general_purpose::STANDARD
+        .decode(data)
+        .ok()?;
+    if bytes.is_empty() || bytes.len() > MAX_PICK_SCREENSHOT_BYTES {
+        return None;
+    }
+    let format = match obj.get("format").and_then(Value::as_str) {
+        Some("jpeg") | Some("jpg") => PickImageFormat::Jpeg,
+        _ => PickImageFormat::Png,
+    };
+    Some(PickScreenshot {
+        bytes,
+        format,
+        width: obj.get("width").and_then(Value::as_u64).map(|n| n as u32),
+        height: obj.get("height").and_then(Value::as_u64).map(|n| n as u32),
+    })
+}
+
+/// Decodes a `panelPick` / `panelPickLook` reply and enforces `captureId` and
+/// pinned `thread` matching. Returns `None` if the reply doesn't match the
+/// in-flight session.
+pub fn parse_pick_reply(
+    result: &Value,
+    expected_capture_id: &str,
+    expected_thread: &str,
+) -> Option<PickReply> {
+    let capture_id = result["captureId"].as_str()?;
+    if capture_id != expected_capture_id {
+        return None;
+    }
+    let state = match result["state"].as_str()? {
+        "picking" => PickState::Picking,
+        "done" => PickState::Done,
+        "cancelled" => PickState::Cancelled,
+        "gone" => PickState::Gone,
+        "replaced" => PickState::Replaced,
+        "abandoned" => PickState::Abandoned,
+        "timeout" => PickState::Timeout,
+        "failed" => PickState::Failed,
+        _ => PickState::Unknown,
+    };
+    let mode = cap_text(result["mode"].as_str(), 24);
+    let note = cap_text(result["note"].as_str(), 400);
+    let capture = if state == PickState::Done {
+        let raw = result.get("capture")?.as_object()?;
+        let cap_id = raw.get("captureId").and_then(Value::as_str)?;
+        let cap_thread = raw.get("thread").and_then(Value::as_str)?;
+        // Never accept a capture meant for another session or another thread.
+        if cap_id != expected_capture_id || cap_thread != expected_thread {
+            return None;
+        }
+        let raw_url = raw
+            .get("source")
+            .and_then(|s| s.get("url"))
+            .and_then(Value::as_str)
+            .unwrap_or("");
+        let (clean_url, removed) = sanitize_url(raw_url);
+        let source_title = cap_text(
+            raw.get("source")
+                .and_then(|s| s.get("title"))
+                .and_then(Value::as_str),
+            200,
+        )
+        .unwrap_or_default();
+        let screenshot = raw.get("screenshot").and_then(parse_screenshot);
+        let quote = cap_text(
+            raw.get("quote").and_then(Value::as_str),
+            MAX_PICK_QUOTE_CHARS,
+        );
+        let target = raw.get("target").and_then(parse_target);
+        let mut warnings: Vec<String> = raw
+            .get("warnings")
+            .and_then(Value::as_array)
+            .map(|arr| {
+                arr.iter()
+                    .filter_map(Value::as_str)
+                    .take(12)
+                    .map(ToOwned::to_owned)
+                    .collect()
+            })
+            .unwrap_or_default();
+        if removed && !warnings.iter().any(|w| w == "url_query_removed") {
+            warnings.push("url_query_removed".to_owned());
+        }
+        if screenshot.is_some() && !warnings.iter().any(|w| w == "may_contain_visible_secrets") {
+            warnings.push("may_contain_visible_secrets".to_owned());
+        }
+        if screenshot.is_none() && quote.is_none() {
+            return None;
+        }
+        Some(PickCapture {
+            capture_id: cap_id.to_owned(),
+            thread: cap_thread.to_owned(),
+            created_at: raw.get("createdAt").and_then(Value::as_i64),
+            kind: cap_text(raw.get("kind").and_then(Value::as_str), 24)
+                .unwrap_or_else(|| "element".to_owned()),
+            source_title,
+            source_url: clean_url,
+            screenshot,
+            quote,
+            target,
+            warnings,
+        })
+    } else {
+        None
+    };
+    Some(PickReply {
+        capture_id: capture_id.to_owned(),
+        state,
+        mode,
+        note,
+        capture,
+    })
+}
+
+/// Pure per-thread pending capture store: pins every capture to its own
+/// `thread_id`, deduplicates by `capture_id`, and supports discarding or
+/// stripping just the quote or screenshot before Send.
+#[derive(Debug)]
+pub struct CaptureStore<T> {
+    by_thread: std::collections::HashMap<String, Vec<(PickCapture, T)>>,
+    seen_ids: std::collections::HashSet<String>,
+}
+
+impl<T> Default for CaptureStore<T> {
+    fn default() -> Self {
+        Self {
+            by_thread: std::collections::HashMap::new(),
+            seen_ids: std::collections::HashSet::new(),
+        }
+    }
+}
+
+impl<T> CaptureStore<T> {
+    /// Inserts a capture into its pinned thread if `capture_id` has not been
+    /// accepted before. Returns `false` for a duplicate `capture_id`.
+    pub fn insert(&mut self, capture: PickCapture, extra: T) -> bool {
+        if !self.seen_ids.insert(capture.capture_id.clone()) {
+            return false;
+        }
+        let thread = capture.thread.clone();
+        self.by_thread
+            .entry(thread)
+            .or_default()
+            .push((capture, extra));
+        true
+    }
+
+    pub fn for_thread(&self, thread: &str) -> &[(PickCapture, T)] {
+        self.by_thread.get(thread).map(Vec::as_slice).unwrap_or(&[])
+    }
+
+    pub fn for_thread_mut(&mut self, thread: &str) -> Option<&mut Vec<(PickCapture, T)>> {
+        self.by_thread.get_mut(thread)
+    }
+
+    pub fn remove(&mut self, thread: &str, capture_id: &str) -> Option<(PickCapture, T)> {
+        let list = self.by_thread.get_mut(thread)?;
+        let pos = list.iter().position(|(c, _)| c.capture_id == capture_id)?;
+        let item = list.remove(pos);
+        if list.is_empty() {
+            self.by_thread.remove(thread);
+        }
+        Some(item)
+    }
+
+    pub fn take_thread(&mut self, thread: &str) -> Vec<(PickCapture, T)> {
+        self.by_thread.remove(thread).unwrap_or_default()
+    }
+
+    /// Puts back captures from a failed send without letting `seen_ids` block
+    /// them.
+    pub fn restore_thread(&mut self, thread: String, mut items: Vec<(PickCapture, T)>) {
+        if items.is_empty() {
+            return;
+        }
+        let entry = self.by_thread.entry(thread).or_default();
+        items.append(entry);
+        *entry = items;
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -709,5 +1353,99 @@ mod tests {
             home(Some("/tmp/bear"), user, true),
             Some(PathBuf::from("/tmp/bear"))
         );
+    }
+
+    #[test]
+    fn sanitize_url_strips_tokens_and_credentials_while_keeping_safe_params() {
+        let (clean, removed) = sanitize_url(
+            "https://alice:hunter2@app.example.com/items?page=3&author=mike&keyword=rust&token=1&access_token=2&id_token=3&refresh_token=4&auth=5&authorization=6&code=7&session=8&sid=9&key=10&api_key=11&x-api-key=12&password=13&pwd=14#access_token=frag",
+        );
+        assert!(removed);
+        assert_eq!(
+            clean,
+            "https://app.example.com/items?page=3&author=mike&keyword=rust"
+        );
+        assert_eq!(
+            sanitize_url("https://docs.example.com/a#intro"),
+            ("https://docs.example.com/a#intro".to_owned(), false)
+        );
+        assert_eq!(sanitize_url("file:///etc/passwd"), (String::new(), true));
+        assert_eq!(sanitize_url("javascript:alert(1)"), (String::new(), true));
+        let huge = format!("https://example.com/x?q={}", "a".repeat(2500));
+        assert_eq!(
+            sanitize_url(&huge),
+            ("https://example.com/x".to_owned(), true)
+        );
+    }
+
+    #[test]
+    fn pick_reply_enforces_capture_id_and_pinned_thread_and_resanitizes_url() {
+        let raw = json!({
+            "captureId": "pick-12345678",
+            "state": "done",
+            "capture": {
+                "captureId": "pick-12345678",
+                "thread": "thread-a",
+                "kind": "element",
+                "source": {
+                    "title": "Dashboard",
+                    "url": "https://app.example.com/dash?tab=main&access_token=secret123"
+                },
+                "screenshot": {
+                    "data": "iVBORw0KGgo=",
+                    "format": "png",
+                    "width": 100,
+                    "height": 40
+                },
+                "quote": "Selected line",
+                "target": {
+                    "tag": "button",
+                    "role": "button",
+                    "name": "Save",
+                    "selector": "#save-btn",
+                    "html": "<script>alert(1)</script>"
+                },
+                "warnings": ["closed_shadow_root"]
+            }
+        });
+        assert!(parse_pick_reply(&raw, "pick-other", "thread-a").is_none());
+        assert!(parse_pick_reply(&raw, "pick-12345678", "thread-b").is_none());
+        let reply = parse_pick_reply(&raw, "pick-12345678", "thread-a").unwrap();
+        assert_eq!(reply.state, PickState::Done);
+        let cap = reply.capture.unwrap();
+        assert_eq!(cap.source_url, "https://app.example.com/dash?tab=main");
+        assert!(cap.warnings.iter().any(|w| w == "url_query_removed"));
+        assert!(cap
+            .warnings
+            .iter()
+            .any(|w| w == "may_contain_visible_secrets"));
+        assert!(cap.warnings.iter().any(|w| w == "closed_shadow_root"));
+        let block = cap.message_block();
+        assert!(block.contains("From page: [Dashboard](https://app.example.com/dash?tab=main)"));
+        assert!(block.contains("> Selected line"));
+        assert!(!block.contains("<script>"));
+    }
+
+    #[test]
+    fn capture_store_pins_to_thread_and_deduplicates_capture_id() {
+        let mut store: CaptureStore<()> = CaptureStore::default();
+        let cap = PickCapture {
+            capture_id: "pick-dup-1".into(),
+            thread: "thread-pinned".into(),
+            created_at: None,
+            kind: "text".into(),
+            source_title: "Docs".into(),
+            source_url: "https://example.com/docs".into(),
+            screenshot: None,
+            quote: Some("Important quote".into()),
+            target: None,
+            warnings: vec![],
+        };
+        assert!(store.insert(cap.clone(), ()));
+        assert!(!store.insert(cap, ()), "duplicate capture_id ignored");
+        assert_eq!(store.for_thread("thread-pinned").len(), 1);
+        assert_eq!(store.for_thread("thread-focused-later").len(), 0);
+        assert!(store.remove("thread-pinned", "pick-dup-1").is_some());
+        assert_eq!(store.for_thread("thread-pinned").len(), 0);
     }
 }

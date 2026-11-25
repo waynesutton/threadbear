@@ -24,11 +24,25 @@ export type Heard = { cmd: string; args: Record<string, unknown>; thread?: strin
 
 // A 1×1 grey JPEG, for panelStill.
 const STILL = '/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAgGBgcGBQgHBwcJCQgKDBQNDAsLDBkSEw8UHRofHh0aHBwgJC4nICIsIxwcKDcpLDAxNDQ0Hyc5PTgyPC4zNDL/wAALCAABAAEBAREA/8QAFAABAAAAAAAAAAAAAAAAAAAACf/EABQQAQAAAAAAAAAAAAAAAAAAAAD/2gAIAQEAAD8AKp//2Q==';
+// A valid 1×1 PNG, for Add from page captures.
+const PICK_PNG = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=';
+
+type PickEntry = {
+  captureId: string;
+  thread: string;
+  tabId: number;
+  mode: string;
+  state: string;
+  note?: string | null;
+  capture?: Record<string, unknown> | null;
+};
 
 export class StandInBrowserBear {
   readonly home: string;
   readonly heard: Heard[] = [];
   private tabs: Tab[] = [];
+  private picks = new Map<string, PickEntry>();
+  private activePickId: string | null = null;
   private server: net.Server;
   private sockets = new Set<net.Socket>();
 
@@ -93,9 +107,38 @@ export class StandInBrowserBear {
     });
   }
 
+  /** Completes the active pick session with a simulated element capture. */
+  finishPick(opts: {
+    name: string;
+    url: string;
+    title?: string;
+    quote?: string | null;
+    warnings?: string[];
+  }): void {
+    if (!this.activePickId) throw new Error('no active pick session');
+    const entry = this.picks.get(this.activePickId);
+    if (!entry) throw new Error(`missing pick ${this.activePickId}`);
+    const tab = this.tabs.find((t) => t.tabId === entry.tabId);
+    entry.state = 'done';
+    entry.capture = {
+      captureId: entry.captureId,
+      thread: entry.thread,
+      createdAt: Date.now(),
+      kind: 'element',
+      source: { title: opts.title ?? tab?.title ?? 'Page', url: opts.url },
+      screenshot: { data: PICK_PNG, format: 'png', width: 1, height: 1 },
+      quote: opts.quote ?? null,
+      target: { tag: 'button', role: 'button', name: opts.name, selector: '#target' },
+      warnings: opts.warnings ?? ['may_contain_visible_secrets'],
+    };
+    this.activePickId = null;
+  }
+
   private answer(cmd: string, args: Record<string, unknown>, thread?: string): Record<string, unknown> {
     // The pane's own polling isn't worth keeping.
-    if (cmd !== 'panelState' && cmd !== 'panelStill') this.heard.push({ cmd, args, ...(thread ? { thread } : {}) });
+    if (cmd !== 'panelState' && cmd !== 'panelStill' && cmd !== 'panelPickLook') {
+      this.heard.push({ cmd, args, ...(thread ? { thread } : {}) });
+    }
     switch (cmd) {
       case 'panelState':
         return { ok: true, result: { profiles: [], tabs: [] } };
@@ -103,6 +146,57 @@ export class StandInBrowserBear {
         return { ok: true, result: { data: STILL, at: Date.now() } };
       case 'panelShow':
         return { ok: true, result: {} };
+      case 'panelPick': {
+        const captureId = String(args.captureId ?? '');
+        const tabId = Number(args.tab);
+        const mode = String(args.mode ?? 'element');
+        const tab = this.tabs.find((t) => t.tabId === tabId);
+        if (!tab || !thread || tab.thread !== thread) {
+          return { ok: false, error: 'This page belongs to another thread, or is no longer open.' };
+        }
+        const existing = this.picks.get(captureId);
+        if (existing) {
+          return {
+            ok: true,
+            result: {
+              captureId,
+              state: existing.state,
+              mode: existing.mode,
+              note: existing.note ?? null,
+              capture: existing.capture ?? null,
+            },
+          };
+        }
+        this.picks.set(captureId, { captureId, thread, tabId, mode, state: 'picking' });
+        this.activePickId = captureId;
+        return { ok: true, result: { captureId, state: 'picking', mode } };
+      }
+      case 'panelPickLook': {
+        const captureId = String(args.captureId ?? '');
+        const entry = this.picks.get(captureId);
+        if (!entry || entry.thread !== thread) {
+          return { ok: true, result: { captureId, state: 'unknown' } };
+        }
+        return {
+          ok: true,
+          result: {
+            captureId,
+            state: entry.state,
+            mode: entry.mode,
+            note: entry.note ?? null,
+            capture: entry.capture ?? null,
+          },
+        };
+      }
+      case 'panelPickCancel': {
+        const captureId = String(args.captureId ?? '');
+        const entry = this.picks.get(captureId);
+        if (entry && entry.thread === thread) {
+          entry.state = 'cancelled';
+          if (this.activePickId === captureId) this.activePickId = null;
+        }
+        return { ok: true, result: {} };
+      }
       case 'markDone': {
         const tab = this.tabs.find((t) => t.tabId === args.tab);
         if (!tab) return { ok: false, error: 'no such tab' };

@@ -426,9 +426,23 @@ thread's agents have open through [BrowserBear](https://github.com/mikecann/brow
 in the agents' own browser ([Helium](https://helium.computer), in real windows
 that open behind yours without taking the focus) or in one of your Chrome
 profiles. Each page has a still of how it looks, what the agent is doing in it,
-and Show window, which brings its real window to the front. The panel doesn't
-draw the live page or take clicks for it: you use the page in its own window.
-An address typed at the top opens a new page in the agents' browser.
+Show window (which brings its real window to the front), and Select on page
+(Add from page). The panel doesn't draw the live page or take clicks for it:
+you use the page in its own window. An address typed at the top opens a new
+page in the agents' browser.
+
+Select on page pins the current thread, brings that page's real window forward,
+and turns on a temporary picker overlay in the page. Hover outlines an element,
+click picks it without navigating or submitting forms, scrolling keeps working
+including inside nested containers, and Escape cancels cleanly. A small bar at
+the top of the page also switches to Region (drag a box to crop what is visible,
+including over cross-origin frames or closed controls) or Text (highlight text
+and press Return to attach a quote). While you are picking, agents cannot click,
+snap, evaluate or navigate that tab, and unclaimed tabs in your own Chrome stay
+read-only. The capture lands as a preview in the pinned thread's message box
+with the cropped screenshot, title, sanitized address (token parameters
+removed), optional quote, collapsed element details, a reminder to check the
+image for visible secrets, and Discard. Nothing is sent until you press Send.
 
 When the agent needs you to do something in a page (sign in, approve, pay),
 handoff brings that page's window to the front. For a page in the agents'

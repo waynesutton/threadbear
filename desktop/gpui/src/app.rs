@@ -2539,6 +2539,11 @@ impl Threadbear {
             if !drafts.is_empty() {
                 out["drafts"] = json!(drafts);
             }
+            // Pending "Add from page" captures (composer_captures.rs).
+            let captures = composer.capture_dump(cx);
+            if !captures.is_empty() {
+                out["captures"] = json!(captures);
+            }
         }
         out
     }

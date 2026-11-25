@@ -282,6 +282,16 @@ profiles.
   in their own Chrome.
 - `{cmd:"panelShow",thread,args:{tab,profile}}` brings the page's real window
   to the front.
+- `{cmd:"panelPick",thread,args:{tab,profile,captureId,mode}}` starts an Add
+  from page pick in that tab's real window, pinned to `thread` and keyed by an
+  idempotent `captureId`. `{cmd:"panelPickLook",thread,args:{captureId}}` polls
+  its state (`picking`, `done` with sanitized `capture`, `cancelled`, `gone`,
+  `replaced`, `abandoned`, `timeout`, `failed`), and
+  `{cmd:"panelPickCancel",thread,args:{captureId}}` cancels and cleans up. Only
+  one pick runs at a time, agents wait or are refused on that tab while it runs,
+  unclaimed user tabs are refused without claiming them, token-bearing query
+  parameters are stripped from the source URL, and screenshots land in the
+  pinned thread's composer through `media.import` for review before Send.
 - `markDone {tab}` is the Done button for a page waiting on `handoff --wait`.
 
 BrowserBear checks that the thread owns the page in that exact profile (the agents'

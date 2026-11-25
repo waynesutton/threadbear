@@ -200,6 +200,12 @@ pub struct RestoreDraft {
     /// the drafts file, which keeps only words and pictures (a quit with
     /// this still waiting to be given back keeps the answers as words).
     pub(crate) as_sent: Option<(String, Vec<ImageRef>)>,
+    /// Pending "Add from page" captures that went with this send, put back
+    /// intact if the send is refused (composer_captures.rs).
+    pub(crate) captures: Vec<(
+        threadbear_core::browserbear::PickCapture,
+        crate::composer_captures::PendingCaptureMeta,
+    )>,
 }
 
 impl RestoreDraft {
@@ -209,6 +215,7 @@ impl RestoreDraft {
             images,
             card: None,
             as_sent: None,
+            captures: vec![],
         }
     }
 
@@ -240,12 +247,15 @@ impl RestoreDraft {
     pub(crate) fn joined(first: RestoreDraft, then: RestoreDraft) -> RestoreDraft {
         let as_sent = (first.card.is_some() || then.card.is_some())
             .then(|| Self::join_parts(first.for_saving(), then.for_saving()));
+        let mut captures = first.captures;
+        captures.extend(then.captures);
         let (text, images) = Self::join_parts((first.text, first.images), (then.text, then.images));
         RestoreDraft {
             text,
             images,
             card: first.card.or(then.card),
             as_sent,
+            captures,
         }
     }
 }
@@ -853,6 +863,9 @@ impl Composer {
     // ---- Sending ----
 
     fn loading_pictures(&self, cx: &App) -> bool {
+        if self.importing_captures(cx) {
+            return true;
+        }
         let mut inputs = if self.editing.is_some() {
             Vec::new()
         } else {
@@ -886,6 +899,8 @@ impl Composer {
             // A changed draft's chip says it goes with the message, so it
             // can go on its own (composer_drafts.rs).
             || self.has_pending_drafts(cx)
+            // Pending "Add from page" previews (composer_captures.rs).
+            || self.has_pending_captures(cx)
     }
 
     /// Whether the Fast lane toggle and shortcuts are available on this box.
@@ -956,6 +971,7 @@ impl Composer {
         // the agent to use his words (draft_boxes.rs).
         let thread = self.thread_id.clone().unwrap_or_default();
         let edits = crate::draft_boxes::unsent_edits(&thread, cx);
+        let has_captures = crate::composer_captures::has_pending(&thread, cx);
         let words = [words, edits.clone()]
             .into_iter()
             .filter(|w| !w.is_empty())
@@ -968,7 +984,7 @@ impl Composer {
             }
             None => (words, images.clone(), Value::Null),
         };
-        if text.trim().is_empty() && images_to_send.is_empty() {
+        if text.trim().is_empty() && images_to_send.is_empty() && !has_captures {
             return;
         }
         let Some(pane) = self.pane() else { return };
@@ -980,6 +996,15 @@ impl Composer {
             }
             return;
         }
+        let (capture_text, capture_images, taken_captures) =
+            crate::composer_captures::take_for_send(&thread, cx);
+        let text = [text, capture_text]
+            .into_iter()
+            .filter(|w| !w.is_empty())
+            .collect::<Vec<_>>()
+            .join("\n\n");
+        let mut images_to_send = images_to_send;
+        images_to_send.extend(capture_images);
         let picks = self.saved_picks();
         self.input.update(cx, |s, cx| s.set_value("", window, cx));
         self.forget_chips();
@@ -995,6 +1020,7 @@ impl Composer {
             images,
             card: picks,
             as_sent: None,
+            captures: taken_captures,
         };
         pane.update(cx, |p, cx| {
             p.send_message_with_fast(
@@ -1379,8 +1405,14 @@ impl Composer {
             text: draft,
             images,
             card,
+            captures,
             ..
         } = restore;
+        if !captures.is_empty() {
+            if let Some(thread) = self.thread_id.clone() {
+                crate::composer_captures::restore_after_failed_send(thread, captures, cx);
+            }
+        }
         if let Some(saved) = card {
             if self.card.seq == Some(saved.seq) {
                 self.card.picks = saved.picks;
@@ -2901,6 +2933,9 @@ impl Render for Composer {
         // Drafts he's changed in this thread's replies, which go with the
         // message: a chip each, so it's plain they do (composer_drafts.rs).
         let draft_chips = self.render_draft_chips(cx);
+        // Pending "Add from page" captures waiting for review before Send
+        // (composer_captures.rs).
+        let capture_previews = self.render_capture_previews(cx);
         let needs_you = self.open_card(cx).is_some_and(|c| !c.is_done());
         // The slash palette, on the box's top edge, or else the # thread
         // picker, on the text's (thread_palette.rs).
@@ -2938,6 +2973,7 @@ impl Render for Composer {
             .children(editing_banner)
             .children(answer_chips)
             .children(draft_chips)
+            .children(capture_previews)
             .when_some(strip, |s, strip| s.child(strip))
             // The # picker hangs off the text, not the box's top: with a
             // card or chips over the text it sat a card's height away from

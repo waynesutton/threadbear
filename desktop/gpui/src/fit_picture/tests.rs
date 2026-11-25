@@ -626,6 +626,10 @@ fn every_picture_path_shares_this_one() {
             include_str!("../highlights_project.rs"),
         ),
         ("composer_card.rs", include_str!("../composer_card.rs")),
+        (
+            "composer_captures.rs",
+            include_str!("../composer_captures.rs"),
+        ),
         ("file_thumbs.rs", include_str!("../file_thumbs.rs")),
         ("folders.rs", include_str!("../folders.rs")),
         (

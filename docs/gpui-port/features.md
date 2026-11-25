@@ -332,6 +332,7 @@ It comes from reading code, not from running anything, so "(unverified)" means n
 | `browser.show` | Show window | Brings the real window forward | BrowserBear socket: Unix socket on macOS and Linux, named pipe on Windows (inferred). | shim | S | `AgentBrowserPanel` |
 | `browser.handoff` | Your turn and Done | Handoff marks a page | Drawn. | build | S | `AgentBrowserPanel` |
 | `browser.address` | New page by address | Field at the top | `Input`. | kit | S | `AgentBrowserPanel` |
+| `browser.pick` | Add from page | Select on page button, pick session and composer preview | BrowserBear socket (`panelPick`/`panelPickLook`/`panelPickCancel`), `composer_captures.rs`. | build | M | `AgentBrowserPanel` |
 | `pane.prs` | Pull requests in the pane | A GitHub PR link opens as a tab beside the thread (Overview with branch, status, checks, description, activity and a comment box; Diff; Checks), with Review, Merge and Close that spin until GitHub answers, and Start a thread or Ask Claude to review | `pr_view.rs` over the pane as a preview (`Target::Pr`); rules in `core/src/pull_requests.rs`; the runner's `github.*` through gh. | build | M | none (GPUI only) |
 
 ## 12. File previews and folders

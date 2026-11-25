@@ -17,9 +17,12 @@ use crate::highlights::{icon, palette, tipped_as, with_scroll_bar, SidePane};
 use crate::push_button::PushButton;
 use crate::spinner::Spinner;
 use crate::style::{self, px};
+use crate::tips::Tip as _;
 use futures::channel::oneshot;
+use gpui_kit::assets::IconName;
+use gpui_kit::base::TestSupportExt as _;
 use gpui_kit::component::input::{Input, InputEvent, InputState};
-use gpui_kit::component::{h_flex, v_flex, Sizable as _};
+use gpui_kit::component::{h_flex, v_flex, Icon, Sizable as _};
 use gpui_kit::prelude::*;
 use gpui_kit::*;
 use serde_json::{json, Value};
@@ -27,7 +30,8 @@ use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, LazyLock, Mutex};
 use std::time::{Duration, Instant};
-use threadbear_core::browserbear::{self as bear, AgentTab};
+use threadbear_client::runner::Client;
+use threadbear_core::browserbear::{self as bear, AgentTab, PickState};
 use threadbear_core::inbox::ThreadSummary;
 
 pub(crate) use threadbear_core::browserbear::PANEL_ID as BROWSER;
@@ -35,12 +39,17 @@ pub(crate) use threadbear_core::browserbear::PANEL_ID as BROWSER;
 /// How often tabs.json and the profiles' pages are looked at: a second's lag
 /// is fine, it's for which pages a thread has and what the agent's doing.
 const POLL: Duration = Duration::from_millis(750);
+/// How often an active "Add from page" pick asks BrowserBear for its result.
+const PICK_POLL: Duration = Duration::from_millis(250);
 /// A row's still is asked for this often while it's on show; BrowserBear
 /// decides how fresh it can be.
 const STILL_EVERY: Duration = Duration::from_secs(3);
 /// A button's request is given up on after this, and the button comes back.
 const ANSWER_WITHIN: Duration = Duration::from_secs(45);
 const STILL_WIDTH: f32 = 104.;
+pub(crate) const PICK_BUTTON_TIP: &str =
+    "Pick an element, region or text in this page's window to preview in your message";
+pub(crate) const CANCEL_PICK_TIP: &str = "Stop picking on this page";
 
 /// BrowserBear's folder, worked out once (`bear::home`): none for a scripted
 /// app without `BROWSERBEAR_HOME`, so specs and dev-apps never reach the real one.
@@ -423,6 +432,17 @@ pub(crate) struct Still {
     pub(crate) at: Option<f64>,
 }
 
+/// One active "Add from page" pick session, pinned to the thread that started
+/// it so later thread switches cannot redirect the resulting preview.
+#[derive(Clone)]
+pub(crate) struct ActivePick {
+    pub(crate) capture_id: String,
+    pub(crate) thread_id: String,
+    pub(crate) tab_key: String,
+    pub(crate) tab_title: String,
+    pub(crate) mode: String,
+}
+
 /// Reads the agent host's tabs.json and asks BrowserBear for the pages in
 /// Mike's own profiles (`AgentBrowserModel`). One for the app.
 pub(crate) struct AgentBrowser {
@@ -434,6 +454,12 @@ pub(crate) struct AgentBrowser {
     pub(crate) browser_name: String,
     pub(crate) error: Option<String>,
     request_error: Option<String>,
+    /// The one active "Add from page" pick on this Mac, if any.
+    pub(crate) active_pick: Option<ActivePick>,
+    /// User-facing explanation when a pick fails, moves away, or is refused.
+    pub(crate) pick_note: Option<String>,
+    pick_serial: u64,
+    pick_task: Option<Task<()>>,
     /// Buttons waiting for BrowserBear's answer, by `pending_key`. It can
     /// take a while, as the browser has to do the thing.
     pub(crate) pending: HashSet<String>,
@@ -519,6 +545,10 @@ impl AgentBrowser {
             browser_name: "Helium".into(),
             error: None,
             request_error: None,
+            active_pick: None,
+            pick_note: None,
+            pick_serial: 0,
+            pick_task: None,
             pending: HashSet::new(),
             pending_requests: HashMap::new(),
             next_request: 0,
@@ -612,6 +642,11 @@ impl AgentBrowser {
         };
         self.pipe = None;
         self.set_error(Some(why), cx);
+        if self.active_pick.take().is_some() {
+            self.pick_task = None;
+            self.pick_serial += 1;
+            self.pick_note = Some("BrowserBear disconnected. Nothing was added.".into());
+        }
         self.polling = false;
         self.profile_tabs.clear();
         self.merge(cx);
@@ -774,6 +809,233 @@ impl AgentBrowser {
         );
     }
 
+    /// Starts an "Add from page" pick session in the real browser window,
+    /// pinning `thread` as the only destination for its capture.
+    pub(crate) fn start_pick(
+        &mut self,
+        tab: &AgentTab,
+        thread: &str,
+        mode: &str,
+        client: Arc<Client>,
+        cx: &mut Context<Self>,
+    ) {
+        if let Some(prev) = self.active_pick.take() {
+            self.pick_task = None;
+            let _ = self.send(
+                "panelPickCancel",
+                json!({ "captureId": prev.capture_id }),
+                Some(&prev.thread_id),
+                cx,
+                |_, _, _| {},
+            );
+        }
+        self.pick_serial += 1;
+        let serial = self.pick_serial;
+        let capture_id = format!("pick-{}-{serial}", crate::now_ms());
+        let pinned_thread = thread.to_owned();
+        let tab_key = tab.id();
+        let key = pending_key("panelPick", tab);
+        self.next_request += 1;
+        let request = self.next_request;
+        self.pending.insert(key.clone());
+        self.pending_requests.insert(key.clone(), request);
+        self.pick_note = None;
+        self.request_error = None;
+        self.error = None;
+        self.active_pick = Some(ActivePick {
+            capture_id: capture_id.clone(),
+            thread_id: pinned_thread.clone(),
+            tab_key,
+            tab_title: tab.shown_title(),
+            mode: mode.to_owned(),
+        });
+        cx.notify();
+        let args = json!({
+            "tab": tab.tab_id,
+            "profile": tab.profile_id(),
+            "captureId": capture_id,
+            "mode": mode,
+        });
+        let key_cb = key.clone();
+        let sent = self.send("panelPick", args, Some(thread), cx, move |b, got, cx| {
+            b.answered(&key_cb, request);
+            if b.pick_serial != serial {
+                cx.notify();
+                return;
+            }
+            match got {
+                Ok(result) => match bear::parse_pick_reply(&result, &capture_id, &pinned_thread) {
+                    Some(reply) if reply.state == PickState::Done => {
+                        b.active_pick = None;
+                        b.pick_task = None;
+                        if let Some(capture) = reply.capture {
+                            crate::composer_captures::insert(capture, client, cx);
+                        }
+                    }
+                    Some(reply) if reply.state == PickState::Picking => {
+                        if let Some(active) = b.active_pick.as_mut() {
+                            if let Some(m) = reply.mode {
+                                active.mode = m;
+                            }
+                        }
+                        b.spawn_pick_poll(serial, capture_id, pinned_thread, client, cx);
+                    }
+                    Some(reply) => {
+                        b.active_pick = None;
+                        b.pick_task = None;
+                        if reply.state != PickState::Cancelled {
+                            b.pick_note = reply.note;
+                        }
+                    }
+                    None => {
+                        b.active_pick = None;
+                        b.pick_task = None;
+                        b.pick_note = Some("BrowserBear sent an unexpected pick reply.".into());
+                    }
+                },
+                Err(why) => {
+                    b.active_pick = None;
+                    b.pick_task = None;
+                    b.pick_note = Some(why);
+                }
+            }
+            cx.notify();
+        });
+        if !sent {
+            self.answered(&key, request);
+            self.active_pick = None;
+            self.pick_note = Some("BrowserBear isn't running.".into());
+            cx.notify();
+        }
+    }
+
+    fn spawn_pick_poll(
+        &mut self,
+        serial: u64,
+        capture_id: String,
+        pinned_thread: String,
+        client: Arc<Client>,
+        cx: &mut Context<Self>,
+    ) {
+        let task = cx.spawn(async move |this, cx| loop {
+            cx.background_executor().timer(PICK_POLL).await;
+            let req = this.update(cx, |b, _| {
+                if b.pick_serial != serial || b.active_pick.is_none() {
+                    return None;
+                }
+                let pipe = b.connection()?;
+                let (_, rx) = pipe.request(
+                    "panelPickLook",
+                    json!({ "captureId": capture_id }),
+                    Some(&pinned_thread),
+                );
+                Some((rx, b.pipe_serial))
+            });
+            let Ok(Some((rx, pipe_serial))) = req else {
+                break;
+            };
+            let (got, timed_out) = answer(rx, cx).await;
+            let keep_going = this.update(cx, |b, cx| {
+                if timed_out && b.pipe_serial == pipe_serial {
+                    if let Some(pipe) = b.pipe.take() {
+                        b.stuck_connect = Some(pipe.connecting.clone());
+                    }
+                    b.polling = false;
+                }
+                if b.pick_serial != serial || b.active_pick.is_none() {
+                    return false;
+                }
+                match got {
+                    Ok(result) => {
+                        let Some(reply) =
+                            bear::parse_pick_reply(&result, &capture_id, &pinned_thread)
+                        else {
+                            // Ignore mismatched captureId or thread replies.
+                            return true;
+                        };
+                        match reply.state {
+                            PickState::Picking => {
+                                if let Some(active) = b.active_pick.as_mut() {
+                                    if let Some(m) = reply.mode {
+                                        if active.mode != m {
+                                            active.mode = m;
+                                            cx.notify();
+                                        }
+                                    }
+                                }
+                                true
+                            }
+                            PickState::Done => {
+                                b.active_pick = None;
+                                b.pick_task = None;
+                                if let Some(capture) = reply.capture {
+                                    crate::composer_captures::insert(capture, client.clone(), cx);
+                                }
+                                cx.notify();
+                                false
+                            }
+                            PickState::Cancelled => {
+                                b.active_pick = None;
+                                b.pick_task = None;
+                                b.pick_note = None;
+                                cx.notify();
+                                false
+                            }
+                            PickState::Gone
+                            | PickState::Replaced
+                            | PickState::Abandoned
+                            | PickState::Timeout
+                            | PickState::Failed
+                            | PickState::Unknown => {
+                                b.active_pick = None;
+                                b.pick_task = None;
+                                b.pick_note = reply.note.or_else(|| {
+                                    Some("The pick session ended. Nothing was added.".into())
+                                });
+                                cx.notify();
+                                false
+                            }
+                        }
+                    }
+                    Err(why) => {
+                        b.active_pick = None;
+                        b.pick_task = None;
+                        b.pick_note = Some(why);
+                        cx.notify();
+                        false
+                    }
+                }
+            });
+            if !matches!(keep_going, Ok(true)) {
+                break;
+            }
+        });
+        self.pick_task = Some(task);
+    }
+
+    /// Cancels the active pick session and tells BrowserBear to clean up.
+    pub(crate) fn cancel_pick(&mut self, cx: &mut Context<Self>) {
+        self.pick_serial += 1;
+        self.pick_task = None;
+        self.pick_note = None;
+        if let Some(pick) = self.active_pick.take() {
+            let _ = self.send(
+                "panelPickCancel",
+                json!({ "captureId": pick.capture_id }),
+                Some(&pick.thread_id),
+                cx,
+                |_, _, _| {},
+            );
+        }
+        cx.notify();
+    }
+
+    pub(crate) fn dismiss_pick_note(&mut self, cx: &mut Context<Self>) {
+        if self.pick_note.take().is_some() {
+            cx.notify();
+        }
+    }
+
     /// Asks for the stills of a thread's pages that are due, while its pane
     /// is on show. None for a background tab Chrome isn't drawing, or one
     /// handed to Mike in his own Chrome, which BrowserBear leaves alone.
@@ -874,11 +1136,13 @@ impl SidePane {
         };
         let b = model.read(cx);
         let tabs = b.tabs_for(&thread.id);
-        let (available, opening, browser_name, error) = (
+        let (available, opening, browser_name, error, active_pick, pick_note) = (
             b.available(),
             b.pending.contains(OPENING_KEY),
             b.browser_name.clone(),
             b.error.clone(),
+            b.active_pick.clone(),
+            b.pick_note.clone(),
         );
         let input = self.browser_address(window, cx);
         input.update(cx, |s, cx| {
@@ -909,6 +1173,93 @@ impl SidePane {
                 s.child(Spinner::new().color(p.secondary).with_size(px(11.)))
             });
         let mut pane = v_flex().size_full().child(bar);
+        if let Some(pick) = active_pick {
+            let cancel_model = model.clone();
+            let note = if pick.thread_id == thread.id {
+                format!(
+                    "Picking on {} ({})… Press Esc in the page or Cancel.",
+                    pick.tab_title, pick.mode
+                )
+            } else {
+                format!(
+                    "Picking on {} for another thread… Press Esc or Cancel.",
+                    pick.tab_title
+                )
+            };
+            pane = pane.child(
+                h_flex()
+                    .flex_none()
+                    .items_center()
+                    .gap(px(8.))
+                    .mx(px(10.))
+                    .mb(px(6.))
+                    .px(px(8.))
+                    .py(px(6.))
+                    .rounded(px(7.))
+                    .bg(style::chip_fill(cx))
+                    .border(gpui_kit::px(0.5))
+                    .border_color(style::accent(cx).opacity(0.5))
+                    .child(Spinner::new().color(style::accent(cx)).with_size(px(11.)))
+                    .child(
+                        div()
+                            .flex_1()
+                            .min_w_0()
+                            .text_size(px(style::size::LABEL))
+                            .text_color(p.fg)
+                            .child(note),
+                    )
+                    .child(
+                        PushButton::new("browser-pick-cancel-bar", "Cancel", CANCEL_PICK_TIP)
+                            .small()
+                            .render(cx, move |_, _, cx| {
+                                cancel_model.update(cx, |b, cx| b.cancel_pick(cx))
+                            }),
+                    ),
+            );
+        }
+        if let Some(note) = pick_note {
+            let dismiss_model = model.clone();
+            pane = pane.child(
+                h_flex()
+                    .flex_none()
+                    .items_start()
+                    .gap(px(6.))
+                    .mx(px(10.))
+                    .mb(px(6.))
+                    .px(px(8.))
+                    .py(px(6.))
+                    .rounded(px(7.))
+                    .bg(style::chip_fill(cx))
+                    .border(gpui_kit::px(0.5))
+                    .border_color(style::hairline(cx))
+                    .child(
+                        div()
+                            .flex_1()
+                            .min_w_0()
+                            .text_size(px(style::size::LABEL))
+                            .text_color(p.secondary)
+                            .child(note),
+                    )
+                    .child(
+                        div()
+                            .id("browser-pick-note-dismiss")
+                            .test_support()
+                            .role(Role::Button)
+                            .aria_label("Dismiss note")
+                            .cursor_pointer()
+                            .flex_none()
+                            .tip("Dismiss note")
+                            .on_click(move |_, _, cx| {
+                                dismiss_model.update(cx, |b, cx| b.dismiss_pick_note(cx));
+                            })
+                            .child(
+                                Icon::from(IconName::X)
+                                    .with_size(px(10.))
+                                    .text_color(p.secondary),
+                            ),
+                    ),
+            );
+        }
         if tabs.is_empty() {
             return pane
                 .child(crate::files::pane_note(
@@ -1045,7 +1396,45 @@ impl SidePane {
         .render(cx, move |_, _, cx| {
             show_model.update(cx, |b, cx| b.show(&show_tab, &show_thread, cx))
         });
-        let mut buttons = h_flex().gap(px(6.)).child(show);
+        let picking_this = b
+            .active_pick
+            .as_ref()
+            .is_some_and(|pick| pick.tab_key == tab.id() && pick.thread_id == thread);
+        let (pick_tab, pick_thread, pick_model, pick_client) = (
+            tab.clone(),
+            thread.to_owned(),
+            model.clone(),
+            self.client.clone(),
+        );
+        let pick_button = PushButton::new(
+            SharedString::from(format!("browser-pick-{}", tab.id())),
+            if picking_this {
+                "Cancel pick"
+            } else {
+                "Select on page"
+            },
+            if picking_this {
+                CANCEL_PICK_TIP
+            } else {
+                PICK_BUTTON_TIP
+            },
+        )
+        .small()
+        .busy(b.pending.contains(&pending_key("panelPick", tab)))
+        .render(cx, move |_, _, cx| {
+            pick_model.update(cx, |b, cx| {
+                if picking_this {
+                    b.cancel_pick(cx);
+                } else {
+                    b.start_pick(&pick_tab, &pick_thread, "element", pick_client.clone(), cx);
+                }
+            })
+        });
+        let mut buttons = h_flex()
+            .flex_wrap()
+            .gap(px(6.))
+            .child(show)
+            .child(pick_button);
         if yours {
             let (done_tab, done_model) = (tab.clone(), model.clone());
             buttons = buttons.child(
@@ -1104,7 +1493,18 @@ impl SidePane {
         let rows: Vec<Value> = tabs
             .iter()
             .map(|t| {
-                let mut buttons = vec!["Show window"];
+                let picking_this = b
+                    .active_pick
+                    .as_ref()
+                    .is_some_and(|pick| pick.tab_key == t.id() && pick.thread_id == thread.id);
+                let mut buttons = vec![
+                    "Show window",
+                    if picking_this {
+                        "Cancel pick"
+                    } else {
+                        "Select on page"
+                    },
+                ];
                 if t.yours() {
                     buttons.push("Done");
                 }
@@ -1112,6 +1512,15 @@ impl SidePane {
             })
             .collect();
         pane.insert("pages".into(), json!(rows));
+        if let Some(pick) = &b.active_pick {
+            pane.insert(
+                "picking".into(),
+                json!({ "captureId": pick.capture_id, "thread": pick.thread_id, "tab": pick.tab_title, "mode": pick.mode }),
+            );
+        }
+        if let Some(note) = &b.pick_note {
+            pane.insert("pickNote".into(), json!(note));
+        }
         if let Some(error) = &b.error {
             pane.insert("error".into(), json!(error));
         }

@@ -47,6 +47,7 @@ mod colour_space;
 mod composer;
 mod composer_account;
 mod composer_answers;
+mod composer_captures;
 mod composer_card;
 mod composer_chips;
 mod composer_context;

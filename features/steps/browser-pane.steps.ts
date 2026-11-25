@@ -54,8 +54,22 @@ Then('the Browser pane lists {string} from {string} with {string}', async functi
 
 const tips: Record<string, string> = {
   'Show window': "Bring this page's window to the front",
+  'Select on page': "Pick an element, region or text in this page's window",
+  'Cancel pick': 'Stop picking on this page',
   Done: "Tell the agent you've finished here",
 };
+
+type CaptureDump = {
+  captureId: string;
+  title: string;
+  url: string;
+  quote: string | null;
+  hasImage: boolean;
+  importing: boolean;
+};
+
+const captures = (d: Dump): CaptureDump[] =>
+  ((d.composer as unknown as { captures?: CaptureDump[] })?.captures ?? []);
 
 When('I press {string} on {string}', async function (this: ThreadbearWorld, button: string, title: string) {
   await this.until(`"${title}" with ${button} in the Browser pane`, (d) => listed(d)?.some((p) => p.title === title && p.buttons.includes(button)));
@@ -74,6 +88,35 @@ Then('BrowserBear was asked to show that page for {string}', async function (thi
   const thread = this.thread(await this.app.dump(), threadTitle);
   const tab = [...(this.pages?.values() ?? [])][0];
   await heard(this, `panelShow for tab ${tab}`, (h) => h.cmd === 'panelShow' && h.args.tab === tab && h.args.profile === 'agent-chrome' && h.thread === thread?.id);
+});
+
+Then('BrowserBear was asked to start a pick on {string} for {string}', async function (this: BrowserWorld, title: string, threadTitle: string) {
+  const thread = this.thread(await this.app.dump(), threadTitle);
+  const tab = tabOf(this, title);
+  await heard(this, `panelPick for tab ${tab}`, (h) => h.cmd === 'panelPick' && h.args.tab === tab && h.args.profile === 'agent-chrome' && h.thread === thread?.id && typeof h.args.captureId === 'string');
+});
+
+Then('BrowserBear was asked to cancel the pick', async function (this: ThreadbearWorld) {
+  await heard(this, 'panelPickCancel', (h) => h.cmd === 'panelPickCancel' && typeof h.args.captureId === 'string');
+});
+
+When('BrowserBear finishes the pick with element {string} from {string} and quote {string}', function (this: BrowserWorld, name: string, url: string, quote: string) {
+  bear(this).finishPick({ name, url, quote });
+});
+
+Then('the composer has a page capture preview for {string} at {string} with quote {string} and image', async function (this: ThreadbearWorld, title: string, url: string, quote: string) {
+  await this.until(`composer preview for "${title}" at ${url}`, (d) =>
+    captures(d).some((c) => c.title === title && c.url === url && c.quote === quote && c.hasImage && !c.importing),
+  );
+});
+
+Then('the composer has no page capture preview', async function (this: ThreadbearWorld) {
+  await this.until('no page capture preview in composer', (d) => captures(d).length === 0);
+});
+
+When('I discard the page capture preview', async function (this: ThreadbearWorld) {
+  await this.until('a page capture preview to discard', (d) => captures(d).length > 0);
+  await this.app.do({ cmd: 'click', tipPrefix: 'Discard this page capture' });
 });
 
 Then("BrowserBear was told I'm done with {string}", async function (this: BrowserWorld, title: string) {
