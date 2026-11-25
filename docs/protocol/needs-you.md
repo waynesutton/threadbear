@@ -302,8 +302,7 @@ sub-agents above. `HELD_NUDGE` keeps the next turn from dropping the asks.
   ask's markdown) can link `work:<words>`, a step in this turn's working,
   `thread:<id>`, another thread by id or id prefix, and `review:<id>`,
   one of this thread's design reviews by id or a prefix that fits only
-  one (its window opens), and `print:<id>`, a Print by id or prefix
-  (beside the thread; desktop only, the phones show its card). Spaces are fine
+  one (its window opens), and `print:<id>` a Print (desktop only). Spaces are fine
   inside the parentheses. The app opens the turn's work group, scrolls to
   the step and lights it up: the last step whose command (or one of its
   `&&` parts) starts with the words, else the last whose command,
