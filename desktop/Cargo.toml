@@ -36,6 +36,10 @@ large_enum_variant = "allow" # Boxing to even out variants costs an allocation f
 # tick). `git log -p desktop/vendor` shows what's ours: the first commit
 # there is the crate as published. On a gpui-kit bump, copy the new version
 # in from ~/.cargo/registry/src and put those changes back on it.
+# And an input keeps a right-click to itself (`input/input.rs`): the press
+# went on to a dock panel's menu, which came up with the input's own and
+# took its focus, so nothing chosen from the Mac's menu reached the box
+# (Wayne, 25 Nov; mikecann/threadbear#94).
 #
 # gpui-kit's base, the same way: the first commit under vendor/gpui-base is
 # 0.9.0 as published. Ours on top: a TextViewStyle switch for the hairline

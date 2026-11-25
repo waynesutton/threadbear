@@ -816,7 +816,9 @@ correction you
 take back (⌘Z straight after it, or deleting into the word and typing it
 your way again) isn't made again while the app runs, and the word stops
 being marked. "Threadbear" is never marked or corrected. Right-click a marked
-word for the Mac's guesses, Ignore Spelling and Learn Spelling. The same
+word for the Mac's guesses, Ignore Spelling and Learn Spelling. (A
+right-click on a text box brings up only that box's menu; a panel's Hide
+Title menu is on its title or an empty part of it.) The same
 menu has Spelling and Grammar (a green line under grammar, off until you
 turn it on), Substitutions (smart quotes and dashes, off to start with, and
 text replacement), Transformations (upper case, lower case or capitalized,

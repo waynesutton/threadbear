@@ -235,7 +235,10 @@ kit draws every menu's rows itself (their height, padding and gaps, the tick
 in the icon's place) and nothing outside the crate reaches them, and every
 dropdown, context menu and the sidebar's menus go through it. Its first commit
 is the crate as published, so `git log -p desktop/vendor` is the whole fork;
-a gpui-kit bump copies the new version in and puts that back.
+a gpui-kit bump copies the new version in and puts that back. A text box
+also keeps a right-click to itself there (`input/input.rs`): the press went
+on to whatever was around the box, so a dock panel's Hide Title menu came up
+with the box's own menu and took the keyboard from it.
 
 `desktop/vendor/gpui-base` keeps the input, text and test-support fixes listed
 in `desktop/Cargo.toml`. `desktop/vendor/gpui-pre` is GPUI 0.3.11 with file
