@@ -78,3 +78,28 @@ test('an older backend is left alone', async () => {
   const r = new TaskReminders({ enabled: () => true, apiVersion: () => 87, call: async () => assert.fail('no calls'), notify: () => {}, send: () => {} });
   assert.equal(await r.tick(), 0);
 });
+
+test('offline: a failed read never rejects, and the next tick tries again', async () => {
+  let online = false;
+  const warned: string[] = [];
+  const notified: string[] = [];
+  const r = new TaskReminders({
+    enabled: () => true,
+    apiVersion: () => 88,
+    now: () => at('2026-11-20T09:30:30'),
+    call: async (op) => {
+      if (!online) throw new Error('fetch failed (ENOTFOUND)');
+      if (op === 'list') return { items: [task()], next: null };
+      if (op === 'preferences') return { reminders: { mac: true, channel: 'none', to: '', lead: 0 } };
+      return op === 'claimReminder';
+    },
+    notify: (p) => notified.push(p.id),
+    send: () => {},
+    warn: (msg) => warned.push(msg),
+  });
+  assert.equal(await r.tick(), 0);
+  assert.equal(warned.length, 1);
+  online = true;
+  assert.equal(await r.tick(), 1);
+  assert.deepEqual(notified, ['t1']);
+});
