@@ -375,35 +375,61 @@ pub fn box_can_clone(origin: &str) -> bool {
 
 /// What `git rev-parse --show-toplevel` and `git remote get-url origin` said
 /// (None when they failed), as the check for a cloud runner named `name`.
-pub fn folder_check(name: &str, top: Option<&str>, origin: Option<&str>) -> FolderCheck {
+/// `folder` is the folder's path, named in the words by its last part;
+/// `inside` the git repos directly inside it, for one that isn't a repo.
+pub fn folder_check(
+    name: &str,
+    folder: &str,
+    top: Option<&str>,
+    origin: Option<&str>,
+    inside: &[String],
+) -> FolderCheck {
     let top = top.map(str::trim).filter(|t| !t.is_empty());
     let origin = origin.map(str::trim).filter(|o| !o.is_empty());
+    let folder = folder_name(folder);
     match (top, origin) {
-        (None, _) => FolderCheck::Not(not_a_repo(name)),
+        (None, _) => FolderCheck::Not(not_a_repo(name, &folder, inside)),
         (Some(_), None) => FolderCheck::Not(format!(
-            "{name} copies this folder's repo from GitHub, and it has no origin. Push it to GitHub first."
+            "{folder} isn't on GitHub yet, so {name} can't copy it. Push it to GitHub first."
         )),
         (Some(_), Some(o)) if !box_can_clone(o) => FolderCheck::Not(format!(
-            "{name} copies this folder's repo over https, and its origin isn't on GitHub or https."
+            "{name} can't reach {folder}'s origin. It copies repos from GitHub or an https address."
         )),
         _ => FolderCheck::Fine,
     }
 }
 
-/// The usual case: a folder that isn't a git repo.
-pub fn not_a_repo(name: &str) -> String {
-    format!("{name} works in a folder that's a GitHub repo.")
+/// A folder's name for the warning: its path's last part.
+fn folder_name(path: &str) -> String {
+    let trimmed = path.trim().trim_end_matches('/');
+    match trimmed.rsplit('/').next().filter(|n| !n.is_empty()) {
+        Some(n) => n.to_owned(),
+        None => "This folder".to_owned(),
+    }
 }
+
+/// The usual case: a folder that isn't a git repo. The + menu in the
+/// message box is the one way to another folder, so the words point there;
+/// a repo found directly inside is named, as that's the one usually meant.
+pub fn not_a_repo(name: &str, folder: &str, inside: &[String]) -> String {
+    match inside {
+        [] => format!(
+            "{folder} isn't a git repo, so {name} can't copy it. Press + to pick a repo's folder."
+        ),
+        [one] => format!(
+            "{folder} isn't a git repo, but {one} inside it is. Press + and pick that folder."
+        ),
+        [a, b, ..] => format!(
+            "{folder} isn't a git repo, but {a} and {b} inside it are. Press + and pick one of them."
+        ),
+    }
+}
+
+/// How many repos inside a folder the warning names at most.
+pub const INSIDE_MAX: usize = 2;
 
 /// Short, beside the runner in Runs on.
 pub const MENU_NOT_HERE: &str = "needs a GitHub repo folder";
-
-/// The warning's two ways out, beside it: another folder for this thread,
-/// or this thread on this Mac instead.
-pub const CHOOSE_FOLDER: &str = "Choose folder…";
-pub const CHOOSE_FOLDER_TIP: &str = "Pick a folder that's a GitHub repo for this thread";
-pub const USE_THIS_MAC: &str = "Use This Mac";
-pub const USE_THIS_MAC_TIP: &str = "Run this thread on this Mac instead, in the folder it has";
 
 #[cfg(test)]
 mod tests {
@@ -510,52 +536,65 @@ mod tests {
     #[test]
     fn folder_checks() {
         let n = "Cloud (Fly)";
-        assert_eq!(folder_check(n, None, None), FolderCheck::Not(not_a_repo(n)));
-        assert!(not_a_repo(n).starts_with("Cloud (Fly) works in a folder that's a GitHub repo."));
+        let f = "/Users/x/sites/waynesuttonai";
+        let check = |top, origin| folder_check(n, f, top, origin, &[]);
+        assert_eq!(
+            check(None, None),
+            FolderCheck::Not(
+                "waynesuttonai isn't a git repo, so Cloud (Fly) can't copy it. Press + to pick a repo's folder."
+                    .to_owned()
+            )
+        );
         assert!(
-            matches!(folder_check(n, Some("/r"), None), FolderCheck::Not(w) if w.contains("no origin"))
+            matches!(check(Some("/r"), None), FolderCheck::Not(w) if w.starts_with("waynesuttonai isn't on GitHub yet"))
         );
-        assert!(matches!(
-            folder_check(n, Some("/r"), Some("/Users/x/repo")),
-            FolderCheck::Not(_)
-        ));
+        assert!(
+            matches!(check(Some("/r"), Some("/Users/x/repo")), FolderCheck::Not(w) if w.contains("waynesuttonai's origin"))
+        );
         assert_eq!(
-            folder_check(n, Some("/r"), Some("https://github.com/o/r.git\n")),
+            check(Some("/r"), Some("https://github.com/o/r.git\n")),
             FolderCheck::Fine
         );
         assert_eq!(
-            folder_check(n, Some("/r"), Some("git@github.com:o/r.git")),
+            check(Some("/r"), Some("git@github.com:o/r.git")),
             FolderCheck::Fine
         );
         assert_eq!(
-            folder_check(n, Some("/r"), Some("ssh://git@github.com/o/r")),
+            check(Some("/r"), Some("ssh://git@github.com/o/r")),
             FolderCheck::Fine
         );
         assert!(!box_can_clone("git@gitlab.com:o/r.git"));
         assert!(!box_can_clone("http://github.com/o/r"));
         assert!(!box_can_clone("file:///x"));
         assert!(!box_can_clone("git@github.com:o"));
-        for w in [
-            not_a_repo(n),
-            MENU_NOT_HERE.to_owned(),
-            CHOOSE_FOLDER.to_owned(),
-            CHOOSE_FOLDER_TIP.to_owned(),
-            USE_THIS_MAC.to_owned(),
-            USE_THIS_MAC_TIP.to_owned(),
-        ] {
-            assert!(!w.contains('\u{2014}'));
-        }
     }
 
     #[test]
-    fn the_warning_names_no_way_out_the_buttons_give() {
-        // The buttons beside it say what to do, so the words don't repeat them.
+    fn the_warning_names_the_folder_a_repo_inside_it_and_the_plus_menu() {
         let n = "Cloud (Fly)";
+        let one = ["waynesutton-ai".to_owned()];
         assert_eq!(
-            not_a_repo(n),
-            "Cloud (Fly) works in a folder that's a GitHub repo."
+            folder_check(n, "/Users/x/sites/waynesuttonai/", None, None, &one),
+            FolderCheck::Not(
+                "waynesuttonai isn't a git repo, but waynesutton-ai inside it is. Press + and pick that folder."
+                    .to_owned()
+            )
         );
-        assert!(CHOOSE_FOLDER.ends_with('…'));
-        assert_eq!(USE_THIS_MAC, "Use This Mac");
+        let two = ["a".to_owned(), "b".to_owned()];
+        assert_eq!(
+            not_a_repo(n, "sites", &two),
+            "sites isn't a git repo, but a and b inside it are. Press + and pick one of them."
+        );
+        assert!(not_a_repo(n, &folder_name("/"), &[]).starts_with("This folder isn't a git repo"));
+        // One way out, the + menu: every not-a-repo wording points there.
+        for w in [
+            not_a_repo(n, "x", &[]),
+            not_a_repo(n, "x", &one),
+            not_a_repo(n, "x", &two),
+        ] {
+            assert!(w.contains("Press +"));
+            assert!(!w.contains('\u{2014}'));
+        }
+        assert!(!MENU_NOT_HERE.contains('\u{2014}'));
     }
 }
