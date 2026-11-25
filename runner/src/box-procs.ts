@@ -73,6 +73,9 @@ export function listProcs(root = '/proc'): Proc[] {
   return out;
 }
 
+// Linux's kthreadd: the parent of every kernel thread.
+const KTHREADD = 2;
+
 const key = (p: { pid: number; start: string }) => `${p.pid}:${p.start}`;
 
 export class BoxProcesses {
@@ -108,7 +111,12 @@ export class BoxProcesses {
     const spared = new Set<number>([1, this.self]);
     // Its ancestors, up to PID 1.
     for (let p = byPid.get(this.self); p && !spared.has(p.ppid); p = byPid.get(p.ppid)) spared.add(p.ppid);
-    return procs.filter((p) => p.alive && !spared.has(p.pid) && !this.baseline.has(key(p)));
+    // Nor the kernel's own threads: kthreadd (pid 2) and its children,
+    // which Linux starts and ends as it likes (a kworker made after boot is
+    // in no baseline) and no signal stops. Nothing a thread ran has kthreadd
+    // for a parent: an orphan goes to PID 1. Counting them left every save
+    // refused for good, so the box never slept.
+    return procs.filter((p) => p.alive && !spared.has(p.pid) && !this.baseline.has(key(p)) && p.pid !== KTHREADD && p.ppid !== KTHREADD);
   }
 
   /**

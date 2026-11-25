@@ -85,3 +85,13 @@ test("the process table is read from /proc: a name with spaces and parens, a zom
     { pid: 44, ppid: 42, start: '12500', alive: false },
   ]);
 });
+
+test("the kernel's own threads are never counted: a kworker made after boot doesn't refuse the save", async () => {
+  // As on a Fly box five hours up: kthreadd (2) and kworkers started since the baseline, which no signal stops.
+  const baseline = [{ pid: 1, start: '1', cmd: '/init' }, { pid: 2, start: '2', cmd: '' }, { pid: 40, start: '40', cmd: 'entrypoint' }];
+  let procs = [P(1, 0), P(2, 0), P(40, 1), P(50, 40), P(829, 2), P(842, 2), P(1126, 2), P(60, 50)];
+  const killed: number[] = [];
+  const box = new BoxProcesses({ self: 50, baseline, list: () => procs, kill: (pid) => (killed.push(pid), pid === 60 && (procs = procs.filter((p) => p.pid !== pid))), sleep: async () => {} });
+  assert.equal(await box.stopOthers(3), 1);
+  assert.deepEqual(killed, [60], "only the thread's own process");
+});
