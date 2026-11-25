@@ -183,12 +183,6 @@ sub-agents above. `HELD_NUDGE` keeps the next turn from dropping the asks.
   lettered mockups are fine there. Nothing reaches the app. It's a note, not
   a line in the description: in replays of cards Mike couldn't follow, the
   line changed nothing and the note rewrote every one.
-- **A task list for real work.** With the `clearerCompletion` experiment on, an
-  end_turn without `completion` is refused once a turn, with an error result
-  that starts `Not ended: this turn has no task list` (`completionNudge`), when
-  the thread has open tasks or the turn made 5 or more of its own tool calls
-  outside Threadbear's. Called again, it's taken as it is. A review's verdict
-  and a quiet bear run are left out. The description asks for the list too.
 - **Done in a project still going.** A Done card (`needs: "nothing"`) in a
   thread Mike started (no `startedBy`) that's in a project not archived is
   refused once a turn, with an error result that starts `Not ended: this

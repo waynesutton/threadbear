@@ -688,6 +688,12 @@ titles are nonempty (120 chars), and status is `completed`, `pending` or
 `blocked`. These are agent reports, shown separately from runner-checked
 loose ends. This feature never archives a thread automatically.
 
+An end_turn without `completion` is refused once a turn, with an error result
+that starts `Not ended: this turn has no task list` (`completionNudge`), when
+the thread has open tasks or the turn made 5 or more of its own tool calls
+outside Threadbear's. Called again, it's taken as it is. A review's verdict and
+a quiet bear run are left out. The description asks for the list too.
+
 The tool takes task updates, merging by ID in first-seen order. Omitted
 tasks retain their state; omitting completion preserves the whole ledger.
 `completion.removeIds` explicitly removes tasks no longer in scope (tool
