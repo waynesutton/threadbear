@@ -28,6 +28,18 @@
   color: var(--text);
   font-size: 14px;
 }
+/* A named theme (styles.css) brings its own orange and green. */
+:root[data-palette] .tasks-page {
+  --status-doing: var(--orange);
+  --status-done: var(--green);
+}
+:root[data-palette] .task-chip.is-warning {
+  color: var(--orange);
+  border-color: color-mix(in srgb, var(--orange) 45%, transparent);
+}
+:root[data-palette] .task-favorite {
+  color: var(--orange);
+}
 .tasks-page:before {
   content: '';
   position: fixed;

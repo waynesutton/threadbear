@@ -71,6 +71,159 @@
   --shadow: 0 12px 34px rgba(0, 0, 0, 0.45), 0 0 0 1px rgba(255, 255, 255, 0.07);
 }
 
+/* Named themes (theme.ts, the desktop app's Settings > General > Appearance >
+   Theme). <html data-palette="harbor"> follows light and dark as the stock
+   look does; <html data-palette="squall"> is always dark, data-theme="light"
+   included. No data-palette is the stock look. The --rail, --green,
+   --selected, --focus, --code-* and --syn-* variables exist only under a
+   palette, for pages that draw code. */
+
+:root[data-palette='harbor'] {
+  color-scheme: light;
+  --bg: #f4f4fa;
+  --side: #f0f0f6;
+  --raised: #faf9ff;
+  --fill: #dce1e8;
+  --hover: #dce1e8;
+  --line: #d9dde3;
+  --line-strong: #bfc7d2;
+  --text: #222929;
+  --muted: #565a65;
+  --faint: #63666f;
+  --accent: #0a6fa8;
+  --accent-soft: #c6dff6;
+  --link: #115fa7;
+  --orange: #895b01;
+  --red: #b3262f;
+  --code: #f2f2f8;
+  --bubble: #dbe3ee;
+  --shadow: 0 12px 34px #dce1e880, 0 0 0 1px #d9dde3;
+  --rail: #dce2e8;
+  --green: #2f7f3a;
+  --selected: #ccdeef;
+  --focus: #1a7fbe;
+  --code-text: #2d2f37;
+  --code-comment: #626772;
+  --syn-keyword: #9330a0;
+  --syn-string: #327530;
+  --syn-number: #925d01;
+  --syn-function: #076f86;
+  --syn-call: #2f5fcc;
+  --syn-storage: #b3262f;
+  --syn-operator: #b54f0c;
+  --syn-punctuation: #626772;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root[data-palette='harbor']:not([data-theme='light']) {
+    color-scheme: dark;
+    --bg: #14161d;
+    --side: #292a32;
+    --raised: #292a32;
+    --fill: #323641;
+    --hover: #2c2e36;
+    --line: #2d2f37;
+    --line-strong: #494a52;
+    --text: #d4d9de;
+    --muted: #a2a9ae;
+    --faint: #9ba4a8;
+    --accent: #1b80bf;
+    --accent-soft: #304e6b;
+    --link: #599bfc;
+    --orange: #eeac54;
+    --red: #f1747d;
+    --code: #313845;
+    --bubble: #202f34;
+    --shadow: 0 12px 34px #14161d80, 0 0 0 1px #2d2f37;
+    --rail: #2d2f37;
+    --green: #9dd093;
+    --selected: #13426a;
+    --focus: #3285e6;
+    --code-text: #e4ebec;
+    --code-comment: #9aa4ad;
+    --syn-keyword: #cb9fd2;
+    --syn-string: #aad79d;
+    --syn-number: #f0b967;
+    --syn-function: #69bcb5;
+    --syn-call: #7eaedd;
+    --syn-storage: #fd8895;
+    --syn-operator: #f79372;
+    --syn-punctuation: #9aa4ad;
+  }
+}
+
+:root[data-palette='harbor'][data-theme='dark'] {
+  color-scheme: dark;
+  --bg: #14161d;
+  --side: #292a32;
+  --raised: #292a32;
+  --fill: #323641;
+  --hover: #2c2e36;
+  --line: #2d2f37;
+  --line-strong: #494a52;
+  --text: #d4d9de;
+  --muted: #a2a9ae;
+  --faint: #9ba4a8;
+  --accent: #1b80bf;
+  --accent-soft: #304e6b;
+  --link: #599bfc;
+  --orange: #eeac54;
+  --red: #f1747d;
+  --code: #313845;
+  --bubble: #202f34;
+  --shadow: 0 12px 34px #14161d80, 0 0 0 1px #2d2f37;
+  --rail: #2d2f37;
+  --green: #9dd093;
+  --selected: #13426a;
+  --focus: #3285e6;
+  --code-text: #e4ebec;
+  --code-comment: #9aa4ad;
+  --syn-keyword: #cb9fd2;
+  --syn-string: #aad79d;
+  --syn-number: #f0b967;
+  --syn-function: #69bcb5;
+  --syn-call: #7eaedd;
+  --syn-storage: #fd8895;
+  --syn-operator: #f79372;
+  --syn-punctuation: #9aa4ad;
+}
+
+:root[data-palette='squall'] {
+  color-scheme: dark;
+  --bg: #323946;
+  --side: #18252d;
+  --raised: #383f4c;
+  --fill: #3e4756;
+  --hover: #2c313c;
+  --line: #3c4554;
+  --line-strong: #465863;
+  --text: #dce2e8;
+  --muted: #b2b9c1;
+  --faint: #a5aeb6;
+  --accent: #70a3d6;
+  --accent-soft: #475c6d;
+  --link: #9dbcdc;
+  --orange: #f0b967;
+  --red: #fd8895;
+  --code: #18252d;
+  --bubble: #354a62;
+  --shadow: 0 12px 34px #14161d80, 0 0 0 1px #3c4554;
+  --rail: #141f27;
+  --green: #aad79d;
+  --selected: #353f4e;
+  --focus: #70a3d6;
+  --code-text: #e5eced;
+  --code-comment: #9aa4ad;
+  --syn-keyword: #cb9fd2;
+  --syn-string: #aad79d;
+  --syn-number: #f0b967;
+  --syn-function: #69bcb5;
+  --syn-call: #7eaedd;
+  --syn-storage: #fd8895;
+  --syn-operator: #f79372;
+  --syn-punctuation: #9aa4ad;
+}
+
 * { box-sizing: border-box; }
 html, body, #root { height: 100%; margin: 0; }
 body { background: var(--bg); color: var(--text); font: 15px/1.5 var(--font); -webkit-font-smoothing: antialiased; }
@@ -781,3 +934,5 @@ a.lab-review-head:hover { color: var(--muted); }
   flex: 1;
   min-height: 0;
 }
+
+.menu-choice:disabled { opacity: .45; cursor: default; }

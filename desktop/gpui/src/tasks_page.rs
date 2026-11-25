@@ -148,8 +148,14 @@ fn status_name(status: &str) -> &'static str {
 fn status_icon(status: &str, cx: &App) -> Icon {
     let (symbol, color) = match status {
         "backlog" => ("circle.dashed", style::tertiary_label(cx)),
-        "doing" => ("circle.lefthalf.filled", Hsla::from(rgb(0xe2a336))),
-        "done" => ("checkmark.circle.fill", Hsla::from(rgb(0x4f9d69))),
+        "doing" => (
+            "circle.lefthalf.filled",
+            style::themed(cx).map_or(Hsla::from(rgb(0xe2a336)), |p| style::hex(p.warning)),
+        ),
+        "done" => (
+            "checkmark.circle.fill",
+            style::themed(cx).map_or(Hsla::from(rgb(0x4f9d69)), |p| style::hex(p.success)),
+        ),
         _ => ("circle", style::secondary_label(cx)),
     };
     icons::symbol(symbol).with_size(px(14.)).text_color(color)

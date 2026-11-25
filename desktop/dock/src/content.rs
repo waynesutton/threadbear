@@ -30,6 +30,14 @@ pub trait DockContent: 'static {
     /// value was for.
     fn view(&self, panel: &str, ghost: bool, window: &mut Window, cx: &mut App) -> AnyElement;
 
+    /// The colour behind the panel and its bar, when it isn't the window's
+    /// own: an app theme whose side columns are darker than its transcript.
+    /// Nil: the theme's background, as every panel had before.
+    fn fill(&self, panel: &str, cx: &App) -> Option<Hsla> {
+        let _ = (panel, cx);
+        None
+    }
+
     /// Drawn in place of the title when the panel is on its own (a thread's
     /// name and folder over the transcript, say). Nil: the title.
     fn header(&self, panel: &str, window: &mut Window, cx: &mut App) -> Option<AnyElement> {

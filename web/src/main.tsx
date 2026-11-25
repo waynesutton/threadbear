@@ -7,7 +7,7 @@ import { api } from '../../convex/_generated/api';
 import { startSignIn, takeSignInCodeFromHash } from './token';
 import { LinkConfirm } from './link-confirm';
 import { ReplaceSignIn } from './replace-sign-in';
-import { applyTheme } from './theme';
+import { applyPalette, applyTheme } from './theme';
 import './styles.css';
 
 // A sign-in link (the Mac's Open signed in, or `npm run web:sign-in`)
@@ -16,6 +16,7 @@ import './styles.css';
 // for this browser's token (token.ts says why it's never the token itself).
 const signInCode = takeSignInCodeFromHash();
 applyTheme();
+applyPalette();
 
 const convex = new ConvexReactClient(import.meta.env.VITE_CONVEX_URL as string);
 // A browser that's already signed in asks before swapping (token.ts, startSignIn).

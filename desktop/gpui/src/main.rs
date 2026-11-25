@@ -112,6 +112,7 @@ mod notify;
 mod open_anything;
 mod open_gate;
 mod open_motion;
+mod palettes;
 mod pane_cache;
 mod pane_store;
 mod patch_icons;

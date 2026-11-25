@@ -785,7 +785,7 @@ impl Threadbear {
             .flex_none()
             .w(px(BAR_WIDTH))
             .h_full()
-            .bg(cx.theme().sidebar)
+            .bg(crate::style::themed(cx).map_or(cx.theme().sidebar, |p| crate::style::hex(p.rail)))
             // Starts under the title bar strip: the traffic lights are wider
             // than the bar, so a full-height line cut between the yellow and
             // green dots (ActivityBar).
@@ -989,7 +989,7 @@ impl Threadbear {
             .flex_none()
             .w(px(BAR_WIDTH))
             .h_full()
-            .bg(cx.theme().sidebar)
+            .bg(crate::style::themed(cx).map_or(cx.theme().sidebar, |p| crate::style::hex(p.rail)))
             .child(
                 div()
                     .absolute()

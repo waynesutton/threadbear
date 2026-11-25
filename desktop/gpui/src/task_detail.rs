@@ -22,8 +22,14 @@ const URGENT: &[u8] = br#"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1
 /// No priority: three short dashes.
 const NO_PRIORITY: &[u8] = br#"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"><g fill="black" fill-opacity=".7"><rect x="1.5" y="7.25" width="3" height="1.5" rx=".75"/><rect x="6.5" y="7.25" width="3" height="1.5" rx=".75"/><rect x="11.5" y="7.25" width="3" height="1.5" rx=".75"/></g></svg>"#;
 
-pub(super) fn urgent_red() -> Hsla {
-    Hsla::from(rgb(0xe5484d))
+pub(super) fn urgent_red(cx: &App) -> Hsla {
+    // A named theme's own red, orange and green, so the marks sit with it.
+    style::themed(cx).map_or(Hsla::from(rgb(0xe5484d)), |p| style::hex(p.error))
+}
+
+/// Due today, and a task under way.
+pub(super) fn due_today(cx: &App) -> Hsla {
+    style::themed(cx).map_or(Hsla::from(rgb(0xd9870b)), |p| style::hex(p.warning))
 }
 
 /// A priority's mark: Urgent red, the bars and dashes in the text colour.
@@ -33,7 +39,7 @@ pub(super) fn priority_icon(priority: Option<&str>, size: f32, cx: &App) -> Icon
             return Icon::default()
                 .data(URGENT)
                 .with_size(px(size))
-                .text_color(urgent_red())
+                .text_color(urgent_red(cx))
         }
         Some(p) if task_dates::priority_bars(p) > 0 => {
             Icon::default().data(BARS[task_dates::priority_bars(p) - 1])
@@ -60,8 +66,8 @@ pub(super) fn due_chip(due: &str, time: Option<&str>, cx: &App) -> Option<AnyEle
     } else {
         task_dates::due_state(day, now)
     } {
-        Due::Overdue => urgent_red(),
-        Due::Today => Hsla::from(rgb(0xd9870b)),
+        Due::Overdue => urgent_red(cx),
+        Due::Today => due_today(cx),
         Due::Later => style::secondary_label(cx),
     };
     let mut label = task_dates::chip_label(day, now);
@@ -1519,8 +1525,8 @@ impl TasksPage {
             .as_deref()
             .and_then(task_dates::parse)
             .map(|d| match task_dates::due_state(d, today()) {
-                Due::Overdue => urgent_red(),
-                Due::Today => Hsla::from(rgb(0xd9870b)),
+                Due::Overdue => urgent_red(cx),
+                Due::Today => due_today(cx),
                 Due::Later => style::label_text(cx),
             })
             .unwrap_or(tertiary);

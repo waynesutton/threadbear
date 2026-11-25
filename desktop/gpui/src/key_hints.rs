@@ -187,15 +187,25 @@ pub(crate) fn hint(key: Option<String>, placement: Placement) -> Option<AnyEleme
 /// reads as a passing label over the window rather than part of it
 /// (`ShortcutKeyBadge`).
 fn badge(key: String) -> impl IntoElement {
-    let amber = rgb(0xFFB224);
-    let on_amber = rgb(0x0C0D0F);
+    // A named theme's caps are its deepest surface with the warning colour
+    // for the key and its border round them. The dark side's in either
+    // look, as the stock amber is the same in both: it's a label passing
+    // over the window, not part of it.
+    let themed = style::palette_choice().colours(true);
+    let (fill, text): (Hsla, Hsla) = match themed {
+        Some(p) => (style::hex(p.deep), style::hex(p.warning)),
+        None => (rgb(0xFFB224).into(), rgb(0x0C0D0F).into()),
+    };
     div()
         .flex_none()
         .px(px(4.))
         .py(px(1.))
         .rounded(px(4.))
-        .bg(amber)
-        .text_color(on_amber)
+        .bg(fill)
+        .when_some(themed, |cap, p| {
+            cap.border_1().border_color(style::hex(p.border))
+        })
+        .text_color(text)
         .text_size(px(10.5))
         .line_height(px(style::natural_line(10.5)))
         .font_weight(FontWeight::SEMIBOLD)

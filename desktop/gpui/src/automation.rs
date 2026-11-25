@@ -946,7 +946,9 @@ fn step(
         "dock-move" | "panel" | "float" | "mode" | "zoom" | "rename" | "undo-archive"
         | "open-archived" | "error" | "mouse-button" | "copy-thread-id" | "menus" | "menu-item"
         | "app-menu" | "data-dir" | "share" | "signin" | "edit-message" | "message-words"
-        | "refusal" | "appearance" | "resize" | "canvas" => shell_step(app, cmd, window, cx),
+        | "refusal" | "appearance" | "theme" | "resize" | "canvas" => {
+            shell_step(app, cmd, window, cx)
+        }
         "search" => {
             let words = text(cmd, "text").to_string();
             let search = app.read(cx).search.clone();
@@ -2128,6 +2130,20 @@ fn shell_step(
                 other => return Err(format!("mode is light, dark or system, not {other:?}")),
             }
             Ok(json!(format!("ok {mode}")))
+        }
+        // `theme`: Appearance's Theme (stock, harbor or squall), for pictures
+        // of each. A script's choice isn't saved, as `appearance`'s isn't.
+        "theme" => {
+            let name = cmd["name"]
+                .as_str()
+                .ok_or("name is stock, harbor or squall")?;
+            let palette = crate::style::Palette::from_name(name);
+            if palette.name() != name {
+                return Err(format!("name is stock, harbor or squall, not {name:?}"));
+            }
+            crate::style::set_palette_choice(palette, window, cx);
+            cx.refresh_windows();
+            Ok(json!(format!("ok {name}")))
         }
         // `resize`: the window's content size, as the Swift command sets it
         // (for pictures at a given size).

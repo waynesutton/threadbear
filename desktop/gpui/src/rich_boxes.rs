@@ -723,6 +723,9 @@ fn switch_thumb(cx: &App) -> Hsla {
 /// codeBackground over the transcript as one solid colour, for the fade at
 /// a cut-off page's foot (Theme.codeBackgroundOpaque).
 fn box_fill_opaque(cx: &App) -> Hsla {
+    if let Some(p) = style::themed(cx) {
+        return style::hex(p.code);
+    }
     if dark(cx) {
         rgb(0x282828).into()
     } else {
@@ -732,6 +735,9 @@ fn box_fill_opaque(cx: &App) -> Hsla {
 
 /// NSColor.systemOrange, for why a block couldn't be drawn.
 fn orange(cx: &App) -> Hsla {
+    if let Some(p) = style::themed(cx) {
+        return style::hex(p.warning);
+    }
     if dark(cx) {
         rgb(0xff9f0a).into()
     } else {
@@ -977,7 +983,10 @@ fn icon_button(
         cx.theme().foreground,
     );
     let color = if lit {
-        rgb(if dark(cx) { 0x30d158 } else { 0x34c759 }).into()
+        style::themed(cx).map_or_else(
+            || rgb(if dark(cx) { 0x30d158 } else { 0x34c759 }).into(),
+            |p| style::hex(p.success),
+        )
     } else {
         secondary
     };

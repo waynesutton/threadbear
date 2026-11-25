@@ -1645,8 +1645,11 @@ pub(crate) fn segmented(
                 d.bg(accent).text_color(gpui_kit::white()).font_medium()
             })
             .when(!on, |d| {
-                d.text_color(fg)
-                    .hover(|s| s.bg(gpui_kit::hsla(0., 0., 0.5, 0.12)))
+                let hover = style::themed(cx).map_or_else(
+                    || gpui_kit::hsla(0., 0., 0.5, 0.12),
+                    |p| style::hex(p.hover),
+                );
+                d.text_color(fg).hover(move |s| s.bg(hover))
             })
             .text_size(px(style::size::LABEL))
             .line_height(px(16.))

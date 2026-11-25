@@ -22,6 +22,7 @@ How the Tasks section works today (an experiment: turn it on in Settings > Exper
 
 ### Added
 
+- Settings > General > Appearance has a Theme row with three pictures: Stock, Harbor and Squall. Stock is the usual look and stays the default. Harbor is charcoal with blue-slate code blocks and a sea-blue accent, light or dark. Squall is blue-grey with a steel-blue accent and always dark. A theme colours the window, cards, menus, code and the Terminal, and the first accent dot becomes the theme's own accent. The website's gear menu has the same three. The choice is saved as `palette` in `desktop-settings.json`.
 - Settings > Runners has a Cloud runners section. Add a cloud runner… sets up Fly from one org token, or from flyctl's own sign-in: it makes the Fly app, saves the token and keys to your backend, builds the box image, makes the runner and tries a test box, showing each step as it goes. Afterwards the section lists each cloud runner's box size and threads, with Check again, Rebuild and Edit…. `tb cloud setup`, `check` and `rebuild` do the same from a terminal. Needs the `virtualRunners` experiment and flyctl.
 - Fixed: Use flyctl's sign-in in Add a cloud runner failed at Fly token works with a 401, because the runner cut the token flyctl made to 300 characters. It now keeps the whole token.
 - The Add a cloud runner sheet no longer shows Daytona and E2B as later providers. It sets up Fly only.

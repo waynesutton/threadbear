@@ -32,6 +32,34 @@ impl Colours {
         static DARK: OnceLock<[Rgb8; 256]> = OnceLock::new();
         static LIGHT: OnceLock<[Rgb8; 256]> = OnceLock::new();
         let dark = cx.theme().is_dark();
+        // A named theme (Settings > General > Appearance > Theme) has its
+        // own background, text, selection and sixteen colours.
+        if let Some(p) = style::themed(cx) {
+            static THEMED: [OnceLock<[Rgb8; 256]>; 3] =
+                [OnceLock::new(), OnceLock::new(), OnceLock::new()];
+            let rgb8 = |c: u32| ((c >> 16) as u8, (c >> 8) as u8, c as u8);
+            let (background, foreground) = (rgb8(p.term_bg), rgb8(p.term_fg));
+            // Harbor's two sides and Squall each keep their own.
+            let slot = match (style::palette_choice(), dark) {
+                (style::Palette::Squall, _) => 2,
+                (_, true) => 1,
+                (_, false) => 0,
+            };
+            let palette = *THEMED[slot].get_or_init(|| {
+                let mut all = rules::palette(background, foreground);
+                for (to, from) in all.iter_mut().zip(p.ansi) {
+                    *to = rgb8(from);
+                }
+                all
+            });
+            return Colours {
+                background,
+                foreground,
+                cursor: style::control_accent(cx),
+                selection: style::hex(p.selection),
+                palette,
+            };
+        }
         // sRGB(0.11, 0.11, 0.12) and white at 0.9 on dark; white and 0.12 on light.
         let (background, foreground) = if dark {
             ((28, 28, 31), (230, 230, 230))

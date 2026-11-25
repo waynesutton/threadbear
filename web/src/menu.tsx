@@ -34,9 +34,9 @@ export function Pop({ title, icon, lit, children }: { title: string; icon: React
 
 // A menu row that's one of a set: its icon, its words, and a tick on the one
 // in force.
-export function MenuChoice({ icon, label, note, on, pick }: { icon: ReactNode; label: string; note?: ReactNode; on: boolean; pick: () => void }) {
+export function MenuChoice({ icon, label, note, on, pick, disabled, tip }: { icon: ReactNode; label: string; note?: ReactNode; on: boolean; pick: () => void; disabled?: boolean; tip?: string }) {
   return (
-    <button className="menu-choice" role="menuitemradio" aria-checked={on} title={label} onClick={pick}>
+    <button className="menu-choice" role="menuitemradio" aria-checked={on} aria-disabled={disabled || undefined} disabled={disabled} title={tip ?? label} onClick={pick}>
       {icon}
       <span className="menu-label">{label}</span>
       {note !== undefined ? <span className="menu-note">{note}</span> : null}

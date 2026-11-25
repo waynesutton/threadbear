@@ -103,6 +103,26 @@ pub struct Colors {
 pub fn colors(cx: &App) -> Colors {
     let white = |a: f32| hsla(0., 0., 1., a);
     let black = |a: f32| hsla(0., 0., 0., a);
+    let theme = cx.theme();
+    let config = if theme.is_dark() { &theme.dark_theme } else { &theme.light_theme };
+    // A theme other than the kit's own (Threadbear's Harbor and Squall,
+    // Settings > General > Appearance > Theme) brings its menu colours with
+    // it, so a menu follows any theme. The kit's own keep the look below.
+    if !config.is_default {
+        return Colors {
+            background: theme.popover,
+            edge: theme.border,
+            rim: gpui::transparent_black(),
+            rim_width: px(1.),
+            label: theme.popover_foreground,
+            disabled: theme.muted_foreground.opacity(0.5),
+            secondary: theme.muted_foreground,
+            separator: theme.border,
+            highlight: theme.accent,
+            highlight_label: theme.accent_foreground,
+            icon: theme.muted_foreground,
+        };
+    }
     if cx.theme().is_dark() {
         Colors {
             background: rgb(0x2b2b2d).into(),

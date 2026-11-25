@@ -10,7 +10,8 @@ import { useInbox } from './inbox';
 import { MenuChoice, Pop } from './menu';
 import { go, type RailView, type Route, viewPath } from './route';
 import { build, wakesOf } from './sections';
-import { useTheme } from './pages';
+import { usePalette, useTheme } from './pages';
+import { darkOnly } from './theme';
 import { signOut } from './token';
 import { day } from './format';
 import { isOnline, runnersShown, runnerState } from './view-logic';
@@ -97,9 +98,22 @@ function tileWords(r: Parameters<typeof runnerState>[0] & { name: string; pressu
   return `${r.name}: ${runnerState(r, now)}${r.pressure && isOnline(r, now) ? `. Low on ${r.pressure}` : ''}`;
 }
 
+/** A theme's dot in the gear menu, in its accent. */
+function Swatch({ colour }: { colour: string }) {
+  return (
+    <svg viewBox="0 0 16 16" aria-hidden="true">
+      <circle cx="8" cy="8" r="5" fill={colour} />
+    </svg>
+  );
+}
+
 function GearMenu({ token }: { token: string }) {
   const me = useQuery(api.phone.me, { token });
   const [theme, pick] = useTheme();
+  const [palette, pickPalette] = usePalette();
+  // Squall is dark whatever's picked above, so the other two can't be chosen while it's on.
+  const fixed = darkOnly(palette);
+  const fixedTip = 'Squall is always dark. Pick Stock or Harbor to use this';
   const row = (close: () => void, label: string, icon: ReactNode, run: () => void, className = '') => (
     <button
       className={className}
@@ -120,9 +134,13 @@ function GearMenu({ token }: { token: string }) {
           {row(close, 'Runners', <Icon.Server />, () => go(viewPath('runners')), 'phone-only')}
           {row(close, 'Usage', <Icon.Bars />, () => go(viewPath('usage')), 'phone-only')}
           <hr className="phone-only" />
-          <MenuChoice icon={<Icon.Gear />} label="Follow the system" on={theme === 'system'} pick={() => pick('system')} />
-          <MenuChoice icon={<Icon.Sun />} label="Always light" on={theme === 'light'} pick={() => pick('light')} />
-          <MenuChoice icon={<Icon.Moon />} label="Always dark" on={theme === 'dark'} pick={() => pick('dark')} />
+          <MenuChoice icon={<Icon.Gear />} label="Follow the system" on={theme === 'system' && !fixed} pick={() => pick('system')} disabled={fixed} tip={fixed ? fixedTip : undefined} />
+          <MenuChoice icon={<Icon.Sun />} label="Always light" on={theme === 'light' && !fixed} pick={() => pick('light')} disabled={fixed} tip={fixed ? fixedTip : undefined} />
+          <MenuChoice icon={<Icon.Moon />} label="Always dark" on={theme === 'dark' || fixed} pick={() => pick('dark')} />
+          <hr />
+          <MenuChoice icon={<Swatch colour="#8e8e93" />} label="Stock colours" tip="The usual colours" on={palette === 'stock'} pick={() => pickPalette('stock')} />
+          <MenuChoice icon={<Swatch colour="#1b80bf" />} label="Harbor" tip="Charcoal and sea blue. Light or dark" on={palette === 'harbor'} pick={() => pickPalette('harbor')} />
+          <MenuChoice icon={<Swatch colour="#70a3d6" />} label="Squall" tip="Blue-grey storm light. Always dark" on={palette === 'squall'} pick={() => pickPalette('squall')} />
           <hr />
           <div className="note-line" title="How long this browser stays signed in">
             <Icon.Globe />

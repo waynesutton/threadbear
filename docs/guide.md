@@ -3461,7 +3461,7 @@ changed `desktop/` too) is already in the new app, so it isn't listed. In
 a copy with no changes of its own there's nothing
 to see.
 
-### Light and dark, accent, spacing and font
+### Light and dark, theme, accent, spacing and font
 
 Settings (⌘,) > General > Appearance is how Threadbear looks, for Threadbear
 alone. Each change shows straight away and stays picked the next time the
@@ -3470,10 +3470,20 @@ app opens.
 - **Light or dark**: three pictures. Same as the Mac (Same as Windows on
   Windows) follows the system's own setting: System Settings > Appearance,
   or Settings > Personalization > Colors > Choose your mode on Windows.
+- **Theme**: three pictures. Stock is the usual look and what you get
+  until you pick another. Harbor is a charcoal frame with blue-slate code
+  blocks and a sea-blue accent, and has a light and a dark side, so it
+  follows Light or dark above. Squall is blue-grey all through with a
+  steel-blue accent. It's always dark, so the other two looks are dimmed
+  while it's on; your choice there is kept for when you change theme. A
+  theme colours everything: the window, cards, menus, code and the
+  Terminal. Both are Wayne Sutton's.
 - **Accent**: the colour of buttons, ticks, the outline of a card that
   needs you and the tint behind your own messages. The first dot is the
-  Mac's accent (blue elsewhere); the rest are bear colours (Fur, Honey,
-  Berry, Rose, Plum, Sky, Moss and Slate), from Wayne Sutton's fork.
+  Mac's accent (blue elsewhere), or the theme's own while Harbor or Squall
+  is on; the rest are bear colours (Fur, Honey, Berry, Rose, Plum, Sky,
+  Moss and Slate), from Wayne Sutton's fork. A bear colour goes over a
+  theme's accent too.
 - **Spacing**: Roomy, or Compact for shorter sidebar rows and less room
   around each of your messages, so more fits.
 - **Text size**: Smaller, Normal or Larger, the same as View > Zoom
@@ -3481,6 +3491,10 @@ app opens.
 - **Font**: Allo (the default, [a free font](https://allo.joshpuckett.me)
   that comes with the app), System, Serif or Monospaced for everything but
   code, which keeps its own.
+
+The website has the same three themes in its settings menu (the gear),
+under the light and dark choices. It remembers the one you pick on that
+browser.
 
 On Mac, Increase Contrast in System Settings > Accessibility > Display
 also strengthens text and borders. It is read at launch and when you return

@@ -1138,6 +1138,10 @@ impl SettingsWindow {
     fn appearance_section(&mut self, cx: &mut Context<Self>) -> AnyElement {
         let app = self.app.clone();
         let current = style::appearance();
+        let palette_now = style::palette_choice();
+        // A dark-only theme leaves Look's other choices saved but unused
+        // until the theme changes, so they're drawn dimmed.
+        let dark_only = palette_now.dark_only();
         let looks = h_flex()
             .gap(px(14.))
             .children(style::Appearance::ALL.into_iter().map(|choice| {
@@ -1147,12 +1151,48 @@ impl SettingsWindow {
                     style::Appearance::Light => "Always light, whatever the system is set to",
                     style::Appearance::Dark => "Always dark, whatever the system is set to",
                 };
-                look_tile(choice, choice == current, tip, cx, move |_, window, cx| {
-                    if let Some(app) = app.upgrade() {
-                        app.update(cx, |app, cx| app.set_appearance(choice, window, cx));
-                    }
-                })
+                let dim = dark_only && choice != style::Appearance::Dark;
+                look_tile(
+                    choice,
+                    choice == current,
+                    dim,
+                    tip,
+                    cx,
+                    move |_, window, cx| {
+                        if let Some(app) = app.upgrade() {
+                            app.update(cx, |app, cx| app.set_appearance(choice, window, cx));
+                        }
+                    },
+                )
             }));
+        let tiles =
+            h_flex()
+                .gap(px(10.))
+                .items_start()
+                .children(style::Palette::ALL.into_iter().map(|choice| {
+                    let app = app.clone();
+                    theme_tile(choice, choice == palette_now, cx, move |_, window, cx| {
+                        if let Some(app) = app.upgrade() {
+                            app.update(cx, |app, cx| app.set_palette(choice, window, cx));
+                        }
+                    })
+                }));
+        let theme_help = match palette_now {
+            style::Palette::Stock => "Stock is the usual look. Harbor and Squall bring their own colours for everything, code and the Terminal included.",
+            style::Palette::Harbor => "Harbor has a light and a dark side and follows the choice above.",
+            style::Palette::Squall => "Squall is always dark, so the other looks above are dimmed while it's on.",
+        };
+        let themes = v_flex()
+            .gap(px(8.))
+            .child(div().text_size(px(13.)).line_height(px(17.)).child("Theme"))
+            .child(tiles)
+            .child(
+                div()
+                    .text_size(px(12.))
+                    .line_height(px(16.))
+                    .text_color(style::secondary_text(cx))
+                    .child(theme_help),
+            );
         let accent_now = style::accent_choice();
         let accents =
             h_flex()
@@ -1265,7 +1305,7 @@ impl SettingsWindow {
             "settings-appearance-section",
             "Appearance",
             if cfg!(target_os = "macos") {
-                "How Threadbear looks, for Threadbear only. Same as the Mac follows System Settings > Appearance, and the first accent is the Mac's own. Text size is the same as View > Zoom (⌘= and ⌘-). The bear colours are Wayne Sutton's, from his fork."
+                "How Threadbear looks, for Threadbear only. Same as the Mac follows System Settings > Appearance, and the first accent is the Mac's own, or the theme's when one is on. Text size is the same as View > Zoom (⌘= and ⌘-). The bear colours are Wayne Sutton's, from his fork."
             } else if cfg!(target_os = "windows") {
                 "How Threadbear looks, for Threadbear only. Same as Windows follows Settings > Personalization > Colors. Text size is the same as View > Zoom (Ctrl+= and Ctrl+-). The bear colours are Wayne Sutton's, from his fork."
             } else {
@@ -1278,6 +1318,12 @@ impl SettingsWindow {
                     .pt(px(12.))
                     .pb(px(10.))
                     .child(looks)
+                    .into_any_element(),
+                div()
+                    .px(px(ROW_INSET))
+                    .pt(px(8.))
+                    .pb(px(10.))
+                    .child(themes)
                     .into_any_element(),
                 row("Accent", accents, cx),
                 row("Spacing", spacing, cx),
@@ -2312,6 +2358,7 @@ fn row_with(label: AnyElement, control: AnyElement, _cx: &App) -> AnyElement {
 fn look_tile(
     choice: style::Appearance,
     on: bool,
+    dim: bool,
     tip: &'static str,
     cx: &App,
     click: impl Fn(&ClickEvent, &mut Window, &mut App) + 'static,
@@ -2389,6 +2436,8 @@ fn look_tile(
         .cursor_pointer()
         .items_center()
         .gap(px(6.))
+        // Still a button while dimmed: the choice is saved for the next theme.
+        .when(dim, |tile| tile.opacity(0.45))
         .child(
             div()
                 .w(px(96.))
@@ -2421,6 +2470,165 @@ fn look_tile(
         .into_any_element()
 }
 
+/// One of Appearance's themes: a picture of a window in its colours (the
+/// rail, the sidebar with its open row, a title, a code block with three
+/// lines of syntax and a button in the accent), then its name and a line on
+/// what it is. Drawn from the palette, not kept as pictures, so a colour
+/// changed there changes here. A theme with two sides shows the one in use.
+fn theme_tile(
+    choice: style::Palette,
+    on: bool,
+    cx: &App,
+    click: impl Fn(&ClickEvent, &mut Window, &mut App) + 'static,
+) -> AnyElement {
+    let dark = cx.theme().is_dark();
+    // rail, sidebar, window, row, open row, title, code, three syntax lines, accent
+    let c: [Hsla; 11] = match choice.colours(dark) {
+        Some(p) => [
+            p.rail,
+            p.sidebar,
+            p.window,
+            p.chip,
+            p.selected,
+            p.text_secondary,
+            p.code,
+            p.syntax.keyword,
+            p.syntax.string,
+            p.syntax.function,
+            p.accent,
+        ]
+        .map(style::hex),
+        // Stock has no palette: its greys, as the Look pictures have them.
+        None if dark => [
+            0x1e1e1e, 0x262626, 0x1e1e1e, 0x3a3a3a, 0x4a4a4a, 0x9a9a9a, 0x2a2a2a, 0xc792ea,
+            0x8fd18a, 0x6cb6ff, 0x0a84ff,
+        ]
+        .map(style::hex),
+        None => [
+            0xe4e4e4, 0xececec, 0xffffff, 0xd8d8d8, 0xc4c4c4, 0x6a6a6a, 0xf3f3f3, 0x9b3fb5,
+            0x2e7d32, 0x1c6fd6, 0x007aff,
+        ]
+        .map(style::hex),
+    };
+    let [rail, sidebar, window, row, open_row, title, code, keyword, string, function, accent] = c;
+    // A bear accent shows on every tile, as it would on the theme.
+    let accent = style::accent_choice().rgb().map_or(accent, style::hex);
+    let bar = |w: f32, colour: Hsla| div().h(px(4.)).w(px(w)).rounded_full().bg(colour);
+    let picture = h_flex()
+        .size_full()
+        .child(div().flex_none().w(px(8.)).h_full().bg(rail))
+        .child(
+            v_flex()
+                .flex_none()
+                .w(px(26.))
+                .h_full()
+                .bg(sidebar)
+                .pt(px(8.))
+                .px(px(4.))
+                .gap(px(4.))
+                .child(bar(18., open_row))
+                .child(bar(18., row))
+                .child(bar(18., row)),
+        )
+        .child(
+            v_flex()
+                .flex_1()
+                .min_w_0()
+                .h_full()
+                .bg(window)
+                .pt(px(8.))
+                .px(px(6.))
+                .gap(px(5.))
+                .child(bar(30., title))
+                .child(
+                    v_flex()
+                        .p(px(5.))
+                        .gap(px(3.))
+                        .rounded(px(4.))
+                        .bg(code)
+                        .child(bar(22., keyword))
+                        .child(bar(38., string))
+                        .child(bar(30., function)),
+                )
+                .child(div().h(px(7.)).w(px(24.)).rounded_full().bg(accent)),
+        );
+    let tip: SharedString = match choice {
+        style::Palette::Stock => "The usual look, as Threadbear has always been".into(),
+        style::Palette::Harbor => {
+            "Harbor: a charcoal frame, blue-slate code and a sea-blue accent. Light or dark".into()
+        }
+        style::Palette::Squall => {
+            "Squall: blue-grey all through, with a steel-blue accent. Always dark".into()
+        }
+    };
+    let (fg, faint) = (cx.theme().foreground, style::faint_text(cx));
+    v_flex()
+        .id(SharedString::from(format!(
+            "settings-theme-{}",
+            choice.name()
+        )))
+        .test_support()
+        .a11y_role(Role::Button)
+        .aria_label(tip.clone())
+        .tip(tip)
+        .cursor_pointer()
+        // The three share the row, so they fit Settings at any width.
+        .flex_1()
+        .min_w_0()
+        .max_w(px(160.))
+        .gap(px(6.))
+        .child(
+            // The ring, a gap, then the picture.
+            div()
+                .w_full()
+                .h(px(84.))
+                .rounded(px(11.))
+                .border(px(2.))
+                .border_color(if on {
+                    style::control_accent(cx)
+                } else {
+                    gpui_kit::transparent_black()
+                })
+                .p(px(3.))
+                .child(
+                    div()
+                        .size_full()
+                        .rounded(px(7.))
+                        .overflow_hidden()
+                        .border_1()
+                        .border_color(style::primary_opacity(cx, 0.12))
+                        .child(picture),
+                ),
+        )
+        .on_click(click)
+        .child(
+            h_flex()
+                .px(px(5.))
+                .gap(px(5.))
+                .items_center()
+                .text_size(px(13.))
+                .line_height(px(17.))
+                .text_color(fg)
+                .when(on, |name| {
+                    name.font_weight(FontWeight::SEMIBOLD).child(
+                        Icon::from(gpui_kit::assets::IconName::Check)
+                            .with_size(px(12.))
+                            .text_color(style::control_accent(cx)),
+                    )
+                })
+                .child(choice.title()),
+        )
+        .child(
+            div()
+                .px(px(5.))
+                .text_size(px(12.))
+                .line_height(px(16.))
+                .text_color(faint)
+                .child(choice.blurb()),
+        )
+        .into_any_element()
+}
+
 /// One accent: a dot in its colour, ringed when it's the one picked. The
 /// system's is the Mac's accent where there is one, else the usual blue.
 fn accent_dot(
@@ -2436,12 +2644,17 @@ fn accent_dot(
             let picked = style::accent_choice();
             if picked == style::Accent::System {
                 style::control_accent(cx)
+            } else if let Some(p) = style::themed(cx) {
+                style::hex(p.accent)
             } else {
                 rgb(0x0a84ff).into()
             }
         }
     };
     let tip: SharedString = match choice {
+        style::Accent::System if style::palette_choice() != style::Palette::Stock => {
+            "Use the theme's accent".into()
+        }
         style::Accent::System if cfg!(target_os = "macos") => "Use the Mac's accent colour".into(),
         style::Accent::System => "Use blue, the usual accent".into(),
         _ => format!("Use {} as the accent", choice.title()).into(),
@@ -2633,6 +2846,7 @@ impl SettingsWindow {
             "instructionsStatus": self.instructions_status,
             "appearance": style::appearance().name(),
             "accent": style::accent_choice().name(),
+            "palette": style::palette_choice().name(),
             "compact": style::compact(),
             "font": style::font_choice().name(),
             "defaultFolder": settings.as_ref().map(|s| s.default_cwd.clone()),

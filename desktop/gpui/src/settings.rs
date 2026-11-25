@@ -56,6 +56,8 @@ pub struct Saved {
     pub appearance: Option<String>,
     /// Appearance's accent, `style::Accent`'s name. None is the system's.
     pub accent: Option<String>,
+    /// Appearance's Theme, `style::Palette`'s name. None is Stock.
+    pub palette: Option<String>,
     /// Appearance's Spacing: Some(true) is Compact. None is Roomy.
     pub compact: Option<bool>,
     /// Appearance's Font, `style::Font`'s name. None is the system's.

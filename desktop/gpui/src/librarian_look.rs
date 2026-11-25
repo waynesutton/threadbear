@@ -268,6 +268,10 @@ impl Threadbear {
         let quote = quotes::pick(&day, look.quote_skips_on(&day))?;
         let secondary = style::secondary_text(cx);
         let copied = format!("\u{201C}{}\u{201D}\n{}", quote.text, quote.author);
+        let refresh_hover = style::themed(cx).map_or_else(
+            || gpui_kit::hsla(0., 0., 0.5, 0.12),
+            |p| style::hex(p.hover),
+        );
         let refresh = crate::highlights::tipped(
             div()
                 .id("quote-another")
@@ -278,7 +282,7 @@ impl Threadbear {
                 .justify_center()
                 .rounded(px(5.))
                 .cursor_pointer()
-                .hover(|s| s.bg(gpui_kit::hsla(0., 0., 0.5, 0.12))),
+                .hover(move |s| s.bg(refresh_hover)),
             "Show another quote for today",
         )
         .on_click(cx.listener(move |this, _, _, cx| {

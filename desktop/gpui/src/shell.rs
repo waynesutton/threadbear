@@ -253,6 +253,14 @@ impl DockContent for Panels {
         Some(app.update(cx, |t, cx| t.render_header_title(window, cx)))
     }
 
+    /// A named theme's side columns: every panel but a thread's own takes
+    /// the theme's sidebar colour, and the transcript keeps the window's.
+    fn fill(&self, panel: &str, cx: &App) -> Option<Hsla> {
+        let p = crate::style::themed(cx)?;
+        (panel != MAIN && crate::thread_panels::pinned_thread(panel).is_none())
+            .then(|| crate::style::hex(p.pane))
+    }
+
     fn header_fills(&self, panel: &str, cx: &App) -> bool {
         let Some(app) = self.app.upgrade() else {
             return false;

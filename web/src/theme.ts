@@ -17,3 +17,36 @@ export function setTheme(theme: Theme): void {
   localStorage.setItem(KEY, theme);
   applyTheme(theme);
 }
+
+// The colours on this browser: the stock ones, or a named theme (the desktop
+// app's Settings > General > Appearance > Theme). Harbor has a light and a
+// dark side and follows the choice above; Squall is always dark. Kept apart
+// from the theme, so the two combine. styles.css has the colours.
+export type Palette = 'stock' | 'harbor' | 'squall';
+export const PALETTES: Palette[] = ['stock', 'harbor', 'squall'];
+const PALETTE_KEY = 'threadbear.palette';
+
+/** What a saved value means: anything unknown is the stock look. */
+export function paletteFrom(saved: string | null): Palette {
+  return saved === 'harbor' || saved === 'squall' ? saved : 'stock';
+}
+
+/** Squall has no light side, so light and "follow the system" don't apply to it. */
+export function darkOnly(palette: Palette): boolean {
+  return palette === 'squall';
+}
+
+export function readPalette(): Palette {
+  return paletteFrom(localStorage.getItem(PALETTE_KEY));
+}
+
+export function applyPalette(palette: Palette = readPalette()): void {
+  if (palette === 'stock') delete document.documentElement.dataset.palette;
+  else document.documentElement.dataset.palette = palette;
+}
+
+export function setPalette(palette: Palette): void {
+  if (palette === 'stock') localStorage.removeItem(PALETTE_KEY);
+  else localStorage.setItem(PALETTE_KEY, palette);
+  applyPalette(palette);
+}

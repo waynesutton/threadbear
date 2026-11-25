@@ -1026,7 +1026,7 @@ impl DockView {
             .min_w(px(0.))
             .min_h(px(0.))
             .overflow_hidden()
-            .bg(theme.panel)
+            .bg(self.content.fill(&panel, cx).unwrap_or(theme.panel))
             .when(landing, |d| d.opacity(0.))
             .child(measure(move |bounds, _, cx| {
                 let origin = root_bounds.get().origin;

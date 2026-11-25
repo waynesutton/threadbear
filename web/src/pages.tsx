@@ -13,7 +13,7 @@ import { MessageText } from './messages';
 import { CommandNote, useCommand } from './command-state';
 import { go, projectPath, threadPath, type RailView, viewPath } from './route';
 import { ago, day, folderName } from './format';
-import { readTheme, setTheme, type Theme } from './theme';
+import { readPalette, readTheme, setPalette, setTheme, type Palette, type Theme } from './theme';
 import { bytesWords, statsFresh, isOnline, matchesSchedule, runnersShown, runnerState, scheduleSections, sinceWords, tightest, untilWords } from './view-logic';
 import { busy, type Row } from './sidebar';
 import * as Icon from './icons';
@@ -25,6 +25,18 @@ export function useTheme(): [Theme, (t: Theme) => void] {
     (t) => {
       setTheme(t);
       set(t);
+    },
+  ];
+}
+
+/** This browser's colours: stock, or a named theme (theme.ts). */
+export function usePalette(): [Palette, (p: Palette) => void] {
+  const [palette, set] = useState(readPalette);
+  return [
+    palette,
+    (p) => {
+      setPalette(p);
+      set(p);
     },
   ];
 }

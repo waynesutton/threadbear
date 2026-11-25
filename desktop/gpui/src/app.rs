@@ -370,6 +370,14 @@ impl Threadbear {
         // transcript and composer have them (`scrollerStyle = .overlay`).
         crate::style::install_window_colours(cx);
         Theme::set_scrollbar_mode(gpui_kit::component::scroll::ScrollbarMode::Scrolling, cx);
+        // Appearance's Theme. Stock, with nothing saved, leaves the kit's
+        // themes as they are, so the app looks as it always has.
+        crate::style::register_palettes(cx);
+        let palette =
+            crate::style::Palette::from_name(settings.saved.palette.as_deref().unwrap_or("stock"));
+        if palette != crate::style::Palette::Stock {
+            crate::style::set_palette_choice(palette, window, cx);
+        }
         // Light or dark as Settings › General says, else the Mac's, followed
         // as it changes.
         crate::style::set_appearance(
@@ -396,9 +404,7 @@ impl Threadbear {
         let appearance = window.observe_window_appearance(|window, cx| {
             crate::style::refresh_system_accent(cx);
             crate::style::refresh_system_contrast(cx);
-            if crate::style::appearance() == crate::style::Appearance::System {
-                Theme::sync_system_appearance(Some(window), cx);
-            }
+            crate::style::follow_system_appearance(window, cx);
         });
         crate::style::set_zoom_percent(settings.zoom_percent());
         shell::apply_zoom_to_theme(settings.zoom_percent(), cx);
@@ -1780,6 +1786,21 @@ impl Threadbear {
         crate::style::set_accent_choice(accent, cx);
         self.settings.saved.accent =
             (accent != crate::style::Accent::System).then(|| accent.name().to_owned());
+        self.look_changed(window, cx);
+    }
+
+    /// Appearance's Theme (`style::Palette`), kept in this app's settings file.
+    pub(crate) fn set_palette(
+        &mut self,
+        palette: crate::style::Palette,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        crate::style::set_palette_choice(palette, window, cx);
+        // What went on, which is Stock if the theme couldn't be found.
+        let palette = crate::style::palette_choice();
+        self.settings.saved.palette =
+            (palette != crate::style::Palette::Stock).then(|| palette.name().to_owned());
         self.look_changed(window, cx);
     }
 

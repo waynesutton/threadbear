@@ -436,6 +436,9 @@ fn edit_state(key: &str, cx: &App) -> (Option<Entity<TextareaState>>, Option<Str
 
 /// NSColor.systemGreen, for Copied and the bubble's tick.
 fn system_green(cx: &App) -> Hsla {
+    if let Some(p) = style::themed(cx) {
+        return style::hex(p.success);
+    }
     if cx.theme().is_dark() {
         rgb(0x30d158).into()
     } else {

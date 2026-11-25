@@ -172,6 +172,176 @@ pub fn set_accent_choice(accent: Accent, cx: &mut App) {
     bump_look();
 }
 
+/// Settings > General > Appearance > Theme: the stock look, or one of the
+/// named themes (Wayne Sutton's Harbor and Squall, 25 Nov). A named theme
+/// brings its own surfaces, text, accent, syntax and terminal colours
+/// (palettes.rs for this file's colours, themes/harbor-squall.theme.json for
+/// the kit's). Stock is today's look, untouched.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Palette {
+    Stock,
+    Harbor,
+    Squall,
+}
+
+static PALETTE: AtomicU32 = AtomicU32::new(0);
+
+/// The named themes, in the kit's own format. Registered once at launch
+/// (`register_palettes`).
+pub(crate) const PALETTE_THEMES: &str = include_str!("../themes/harbor-squall.theme.json");
+
+impl Palette {
+    pub const ALL: [Palette; 3] = [Palette::Stock, Palette::Harbor, Palette::Squall];
+
+    /// What the settings file keeps.
+    pub fn name(self) -> &'static str {
+        match self {
+            Palette::Stock => "stock",
+            Palette::Harbor => "harbor",
+            Palette::Squall => "squall",
+        }
+    }
+
+    pub fn from_name(name: &str) -> Palette {
+        Palette::ALL
+            .into_iter()
+            .find(|p| p.name() == name)
+            .unwrap_or(Palette::Stock)
+    }
+
+    pub fn title(self) -> &'static str {
+        match self {
+            Palette::Stock => "Stock",
+            Palette::Harbor => "Harbor",
+            Palette::Squall => "Squall",
+        }
+    }
+
+    pub fn blurb(self) -> &'static str {
+        match self {
+            Palette::Stock => "The usual look",
+            Palette::Harbor => "Charcoal and sea blue. Light or dark",
+            Palette::Squall => "Blue-grey storm light. Always dark",
+        }
+    }
+
+    /// Squall has no light side, so it's dark whatever Look says.
+    pub fn dark_only(self) -> bool {
+        matches!(self, Palette::Squall)
+    }
+
+    /// The kit themes' names in the theme JSON: (dark, light).
+    pub(crate) fn kit_names(self) -> Option<(&'static str, &'static str)> {
+        match self {
+            Palette::Stock => None,
+            Palette::Harbor => Some(("Harbor", "Harbor Light")),
+            Palette::Squall => Some(("Squall", "Squall")),
+        }
+    }
+
+    /// This theme's colours on one side, None for Stock.
+    pub(crate) fn colours(self, dark: bool) -> Option<&'static crate::palettes::Palette> {
+        use crate::palettes::{HARBOR_DARK, HARBOR_LIGHT, SQUALL};
+        match (self, dark) {
+            (Palette::Stock, _) => None,
+            (Palette::Harbor, true) => Some(&HARBOR_DARK),
+            (Palette::Harbor, false) => Some(&HARBOR_LIGHT),
+            (Palette::Squall, _) => Some(&SQUALL),
+        }
+    }
+}
+
+pub fn palette_choice() -> Palette {
+    Palette::ALL
+        .get(PALETTE.load(Ordering::Relaxed) as usize)
+        .copied()
+        .unwrap_or(Palette::Stock)
+}
+
+/// The named theme's colours for the side showing, or None on Stock: what
+/// every colour below asks first.
+pub(crate) fn themed(cx: &App) -> Option<&'static crate::palettes::Palette> {
+    palette_choice().colours(cx.theme().is_dark())
+}
+
+/// A palette's 0xRRGGBB as a colour.
+pub(crate) fn hex(colour: u32) -> Hsla {
+    rgb(colour).into()
+}
+
+/// A named theme's colour when one is on, else the stock look's.
+fn theme_or(cx: &App, colour: impl Fn(&crate::palettes::Palette) -> u32, stock: Hsla) -> Hsla {
+    themed(cx).map_or(stock, |p| hex(colour(p)))
+}
+
+/// Adds the named themes to the kit's registry. Once, at launch, before a
+/// saved theme is put on.
+pub(crate) fn register_palettes(cx: &mut App) {
+    if let Err(error) =
+        gpui_kit::component::ThemeRegistry::global_mut(cx).load_themes_from_str(PALETTE_THEMES)
+    {
+        // The JSON is bundled and tested (palette_tests), so this is a build
+        // gone wrong. The app still runs, on Stock.
+        eprintln!("the bundled themes didn't load: {error}");
+    }
+}
+
+/// Puts a theme on every window: the kit's two themes are swapped for the
+/// named theme's (or back to the kit's own), and what's kept from the old
+/// ones (the accent, the contrast colours, the font) is worked out again on
+/// the new.
+pub fn set_palette_choice(palette: Palette, window: &mut Window, cx: &mut App) {
+    use gpui_kit::component::{Theme, ThemeRegistry};
+    let registry = ThemeRegistry::global(cx);
+    let named = palette.kit_names().and_then(|(dark, light)| {
+        let themes = registry.themes();
+        Some((themes.get(dark)?.clone(), themes.get(light)?.clone()))
+    });
+    // A theme that didn't register falls back to Stock rather than half of it.
+    let palette = if named.is_some() {
+        palette
+    } else {
+        Palette::Stock
+    };
+    let (dark, light) = named.unwrap_or_else(|| {
+        (
+            registry.default_dark_theme().clone(),
+            registry.default_light_theme().clone(),
+        )
+    });
+    PALETTE.store(
+        Palette::ALL.iter().position(|p| *p == palette).unwrap_or(0) as u32,
+        Ordering::Relaxed,
+    );
+    let theme = Theme::global_mut(cx);
+    theme.dark_theme = dark;
+    theme.light_theme = light;
+    // These remember colours of the themes just replaced: the kit's accent
+    // to go back to, the accent last put on, and the kit's colours from
+    // before Increase Contrast. Each is read again from the new themes.
+    if cx.has_global::<KitAccent>() {
+        cx.remove_global::<KitAccent>();
+    }
+    if cx.has_global::<SystemAccent>() {
+        cx.remove_global::<SystemAccent>();
+    }
+    if cx.has_global::<SystemContrast>() {
+        cx.remove_global::<SystemContrast>();
+    }
+    if palette == Palette::Stock {
+        // The stock look's own window, sidebar and popover colours, which
+        // the kit's themes don't carry. A named theme's JSON has its own.
+        install_window_colours(cx);
+    } else {
+        refresh_system_accent(cx);
+        refresh_system_contrast(cx);
+    }
+    // The font's family lives in the themes too.
+    set_font_choice(font_choice(), cx);
+    apply_appearance(window, cx);
+    bump_look();
+}
+
 /// Settings > General > Appearance's Spacing: Compact tightens the sidebar's
 /// rows and the room around each of your messages, for those who want more
 /// on screen, as Jordan Newton's fork does with its denser sizes
@@ -312,7 +482,6 @@ pub fn appearance() -> Appearance {
 /// Sets the preference and puts it on the window: the theme is the app's, so
 /// every window follows.
 pub fn set_appearance(appearance: Appearance, window: &mut Window, cx: &mut App) {
-    use gpui_kit::component::{Theme, ThemeMode};
     APPEARANCE.store(
         match appearance {
             Appearance::System => 0,
@@ -321,10 +490,29 @@ pub fn set_appearance(appearance: Appearance, window: &mut Window, cx: &mut App)
         },
         Ordering::Relaxed,
     );
-    match appearance {
+    apply_appearance(window, cx);
+}
+
+/// Puts the saved look on the theme. A dark-only theme (Squall) is dark
+/// whatever's saved, and the saved look is kept for when the theme changes.
+fn apply_appearance(window: &mut Window, cx: &mut App) {
+    use gpui_kit::component::{Theme, ThemeMode};
+    if palette_choice().dark_only() {
+        Theme::change(ThemeMode::Dark, Some(window), cx);
+        return;
+    }
+    match appearance() {
         Appearance::System => Theme::sync_system_appearance(Some(window), cx),
         Appearance::Light => Theme::change(ThemeMode::Light, Some(window), cx),
         Appearance::Dark => Theme::change(ThemeMode::Dark, Some(window), cx),
+    }
+}
+
+/// The Mac went light or dark: follow it, if that's what Look says and the
+/// theme has both sides.
+pub(crate) fn follow_system_appearance(window: &mut Window, cx: &mut App) {
+    if appearance() == Appearance::System && !palette_choice().dark_only() {
+        gpui_kit::component::Theme::sync_system_appearance(Some(window), cx);
     }
 }
 
@@ -718,6 +906,10 @@ pub(crate) fn refresh_system_accent(cx: &mut App) {
     let system = system_control_accent(false).zip(system_control_accent(true));
     #[cfg(not(target_os = "macos"))]
     let system: Option<(Rgba, Rgba)> = None;
+    // A named theme has an accent of its own (its JSON's primary and ring),
+    // which the first accent dot means while it's on. A bear accent still
+    // replaces it.
+    let system = system.filter(|_| palette_choice() == Palette::Stock);
     if !cx.has_global::<KitAccent>() {
         let theme = Theme::global(cx);
         let saved = [&theme.light_theme, &theme.dark_theme].map(|t| {
@@ -899,23 +1091,27 @@ fn black(alpha: f32) -> Hsla {
 }
 
 pub fn card_background(cx: &App) -> Hsla {
-    pick(cx, white(0.035), black(0.02))
+    theme_or(cx, |p| p.card, pick(cx, white(0.035), black(0.02)))
 }
 
 pub fn card_border(cx: &App) -> Hsla {
-    contrast_colour(cx, 3, pick(cx, white(0.12), black(0.12)))
+    contrast_colour(
+        cx,
+        3,
+        theme_or(cx, |p| p.border, pick(cx, white(0.12), black(0.12))),
+    )
 }
 
 pub fn code_background(cx: &App) -> Hsla {
-    pick(cx, white(0.045), black(0.03))
+    theme_or(cx, |p| p.code, pick(cx, white(0.045), black(0.03)))
 }
 
 pub fn inline_code_background(cx: &App) -> Hsla {
-    pick(cx, white(0.085), black(0.05))
+    theme_or(cx, |p| p.inline_code, pick(cx, white(0.085), black(0.05)))
 }
 
 pub fn hover_fill(cx: &App) -> Hsla {
-    pick(cx, white(0.05), black(0.04))
+    theme_or(cx, |p| p.hover, pick(cx, white(0.05), black(0.04)))
 }
 
 /// The task list's unchecked box. The theme's input border is near invisible
@@ -927,6 +1123,18 @@ pub fn list_checkbox(
     group: &'static str,
 ) -> gpui_kit::component::checkbox::UncheckedLook {
     use gpui_kit::component::checkbox::{UncheckedHover, UncheckedLook};
+    if let Some(p) = themed(cx) {
+        return UncheckedLook {
+            border: contrast_colour(cx, 2, hex(p.checkbox_border)),
+            background: hex(p.checkbox_bg),
+            hover: Some(UncheckedHover {
+                group: group.into(),
+                border: hex(p.text_secondary),
+                background: hex(p.chip),
+                ring: hex(p.hover),
+            }),
+        };
+    }
     UncheckedLook {
         border: contrast_colour(cx, 2, pick(cx, white(0.34), black(0.3))),
         background: pick(cx, black(0.35), white(0.9)),
@@ -940,48 +1148,68 @@ pub fn list_checkbox(
 }
 
 pub fn hairline(cx: &App) -> Hsla {
-    contrast_colour(cx, 3, pick(cx, white(0.1), black(0.1)))
+    contrast_colour(
+        cx,
+        3,
+        theme_or(cx, |p| p.hairline, pick(cx, white(0.1), black(0.1))),
+    )
 }
 
 pub fn faint_text(cx: &App) -> Hsla {
-    contrast_colour(cx, 1, pick(cx, white(0.36), black(0.45)))
+    contrast_colour(
+        cx,
+        1,
+        theme_or(cx, |p| p.text_meta, pick(cx, white(0.36), black(0.45))),
+    )
 }
 
 pub fn quiet_text(cx: &App) -> Hsla {
-    contrast_colour(cx, 1, pick(cx, white(0.55), black(0.6)))
+    contrast_colour(
+        cx,
+        1,
+        theme_or(cx, |p| p.text_secondary, pick(cx, white(0.55), black(0.6))),
+    )
 }
 
 pub fn button_fill(cx: &App) -> Hsla {
-    pick(cx, white(0.12), white(1.))
+    theme_or(cx, |p| p.button2, pick(cx, white(0.12), white(1.)))
 }
 
 pub fn button_edge(cx: &App) -> Hsla {
-    contrast_colour(cx, 3, pick(cx, white(0.08), black(0.18)))
+    contrast_colour(
+        cx,
+        3,
+        theme_or(cx, |p| p.border, pick(cx, white(0.08), black(0.18))),
+    )
 }
 
 /// The composer's card: a lighter fill on dark, white on light (ComposerView.card).
 pub fn composer_fill(cx: &App) -> Hsla {
-    pick(cx, white(0.085), white(1.))
+    theme_or(cx, |p| p.composer, pick(cx, white(0.085), white(1.)))
 }
 
 /// The empty look of the send button (CircleButtonStyle, not filled).
 pub fn send_faint_fill(cx: &App) -> Hsla {
-    pick(cx, white(0.1), black(0.1))
+    theme_or(cx, |p| p.chip, pick(cx, white(0.1), black(0.1)))
 }
 
 /// A picture chip's fill (PictureChip.fill).
 pub fn chip_fill(cx: &App) -> Hsla {
-    pick(cx, white(0.1), black(0.06))
+    theme_or(cx, |p| p.chip, pick(cx, white(0.1), black(0.06)))
 }
 
 /// A composer chip's hover fill (ComposerChip).
 pub fn chip_hover_fill(cx: &App) -> Hsla {
-    pick(cx, white(0.07), black(0.05))
+    theme_or(cx, |p| p.chip_hover, pick(cx, white(0.07), black(0.05)))
 }
 
 /// The hairline between chips (ChipDivider).
 pub fn chip_divider(cx: &App) -> Hsla {
-    contrast_colour(cx, 3, pick(cx, white(0.12), black(0.12)))
+    contrast_colour(
+        cx,
+        3,
+        theme_or(cx, |p| p.divider, pick(cx, white(0.12), black(0.12))),
+    )
 }
 
 /// The Needs you orange (Theme.needsYou): systemOrange on dark, a deeper
@@ -992,7 +1220,7 @@ pub fn needs_you(cx: &App) -> Hsla {
 
 /// The answer box under an ask's Something else.
 pub fn answer_box_fill(cx: &App) -> Hsla {
-    pick(cx, white(0.05), black(0.03))
+    theme_or(cx, |p| p.card, pick(cx, white(0.05), black(0.03)))
 }
 
 /// The system's accent (NSColor.controlAccentColor): the outline of a box
@@ -1001,7 +1229,12 @@ pub fn accent(cx: &App) -> Hsla {
     if let Some(hex) = accent_choice().rgb() {
         return rgb_hsla(hex);
     }
-    pick(cx, rgb_hsla(0x0a84ff), rgb_hsla(0x007aff))
+    // The first accent dot is the theme's own accent while a theme is on.
+    theme_or(
+        cx,
+        |p| p.accent,
+        pick(cx, rgb_hsla(0x0a84ff), rgb_hsla(0x007aff)),
+    )
 }
 
 fn rgb_hsla(hex: u32) -> Hsla {
@@ -1025,40 +1258,64 @@ pub fn over_background(color: Hsla, cx: &App) -> Hsla {
 
 /// NSColor.labelColor: body text.
 pub fn label_text(cx: &App) -> Hsla {
-    contrast_colour(cx, 0, pick(cx, white(0.85), black(0.85)))
+    contrast_colour(
+        cx,
+        0,
+        theme_or(cx, |p| p.text, pick(cx, white(0.85), black(0.85))),
+    )
 }
 
 /// NSColor.secondaryLabelColor: a table's headers, quoted text.
 pub fn secondary_label(cx: &App) -> Hsla {
-    contrast_colour(cx, 1, pick(cx, white(0.55), black(0.5)))
+    contrast_colour(
+        cx,
+        1,
+        theme_or(cx, |p| p.text_secondary, pick(cx, white(0.55), black(0.5))),
+    )
 }
 
 /// NSColor.tertiaryLabelColor, and `Theme.faintIcon`'s dark value: work line
 /// icons and chevrons, the "⏎" on the Allow button.
 pub fn tertiary_label(cx: &App) -> Hsla {
-    contrast_colour(cx, 2, pick(cx, white(0.25), black(0.25)))
+    contrast_colour(
+        cx,
+        2,
+        theme_or(cx, |p| p.text_meta, pick(cx, white(0.25), black(0.25))),
+    )
 }
 
 /// `Theme.faintIcon`: work line icons and chevrons.
 pub fn faint_icon(cx: &App) -> Hsla {
-    contrast_colour(cx, 2, pick(cx, white(0.25), black(0.36)))
+    contrast_colour(
+        cx,
+        2,
+        theme_or(cx, |p| p.icon_muted, pick(cx, white(0.25), black(0.36))),
+    )
 }
 
 /// The pane's row icons (`Theme.faintIcon`): a notch brighter here, as
 /// Lucide's thin strokes read fainter than SF Symbols.
 pub fn pane_icon(cx: &App) -> Hsla {
-    contrast_colour(cx, 1, pick(cx, white(0.4), black(0.42)))
+    contrast_colour(
+        cx,
+        1,
+        theme_or(cx, |p| p.icon, pick(cx, white(0.4), black(0.42))),
+    )
 }
 
 /// `Theme.answerRowsFill`.
 pub fn answer_rows_fill(cx: &App) -> Hsla {
-    pick(cx, white(0.02), black(0.015))
+    theme_or(cx, |p| p.chip, pick(cx, white(0.02), black(0.015)))
 }
 
 /// The small star beside "Recommended" on the agent's own pick: a muted gold,
 /// as on the Mac app (Theme.recommendedStar), after Ghostex's (Mike, 9 Nov 2026).
 pub fn recommended_star(cx: &App) -> Hsla {
-    pick(cx, srgb(0.86, 0.70, 0.33, 1.), srgb(0.72, 0.54, 0.12, 1.))
+    theme_or(
+        cx,
+        |p| p.warning,
+        pick(cx, srgb(0.86, 0.70, 0.33, 1.), srgb(0.72, 0.54, 0.12, 1.)),
+    )
 }
 
 fn srgb(r: f32, g: f32, b: f32, a: f32) -> Hsla {
@@ -1067,6 +1324,12 @@ fn srgb(r: f32, g: f32, b: f32, a: f32) -> Hsla {
 
 /// NSColor.controlAccentColor on a Mac, the existing blue elsewhere.
 pub fn control_accent(cx: &App) -> Hsla {
+    // A named theme's own accent, unless a bear accent was picked over it.
+    if accent_choice() == Accent::System {
+        if let Some(p) = themed(cx) {
+            return hex(p.accent);
+        }
+    }
     if let Some(accent) = cx.try_global::<SystemAccent>() {
         return Hsla::from(if cx.theme().is_dark() {
             accent.dark
@@ -1082,15 +1345,26 @@ pub fn control_accent(cx: &App) -> Hsla {
 /// own colour, 12 Nov; this was the accent's blue before and read deeper than
 /// the Swift app's links).
 pub fn link_text(cx: &App) -> Hsla {
-    pick(
+    theme_or(
         cx,
-        srgb(0.255, 0.612, 1.0, 1.0),
-        srgb(0.0, 0.408, 0.855, 1.0),
+        |p| p.link,
+        pick(
+            cx,
+            srgb(0.255, 0.612, 1.0, 1.0),
+            srgb(0.0, 0.408, 0.855, 1.0),
+        ),
     )
 }
 
 /// A little of the accent over the faint fill behind Mike's own messages.
 pub fn bubble_background(cx: &App) -> Hsla {
+    // A named theme's own bubble. With a bear accent picked, the tint is
+    // mixed from that accent as on Stock.
+    if accent_choice() == Accent::System {
+        if let Some(p) = themed(cx) {
+            return hex(p.bubble);
+        }
+    }
     let dark = cx.theme().is_dark();
     let accent = Rgba::from(control_accent(cx));
     let (base, base_alpha, accent_alpha): (f32, f32, f32) = if dark {
@@ -1105,34 +1379,62 @@ pub fn bubble_background(cx: &App) -> Hsla {
 
 /// A faint line's tint in a diff: green for added lines, red for removed.
 pub fn added_line_bg(cx: &App) -> Hsla {
-    pick(cx, srgb(0.25, 0.78, 0.4, 0.12), srgb(0.1, 0.62, 0.25, 0.1))
+    theme_or(
+        cx,
+        |p| p.added_bg,
+        pick(cx, srgb(0.25, 0.78, 0.4, 0.12), srgb(0.1, 0.62, 0.25, 0.1)),
+    )
 }
 
 pub fn removed_line_bg(cx: &App) -> Hsla {
-    pick(cx, srgb(0.95, 0.3, 0.3, 0.12), srgb(0.85, 0.2, 0.2, 0.09))
+    theme_or(
+        cx,
+        |p| p.removed_bg,
+        pick(cx, srgb(0.95, 0.3, 0.3, 0.12), srgb(0.85, 0.2, 0.2, 0.09)),
+    )
 }
 
 pub fn added_text(cx: &App) -> Hsla {
-    pick(cx, srgb(0.42, 0.84, 0.5, 1.), srgb(0.1, 0.55, 0.22, 1.))
+    theme_or(
+        cx,
+        |p| p.added_text,
+        pick(cx, srgb(0.42, 0.84, 0.5, 1.), srgb(0.1, 0.55, 0.22, 1.)),
+    )
 }
 
 pub fn removed_text(cx: &App) -> Hsla {
-    pick(cx, srgb(1., 0.45, 0.45, 1.), srgb(0.8, 0.15, 0.15, 1.))
+    theme_or(
+        cx,
+        |p| p.removed_text,
+        pick(cx, srgb(1., 0.45, 0.45, 1.), srgb(0.8, 0.15, 0.15, 1.)),
+    )
 }
 
 /// `Theme.failed`: "Failed" and a failed tool's icon.
 pub fn failed_text(cx: &App) -> Hsla {
-    pick(cx, srgb(1., 0.27, 0.23, 1.), srgb(0.78, 0.13, 0.13, 1.))
+    theme_or(
+        cx,
+        |p| p.error,
+        pick(cx, srgb(1., 0.27, 0.23, 1.), srgb(0.78, 0.13, 0.13, 1.)),
+    )
 }
 
 /// `Theme.needsYou` and NSColor.systemOrange.
 pub fn needs_you_text(cx: &App) -> Hsla {
-    pick(cx, srgb(1., 0.62, 0.04, 1.), srgb(0.7, 0.33, 0., 1.))
+    theme_or(
+        cx,
+        |p| p.warning,
+        pick(cx, srgb(1., 0.62, 0.04, 1.), srgb(0.7, 0.33, 0., 1.)),
+    )
 }
 
 /// `Theme.errorBackground`: behind a failed turn's message.
 pub fn error_background(cx: &App) -> Hsla {
-    pick(cx, srgb(0.7, 0.2, 0.2, 0.18), srgb(1., 0.94, 0.94, 1.))
+    theme_or(
+        cx,
+        |p| p.error_bg,
+        pick(cx, srgb(0.7, 0.2, 0.2, 0.18), srgb(1., 0.94, 0.94, 1.)),
+    )
 }
 
 // The sidebar's colours (SidebarMetrics, ThreadRowView, ProjectTiles).
@@ -1144,7 +1446,7 @@ pub fn primary_opacity(cx: &App, alpha: f32) -> Hsla {
 
 /// A row under the pointer (SidebarMetrics.hover).
 pub fn sidebar_hover(cx: &App) -> Hsla {
-    primary_opacity(cx, 0.03)
+    theme_or(cx, |p| p.hover, primary_opacity(cx, 0.03))
 }
 
 /// The open thread's row, brighter than a hover so the two read apart.
@@ -1153,6 +1455,13 @@ pub fn sidebar_selected(cx: &App) -> Hsla {
 }
 
 pub fn sidebar_selection(cx: &App, active: bool) -> Hsla {
+    if let Some(p) = themed(cx) {
+        return hex(if active {
+            p.selected
+        } else {
+            p.selected_inactive
+        });
+    }
     primary_opacity(cx, if active { 0.08 } else { 0.06 })
 }
 
@@ -1164,28 +1473,48 @@ pub fn sidebar_selection(cx: &App, active: bool) -> Hsla {
 /// deuteranope. Each mark has its own shape too. An error's words keep
 /// `failed`'s red: they're read, not told apart at a glance.
 pub fn status_failed(cx: &App) -> Hsla {
-    pick(cx, rgb_hsla(0xe0457b), rgb_hsla(0xc42a63))
+    theme_or(
+        cx,
+        |p| p.error,
+        pick(cx, rgb_hsla(0xe0457b), rgb_hsla(0xc42a63)),
+    )
 }
 
 /// A list row's `warning`: Okabe-Ito's yellow, a darker gold on light.
 pub fn status_warning(cx: &App) -> Hsla {
-    pick(cx, rgb_hsla(0xf0e442), rgb_hsla(0x8f7a00))
+    theme_or(
+        cx,
+        |p| p.warning,
+        pick(cx, rgb_hsla(0xf0e442), rgb_hsla(0x8f7a00)),
+    )
 }
 
 /// Working and done: Okabe-Ito's sky blue (its blue on light), so neither
 /// leans on the accent, which can be any colour, red included.
 pub fn status_progress(cx: &App) -> Hsla {
-    pick(cx, rgb_hsla(0x56b4e9), rgb_hsla(0x0072b2))
+    theme_or(
+        cx,
+        |p| p.accent,
+        pick(cx, rgb_hsla(0x56b4e9), rgb_hsla(0x0072b2)),
+    )
 }
 
 /// Theme.failed.
 pub fn failed(cx: &App) -> Hsla {
-    pick(cx, rgb(0xff453a).into(), hsla(0.0, 0.71, 0.46, 1.0))
+    theme_or(
+        cx,
+        |p| p.error,
+        pick(cx, rgb(0xff453a).into(), hsla(0.0, 0.71, 0.46, 1.0)),
+    )
 }
 
 /// `.secondary` text (secondaryLabelColor).
 pub fn secondary_text(cx: &App) -> Hsla {
-    contrast_colour(cx, 1, pick(cx, white(0.55), black(0.5)))
+    contrast_colour(
+        cx,
+        1,
+        theme_or(cx, |p| p.text_secondary, pick(cx, white(0.55), black(0.5))),
+    )
 }
 
 /// `SidebarMetrics.corner`: the rails' lit square.
@@ -1193,12 +1522,20 @@ pub const RAIL_CORNER: f32 = 8.;
 
 /// The connection banner's warning fill (`.yellow.opacity(0.12)`).
 pub fn warning_fill(cx: &App) -> Hsla {
-    pick(cx, srgb(1., 0.8, 0., 0.12), srgb(1., 0.8, 0., 0.12))
+    theme_or(
+        cx,
+        |p| p.warning_bg,
+        pick(cx, srgb(1., 0.8, 0., 0.12), srgb(1., 0.8, 0., 0.12)),
+    )
 }
 
 /// The tick on the end-of-inbox note (`Color.green`).
 pub fn tick_green(cx: &App) -> Hsla {
-    pick(cx, srgb(0.2, 0.83, 0.4, 1.), srgb(0.2, 0.7, 0.3, 1.))
+    theme_or(
+        cx,
+        |p| p.success,
+        pick(cx, srgb(0.2, 0.83, 0.4, 1.), srgb(0.2, 0.7, 0.3, 1.)),
+    )
 }
 
 /// The app's own menus that are popovers rather than the kit's PopupMenu
@@ -1474,6 +1811,66 @@ mod font_tests {
         assert_eq!(Font::from_name("gone"), Font::DEFAULT);
         for font in Font::ALL {
             assert_eq!(Font::from_name(font.name()), font);
+        }
+    }
+}
+
+#[cfg(test)]
+mod palette_tests {
+    use super::{Palette, PALETTE_THEMES};
+
+    /// PALETTE starts at 0, so Stock has to be first, and a name that's
+    /// unknown (a theme from a newer build, a typo in the file) is Stock.
+    #[test]
+    fn stock_is_first_and_the_fallback() {
+        assert_eq!(Palette::ALL[0], Palette::Stock);
+        assert_eq!(Palette::from_name("gone"), Palette::Stock);
+        assert_eq!(Palette::from_name(""), Palette::Stock);
+        for palette in Palette::ALL {
+            assert_eq!(Palette::from_name(palette.name()), palette);
+        }
+    }
+
+    /// Stock has no colours of its own, and a dark-only theme gives the same
+    /// ones on either side.
+    #[test]
+    fn each_theme_has_its_sides() {
+        assert!(Palette::Stock.colours(true).is_none());
+        assert!(Palette::Stock.colours(false).is_none());
+        let harbor = (
+            Palette::Harbor.colours(true),
+            Palette::Harbor.colours(false),
+        );
+        assert_ne!(harbor.0.map(|p| p.window), harbor.1.map(|p| p.window));
+        for palette in Palette::ALL.into_iter().filter(|p| p.dark_only()) {
+            assert_eq!(
+                palette.colours(true).map(|p| p.window),
+                palette.colours(false).map(|p| p.window)
+            );
+        }
+    }
+
+    /// The bundled JSON loads through the kit's own registry, under the
+    /// names `kit_names` asks for.
+    #[test]
+    fn the_bundled_themes_register() {
+        let mut registry = gpui_kit::component::ThemeRegistry::default();
+        registry
+            .load_themes_from_str(PALETTE_THEMES)
+            .expect("the bundled themes parse");
+        for name in ["Harbor", "Harbor Light", "Squall"] {
+            assert!(registry.themes().contains_key(name), "{name} registered");
+        }
+        for palette in Palette::ALL {
+            if let Some((dark, light)) = palette.kit_names() {
+                let themes = registry.themes();
+                assert!(themes[dark].mode.is_dark(), "{dark} is a dark theme");
+                assert_eq!(
+                    themes[light].mode.is_dark(),
+                    palette.dark_only(),
+                    "{light} is light unless the theme is dark only"
+                );
+            }
         }
     }
 }
