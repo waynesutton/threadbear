@@ -8,6 +8,41 @@ import path from 'node:path';
 import { FakeClock } from '../../src/clock.ts';
 import { ACTIVITY_DAYS, PublicProfile, activityOf, changelogRepo, localDay, numbersOf, readSettings } from '../../src/public-profile.ts';
 import type { Project, ThreadSummary } from '../../src/protocol.ts';
+import zlib from 'node:zlib';
+
+// A real 1x1 PNG of one grey, as the upload now checks a picture's bytes
+// (icon-budget.ts) before it goes; a different grey is a different file.
+const crcTable = Array.from({ length: 256 }, (_, n) => {
+  let c = n;
+  for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1;
+  return c >>> 0;
+});
+const crc = (b: Buffer) => {
+  let c = 0xffffffff;
+  for (const x of b) c = crcTable[(c ^ x) & 0xff]! ^ (c >>> 8);
+  return (c ^ 0xffffffff) >>> 0;
+};
+const chunk = (type: string, data: Buffer) => {
+  const len = Buffer.alloc(4);
+  len.writeUInt32BE(data.length);
+  const body = Buffer.concat([Buffer.from(type, 'ascii'), data]);
+  const sum = Buffer.alloc(4);
+  sum.writeUInt32BE(crc(body));
+  return Buffer.concat([len, body, sum]);
+};
+const png = (grey: number) => {
+  const ihdr = Buffer.alloc(13);
+  ihdr.writeUInt32BE(1, 0);
+  ihdr.writeUInt32BE(1, 4);
+  ihdr[8] = 8; // bit depth
+  ihdr[9] = 0; // greyscale
+  return Buffer.concat([
+    Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
+    chunk('IHDR', ihdr),
+    chunk('IDAT', zlib.deflateSync(Buffer.from([0, grey]))),
+    chunk('IEND', Buffer.alloc(0)),
+  ]);
+};
 
 const NOW = new Date(2026, 10, 8, 15, 0).getTime();
 const log = { info() {}, warn() {}, error() {}, debug() {} } as never;
@@ -122,12 +157,12 @@ test('the changelog sends only a repo and a GitHub user, and needs both', async 
 test('a picture is uploaded once, and again only when the file changes', async () => {
   const s = setup();
   const pic = path.join(s.home, 'me.png');
-  fs.writeFileSync(pic, 'png-bytes');
+  fs.writeFileSync(pic, png(128));
   await s.p.update({ ...settings, show: ['picture'], picturePath: pic });
   await s.p.update({ ...settings, show: ['picture'], picturePath: pic });
   assert.equal(s.uploads.length, 1);
   assert.equal(s.sent[1]!.pictureId, '_storage:1');
-  fs.writeFileSync(pic, 'other-bytes');
+  fs.writeFileSync(pic, png(64));
   await s.p.update({ ...settings, show: ['picture'], picturePath: pic });
   assert.equal(s.uploads.length, 2);
   await s.p.update({ ...settings, show: [], picturePath: pic });
@@ -164,7 +199,7 @@ test('a picture turned off and on again is uploaded again, as the backend delete
   const backend = strictBackend();
   const p = new PublicProfile({ home, backend: () => backend, threads: () => [], projects: () => [], isPrivate: () => false, clock: new FakeClock(NOW), log });
   const pic = path.join(home, 'me.png');
-  fs.writeFileSync(pic, 'png-bytes');
+  fs.writeFileSync(pic, png(128));
   await p.update({ ...settings, show: ['picture'], picturePath: pic });
   await p.update({ ...settings, show: [], picturePath: pic });
   const back = await p.update({ ...settings, show: ['picture'], picturePath: pic });
@@ -175,8 +210,8 @@ test('a picture turned off and on again is uploaded again, as the backend delete
 test('a picture id the backend no longer has (saved by an older runner) is uploaded again', async () => {
   const home = fs.mkdtempSync(path.join(os.tmpdir(), 'tb-profile-'));
   const pic = path.join(home, 'me.png');
-  fs.writeFileSync(pic, 'png-bytes');
-  const hash = (await import('node:crypto')).createHash('sha256').update('png-bytes').digest('hex');
+  fs.writeFileSync(pic, png(128));
+  const hash = (await import('node:crypto')).createHash('sha256').update(png(128)).digest('hex');
   fs.writeFileSync(path.join(home, 'profile.json'), JSON.stringify({ files: { picture: { hash, storageId: '_storage:gone' } } }));
   const backend = strictBackend();
   const p = new PublicProfile({ home, backend: () => backend, threads: () => [], projects: () => [], isPrivate: () => false, clock: new FakeClock(NOW), log });

@@ -111,7 +111,7 @@ final class ConnectorsTextTests: XCTestCase {
     func testALocalGatewayIsThisMac() {
         XCTAssertEqual(ConnectorsText.host(ConnectorsStatus(state: "ok", url: "http://127.0.0.1:8795")), "This Mac")
         XCTAssertEqual(ConnectorsText.host(ConnectorsStatus(state: "ok", url: "http://localhost:8795")), "This Mac")
-        XCTAssertEqual(ConnectorsText.host(ConnectorsStatus(state: "ok", url: "https://bruce.tail.ts.net:8443")), "bruce")
+        XCTAssertEqual(ConnectorsText.host(ConnectorsStatus(state: "ok", url: "https://bruce.example.ts.net:8443")), "bruce")
     }
 
     func testAgentKeysReadAsWhatTheyMayDoAndWhenLastUsed() throws {

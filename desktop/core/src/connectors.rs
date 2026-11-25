@@ -911,7 +911,7 @@ mod tests {
             s.url = Some(url.into());
             assert_eq!(host(Some(&s)).as_deref(), Some("This Mac"), "{url}");
         }
-        s.url = Some("https://mac-mini.tail.ts.net:8443".into());
+        s.url = Some("https://mac-mini.example.ts.net:8443".into());
         assert_eq!(host(Some(&s)).as_deref(), Some("mac-mini"));
     }
 }
