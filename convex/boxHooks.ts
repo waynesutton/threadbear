@@ -16,6 +16,9 @@ import { internal } from './_generated/api';
 export const WAKES_FROM: readonly string[] = ['asleep', 'failed', 'saving', 'archiving', 'gone', 'shelved', 'expired'];
 // A thread whose box never started: no box, no runner to take its commands.
 export const UNSTARTED: readonly string[] = ['needsToken', 'waitingForRoom'];
+// Already put away (archived, shelved, destroying, gone or expired): no runner
+// wakes for an archive command, so one is settled in the backend.
+export const PUT_AWAY: readonly string[] = ['archiving', 'shelved', 'destroying', 'gone', 'expired'];
 // Archived: woken only for what needs it running (wakesArchived).
 const ARCHIVED: readonly string[] = ['gone', 'shelved', 'archiving'];
 
@@ -42,6 +45,12 @@ export async function wakeIfAsleep(ctx: MutationCtx, runnerId: string, kind: str
   // archive is done there and then, as no runner will ever take it.
   if (UNSTARTED.includes(row.boxState.kind)) {
     if (endsWait(kind, args)) await ctx.scheduler.runAfter(0, internal.boxes.archiveUnstarted, { threadId: row.threadId, ...(commandId ? { commandId } : {}) });
+    return;
+  }
+  // Already put away: archiving from the phone or another device won't wake
+  // the box, so settle the command here and move any stale mirror row to den.
+  if (PUT_AWAY.includes(row.boxState.kind) && endsWait(kind, args)) {
+    await ctx.scheduler.runAfter(0, internal.boxes.archiveUnstarted, { threadId: row.threadId, ...(commandId ? { commandId } : {}) });
     return;
   }
   if (!WAKES_FROM.includes(row.boxState.kind)) return;
@@ -89,5 +98,5 @@ export async function archiveSoon(ctx: MutationCtx, threadId: string): Promise<v
     .query('boxes')
     .withIndex('by_threadId', (q) => q.eq('threadId', threadId))
     .first();
-  if (row && !['archiving', 'shelved', 'destroying', 'gone', 'expired'].includes(row.boxState.kind)) await ctx.scheduler.runAfter(ARCHIVE_GRACE_MS, internal.boxes.archiveIfStill, { threadId });
+  if (row && !PUT_AWAY.includes(row.boxState.kind)) await ctx.scheduler.runAfter(ARCHIVE_GRACE_MS, internal.boxes.archiveIfStill, { threadId });
 }

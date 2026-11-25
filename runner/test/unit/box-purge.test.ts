@@ -265,3 +265,23 @@ for (const [state, after] of [
     assert.equal(w.rows('boxes').length, 0);
   });
 }
+
+test('deleting a shelved thread whose mirror row is still inbox moves it out of inbox and purges it', async () => {
+  process.env.RUNNER_KEY = 'owner-key';
+  const w = await world();
+  const shelved = await w.box(1, { kind: 'shelved', at: Date.now() - 60_000 }, { providerBoxId: 'm-shelved' });
+  await fitIndex(w);
+  const t = w.rows('threads').find((r) => r.threadId === shelved.threadId)!;
+  await w.ctx.db.patch(t._id, { view: 'inbox' });
+  w.scheduled.length = 0;
+  await call(w.ctx, boxes.deleteThread, { key: 'owner-key', threadId: shelved.threadId });
+  assert.equal(w.rows('threads').find((r) => r.threadId === shelved.threadId)?.view, 'den');
+  assert.equal(w.rows('threadIndex').find((r) => r.threadId === shelved.threadId)?.deleted, true);
+  await deleteAll(w);
+  assert.ok(w.destroys.includes(shelved.id), 'the kept box is deleted');
+  await w.ctx.db.patch(shelved.id, { providerBoxId: undefined });
+  await call(w.ctx, boxService.purgeDeleted, { boxId: shelved.id, tries: 1 });
+  await deleteAll(w);
+  assert.equal(w.rows('boxes').length, 0);
+  assert.ok(!w.rows('threads').some((r) => r.threadId === shelved.threadId));
+});

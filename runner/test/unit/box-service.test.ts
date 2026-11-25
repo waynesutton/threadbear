@@ -1118,6 +1118,26 @@ test("an archived thread isn't woken for marking it seen, only for unarchiving o
   assert.equal(s.stateOf('T2'), 'starting');
 });
 
+test('archiving a thread whose box is already put away settles the archive and moves a stale inbox row to den', async () => {
+  const s = await setup();
+  const { runnerId } = await s.start('T2');
+  await s.run();
+  const got = await s.boot('T2', s.fly.live()[0]!.id);
+  await call(s.ctx, sync.upsertThreads, { key: got.boxKey, threads: [{ ...THREAD_BASICS, threadId: 'T2', runnerId, title: 't', view: 'inbox', needsYou: false }] });
+  // Archive the box directly: its mirror row moves to den too.
+  await call(s.ctx, boxes.archiveBox, { key: OWNER, threadId: 'T2' });
+  assert.equal(s.rows('threads').find((r) => r.threadId === 'T2')?.view, 'den');
+  // Even if a stale mirror row is still inbox while the box is shelved, an
+  // archive command from the phone finishes done and moves it to den without waking the box.
+  Object.assign(s.rowOf('T2'), { boxState: { kind: 'shelved', at: Date.now() }, boxStateTimers: [] });
+  s.rows('threads').find((r) => r.threadId === 'T2')!.view = 'inbox';
+  const cmdId = await call(s.ctx, relay.queueCommand, { key: OWNER, runnerId, threadId: 'T2', kind: 'update', args: { archive: true } });
+  await s.run();
+  assert.equal(s.stateOf('T2'), 'shelved', 'box is not woken');
+  assert.equal(s.rows('commands').find((c) => c._id === cmdId)?.state, 'done');
+  assert.equal(s.rows('threads').find((r) => r.threadId === 'T2')?.view, 'den');
+});
+
 // ------------------------------------------------------------ Codex's second review of the fixes (18 Nov 2026)
 
 // 1. A command waiting for the box kept it from its day's cap.

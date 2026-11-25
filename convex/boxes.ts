@@ -23,10 +23,10 @@ import { commandArgs } from './relay';
 import { isPinnedImage, PROVIDERS } from './boxProviders/types';
 import { followMainImage } from './boxImage';
 import { FLY_SUSPEND_MAX_MB } from './boxProviders/fly';
-import { UNSTARTED, WAKES_FROM } from './boxHooks';
+import { PUT_AWAY, UNSTARTED, WAKES_FROM } from './boxHooks';
 import { MOVE_GOING } from './moves';
 import { BOX_KEY_DEAD, BOX_KEY_PREFIX, isThreadId, mayUseStorage } from './runnerAccess';
-import { deleteIfUnused, endCommandFiles, finishedArgs, MAX_RUNNER_UPLOAD_BYTES, uploadedBy } from './sync';
+import { deleteIfUnused, endCommandFiles, finishedArgs, MAX_RUNNER_UPLOAD_BYTES, moveView, uploadedBy } from './sync';
 import { HELD_BACK, scrubText } from './redaction';
 
 // A virtual runner's limits when it's made (runnerServices.limits).
@@ -797,8 +797,8 @@ export const archiveBox = mutation({
   handler: async (ctx, { key, threadId }) => {
     await runnerAuth(ctx, key, 'archiveBox');
     const row = await boxOf(ctx, threadId);
-    if (ARCHIVED_ALREADY.includes(row.boxState.kind)) return null;
-    if (!(await archive(ctx, row))) throw conflict(`The box is ${row.boxState.kind}, so it can't be archived.`);
+    if (!PUT_AWAY.includes(row.boxState.kind) && !(await archive(ctx, row))) throw conflict(`The box is ${row.boxState.kind}, so it can't be archived.`);
+    await archiveMirrorRows(ctx, row);
     return null;
   },
 });
@@ -1078,16 +1078,28 @@ export async function askToSave(ctx: MutationCtx, row: Pick<Doc<'boxes'>, 'runne
   await queued(ctx, { runnerId: row.runnerId, threadId: row.threadId, kind: 'save', args: {}, createdAt: Date.now() });
 }
 
-// The states archiving does nothing more in.
-const ARCHIVED_ALREADY: readonly string[] = ['archiving', 'shelved', 'destroying', 'gone', 'expired'];
+// Moves a virtual runner thread's mirror rows (phone `threads` and Mac
+// `threadIndex`) to archived when the backend archives or puts away its box
+// without the box's runner doing so.
+async function archiveMirrorRows(ctx: MutationCtx, row: Pick<Doc<'boxes'>, 'runnerId' | 'threadId'>): Promise<void> {
+  const now = Date.now();
+  const nowIso = new Date(now).toISOString();
+  const thread = await ctx.db.query('threads').withIndex('by_threadId', (q) => q.eq('threadId', row.threadId)).unique();
+  if (thread && thread.runnerId === row.runnerId && thread.view !== 'den') {
+    const from = thread.view;
+    await ctx.db.patch('threads', thread._id, { view: 'den', wantView: undefined, archivedAt: thread.archivedAt ?? nowIso, status: 'idle', needsYou: false, updatedMs: now });
+    await moveView(ctx, row.runnerId, from, 'den');
+  }
+  const index = await ctx.db.query('threadIndex').withIndex('by_runner_thread', (q) => q.eq('runnerId', row.runnerId).eq('threadId', row.threadId)).unique();
+  if (index && !index.archivedAt && !index.deleted) await ctx.db.patch('threadIndex', index._id, { archivedAt: nowIso, status: 'idle', updatedMs: now });
+}
 
 /**
- * Mike archived a thread whose box never started (boxHooks.ts UNSTARTED):
- * it ends (ARCHIVE, to expired: nothing was made or saved), the archive
- * command that asked is done here, as no runner will ever take it, and the
- * thread's sidebar row is archived, so it goes to Archived everywhere.
- * What else was waiting for it (its create) fails, saying it can't come
- * back (failExpired, scheduled by the machine's step, after this).
+ * Mike archived a thread whose box never started (boxHooks.ts UNSTARTED) or
+ * is already put away (PUT_AWAY): an unstarted box ends (ARCHIVE, to expired:
+ * nothing was made or saved), the archive command that asked is done here as
+ * no runner will take it, and any stale mirror row (threads and threadIndex)
+ * moves to archived so it leaves the phone's inbox and the Mac's sidebar.
  */
 export const archiveUnstarted = internalMutation({
   args: { threadId: v.string(), commandId: v.optional(v.id('commands')) },
@@ -1096,22 +1108,16 @@ export const archiveUnstarted = internalMutation({
     const row = await ctx.db.query('boxes').withIndex('by_threadId', (q) => q.eq('threadId', threadId)).unique();
     if (!row) return null;
     if (UNSTARTED.includes(row.boxState.kind) && (await boxMachine.send(ctx, row._id, { type: 'ARCHIVE' })).status !== 'done') return null;
-    if (row.boxState.kind !== 'expired' && !UNSTARTED.includes(row.boxState.kind)) return null;
+    if (!PUT_AWAY.includes(row.boxState.kind) && !UNSTARTED.includes(row.boxState.kind)) return null;
     const c = commandId ? await ctx.db.get('commands', commandId) : null;
     if (c && c.runnerId === row.runnerId && c.state === 'pending') {
       await commandMachine.send(ctx, c._id, { type: 'TAKE' });
       await commandMachine.send(ctx, c._id, { type: 'FINISH', ok: true });
     }
-    const index = await ctx.db.query('threadIndex').withIndex('by_runner_thread', (q) => q.eq('runnerId', row.runnerId).eq('threadId', threadId)).unique();
-    if (index && !index.archivedAt && !index.deleted) await ctx.db.patch('threadIndex', index._id, { archivedAt: new Date().toISOString(), status: 'idle', updatedMs: Date.now() });
+    await archiveMirrorRows(ctx, row);
     return null;
   },
 });
-
-// The states an archived thread's box is put away in already (or on its
-// way to), so deleting it doesn't archive it again: deleteNow waits out
-// archiving and destroying.
-const PUT_AWAY: readonly string[] = ['gone', 'shelved', 'expired', 'archiving', 'destroying'];
 
 /**
  * An archived thread on a virtual runner was deleted from the app. No box
@@ -1133,9 +1139,10 @@ export const deleteThread = mutation({
     await runnerAuth(ctx, key, 'deleteThread');
     const row = await boxOf(ctx, threadId);
     const thread = await ctx.db.query('threads').withIndex('by_threadId', (q) => q.eq('threadId', threadId)).unique();
-    if (thread && thread.view !== 'den') throw conflict('Archive it first, then delete it.');
+    if (thread && thread.view !== 'den' && !PUT_AWAY.includes(row.boxState.kind)) throw conflict('Archive it first, then delete it.');
     await failExpiredRun(ctx, row.runnerId);
     if (!PUT_AWAY.includes(row.boxState.kind) && !(await archive(ctx, row))) throw conflict('Its machine is still being put away. Try again in a minute.');
+    await archiveMirrorRows(ctx, row);
     const index = await ctx.db.query('threadIndex').withIndex('by_runner_thread', (q) => q.eq('runnerId', row.runnerId).eq('threadId', threadId)).unique();
     if (index && !index.deleted) await ctx.db.patch('threadIndex', index._id, { deleted: true, updatedMs: Date.now() });
     await ctx.scheduler.runAfter(0, internal.boxService.deleteNow, { boxId: row._id });
@@ -1151,7 +1158,7 @@ export const archiveIfStill = internalMutation({
     const t = await ctx.db.query('threads').withIndex('by_threadId', (q) => q.eq('threadId', threadId)).unique();
     if (t && t.view !== 'den') return null;
     const row = await ctx.db.query('boxes').withIndex('by_threadId', (q) => q.eq('threadId', threadId)).unique();
-    if (!row || ARCHIVED_ALREADY.includes(row.boxState.kind)) return null;
+    if (!row || PUT_AWAY.includes(row.boxState.kind)) return null;
     await archive(ctx, row);
     return null;
   },
