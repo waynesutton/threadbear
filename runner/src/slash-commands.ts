@@ -141,15 +141,20 @@ export function planCommand(provider: Provider, cmd: ParsedCommand, skills: Read
 // `threadbear:name`. `/name` runs them too (docs/protocol.md, "Skills").
 export const STORE_PLUGIN = 'threadbear';
 
+// `<name>` for a store skill's full name, `threadbear:<name>`, the way both
+// Claude and Codex name it; undefined for any other.
+export function storeName(full: string): string | undefined {
+  const prefix = `${STORE_PLUGIN}:`;
+  return full.startsWith(prefix) && full.length > prefix.length ? full.slice(prefix.length) : undefined;
+}
+
 // A store skill under its own name, as Mike's Skills page and Codex show it,
 // with scope "store"; kept as `threadbear:name` when another command has
 // that name already, so neither hides the other.
 export function storeNames(cli: SlashCommand[]): SlashCommand[] {
-  const prefix = `${STORE_PLUGIN}:`;
-  const plain = new Set(cli.filter((c) => !c.name.startsWith(prefix)).map((c) => c.name));
+  const plain = new Set(cli.filter((c) => !storeName(c.name)).map((c) => c.name));
   return cli.map((c) => {
-    if (!c.name.startsWith(prefix)) return c;
-    const name = c.name.slice(prefix.length);
+    const name = storeName(c.name);
     if (!name || plain.has(name)) return c;
     const { plugin: _plugin, ...rest } = c;
     return { ...rest, name, scope: 'store' };
@@ -160,7 +165,10 @@ export function storeNames(cli: SlashCommand[]): SlashCommand[] {
 export function commandList(provider: Provider, cli: SlashCommand[]): SlashCommand[] {
   const own = provider === 'codex' ? [...THREADBEAR_COMMANDS, ...CODEX_COMMANDS] : THREADBEAR_COMMANDS;
   const seen = new Set(own.map((c) => c.name));
-  const rest = (provider === 'claude' ? storeNames(cli) : cli).filter((c) => {
+  // Claude and Codex both name a store skill `threadbear:<name>`; the
+  // picker shows it as `<name>` in either, so it reads the same whichever
+  // agent the thread runs (Wayne, 25 Nov 2026).
+  const rest = (provider === 'claude' || provider === 'codex' ? storeNames(cli) : cli).filter((c) => {
     if (seen.has(c.name) || (provider === 'claude' && CLAUDE_HIDDEN.has(c.name))) return false;
     seen.add(c.name);
     return true;

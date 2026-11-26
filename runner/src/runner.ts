@@ -2461,8 +2461,10 @@ export class Runner {
     // thread's folder and login (~/.claude/skills: listedSkills), made to
     // work in this thread's CLI (skill-mentions.ts).
     if (provider) {
-      const names = [...(this.skillNames?.() ?? []), ...(place ? this.listedSkills(place.accountId, place.cwd) : [])];
-      if (names.length) msg = { ...msg, text: withSkillMentions(msg.text, names, provider) };
+      const store = this.skillNames?.() ?? [];
+      const names = [...store, ...(place ? this.listedSkills(place.accountId, place.cwd) : [])];
+      const codexName = provider === 'codex' ? this.codexSkillName(store, place) : undefined;
+      if (names.length) msg = { ...msg, text: withSkillMentions(msg.text, names, provider, codexName) };
     }
     if (msg.beforeMessage) return `${msg.text}\n\nThis ${msg.origin === 'schedule' ? 'reminder' : 'message'} was queued before a later message in this thread. Follow the later instructions, including any request to stop.`;
     if (msg.origin !== 'phone') return msg.text;

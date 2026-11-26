@@ -11,7 +11,7 @@ import { ErrorCode, RpcError, isEffortLevel } from '../protocol.ts';
 import { expandHome } from '../config.ts';
 import type { QueuedSend } from '../store.ts';
 import { claudeOptions, claudeSettingsWithoutCommands } from '../claude-trust.ts';
-import { commandList, storeNames, parseCommand, planCommand, type CommandPlan, type SlashCommand } from '../slash-commands.ts';
+import { commandList, STORE_PLUGIN, storeNames, parseCommand, planCommand, type CommandPlan, type SlashCommand } from '../slash-commands.ts';
 
 // A folder's command list (its skills, its .claude/commands) changes
 // rarely, and asking a CLI for it takes a second or two.
@@ -25,7 +25,9 @@ export const commandsPart = {
     const cmd = parseCommand(text);
     if (!cmd) return undefined;
     const listed = [...this.commandCache.entries()].find(([k]) => k.startsWith(`${st.rec.accountId}\0${st.rec.cwd}\0`))?.[1].commands ?? [];
-    return planCommand(st.rec.provider, cmd, new Set(listed.filter((c) => c.source === 'skill').map((c) => c.name)));
+    // By either name: Codex lists a store skill as `threadbear:<name>`.
+    const skills = listed.filter((c) => c.source === 'skill');
+    return planCommand(st.rec.provider, cmd, new Set([...skills.map((c) => c.name), ...storeNames(skills).map((c) => c.name)]));
   },
 
   // Runs a command the runner answers itself, as the turn the message
@@ -169,6 +171,21 @@ export const commandsPart = {
       for (const c of storeNames(entry.commands)) if (c.source === 'skill' && !c.userOnly) out.add(c.name);
     }
     return [...out];
+  },
+
+  // Codex's own name for a skill a message names: `threadbear:<name>` for a
+  // store skill, as Codex lists the store's (skills.ts links them in from
+  // the threadbear plugin), unless the cached list has the plain name.
+  codexSkillName(this: Runner, store: string[], place?: { accountId: string; cwd: string }): (name: string) => string {
+    const prefix = place ? `${place.accountId}\0${place.cwd}\0` : undefined;
+    const listed = new Set<string>();
+    if (prefix) for (const [key, entry] of this.commandCache) if (key.startsWith(prefix)) for (const c of entry.commands) if (c.source === 'skill') listed.add(c.name);
+    const inStore = new Set(store);
+    return (name) => {
+      const full = `${STORE_PLUGIN}:${name}`;
+      if (listed.has(full)) return full;
+      return inStore.has(name) && !listed.has(name) ? full : name;
+    };
   },
 
   async listCommands(this: Runner, accountId: string, cwd: string, permissionMode: PermissionMode, live?: () => Promise<SlashCommand[] | undefined>): Promise<{ commands: SlashCommand[] }> {

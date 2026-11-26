@@ -21,6 +21,27 @@ test('Codex: /name becomes $name', () => {
   assert.equal(withSkillMentions('/pele draw it in src/pele.ts with /Brand-Voice', names, 'codex'), '$pele draw it in src/pele.ts with $brand-voice');
 });
 
+// Codex loads a store skill only by its own name, threadbear:<name>.
+test("Codex: a store skill becomes $ and Codex's own name for it", () => {
+  const own = (n: string) => (n === 'pele' ? 'threadbear:pele' : n);
+  assert.equal(withSkillMentions('draw it with /pele and /threadbear:pele, in /brand-voice', names, 'codex', own), 'draw it with $threadbear:pele and $threadbear:pele, in $brand-voice');
+});
+
+test('another agent gets the words as typed, with no line about a Skill tool', () => {
+  assert.equal(withSkillMentions('Draw the flow with /pele please', names, 'grok'), 'Draw the flow with /pele please');
+});
+
+test("codexSkillName: the cached list's name, else threadbear:<name> for a store skill", async () => {
+  const { commandsPart } = await import('../../src/runner/commands.ts');
+  const commandCache = new Map([['acct\0/work\0trusted', { at: 0, commands: [
+    { name: 'threadbear:inkworks', source: 'skill' },
+    { name: 'pele', source: 'skill' },
+    { name: 'x-search', source: 'skill' },
+  ] }]]);
+  const own = commandsPart.codexSkillName.call({ commandCache } as never, ['inkworks', 'pele', 'anatomy'], { accountId: 'acct', cwd: '/work' });
+  assert.deepEqual(['inkworks', 'pele', 'anatomy', 'x-search'].map(own), ['threadbear:inkworks', 'pele', 'threadbear:anatomy', 'x-search']);
+});
+
 import { makeHarness, tick, tmpDir } from '../helpers/fakes.ts';
 
 test('the runner gives the agent the message with its skill mentions made to work', async () => {

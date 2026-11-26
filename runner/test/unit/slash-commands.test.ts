@@ -106,6 +106,27 @@ test('Codex skills become picker rows and a name-to-path map, without disabled o
   assert.deepEqual([...skillMap(r)], [['deslop', '/s/deslop/SKILL.md']]);
 });
 
+test("Codex store skills: the picker and lookup by plain name, Codex's own name sent on", () => {
+  const r = { data: [{ cwd: '/w', skills: [
+    { name: 'threadbear:inkworks', description: 'ink', path: '/p/inkworks/SKILL.md', enabled: true, scope: 'user' },
+    { name: 'template-creator:template-creator', description: 't', path: '/t/SKILL.md', enabled: true, scope: 'user' },
+    { name: 'threadbear:pele', description: 'store', path: '/p/pele/SKILL.md', enabled: true },
+    { name: 'pele', description: 'own', path: '/own/pele/SKILL.md', enabled: true },
+  ] }] };
+  const rows = commandList('codex', codexSkillCommands(r)).filter((c) => c.source === 'skill');
+  // The store's lose the prefix, as in Claude; another plugin's keep it, and a clash keeps both.
+  assert.deepEqual(rows.map((c) => [c.name, c.scope]), [
+    ['inkworks', 'store'],
+    ['template-creator:template-creator', 'user'],
+    ['threadbear:pele', undefined],
+    ['pele', undefined],
+  ]);
+  const map = skillMap(r);
+  assert.equal(map.get('inkworks'), '/p/inkworks/SKILL.md');
+  assert.equal(map.get('threadbear:inkworks'), '/p/inkworks/SKILL.md');
+  assert.equal(map.get('pele'), '/own/pele/SKILL.md');
+});
+
 test('pickModel matches ids, titles and the start of one, and Claude aliases', () => {
   const codex = withCodex().find((a) => a.provider === 'codex')!;
   assert.equal(pickModel(codex, 'gpt-6-luna'), 'gpt-6-luna');
@@ -407,5 +428,6 @@ test('commandList: threadbear:name store skills become name, unless taken', asyn
   assert.ok(byName.has('threadbear:blog-post'), 'kept prefixed: a user skill has the plain name');
   assert.equal(byName.get('blog-post')?.scope, 'user');
   assert.ok(byName.has('convex:add'));
-  assert.equal(list('codex', [{ name: 'threadbear:pele', source: 'skill' }]).some((c) => c.name === 'threadbear:pele'), true);
+  // Codex names them the same way, and its list shows them the same way (Wayne, 25 Nov).
+  assert.equal(list('codex', [{ name: 'threadbear:pele', source: 'skill' }]).some((c) => c.name === 'pele' && c.scope === 'store'), true);
 });

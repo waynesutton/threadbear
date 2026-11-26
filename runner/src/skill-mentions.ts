@@ -32,17 +32,25 @@ export function mentionedSkills(text: string, names: Iterable<string>): string[]
   return out;
 }
 
-/** The message as the agent gets it, with its skill mentions made to work. */
-export function withSkillMentions(text: string, names: Iterable<string>, provider: Provider): string {
+/**
+ * The message as the agent gets it, with its skill mentions made to work.
+ * codexName: Codex's own name for a skill, `threadbear:<name>` for a store
+ * one; Codex loads a skill only for `$` and that exact name, so `$inkworks`
+ * for the store's would load nothing (tried 25 Nov 2026).
+ */
+export function withSkillMentions(text: string, names: Iterable<string>, provider: Provider, codexName: (name: string) => string = (n) => n): string {
   const skills = mentionedSkills(text, names);
   if (!skills.length) return text;
   if (provider === 'codex') {
     const set = new Set(skills);
     return text.replace(MENTION, (whole, before: string, word: string) => {
       const name = known(word, set);
-      return name ? `${before}$${name}` : whole;
+      return name ? `${before}$${codexName(name)}` : whole;
     });
   }
+  // Only Claude has a Skill tool and the store; another agent gets the
+  // words as typed rather than a line about a tool it hasn't got.
+  if (provider !== 'claude') return text;
   // Claude: the first word runs as a slash command already; any other needs asking for.
   const first = /^\s*\/([a-z0-9][a-z0-9-]*(?::[a-z0-9][a-z0-9-]*)?)/i.exec(text)?.[1];
   const leading = first ? known(first, new Set(skills)) : undefined;

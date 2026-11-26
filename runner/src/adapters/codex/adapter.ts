@@ -32,7 +32,7 @@ import { CodexApprovals } from './approvals.ts';
 import { CodexTools, dynamicToolSpecs, toolGuidance, type ToolDefinition } from './tools.ts';
 import { CodexNormalizer, limitsFromAccount, limitsFromRateLimits } from './normalize.ts';
 import { placePictures } from '../../pictures.ts';
-import { parseCommand, type SlashCommand } from '../../slash-commands.ts';
+import { parseCommand, STORE_PLUGIN, storeName, type SlashCommand } from '../../slash-commands.ts';
 import type {
   CodexNormalizerLike,
   ConsumeAccountRateLimitResetCreditResponse,
@@ -468,8 +468,17 @@ function enabledSkills(r: SkillsListResponse | undefined) {
   return (r?.data ?? []).flatMap((e) => e.skills ?? []).filter((s) => s.enabled !== false && typeof s.name === 'string' && s.name && typeof s.path === 'string');
 }
 
+// Codex names a store skill `threadbear:<name>`, as Claude does, and the
+// picker lists it as `<name>` (storeNames), so that name finds it too
+// unless another skill already has it.
 export function skillMap(r: SkillsListResponse | undefined): Map<string, string> {
-  return new Map(enabledSkills(r).map((s) => [s.name!, s.path!]));
+  const skills = enabledSkills(r);
+  const out = new Map(skills.map((s) => [s.name!, s.path!]));
+  for (const s of skills) {
+    const short = storeName(s.name!);
+    if (short && !out.has(short)) out.set(short, s.path!);
+  }
+  return out;
 }
 
 export function codexSkillCommands(r: SkillsListResponse | undefined): SlashCommand[] {
@@ -1074,8 +1083,11 @@ export class CodexSession implements AgentSession {
       return this.proc.request<TurnStartResponse>('review/start', { threadId: this.threadId, target, delivery: 'inline' });
     }
     if (name === 'review') return this.turnStart(params);
-    const skill = (await this.skillPaths()).get(cmd.name);
-    if (skill) params.input = [{ type: 'skill', name: cmd.name, path: skill }, ...params.input];
+    const skills = await this.skillPaths();
+    const skill = skills.get(cmd.name);
+    // Codex's own name for it, `threadbear:<name>` for a store skill.
+    const own = skill && skills.get(`${STORE_PLUGIN}:${cmd.name}`) === skill ? `${STORE_PLUGIN}:${cmd.name}` : cmd.name;
+    if (skill) params.input = [{ type: 'skill', name: own, path: skill }, ...params.input];
     return this.turnStart(params);
   }
 
