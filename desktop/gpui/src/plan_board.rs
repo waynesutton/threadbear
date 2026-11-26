@@ -644,6 +644,8 @@ impl PlanBoardView {
             return;
         };
         window.focus(&self.focus, cx);
+        // Tab, Esc and Return reach the board, not a web view that had them.
+        crate::web_panels::keyboard_to_app(window);
         let Some(board) = &self.board else { return };
         let layout = rules::layout(&board.graph, &self.positions());
         let world = self.camera.to_world(at);
