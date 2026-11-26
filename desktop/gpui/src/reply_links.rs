@@ -1735,7 +1735,7 @@ pub(crate) fn peek_command(
     // before they click: the rest's own hit test runs (`rested`).
     if cmd["hover"].as_bool() == Some(true) {
         window.pointer_move(at, None, cx);
-return Some(Ok(json!("ok")));
+        return Some(Ok(json!("ok")));
     }
     if cmd["follow"].as_bool() == Some(true) {
         let modifiers = if cmd["command"].as_bool() == Some(true) {
