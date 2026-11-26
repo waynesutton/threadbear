@@ -197,6 +197,11 @@ Before(async function (this: ThreadbearWorld, { pickle }) {
   // The Recipes view: the recipes experiment on, with the mock's recipes.
   if (pickle.tags.some((t) => t.name === '@recipes')) process.env.TB_MOCK_RECIPES = '1';
   else delete process.env.TB_MOCK_RECIPES;
+  // The plan board: the planBoard experiment on, with the mock's planner thread.
+  if (pickle.tags.some((t) => t.name === '@plan.board')) process.env.TB_MOCK_PLAN_BOARD = '1';
+  else delete process.env.TB_MOCK_PLAN_BOARD;
+  if (pickle.tags.some((t) => t.name === '@plan.board.off')) process.env.TB_MOCK_PLAN_BOARD_OFF = '1';
+  else delete process.env.TB_MOCK_PLAN_BOARD_OFF;
   if (pickle.tags.some((t) => t.name === '@review.canvas')) process.env.TB_MOCK_REVIEW_CANVAS = '1';
   else delete process.env.TB_MOCK_REVIEW_CANVAS;
   // The Canvas page, with the nested demo's coordinator and the threads it started.

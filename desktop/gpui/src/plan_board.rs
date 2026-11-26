@@ -96,7 +96,17 @@ impl Threadbear {
         if !self.plan_board_on() {
             return;
         }
-        self.open_main_tab(&panel(thread), cx);
+        // Beside the transcript, not over it, so the thread's own message
+        // box stays in sight for the chips a click puts there.
+        let id = panel(thread);
+        self.dock.update(cx, |m, cx| {
+            m.show(
+                &id,
+                &[],
+                threadbear_dock::DockDrop::window(threadbear_dock::DockEdge::Right),
+                cx,
+            )
+        });
     }
 
     /// The header's Show plan, for a thread whose agent drew a plan.
@@ -170,8 +180,12 @@ impl Threadbear {
     }
 
     pub(crate) fn plan_board_title(&self, panel: &str) -> Option<String> {
-        board_thread(panel)?;
-        Some("Plan".to_owned())
+        let thread = board_thread(panel)?;
+        // Its thread's name too: the tab can sit beside another thread.
+        Some(match self.threads.get(thread) {
+            Some(t) if !t.title.is_empty() => format!("Plan · {}", t.title),
+            _ => "Plan".to_owned(),
+        })
     }
 
     /// The board tab's view, one per thread, kept while the tab is open.
