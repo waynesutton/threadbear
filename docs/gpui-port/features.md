@@ -443,6 +443,7 @@ It comes from reading code, not from running anything, so "(unverified)" means n
 | `plan.board` | The plan board | The `planBoard` experiment: a thread's plan as boxes, dashed groups and handwritten arrows beside it, opened by Show plan; a click adds a box chip, drags are kept, Approve plan approves a version, Send to… starts one nested thread per box, badges follow those threads, and Ask planner to review sends one message when every box is done | GPUI-only, new in this app (the Swift app is frozen without it). `threadbear-core`'s `plan_board` lays it out; `gpui/src/plan_board.rs` draws it. | build | L | none (GPUI-only) |
 | `plan.board.off` | The plan board, off | The same demo with the `planBoard` experiment off: no Show plan anywhere | GPUI-only, as `plan.board`. | build | S | none (GPUI-only) |
 | `plan.board.mockups` | Screens on the plan board | The `planBoardMockups` experiment: a box's Screens… shows the agent's screens for it as sealed stills beside it, up to three takes side by side; Pick puts one in the message box, a new version says Changed | GPUI-only, as `plan.board`. `threadbear_web::draw_page_at` draws the stills. | build | M | none (GPUI-only) |
+| `needs.coordinators` | Needs project coordinators | Scenarios that run only on a copy with Mike's project coordinators (`runner/src/coordinators.ts`); skipped elsewhere, as on Wayne's fork | A marker for features/support/world.ts, not a feature of its own. | build | S | none |
 
 ## 17. Navigation, shortcuts, main menu
 

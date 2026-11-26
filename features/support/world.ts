@@ -232,6 +232,10 @@ Before(async function (this: ThreadbearWorld, { pickle }) {
   } else delete process.env.BROWSERBEAR_HOME;
   // The web runtime's folder for this scenario (support/web-runtime.ts).
   if ((await webRuntimeSetup(pickle.tags.map((t) => t.name))) === 'skipped') return 'skipped';
+  // Plan board coordinators need Mike's project coordinators
+  // (runner/src/coordinators.ts): skipped on a copy without them, as Wayne's
+  // fork is, where the destination compiles to absent.
+  if (pickle.tags.some((t) => t.name === '@needs.coordinators') && !fs.existsSync(path.join(import.meta.dirname, '..', '..', 'runner', 'src', 'coordinators.ts'))) return 'skipped';
   await this.app.start();
   // The stress run's window size and look (tools/stress.mjs), before any step.
   const size = /^(\d+)x(\d+)$/.exec(process.env.TB_STRESS_SIZE ?? '');

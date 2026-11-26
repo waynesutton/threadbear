@@ -2122,14 +2122,20 @@ pub(crate) fn automation(
     let sheet = || SHEET.with(|o| o.borrow().clone()).and_then(|w| w.upgrade());
     if action == "start" {
         let s = sheet().ok_or("no send sheet open")?;
-        s.update(cx, |s, cx| s.start(window, cx));
+        s.update(cx, |s, cx| {
+            // Give to the project coordinator, when the sheet offers it.
+            if cmd["destination"].as_str() == Some("coordinator") && s.coordinator.is_some() {
+                s.to_coordinator = true;
+            }
+            s.start(window, cx)
+        });
         return Ok(json!("ok"));
     }
     if action == "sheet" {
         let s = sheet().ok_or("no send sheet open")?;
         let s = s.read(cx);
         return Ok(
-            json!({ "brief": s.brief.read(cx).value().to_string(), "starting": s.starting, "error": s.error }),
+            json!({ "brief": s.brief.read(cx).value().to_string(), "coordinator": s.coordinator.is_some(), "toCoordinator": s.to_coordinator, "starting": s.starting, "error": s.error }),
         );
     }
     let view = cx
