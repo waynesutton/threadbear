@@ -2393,14 +2393,12 @@ impl PlanBoardView {
         None
     }
 
-    /// Open in browser: the agents' own browser (BrowserBear's), never Wayne's
-    /// signed-in one; a route frame is its dev server's page.
+    /// Open in browser, for a route screen: its dev server page in the
+    /// agents' own browser (BrowserBear's), never Wayne's signed-in one. A
+    /// sketch screen stays a still: opening its file would go to the
+    /// default browser, which may be his own.
     fn open_frame(&mut self, f: &rules::Frame, cx: &mut Context<Self>) {
-        let url = match (&f.route, &f.path) {
-            (Some(r), _) => r.clone(),
-            (None, Some(p)) => format!("file://{p}"),
-            _ => return,
-        };
+        let Some(url) = f.route.clone() else { return };
         match crate::agent_browser::model(cx) {
             Some(b) => {
                 let thread = self.thread_id.clone();
@@ -2546,19 +2544,25 @@ impl PlanBoardView {
                                     move |this, _: &ClickEvent, _, cx| this.pick_frame(&pick_f, cx),
                                 )),
                             )
-                            .child(
-                                bar_button_dyn(
-                                    format!("plan-open-{id}"),
-                                    "Open in browser",
-                                    "Open it in the agents' browser",
-                                    true,
-                                    cx,
+                            .when(f.route.is_some(), |r| {
+                                r.child(
+                                    bar_button_dyn(
+                                        format!("plan-open-{id}"),
+                                        "Open in browser",
+                                        "Open it in the agents' browser",
+                                        true,
+                                        cx,
+                                    )
+                                    .on_mouse_down(MouseButton::Left, |_, _, cx| {
+                                        cx.stop_propagation()
+                                    })
+                                    .on_click(cx.listener(
+                                        move |this, _: &ClickEvent, _, cx| {
+                                            this.open_frame(&open_f, cx)
+                                        },
+                                    )),
                                 )
-                                .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
-                                .on_click(cx.listener(
-                                    move |this, _: &ClickEvent, _, cx| this.open_frame(&open_f, cx),
-                                )),
-                            ),
+                            }),
                     )
                     .into_any_element(),
             );
