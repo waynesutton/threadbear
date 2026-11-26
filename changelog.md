@@ -48,6 +48,7 @@ How the Tasks section works today (an experiment: turn it on in Settings > Exper
 
 ### Fixed
 
+- Mockups asked for on a plan board box now go beside the box under Screens…, instead of a review window and loose files that left Screens… empty. The Changed badge sits clear of the box's edge.
 - The plan board's bar has a ✕ at its end that closes the board, always in view, as the tab's own × only shows when you hover its title.
 - Show plan in a "Drew a plan" line in the transcript did nothing when clicked. Links in a centred note are now clickable where they're drawn.
 - Open the bottom sidebar panels and Settings on the first click from Canvas.

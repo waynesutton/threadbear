@@ -2359,7 +2359,7 @@ export function buildThreadbearTools(
     ...(frames ? [
       tool(
         'update_frame',
-        "Puts a screen beside a box of this thread's plan board, drawn as a still: up to three takes (variant A, B, C) of a screen. Give html for a sketch: one self-contained file, Tailwind compiled and inlined, pictures and fonts as data: URLs, no <script> (it won't run; render React to static HTML first), under 2 MB. Or give route for a page of the thread's own dev server (http://localhost:<port>/…). Each call is a new version of that screen.",
+        "Puts a screen beside a box of this thread's plan board, drawn as a still. Use it, not show_options or files, whenever Wayne asks for mockups or takes of a box: up to three takes (variant A, B, C) of a screen. Give html for a sketch: one self-contained file, Tailwind compiled and inlined, pictures and fonts as data: URLs, no <script> (it won't run; render React to static HTML first), under 2 MB. Or give route for a page of the thread's own dev server (http://localhost:<port>/…). Each call is a new version of that screen.",
         {
           node: z.string().min(1).describe('The box id on the board.'),
           frame: z.string().min(1).describe('A short id for the screen, like "kpi-row". The same id with another variant is another take.'),
@@ -2906,6 +2906,13 @@ export const LIVE_PAGES_LINE =
 export const PLAN_BOARD_LINE =
   'Draw a plan board with update_board only when the user asks for one by name ("plan board"); any other plan, plan mode\'s included, stays as you would write it without boards. On a board: 25 boxes at most, no secrets, then wait: build nothing and send no boxes until Wayne presses Approve plan. read_board shows its state and skills.';
 
+// planBoardMockups's screens: without this, an agent asked for a box's
+// mockups wrote HTML files and put them in show_options, so the box's
+// Screens… stayed empty (Wayne, 26 Nov). One file either way, so no more
+// tokens; on the board it stays beside the box, versioned, and Pick is there.
+export const PLAN_BOARD_SCREENS_LINE =
+  "Mockups, takes or screens for a box of this thread's plan board (a message with the box's board: chip, or one naming it) go beside the box with update_frame, one call per take, not in show_options or loose files: Wayne sees them under the box's Screens…, compares them side by side and picks one there.";
+
 // Only for a thread that has the pocket tool: the Pocket lives in the Convex
 // backend, so with phone sync off there's no tool to tell it about.
 export const POCKET_LINE =
@@ -2963,7 +2970,7 @@ export function patchesLine(guide = guidePath(), exists: (p: string) => boolean 
 // What a Claude session's threadbear server tells it, standing in every
 // turn's context. Measured by the context budget test with the tools
 // (test/unit/context-budget.test.ts), so growth is a choice.
-export function serverInstructions(selfId: string, o: { one: boolean; bulletReplies: boolean; pocket: boolean; projects: boolean; livePages?: boolean; planBoard?: boolean }): string {
+export function serverInstructions(selfId: string, o: { one: boolean; bulletReplies: boolean; pocket: boolean; projects: boolean; livePages?: boolean; planBoard?: boolean; planBoardScreens?: boolean }): string {
   const guide = guideLine();
   const patches = patchesLine();
   return (
@@ -2977,6 +2984,7 @@ export function serverInstructions(selfId: string, o: { one: boolean; bulletRepl
     `${RICH_BLOCKS_LINE} ` +
     (o.livePages ? `${LIVE_PAGES_LINE} ` : '') +
     (o.planBoard ? `${PLAN_BOARD_LINE} ` : '') +
+    (o.planBoard && o.planBoardScreens ? `${PLAN_BOARD_SCREENS_LINE} ` : '') +
     (o.pocket ? `${POCKET_LINE} ` : '') +
     (o.projects ? `${FILING_PROJECTS} ` : '') +
     (o.one
@@ -3002,7 +3010,7 @@ export function threadbearMcpServer(control: ThreadControl, selfId: string, sche
   const server = createSdkMcpServer({
     name: SERVER_NAME,
     version: RUNNER_VERSION,
-    instructions: serverInstructions(selfId, { one, bulletReplies: bulletReplies(), pocket: Boolean(pocket?.()), projects: Boolean(projects), livePages: livePages?.() ?? false, planBoard: Boolean(board) }),
+    instructions: serverInstructions(selfId, { one, bulletReplies: bulletReplies(), pocket: Boolean(pocket?.()), projects: Boolean(projects), livePages: livePages?.() ?? false, planBoard: Boolean(board), planBoardScreens: Boolean(board && frames?.()) }),
     tools: buildThreadbearTools(control, selfId, Date.now, schedules, projects, appRestarts, { bulletReplies, pocket, oneReply: () => one, gateway, gatewayHealth, remote, pages, printPublisher, printsWhenAsked, tasks, clearerCompletion, progressPrints, loadEndTurn, reviewCanvas, boards: () => board, frames }),
   });
   server.tools = [...ALWAYS_ASK_TOOLS].map((name) => ({ name: name.split('__').at(-1)!, permission_policy: 'always_ask' as const }));

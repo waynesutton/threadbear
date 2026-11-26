@@ -8,7 +8,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { makeHarness } from '../helpers/fakes.ts';
-import { buildThreadbearTools, serverInstructions, PLAN_BOARD_LINE } from '../../src/threadbear-mcp.ts';
+import { buildThreadbearTools, serverInstructions, PLAN_BOARD_LINE, PLAN_BOARD_SCREENS_LINE } from '../../src/threadbear-mcp.ts';
 import { Boards, type BoardTools } from '../../src/boards.ts';
 import { boardMethods, type BoardCoordinatorPort } from '../../src/board-methods.ts';
 
@@ -55,6 +55,9 @@ test('planBoard off: no board tools, no board_node, no guidance line', () => {
   assert.ok(!('board_node' in (create.inputSchema as Record<string, unknown>)));
   assert.ok(!serverInstructions('x', { one: true, bulletReplies: true, pocket: false, projects: false }).includes(PLAN_BOARD_LINE));
   assert.ok(serverInstructions('x', { one: true, bulletReplies: true, pocket: false, projects: false, planBoard: true }).includes(PLAN_BOARD_LINE));
+  // Screens go on the board, not show_options, only with mockups on too.
+  assert.ok(!serverInstructions('x', { one: true, bulletReplies: true, pocket: false, projects: false, planBoard: true }).includes(PLAN_BOARD_SCREENS_LINE));
+  assert.ok(serverInstructions('x', { one: true, bulletReplies: true, pocket: false, projects: false, planBoard: true, planBoardScreens: true }).includes(PLAN_BOARD_SCREENS_LINE));
   assert.throws(() => s.methods['board.get']({ threadId: s.thread.id }), /Plan board is off/);
 });
 

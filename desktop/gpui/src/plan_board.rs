@@ -1374,9 +1374,10 @@ impl PlanBoardView {
             .when(s > 0.2, |d| d.child(node.label.clone()));
             if changed && s > 0.3 {
                 b = b.child(
+                    // Clear of the box's top edge, which drew through it at -9.
                     div()
                         .absolute()
-                        .top(gpui_kit::px(-9. * s))
+                        .top(gpui_kit::px(-18. * s))
                         .left(gpui_kit::px(8. * s))
                         .px(gpui_kit::px(5. * s))
                         .rounded(gpui_kit::px(4. * s))

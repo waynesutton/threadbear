@@ -129,7 +129,7 @@ import { filesMethods } from './files.ts';
 import { devicesMethods } from './devices.ts';
 import { flushSentry, reportException, reportLoggedError, reportLoggedWarning, startSentry, useSentryMask } from './sentry.ts';
 import { ERROR_EXIT_CODE, ERROR_LEAVE_DEADLINE_MS, ERROR_STOP_DEADLINE_MS, decideErrorExit, errorMode, guardHolds, guardNotice, readErrorExits, takeErrorEnv, testThrow, writeErrorExits } from './error-exits.ts';
-import { ALWAYS_ASK_TOOLS, NEVER_ASK_TOOLS, LIVE_PAGES_LINE, PLAN_BOARD_LINE, RICH_BLOCKS_LINE, SERVER_NAME, buildThreadbearTools, threadbearMcpServer, type RemoteControl } from './threadbear-mcp.ts';
+import { ALWAYS_ASK_TOOLS, NEVER_ASK_TOOLS, LIVE_PAGES_LINE, PLAN_BOARD_LINE, PLAN_BOARD_SCREENS_LINE, RICH_BLOCKS_LINE, SERVER_NAME, buildThreadbearTools, threadbearMcpServer, type RemoteControl } from './threadbear-mcp.ts';
 import { CrossRunner } from './cross-runner.ts';
 import { FAILED_SHOWN_MS, MovePreviews, Moves, moveInfoFrom, previewInfo, stillRunner, type ThreadMoving } from './moves.ts';
 import type { RemoteThreads } from './thread-index.ts';
@@ -562,7 +562,7 @@ async function main(): Promise<void> {
   // The threadbear tools for an agent that isn't given them in-process.
   // What Codex and ACP agents get beside the tools: the rich blocks, and
   // live pages with that experiment on.
-  const richGuidance = () => [RICH_BLOCKS_LINE, experimentOn(cfg.home, 'livePages') ? LIVE_PAGES_LINE : '', boardsFor() ? PLAN_BOARD_LINE : ''].filter(Boolean).join(' ');
+  const richGuidance = () => [RICH_BLOCKS_LINE, experimentOn(cfg.home, 'livePages') ? LIVE_PAGES_LINE : '', boardsFor() ? PLAN_BOARD_LINE : '', framesFor() ? PLAN_BOARD_SCREENS_LINE : ''].filter(Boolean).join(' ');
   const codexStyleTools = (threadId: string) => buildThreadbearTools(router(), threadId, Date.now, scheduleControl(), projectControl(), appRestarts, { provider: 'codex', bulletReplies: () => cfg.bulletReplies, oneReply: () => cfg.oneReply, pocket: pocketControl, gateway: () => cfg.connectorsUrl, gatewayHealth, remote: remoteControl, pages: pagesFor, printPublisher: () => printPublisher, printsWhenAsked: () => cfg.printsWhenAsked, tasks: () => experimentOn(cfg.home, 'tasks') ? nativeTasks : undefined, clearerCompletion: () => experimentOn(cfg.home, 'clearerCompletion'), progressPrints: () => cfg.progressPrints, reviewCanvas: () => experimentOn(cfg.home, 'reviewCanvas'), boards: boardsFor, frames: framesFor });
   // One app-server per live Codex thread, each starting what E says is
   // current, with the same threadbear tools as dynamic tools.

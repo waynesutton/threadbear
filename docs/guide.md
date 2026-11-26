@@ -2539,7 +2539,9 @@ looks the same as before.
 three takes side by side. To ask for them, click the box so its chip is
 in the message box, then type what you want, like "make three takes on
 this screen" or "sketch the empty state and the list with 20 todos", and
-send it. Click a screen to put it in the message box, or **Pick** one to ring
+send it. The agent puts them beside the box, not in a review window, and
+nothing is built to make them: each take is one still page. **Changed** on
+a box only means the agent changed that box in the newest version. Click a screen to put it in the message box, or **Pick** one to ring
 it green and send it as a chip. Screens are drawn sealed, with no scripts
 or network, and **Open in browser** opens one in the agents' browser,
 never your own.
