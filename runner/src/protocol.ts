@@ -904,6 +904,10 @@ export type ReplyButton = {
 export type EventBody =
   | { type: 'review.updated'; review: DesignReview }
   | { type: 'button.updated'; button: ReplyButton }
+  // Experiment planBoard (experiments/planBoard.md): the agent wrote a new
+  // version of this thread's plan. The whole board, parsed, each time
+  // (boards.ts PlanBoard); clients that don't know it skip it.
+  | { type: 'board.updated'; board: import('./boards.ts').PlanBoard }
   // origin is set only on messages the runner sent by itself (the resume
   // after a restart).
   | { type: 'user.message'; text: string; images: ImageRef[]; origin?: MessageOrigin; wakeReason?: string; scheduleId?: string; reviewId?: string; reviewResponse?: ReviewDraft; answers?: AskAnswer[]; editOf?: number; sentAs?: string }
@@ -1043,6 +1047,7 @@ export type AnyEvent = PersistedEvent | TransientEvent;
 export const PERSISTED_TYPES = new Set<string>([
   'review.updated',
   'button.updated',
+  'board.updated',
   'user.message',
   'assistant.text',
   'reasoning',

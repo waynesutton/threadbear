@@ -42,6 +42,8 @@ import { StuckJobs } from './stuck-jobs.ts';
 import { FrozenClis } from './frozen-cli.ts';
 import { KeepAwake } from './keep-awake.ts';
 import { experimentOn } from './experiments.ts';
+import { Boards, type BoardTools } from './boards.ts';
+import { boardMethods } from './board-methods.ts';
 import { AgentThreads, agentCommands, agentsMethods, EXPERIMENT as OUTSIDE_AGENTS } from './outside-agents.ts';
 import { Bears, bearsMethods, bearsRoot, shiftOutOfQuiet, EXPERIMENT as BEARS } from './bears.ts';
 import { Mentions } from './mentions.ts';
@@ -126,7 +128,7 @@ import { filesMethods } from './files.ts';
 import { devicesMethods } from './devices.ts';
 import { flushSentry, reportException, reportLoggedError, reportLoggedWarning, startSentry, useSentryMask } from './sentry.ts';
 import { ERROR_EXIT_CODE, ERROR_LEAVE_DEADLINE_MS, ERROR_STOP_DEADLINE_MS, decideErrorExit, errorMode, guardHolds, guardNotice, readErrorExits, takeErrorEnv, testThrow, writeErrorExits } from './error-exits.ts';
-import { ALWAYS_ASK_TOOLS, NEVER_ASK_TOOLS, LIVE_PAGES_LINE, RICH_BLOCKS_LINE, SERVER_NAME, buildThreadbearTools, threadbearMcpServer, type RemoteControl } from './threadbear-mcp.ts';
+import { ALWAYS_ASK_TOOLS, NEVER_ASK_TOOLS, LIVE_PAGES_LINE, PLAN_BOARD_LINE, RICH_BLOCKS_LINE, SERVER_NAME, buildThreadbearTools, threadbearMcpServer, type RemoteControl } from './threadbear-mcp.ts';
 import { CrossRunner } from './cross-runner.ts';
 import { FAILED_SHOWN_MS, MovePreviews, Moves, moveInfoFrom, previewInfo, stillRunner, type ThreadMoving } from './moves.ts';
 import type { RemoteThreads } from './thread-index.ts';
@@ -507,13 +509,38 @@ async function main(): Promise<void> {
     const s = experimentOn(cfg.home, ARCHIVE_EXPERIMENT) ? archiveMcpServer() : undefined;
     return s ? { [ARCHIVE_MCP_NAME]: s } : {};
   };
+  // Experiment planBoard (experiments/planBoard.md): each thread's plan
+  // board, under <dataDir>/boards. The agent's tools only while it's on.
+  const boards = new Boards(path.join(cfg.home, 'boards'));
+  const boardTools: BoardTools = {
+    read: (id) => boards.get(id),
+    write: (id, u) => {
+      const r = boards.update(id, u);
+      runner.emitBoard(id, r.board);
+      return r;
+    },
+    mustSend: (id, node) => boards.mustSend(id, node),
+    linkThread: (id, node, child, planVersion) => {
+      boards.link(id, node, { threadId: child.id, harness: child.provider, planVersion, at: new Date().toISOString() });
+    },
+    statusOf: (id) => {
+      if (!runner.has(id)) return undefined;
+      const t = runner.get(id);
+      if (t.archivedAt) return 'archived';
+      if (t.status === 'waiting' || t.needs === 'you') return 'needs Wayne';
+      if (t.status === 'running' || t.status === 'starting') return 'working';
+      if (t.status === 'error') return 'failed';
+      return 'done';
+    },
+  };
+  const boardsFor = () => (experimentOn(cfg.home, 'planBoard') ? boardTools : undefined);
   const claude = new ClaudeAdapter({
     plugins: () => skills.plugins(),
     claudePath: cfg.claudePath,
     registry,
     log,
     mcpServersFor: (threadId) => ({
-      [SERVER_NAME]: threadbearMcpServer(router(), threadId, scheduleControl(), projectControl(), appRestarts, () => cfg.bulletReplies, pocketControl, () => cfg.oneReply, () => cfg.connectorsUrl, gatewayHealth, remoteControl, () => experimentOn(cfg.home, 'loadEndTurn'), () => experimentOn(cfg.home, 'reviewCanvas'), () => experimentOn(cfg.home, 'livePages'), pagesFor, () => printPublisher, () => cfg.printsWhenAsked, () => experimentOn(cfg.home, 'tasks') ? nativeTasks : undefined, () => experimentOn(cfg.home, 'clearerCompletion'), () => cfg.progressPrints),
+      [SERVER_NAME]: threadbearMcpServer(router(), threadId, scheduleControl(), projectControl(), appRestarts, () => cfg.bulletReplies, pocketControl, () => cfg.oneReply, () => cfg.connectorsUrl, gatewayHealth, remoteControl, () => experimentOn(cfg.home, 'loadEndTurn'), () => experimentOn(cfg.home, 'reviewCanvas'), () => experimentOn(cfg.home, 'livePages'), pagesFor, () => printPublisher, () => cfg.printsWhenAsked, () => experimentOn(cfg.home, 'tasks') ? nativeTasks : undefined, () => experimentOn(cfg.home, 'clearerCompletion'), () => cfg.progressPrints, boardsFor),
       ...Object.fromEntries(Object.entries(archiveServers()).map(([name, server]) => [name, { type: 'stdio' as const, ...server }])),
     }),
     oneReply: () => cfg.oneReply,
@@ -523,8 +550,8 @@ async function main(): Promise<void> {
   // The threadbear tools for an agent that isn't given them in-process.
   // What Codex and ACP agents get beside the tools: the rich blocks, and
   // live pages with that experiment on.
-  const richGuidance = () => (experimentOn(cfg.home, 'livePages') ? `${RICH_BLOCKS_LINE} ${LIVE_PAGES_LINE}` : RICH_BLOCKS_LINE);
-  const codexStyleTools = (threadId: string) => buildThreadbearTools(router(), threadId, Date.now, scheduleControl(), projectControl(), appRestarts, { provider: 'codex', bulletReplies: () => cfg.bulletReplies, oneReply: () => cfg.oneReply, pocket: pocketControl, gateway: () => cfg.connectorsUrl, gatewayHealth, remote: remoteControl, pages: pagesFor, printPublisher: () => printPublisher, printsWhenAsked: () => cfg.printsWhenAsked, tasks: () => experimentOn(cfg.home, 'tasks') ? nativeTasks : undefined, clearerCompletion: () => experimentOn(cfg.home, 'clearerCompletion'), progressPrints: () => cfg.progressPrints, reviewCanvas: () => experimentOn(cfg.home, 'reviewCanvas') });
+  const richGuidance = () => [RICH_BLOCKS_LINE, experimentOn(cfg.home, 'livePages') ? LIVE_PAGES_LINE : '', boardsFor() ? PLAN_BOARD_LINE : ''].filter(Boolean).join(' ');
+  const codexStyleTools = (threadId: string) => buildThreadbearTools(router(), threadId, Date.now, scheduleControl(), projectControl(), appRestarts, { provider: 'codex', bulletReplies: () => cfg.bulletReplies, oneReply: () => cfg.oneReply, pocket: pocketControl, gateway: () => cfg.connectorsUrl, gatewayHealth, remote: remoteControl, pages: pagesFor, printPublisher: () => printPublisher, printsWhenAsked: () => cfg.printsWhenAsked, tasks: () => experimentOn(cfg.home, 'tasks') ? nativeTasks : undefined, clearerCompletion: () => experimentOn(cfg.home, 'clearerCompletion'), progressPrints: () => cfg.progressPrints, reviewCanvas: () => experimentOn(cfg.home, 'reviewCanvas'), boards: boardsFor });
   // One app-server per live Codex thread, each starting what E says is
   // current, with the same threadbear tools as dynamic tools.
   const codex = new CodexAdapter({
@@ -1677,7 +1704,7 @@ async function main(): Promise<void> {
     if (n.method === 'thread.updated') updates.threadChanged(n.params.thread.id);
     else if (n.method === 'thread.deleted') updates.threadChanged(n.params.threadId);
   });
-  const methods = { ...taskMethods(nativeTasks), ...linearMethods(linearTasks), ...profilePageMethods(publicProfile), ...restartMethods(restarter), ...scheduleMethods(scheduler), ...projectMethods(projects), ...pageMethods(pagesFor, askAboutPage, printPublisher), ...drainProjectMethods(projects), ...librarianMethods(librarian), ...connectorsMethods(connectors, { on: () => experimentOn(cfg.home, 'connectorsSetup'), start: (r) => startOwnThread(runner, r, undefined), open: openThread, local: () => experimentOn(cfg.home, 'localConnectors'), findLauncher: (l) => findLauncher(l) }, staticClients), ...recipeMethods(recipes), ...settingsMethods(settings), ...skillMethods(skills), ...instructionsMethods(instructions), ...modelMethods(models), ...devicesMethods(sync), ...agentsMethods(sync, () => experimentOn(cfg.home, OUTSIDE_AGENTS)), ...tablesMethods({ tables: () => tables, on: tablesOn }), ...bearsMethods({ bears, on: bearsOn, mention: (p) => mentions.ask(p), unseat: (id) => tables.unseatEverywhere(id), touch: () => runner.touchThreads(runner.list(['inbox', 'snoozed', 'archived']).filter((t) => bears.forCwd(t.cwd)).map((t) => t.id)), cwdOf: (id) => (runner.has(id) ? runner.get(id).cwd : undefined), revokeHooks: (folder) => (webhooksOn() ? revokeHooksFor(sync, folder) : Promise.resolve(0)) }), ...webhooksMethods({ backend: sync, registry: hookRegistry, on: webhooksOn, runnerId: syncRunnerId, needApi: WEBHOOKS_API_VERSION, modeOf: (id) => (runner.has(id) ? runner.get(id).permissionMode : undefined), bearFolder: (b) => { if (!bearsOn()) return undefined; try { return bears.get(b, { faces: false }).folder; } catch { return undefined; } } }), ...usageStatsMethods({ tally, history: usageHistory, clock: realClock }), ...archiveMethods(agentArchive) };
+  const methods = { ...taskMethods(nativeTasks), ...linearMethods(linearTasks), ...profilePageMethods(publicProfile), ...restartMethods(restarter), ...scheduleMethods(scheduler), ...projectMethods(projects), ...pageMethods(pagesFor, askAboutPage, printPublisher), ...drainProjectMethods(projects), ...librarianMethods(librarian), ...connectorsMethods(connectors, { on: () => experimentOn(cfg.home, 'connectorsSetup'), start: (r) => startOwnThread(runner, r, undefined), open: openThread, local: () => experimentOn(cfg.home, 'localConnectors'), findLauncher: (l) => findLauncher(l) }, staticClients), ...recipeMethods(recipes), ...settingsMethods(settings), ...skillMethods(skills), ...instructionsMethods(instructions), ...modelMethods(models), ...devicesMethods(sync), ...agentsMethods(sync, () => experimentOn(cfg.home, OUTSIDE_AGENTS)), ...tablesMethods({ tables: () => tables, on: tablesOn }), ...bearsMethods({ bears, on: bearsOn, mention: (p) => mentions.ask(p), unseat: (id) => tables.unseatEverywhere(id), touch: () => runner.touchThreads(runner.list(['inbox', 'snoozed', 'archived']).filter((t) => bears.forCwd(t.cwd)).map((t) => t.id)), cwdOf: (id) => (runner.has(id) ? runner.get(id).cwd : undefined), revokeHooks: (folder) => (webhooksOn() ? revokeHooksFor(sync, folder) : Promise.resolve(0)) }), ...webhooksMethods({ backend: sync, registry: hookRegistry, on: webhooksOn, runnerId: syncRunnerId, needApi: WEBHOOKS_API_VERSION, modeOf: (id) => (runner.has(id) ? runner.get(id).permissionMode : undefined), bearFolder: (b) => { if (!bearsOn()) return undefined; try { return bears.get(b, { faces: false }).folder; } catch { return undefined; } } }), ...usageStatsMethods({ tally, history: usageHistory, clock: realClock }), ...archiveMethods(agentArchive), ...boardMethods({ boards, on: () => experimentOn(cfg.home, 'planBoard'), coordinatorsOn: () => experimentOn(cfg.home, 'planBoardCoordinators'), runner }) };
   // runner.status carries the CLI statuses too (protocol, "runner.status").
   const restartStatus = methods['runner.status'];
   methods['runner.status'] = (p) => {
