@@ -232,12 +232,12 @@ impl PlanState {
 /// to it isn't left guessing (Wayne, 26 Nov: "make sense for newbies").
 pub fn next_step(board: &Board) -> &'static str {
     match board.state() {
-        PlanState::Draft(_) => "Click a box, then say what to change in the message box. Press Approve plan when it's right.",
-        PlanState::Changed { .. } => "The plan changed after you approved it. Look it over, then press Approve plan again to send more boxes.",
+        PlanState::Draft(_) => "Draft: click a box to chat or open Screens now. Press Approve plan when ready to send boxes to build.",
+        PlanState::Changed { .. } => "Plan updated after approval: review Changed boxes, then press Approve plan again to unlock Send.",
         PlanState::Approved(_) if board.links.is_empty() => {
-            "Approved. Press Send to… on a box to build it in its own thread, or tell this thread \"build it\"."
+            "Approved: press Send on any box to start its build thread, or tell this thread \"build it\"."
         }
-        PlanState::Approved(_) => "Each sent box shows its thread's state. Click a badge to open that thread.",
+        PlanState::Approved(_) => "In progress: click a box's status badge to open its thread. Press Ask planner to review once all finish.",
     }
 }
 
@@ -268,7 +268,7 @@ pub fn send_allowed(
 
 pub const BOX_H: f32 = 56.;
 pub const RANK_GAP: f32 = 110.;
-pub const ROW_GAP: f32 = 34.;
+pub const ROW_GAP: f32 = 52.;
 pub const GROUP_PAD: f32 = 18.;
 pub const GROUP_HEAD: f32 = 26.;
 
@@ -740,9 +740,21 @@ pub fn skills_line(skills: &[String], provider: &str) -> Option<String> {
     ))
 }
 
-/// The brief Send to… shows, editable, before Start: the same text the
+/// The brief Send shows, editable, before Start: the same text the
 /// runner would write for this box (runner/src/boards.ts `buildBrief`).
 pub fn brief(board: &Board, node_id: &str, provider: &str, skills: &[String]) -> Option<String> {
+    brief_with_screens(board, node_id, provider, skills, &[])
+}
+
+/// Same as `brief`, plus any screens picked for this box so the build thread
+/// knows which mockup take Wayne chose.
+pub fn brief_with_screens(
+    board: &Board,
+    node_id: &str,
+    provider: &str,
+    skills: &[String],
+    picked_screens: &[Frame],
+) -> Option<String> {
     let g = &board.graph;
     let node = g.node(node_id)?;
     let name = |id: &str| {
@@ -788,6 +800,28 @@ pub fn brief(board: &Board, node_id: &str, provider: &str, skills: &[String]) ->
     if !neighbours.is_empty() {
         lines.push(format!("Neighbours: {}.", neighbours.join("; ")));
     }
+    for f in picked_screens
+        .iter()
+        .filter(|f| f.node == node_id && f.picked)
+    {
+        let source = f
+            .route
+            .as_deref()
+            .map(|r| format!("route {r}"))
+            .or_else(|| f.path.as_deref().map(|p| format!("file {p}")))
+            .unwrap_or_default();
+        if source.is_empty() {
+            lines.push(format!(
+                "Picked screen: \"{}\" (variant {}, {}, v{}).",
+                f.title, f.variant, f.viewport, f.version
+            ));
+        } else {
+            lines.push(format!(
+                "Picked screen: \"{}\" (variant {}, {}, v{}): {source}",
+                f.title, f.variant, f.viewport, f.version
+            ));
+        }
+    }
     let note = board
         .note
         .as_ref()
@@ -802,6 +836,14 @@ pub fn brief(board: &Board, node_id: &str, provider: &str, skills: &[String]) ->
             .to_owned(),
     );
     Some(lines.join("\n"))
+}
+
+/// Ready-to-send message for the Screens drawer's one-click Generate 3 takes button.
+pub fn ask_screens_message(board: &Board, node_id: &str) -> String {
+    format!(
+        "{} Make three screen takes (A, B, and C) for this box so I can compare them on the plan board.",
+        chip_markdown(board, &Hit::Box(node_id.to_owned()))
+    )
 }
 
 /// Board skills a login can't run, left out of its brief (the sheet says
@@ -1172,14 +1214,56 @@ mod tests {
     #[test]
     fn the_next_step_line_follows_the_plan() {
         let mut b = acme();
-        assert!(next_step(&b).contains("Approve plan when it's right"));
+        assert!(next_step(&b).contains("open Screens now"));
+        assert!(next_step(&b).contains("Approve plan"));
         b.approved = Some(Approved {
             version: 1,
             at: String::new(),
         });
-        assert!(next_step(&b).contains("Send to…"));
+        assert!(next_step(&b).contains("press Send on any box"));
         b.version = 2;
-        assert!(next_step(&b).contains("changed after you approved"));
+        assert!(next_step(&b).contains("updated after approval"));
+    }
+
+    #[test]
+    fn brief_with_screens_names_the_picked_take() {
+        let mut b = acme();
+        b.approved = Some(Approved {
+            version: 1,
+            at: String::new(),
+        });
+        let frames = vec![
+            Frame {
+                id: "kpi-row-A".into(),
+                node: "kpi".into(),
+                frame: "row".into(),
+                variant: "A".into(),
+                title: "Dense row".into(),
+                viewport: "desktop".into(),
+                version: 1,
+                picked: false,
+                path: Some("/tmp/a.html".into()),
+                ..Default::default()
+            },
+            Frame {
+                id: "kpi-row-B".into(),
+                node: "kpi".into(),
+                frame: "row".into(),
+                variant: "B".into(),
+                title: "Clean cards".into(),
+                viewport: "desktop".into(),
+                version: 2,
+                picked: true,
+                path: Some("/tmp/b.html".into()),
+                ..Default::default()
+            },
+        ];
+        let text = brief_with_screens(&b, "kpi", "claude", &[], &frames).unwrap();
+        assert!(text
+            .contains("Picked screen: \"Clean cards\" (variant B, desktop, v2): file /tmp/b.html"));
+        assert!(!text.contains("Dense row"));
+        let ask = ask_screens_message(&b, "kpi");
+        assert!(ask.starts_with("[KPI cards](board:5533c870-aaaa-bbbb-cccc-000000000001#kpi)"));
     }
 
     #[test]

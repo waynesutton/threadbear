@@ -125,8 +125,9 @@ export function boardMethods(d: BoardMethodDeps): Record<string, (p: Params) => 
       if (!frames) throw new RpcError(ErrorCode.notAllowed, 'Plan board mockups is off. Turn it on in Settings > General > Experiments.');
       const id = thread(p);
       if (typeof p.pick === 'string') frames.pick(id, p.pick);
+      const list = d.boards.has(id) ? frames.list(id, typeof p.node === 'string' ? p.node : undefined) : [];
       if (p.seen === true) frames.seen(id);
-      return { frames: d.boards.has(id) ? frames.list(id, typeof p.node === 'string' ? p.node : undefined) : [] };
+      return { frames: list };
     }),
     // Wayne's Approve plan, for the version he saw. Refused if it isn't the latest.
     'board.approve': guard((p) => {

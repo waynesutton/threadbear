@@ -10,6 +10,7 @@ import path from 'node:path';
 import { makeHarness } from '../helpers/fakes.ts';
 import { buildThreadbearTools, NEVER_ASK_TOOLS, serverInstructions, PLAN_BOARD_LINE, PLAN_BOARD_SCREENS_LINE } from '../../src/threadbear-mcp.ts';
 import { Boards, type BoardTools } from '../../src/boards.ts';
+import { BoardFrames } from '../../src/board-frames.ts';
 import { boardMethods, type BoardCoordinatorPort } from '../../src/board-methods.ts';
 
 const PLAN = `flowchart LR
@@ -212,4 +213,20 @@ test('a box sent from a planner in plan mode starts with full access, so it can 
 
 test('the board tools never stop on an Allow card', () => {
   for (const n of ['read_board', 'update_board', 'read_frames', 'update_frame']) assert.ok(NEVER_ASK_TOOLS.has(`mcp__threadbear__${n}`), n);
+});
+
+test('board.frames shows Changed once when seen is true, then clears it', () => {
+  const s = setup();
+  s.boards.update(s.thread.id, { mermaid: PLAN });
+  const frames = new BoardFrames(s.boards);
+  const methods = boardMethods({ boards: s.boards, on: () => true, frames: () => frames, runner: s.h.runner });
+  const html = '<!doctype html><html><body><div>v</div></body></html>';
+  frames.write(s.thread.id, { node: 'kpi', frame: 'row', variant: 'A', title: 'Row', html });
+  frames.write(s.thread.id, { node: 'kpi', frame: 'row', variant: 'A', title: 'Row', html });
+  const preload = methods['board.frames']({ threadId: s.thread.id, seen: false }) as { frames: { changed: boolean }[] };
+  assert.equal(preload.frames[0].changed, true, 'preload keeps Changed');
+  const firstOpen = methods['board.frames']({ threadId: s.thread.id, seen: true }) as { frames: { changed: boolean }[] };
+  assert.equal(firstOpen.frames[0].changed, true, 'first open still shows Changed');
+  const secondOpen = methods['board.frames']({ threadId: s.thread.id, seen: true }) as { frames: { changed: boolean }[] };
+  assert.equal(secondOpen.frames[0].changed, false, 'second open clears Changed');
 });

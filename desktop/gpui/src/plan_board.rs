@@ -289,10 +289,15 @@ pub(crate) struct PlanBoardView {
     asked: Option<String>,
     // Changed badges Wayne has seen, by version.
     seen_changes: Option<u32>,
+    // Planner note collapsed for this version; a newer version shows its note again.
+    note_hidden_version: Option<u32>,
     // planBoardMockups: the box whose screens are showing, its screens, and
     // their stills by (screen, version, dark).
     screens_for: Option<String>,
     frames: Vec<rules::Frame>,
+    frames_loaded: bool,
+    // Box currently asking the agent to generate 3 screen takes (prevents double-send).
+    asking_screens_for: Option<String>,
     stills: HashMap<(String, u32, bool), Option<Arc<Image>>>,
     // One still at a time: they share one sealed view.
     drawing: bool,
@@ -342,8 +347,11 @@ impl PlanBoardView {
             folder_skills: None,
             asked: None,
             seen_changes: None,
+            note_hidden_version: None,
             screens_for: None,
             frames: Vec::new(),
+            frames_loaded: false,
+            asking_screens_for: None,
             stills: HashMap::new(),
             drawing: false,
             runtime_watch: None,
@@ -369,6 +377,9 @@ impl PlanBoardView {
                             .as_str()
                             .zip(v["coordinator"]["threadId"].as_str())
                             .map(|(p, t)| (p.to_owned(), t.to_owned()));
+                        if this.board.is_some() && this.mockups_on(cx) {
+                            this.load_frames_opts(None, false, cx);
+                        }
                     }
                     Err(e) => this.error = Some(e.message),
                 }
@@ -394,6 +405,7 @@ impl PlanBoardView {
             self.take_board(Some(b));
         }
         self.asked = None;
+        self.asking_screens_for = None;
         self.reload(cx);
         cx.notify();
     }
@@ -832,10 +844,12 @@ fn bar_button(
     crate::a11y::A11yRole::a11y_role(
         div()
             .id(id)
+            .flex_none()
             .h(px(24.))
             .px(px(8.))
             .flex()
             .items_center()
+            .whitespace_nowrap()
             .rounded(px(6.))
             .border_1()
             .border_color(style::button_edge(cx))
@@ -853,6 +867,45 @@ fn bar_button(
 }
 
 impl PlanBoardView {
+    fn render_approve_button(&self, cx: &mut Context<Self>) -> AnyElement {
+        let accent = style::accent(cx);
+        let on_accent = style::over_background(accent, cx);
+        let enabled = !self.approving;
+        crate::a11y::A11yRole::a11y_role(
+            div()
+                .id("plan-board-approve")
+                .flex_none()
+                .h(px(24.))
+                .px(px(10.))
+                .flex()
+                .items_center()
+                .whitespace_nowrap()
+                .rounded(px(6.))
+                .bg(accent)
+                .text_size(px(size::DETAIL))
+                .font_weight(FontWeight::SEMIBOLD)
+                .text_color(on_accent)
+                .when(!enabled, |d| d.opacity(0.5))
+                .when(enabled, |d| {
+                    d.cursor(CursorStyle::PointingHand)
+                        .hover(|s| s.opacity(0.9))
+                })
+                .test_support(),
+            Role::Button,
+        )
+        .aria_label("Approve plan")
+        .tip("Approve plan: unlocks Send on boxes so you can start building")
+        .child(if self.approving {
+            "Approving…"
+        } else {
+            "Approve plan"
+        })
+        .when(enabled, |d| {
+            d.on_click(cx.listener(|this, _: &ClickEvent, _, cx| this.approve(cx)))
+        })
+        .into_any_element()
+    }
+
     fn render_bar(
         &mut self,
         statuses: &BTreeMap<String, BoxStatus>,
@@ -879,7 +932,15 @@ impl PlanBoardView {
                 crate::a11y::A11yRole::a11y_role(
                     div()
                         .id("plan-board-state")
-                        .text_size(px(size::LABEL))
+                        .flex_none()
+                        .h(px(24.))
+                        .px(px(8.))
+                        .flex()
+                        .items_center()
+                        .whitespace_nowrap()
+                        .rounded(px(6.))
+                        .bg(state_colour.opacity(0.14))
+                        .text_size(px(size::DETAIL))
                         .font_weight(FontWeight::SEMIBOLD)
                         .text_color(state_colour)
                         .test_support(),
@@ -889,16 +950,7 @@ impl PlanBoardView {
                 .child(words),
             );
         if !state.approved() {
-            bar = bar.child(
-                bar_button(
-                    "plan-board-approve",
-                    "Approve plan",
-                    "Approve plan",
-                    !self.approving,
-                    cx,
-                )
-                .on_click(cx.listener(|this, _: &ClickEvent, _, cx| this.approve(cx))),
-            );
+            bar = bar.child(self.render_approve_button(cx));
         }
         bar = bar.child(self.skills_menu(&board, cx));
         bar = bar.child(self.versions_menu(&board));
@@ -1219,38 +1271,123 @@ fn paint_dots(cam: Camera, colour: Hsla, bounds: Bounds<Pixels>, window: &mut Wi
     }
 }
 
-/// The agent's note, a bubble near what it's about.
-fn note_bubble(board: &Board, layout: &rules::Layout, cam: Camera, cx: &App) -> Option<AnyElement> {
+/// The agent's note, pinned cleanly at the bottom left of the canvas so pan
+/// and zoom never slice it off or shrink it below reading size.
+fn note_hud(board: &Board, hidden: bool, cx: &mut Context<PlanBoardView>) -> Option<AnyElement> {
     let note = board.note.clone().filter(|n| !n.text.is_empty())?;
-    let s = cam.s;
-    let (edge, label) = (style::hairline(cx), style::label_text(cx));
-    let near = note
+    let version = board.version;
+    if hidden {
+        return Some(
+            crate::a11y::A11yRole::a11y_role(
+                div()
+                    .id("plan-note-show")
+                    .absolute()
+                    .left(px(12.))
+                    .bottom(px(12.))
+                    .h(px(26.))
+                    .px(px(10.))
+                    .flex()
+                    .items_center()
+                    .whitespace_nowrap()
+                    .rounded(px(8.))
+                    .bg(style::card_background(cx))
+                    .border_1()
+                    .border_color(style::card_border(cx))
+                    .shadow_md()
+                    .text_size(px(size::DETAIL))
+                    .text_color(style::secondary_text(cx))
+                    .cursor(CursorStyle::PointingHand)
+                    .hover(|s| s.bg(style::hover_fill(cx)))
+                    .test_support(),
+                Role::Button,
+            )
+            .aria_label("Show planner note")
+            .tip("Show planner note")
+            .child("Planner note")
+            .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
+            .on_click(cx.listener(|this, _: &ClickEvent, _, cx| {
+                this.note_hidden_version = None;
+                cx.notify();
+            }))
+            .into_any_element(),
+        );
+    }
+    let about = note
         .near
         .as_deref()
-        .and_then(|n| layout.rect(n))
-        .unwrap_or_else(|| layout.bounds());
-    let sr = cam.rect(&near);
-    let w = 260. * s.clamp(0.5, 1.4);
+        .and_then(|id| board.graph.node(id))
+        .map(|n| format!("Planner note · {}", n.label))
+        .unwrap_or_else(|| "Planner note".to_owned());
     Some(
         crate::a11y::A11yRole::a11y_role(
-            div()
+            v_flex()
                 .id("plan-note")
                 .absolute()
-                .left(gpui_kit::px(sr.x))
-                .top(gpui_kit::px(sr.y - 70. * s.clamp(0.5, 1.4)))
-                .w(gpui_kit::px(w))
-                .p(gpui_kit::px(8.))
-                .rounded(gpui_kit::px(10.))
-                .bg(style::bubble_background(cx))
+                .left(px(12.))
+                .bottom(px(12.))
+                .max_w(px(360.))
+                .p(px(10.))
+                .gap(px(4.))
+                .rounded(px(10.))
+                .bg(style::card_background(cx))
                 .border_1()
-                .border_color(edge)
-                .text_size(gpui_kit::px(12. * s.clamp(0.7, 1.2)))
-                .text_color(label)
+                .border_color(style::card_border(cx))
+                .shadow_md()
                 .test_support(),
             Role::Note,
         )
         .aria_label(SharedString::from(format!("Note: {}", note.text)))
-        .child(note.text)
+        .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
+        .child(
+            h_flex()
+                .gap(px(8.))
+                .items_center()
+                .child(
+                    div()
+                        .flex_1()
+                        .min_w_0()
+                        .truncate()
+                        .text_size(px(size::SMALL))
+                        .font_weight(FontWeight::SEMIBOLD)
+                        .text_color(style::secondary_text(cx))
+                        .child(about),
+                )
+                .child(
+                    crate::a11y::A11yRole::a11y_role(
+                        div()
+                            .id("plan-note-hide")
+                            .flex_none()
+                            .w(px(18.))
+                            .h(px(18.))
+                            .flex()
+                            .items_center()
+                            .justify_center()
+                            .rounded(px(4.))
+                            .text_size(px(size::SMALL))
+                            .text_color(style::quiet_text(cx))
+                            .cursor(CursorStyle::PointingHand)
+                            .hover(|s| s.bg(style::hover_fill(cx)))
+                            .test_support(),
+                        Role::Button,
+                    )
+                    .aria_label("Hide planner note")
+                    .tip("Hide planner note")
+                    .child("✕")
+                    .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
+                    .on_click(cx.listener(
+                        move |this, _: &ClickEvent, _, cx| {
+                            this.note_hidden_version = Some(version);
+                            cx.notify();
+                        },
+                    )),
+                ),
+        )
+        .child(
+            div()
+                .text_size(px(size::DETAIL))
+                .text_color(style::label_text(cx))
+                .child(note.text),
+        )
         .into_any_element(),
     )
 }
@@ -1441,13 +1578,11 @@ impl PlanBoardView {
             }
             layer = layer.child(b);
             if s > 0.35 {
-                layer = layer.child(self.box_controls(&board, id, &sr, status.as_ref(), cx));
+                layer = layer.child(self.box_controls(&board, id, &sr, s, status.as_ref(), cx));
             }
         }
 
-        layer = layer.children(note_bubble(&board, &layout, cam, cx));
-        // planBoardMockups: the open box's screens, as stills.
-        layer = layer.children(self.render_screens(&board, &layout, cx));
+        let note_overlay = note_hud(&board, self.note_hidden_version == Some(board.version), cx);
 
         let bounds_cell = self.bounds.clone();
         let dot: Hsla = rgb(if dark { 0x2E2E36 } else { 0xC4C4CE }).into();
@@ -1475,6 +1610,7 @@ impl PlanBoardView {
             .child(dots)
             .child(painter)
             .child(layer)
+            .children(note_overlay)
             .on_mouse_down(
                 MouseButton::Left,
                 cx.listener(|this, ev: &MouseDownEvent, window, cx| this.pressed(ev, window, cx)),
@@ -1493,85 +1629,195 @@ impl PlanBoardView {
 // ---------------------------------------------------------------- a box's controls
 
 impl PlanBoardView {
-    /// Under a box: its status badge (a click opens its thread) and Send to….
+    /// Status badge pill under a sent box: compact label + live activity tooltip.
+    fn box_status_badge(
+        &self,
+        board: &Board,
+        id: &str,
+        st: &BoxStatus,
+        ui_s: f32,
+        cx: &mut Context<Self>,
+    ) -> AnyElement {
+        let pill_h = 20. * ui_s;
+        let pill_px = 7. * ui_s;
+        let pill_r = 6. * ui_s;
+        let pill_text = 10.5 * ui_s;
+        let dot_sz = (5. * ui_s).max(4.);
+        let colour = status_colour(st, cx);
+        let link = board.links.get(id).cloned();
+        let target = link.as_ref().and_then(|l| l.thread_id.clone());
+        let who = link
+            .as_ref()
+            .map(|l| {
+                if l.is_coordinator() {
+                    "Coordinator"
+                } else if l.harness.as_deref() == Some("codex") {
+                    "Codex"
+                } else {
+                    "Claude"
+                }
+            })
+            .unwrap_or("Thread");
+        // Keep the canvas pill short so it never clips mid-word; put the
+        // live activity line in the tooltip instead.
+        let pill_label = format!("{who} · {}", st.word());
+        let tip = match st {
+            BoxStatus::Working(line) if !line.is_empty() => {
+                format!("{who} Working: {line} (click to open thread)")
+            }
+            other => format!("{who} {}: click to open thread", other.word()),
+        };
+        crate::a11y::A11yRole::a11y_role(
+            div()
+                .id(SharedString::from(format!("plan-badge-{id}")))
+                .flex_none()
+                .h(gpui_kit::px(pill_h))
+                .px(gpui_kit::px(pill_px))
+                .flex()
+                .items_center()
+                .gap(gpui_kit::px(4. * ui_s))
+                .whitespace_nowrap()
+                .rounded(gpui_kit::px(pill_r))
+                .bg(style::card_background(cx))
+                .border_1()
+                .border_color(colour.opacity(0.55))
+                .text_size(gpui_kit::px(pill_text))
+                .font_weight(FontWeight::MEDIUM)
+                .text_color(colour)
+                .cursor(CursorStyle::PointingHand)
+                .test_support(),
+            Role::Link,
+        )
+        .aria_label(SharedString::from(format!("{} says {}", id, st.word())))
+        .tip(tip)
+        .child(
+            div()
+                .flex_none()
+                .w(gpui_kit::px(dot_sz))
+                .h(gpui_kit::px(dot_sz))
+                .rounded_full()
+                .bg(colour),
+        )
+        .child(pill_label)
+        .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
+        .when_some(target, |d, t| {
+            d.on_click(cx.listener(move |this, _: &ClickEvent, window, cx| {
+                this.open_thread(t.clone(), window, cx)
+            }))
+        })
+        .into_any_element()
+    }
+
+    /// Under a box: its status badge (a click opens its thread), Screens, and Send.
     fn box_controls(
         &mut self,
         board: &Board,
         id: &str,
         sr: &Rect,
+        scale: f32,
         status: Option<&BoxStatus>,
         cx: &mut Context<Self>,
     ) -> AnyElement {
+        // Scale pills gently with canvas zoom so zoomed-out boxes aren't dwarfed
+        // by giant buttons, while keeping labels crisp and never truncated.
+        let ui_s = scale.clamp(0.72, 1.12);
+        let pill_h = 20. * ui_s;
+        let pill_px = 7. * ui_s;
+        let pill_r = 6. * ui_s;
+        let pill_text = 10.5 * ui_s;
+        let accent = style::accent(cx);
         let mut row = h_flex()
             .absolute()
             .left(gpui_kit::px(sr.x))
-            .top(gpui_kit::px(sr.bottom() + 4.))
-            .gap(px(4.))
+            .top(gpui_kit::px(sr.bottom() + 5. * ui_s))
+            .gap(gpui_kit::px(4. * ui_s))
             .items_center();
         if let Some(st) = status {
-            let colour = status_colour(st, cx);
-            let detail = match st {
-                BoxStatus::Working(line) if !line.is_empty() => format!("Working · {line}"),
-                other => other.word().to_owned(),
-            };
-            let link = board.links.get(id).cloned();
-            let target = link.as_ref().and_then(|l| l.thread_id.clone());
-            let who = link
-                .as_ref()
-                .map(|l| {
-                    if l.is_coordinator() {
-                        "Coordinator"
-                    } else if l.harness.as_deref() == Some("codex") {
-                        "Codex"
-                    } else {
-                        "Claude"
-                    }
-                })
-                .unwrap_or("");
-            let tip = format!("{who} {detail}: open its thread");
-            row = row.child(
-                crate::a11y::A11yRole::a11y_role(
-                    div()
-                        .id(SharedString::from(format!("plan-badge-{id}")))
-                        .h(px(18.))
-                        .px(px(6.))
-                        .flex()
-                        .items_center()
-                        .rounded(px(9.))
-                        .bg(colour.opacity(0.15))
-                        .text_size(px(size::SMALL))
-                        .text_color(colour)
-                        .max_w(px(220.))
-                        .truncate()
-                        .test_support(),
-                    Role::Link,
-                )
-                .aria_label(SharedString::from(format!("{} says {}", id, st.word())))
-                .tip(tip)
-                .child(format!("{who} {detail}"))
-                .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
-                .when_some(target, |d, t| {
-                    d.on_click(cx.listener(move |this, _: &ClickEvent, window, cx| {
-                        this.open_thread(t.clone(), window, cx)
-                    }))
-                }),
-            );
+            row = row.child(self.box_status_badge(board, id, st, ui_s, cx));
         }
         if self.mockups_on(cx) {
             let node = id.to_owned();
             let open = self.screens_for.as_deref() == Some(id);
+            let box_frames: Vec<&rules::Frame> =
+                self.frames.iter().filter(|f| f.node == id).collect();
+            let count = box_frames.len();
+            let picked = box_frames.iter().find(|f| f.picked);
+            let any_changed = box_frames.iter().any(|f| f.changed);
+            let screens_label = if let Some(p) = picked {
+                format!("Screens · {}", p.variant)
+            } else if count > 0 {
+                format!("Screens ({count})")
+            } else {
+                "Screens".to_owned()
+            };
+            let green: Hsla = rgb(GREEN).into();
+            let border = if open {
+                accent
+            } else if picked.is_some() {
+                green.opacity(0.65)
+            } else {
+                style::button_edge(cx)
+            };
+            let bg = if open {
+                accent.opacity(0.16)
+            } else {
+                style::button_fill(cx)
+            };
+            let text_col = if open {
+                accent
+            } else if picked.is_some() {
+                green
+            } else {
+                style::label_text(cx)
+            };
+            let tip = if open {
+                "Hide this box's screens"
+            } else if count > 0 {
+                "Open this box's screens to compare or pick a take"
+            } else {
+                "Open or generate screen mockups (works before approving)"
+            };
+            let dot_sz = (5. * ui_s).max(4.);
             row = row.child(
-                bar_button_dyn(
-                    format!("plan-screens-{id}"),
-                    "Screens…",
-                    if open {
-                        "Hide this box's screens"
-                    } else {
-                        "Show this box's screens"
-                    },
-                    true,
-                    cx,
+                crate::a11y::A11yRole::a11y_role(
+                    div()
+                        .id(SharedString::from(format!("plan-screens-{id}")))
+                        .flex_none()
+                        .h(gpui_kit::px(pill_h))
+                        .px(gpui_kit::px(pill_px))
+                        .flex()
+                        .items_center()
+                        .gap(gpui_kit::px(4. * ui_s))
+                        .whitespace_nowrap()
+                        .rounded(gpui_kit::px(pill_r))
+                        .border_1()
+                        .border_color(border)
+                        .bg(bg)
+                        .text_size(gpui_kit::px(pill_text))
+                        .font_weight(if open || picked.is_some() {
+                            FontWeight::SEMIBOLD
+                        } else {
+                            FontWeight::NORMAL
+                        })
+                        .text_color(text_col)
+                        .cursor(CursorStyle::PointingHand)
+                        .hover(|s| s.bg(style::hover_fill(cx)))
+                        .test_support(),
+                    Role::Button,
                 )
+                .aria_label(tip)
+                .tip(tip)
+                .when(any_changed, |d| {
+                    d.child(
+                        div()
+                            .flex_none()
+                            .w(gpui_kit::px(dot_sz))
+                            .h(gpui_kit::px(dot_sz))
+                            .rounded_full()
+                            .bg(style::needs_you(cx)),
+                    )
+                })
+                .child(screens_label)
                 .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
                 .on_click(
                     cx.listener(move |this, _: &ClickEvent, _, cx| this.toggle_screens(&node, cx)),
@@ -1580,19 +1826,16 @@ impl PlanBoardView {
         }
         let allowed = rules::send_allowed(board, id, status.cloned());
         let again = matches!(status, Some(BoxStatus::Failed | BoxStatus::Archived));
-        let shown = match (&allowed, again) {
-            (_, true) => "Send again",
-            _ => "Send to…",
-        };
+        let shown = if again { "Send again" } else { "Send" };
         // Already sent and going: no button, the badge says where it is.
         if !matches!(allowed, Err("Already sent")) {
             let tip: SharedString = match allowed {
                 Ok(()) => format!(
-                    "{shown} {}",
+                    "Send {} to its own Claude or Codex build thread",
                     board.graph.node(id).map(|n| n.label.as_str()).unwrap_or(id)
                 )
                 .into(),
-                Err(why) => why.into(),
+                Err(why) => format!("{why} to send this box to a build thread").into(),
             };
             let enabled = allowed.is_ok();
             let node = id.to_owned();
@@ -1600,17 +1843,23 @@ impl PlanBoardView {
                 crate::a11y::A11yRole::a11y_role(
                     div()
                         .id(SharedString::from(format!("plan-send-{id}")))
-                        .h(px(18.))
-                        .px(px(6.))
+                        .flex_none()
+                        .h(gpui_kit::px(pill_h))
+                        .px(gpui_kit::px(pill_px))
                         .flex()
                         .items_center()
-                        .rounded(px(9.))
+                        .whitespace_nowrap()
+                        .rounded(gpui_kit::px(pill_r))
                         .border_1()
                         .border_color(style::button_edge(cx))
                         .bg(style::button_fill(cx))
-                        .text_size(px(size::SMALL))
+                        .text_size(gpui_kit::px(pill_text))
                         .text_color(style::label_text(cx))
-                        .when(!enabled, |d| d.opacity(0.4))
+                        .when(!enabled, |d| d.opacity(0.42))
+                        .when(enabled, |d| {
+                            d.cursor(CursorStyle::PointingHand)
+                                .hover(|s| s.bg(style::hover_fill(cx)))
+                        })
                         .test_support(),
                     Role::Button,
                 )
@@ -1656,6 +1905,12 @@ impl PlanBoardView {
             app.as_ref()
                 .is_some_and(|a| a.read(cx).experiment_on(rules::COORDINATORS))
         });
+        let picked_screens: Vec<rules::Frame> = self
+            .frames
+            .iter()
+            .filter(|f| f.node == node && f.picked)
+            .cloned()
+            .collect();
         let sheet = cx.new(|cx| {
             SendSheet::new(
                 me,
@@ -1665,6 +1920,7 @@ impl PlanBoardView {
                 planner,
                 accounts,
                 coordinator,
+                picked_screens,
                 window,
                 cx,
             )
@@ -1700,6 +1956,7 @@ pub(crate) struct SendSheet {
     account: Option<String>,
     mode: String,
     coordinator: Option<(String, String)>,
+    picked_screens: Vec<rules::Frame>,
     to_coordinator: bool,
     title: Entity<InputState>,
     brief: Entity<TextareaState>,
@@ -1727,6 +1984,7 @@ impl SendSheet {
         planner: threadbear_core::inbox::ThreadSummary,
         accounts: Vec<threadbear_core::logins::Account>,
         coordinator: Option<(String, String)>,
+        picked_screens: Vec<rules::Frame>,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> Self {
@@ -1760,6 +2018,7 @@ impl SendSheet {
             account,
             mode,
             coordinator,
+            picked_screens,
             to_coordinator: false,
             title,
             brief,
@@ -1804,8 +2063,14 @@ impl SendSheet {
             return;
         }
         let (skills, _) = self.skills();
-        let text =
-            rules::brief(&self.board, &self.node, &self.provider(), &skills).unwrap_or_default();
+        let text = rules::brief_with_screens(
+            &self.board,
+            &self.node,
+            &self.provider(),
+            &skills,
+            &self.picked_screens,
+        )
+        .unwrap_or_default();
         self.filled = text.clone();
         self.brief.update(cx, |b, cx| b.set_value(text, window, cx));
     }
@@ -2147,14 +2412,11 @@ impl Render for SendSheet {
 impl Render for PlanBoardView {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let statuses = self.statuses(cx);
-        let body = if self.board.is_some() {
+        let body = if let Some(board) = self.board.clone() {
             let bar = self.render_bar(&statuses, cx);
             let canvas = self.render_canvas(&statuses, window, cx);
-            let hint = self
-                .board
-                .as_ref()
-                .map(rules::next_step)
-                .unwrap_or_default();
+            let screens_drawer = self.render_screens_drawer(&board, cx);
+            let hint = rules::next_step(&board);
             v_flex()
                 .size_full()
                 .child(bar)
@@ -2164,9 +2426,10 @@ impl Render for PlanBoardView {
                             .id("plan-board-next")
                             .flex_none()
                             .px(px(12.))
-                            .py(px(5.))
+                            .py(px(6.))
+                            .bg(style::card_background(cx).opacity(0.55))
                             .text_size(px(size::DETAIL))
-                            .text_color(style::quiet_text(cx))
+                            .text_color(style::secondary_text(cx))
                             .border_b_1()
                             .border_color(style::hairline(cx))
                             .test_support(),
@@ -2176,6 +2439,7 @@ impl Render for PlanBoardView {
                     .child(hint),
                 )
                 .child(canvas)
+                .children(screens_drawer)
                 .into_any_element()
         } else {
             let words = if self.loading {
@@ -2420,7 +2684,7 @@ impl PlanBoardView {
         })
     }
 
-    /// Screens…: show a box's screens beside it, or hide them.
+    /// Screens: show a box's screens in the bottom tray, or hide them.
     fn toggle_screens(&mut self, node: &str, cx: &mut Context<Self>) {
         if self.screens_for.as_deref() == Some(node) {
             self.screens_for = None;
@@ -2428,20 +2692,21 @@ impl PlanBoardView {
             return;
         }
         self.screens_for = Some(node.to_owned());
-        self.load_frames(None, cx);
+        self.load_frames_opts(None, true, cx);
         cx.notify();
     }
 
-    /// board.frames: the screens, with a pick first when there is one.
-    fn load_frames(&mut self, pick: Option<String>, cx: &mut Context<Self>) {
+    /// board.frames: the screens, with an optional pick and seen flag.
+    fn load_frames_opts(&mut self, pick: Option<String>, seen: bool, cx: &mut Context<Self>) {
         let client = self.client.clone();
-        let mut params = json!({ "threadId": self.thread_id, "seen": true });
+        let mut params = json!({ "threadId": self.thread_id, "seen": seen });
         if let Some(p) = pick {
             params["pick"] = json!(p);
         }
         cx.spawn(async move |this, cx| {
             let res = call(client, "board.frames", params).await;
             this.update(cx, |this, cx| {
+                this.frames_loaded = true;
                 match res {
                     Ok(v) => {
                         this.frames = v["frames"]
@@ -2459,6 +2724,30 @@ impl PlanBoardView {
             .ok();
         })
         .detach();
+    }
+
+    /// One-click request for 3 screen takes (A, B, C) for this box.
+    fn ask_screens(&mut self, node: &str, cx: &mut Context<Self>) {
+        if self.asking_screens_for.as_deref() == Some(node) {
+            return;
+        }
+        let Some(board) = &self.board else { return };
+        let message = rules::ask_screens_message(board, node);
+        self.asking_screens_for = Some(node.to_owned());
+        let client = self.client.clone();
+        let params = json!({ "threadId": self.thread_id, "text": message });
+        cx.spawn(async move |this, cx| {
+            if let Err(e) = call(client, "threads.send", params).await {
+                this.update(cx, |this, cx| {
+                    this.asking_screens_for = None;
+                    this.error = Some(e.message);
+                    cx.notify();
+                })
+                .ok();
+            }
+        })
+        .detach();
+        cx.notify();
     }
 
     /// A screen's still, drawn sealed at its viewport, once per version and
@@ -2530,161 +2819,393 @@ impl PlanBoardView {
         }
     }
 
-    /// The strip beside the box: each screen's still, its title, letter,
-    /// size and version, Pick and Open in browser. Pictures only: a screen's
-    /// html is never put in the board as markup.
-    fn render_screens(
+    /// Docked bottom drawer for the selected box's screens: never overlaps
+    /// arrows or boxes on the canvas, always readable at 100% UI scale.
+    #[expect(
+        clippy::too_many_lines,
+        reason = "one screens tray drawn top to bottom: header, empty or cards"
+    )]
+    fn render_screens_drawer(
         &mut self,
         board: &Board,
-        layout: &rules::Layout,
         cx: &mut Context<Self>,
-    ) -> Vec<AnyElement> {
-        let Some(node) = self.screens_for.clone() else {
-            return Vec::new();
-        };
-        let Some(r) = layout.rect(&node) else {
-            return Vec::new();
-        };
+    ) -> Option<AnyElement> {
+        if !self.mockups_on(cx) {
+            return None;
+        }
+        let node = self.screens_for.clone()?;
+        let box_label = board
+            .graph
+            .node(&node)
+            .map(|n| n.label.clone())
+            .unwrap_or_else(|| node.clone());
         let mine: Vec<rules::Frame> = self
             .frames
             .iter()
             .filter(|f| f.node == node)
             .cloned()
             .collect();
-        let cam = self.camera;
-        let s = cam.s;
         let dark = cx.theme().is_dark();
-        if mine.is_empty() {
-            let sr = cam.rect(&r);
-            return vec![div()
-                .absolute()
-                .left(gpui_kit::px(sr.right() + 16.))
-                .top(gpui_kit::px(sr.y))
-                .text_size(px(size::DETAIL))
-                .text_color(style::quiet_text(cx))
-                .child("No screens yet. Click the box, then type in the message box: \"make three takes on this screen\".")
-                .into_any_element()];
-        }
-        let mut out = Vec::new();
-        for (id, rect) in rules::frame_strip(&r, &mine, board.graph.top_to_bottom()) {
-            let Some(f) = mine.iter().find(|f| f.id == id).cloned() else {
-                continue;
-            };
-            let sr = cam.rect(&rect);
-            let picture = self.still(&f, dark, cx);
-            let edge = if f.picked {
-                rgb(GREEN).into()
-            } else {
-                style::hairline(cx)
-            };
-            let words = format!(
-                "{} · {} · {} · v{}",
-                f.title, f.variant, f.viewport, f.version
+        let accent = style::accent(cx);
+        let on_accent = style::over_background(accent, cx);
+        let green: Hsla = rgb(GREEN).into();
+        let picked_variant = mine.iter().find(|f| f.picked).map(|f| f.variant.clone());
+        let asking = self.asking_screens_for.as_deref() == Some(node.as_str());
+        let node_for_ask = node.clone();
+        let node_for_mention = node.clone();
+
+        let mut header = h_flex()
+            .flex_none()
+            .px(px(12.))
+            .py(px(8.))
+            .gap(px(8.))
+            .items_center()
+            .border_b_1()
+            .border_color(style::hairline(cx))
+            .child(
+                div()
+                    .text_size(px(size::LABEL))
+                    .font_weight(FontWeight::SEMIBOLD)
+                    .text_color(style::label_text(cx))
+                    .truncate()
+                    .child(format!("Screens · {box_label}")),
             );
-            let chip = rules::frame_chip(board, &f);
-            let (pick_f, open_f) = (f.clone(), f.clone());
-            out.push(
-                v_flex()
-                    .absolute()
-                    .left(gpui_kit::px(sr.x))
-                    .top(gpui_kit::px(sr.y - 18.))
-                    .w(gpui_kit::px(sr.w))
-                    .gap(px(2.))
-                    .child(
-                        h_flex()
-                            .gap(px(4.))
-                            .text_size(px(size::SMALL))
-                            .text_color(style::secondary_text(cx))
-                            .child(div().truncate().child(words.clone()))
-                            .when(f.changed, |d| {
-                                d.child(div().text_color(style::needs_you(cx)).child("Changed"))
+        if let Some(v) = picked_variant {
+            header = header.child(
+                div()
+                    .flex_none()
+                    .h(px(20.))
+                    .px(px(7.))
+                    .flex()
+                    .items_center()
+                    .whitespace_nowrap()
+                    .rounded(px(5.))
+                    .bg(green.opacity(0.16))
+                    .text_size(px(size::SMALL))
+                    .font_weight(FontWeight::SEMIBOLD)
+                    .text_color(green)
+                    .child(format!("Picked: {v}")),
+            );
+        } else if !board.state().approved() {
+            header = header.child(
+                div()
+                    .flex_none()
+                    .h(px(20.))
+                    .px(px(7.))
+                    .flex()
+                    .items_center()
+                    .whitespace_nowrap()
+                    .rounded(px(5.))
+                    .bg(accent.opacity(0.14))
+                    .text_size(px(size::SMALL))
+                    .text_color(accent)
+                    .child("Works before approving"),
+            );
+        }
+        header = header
+            .child(div().flex_1())
+            .child(
+                bar_button_dyn(
+                    format!("plan-screens-refresh-{node}"),
+                    "Refresh",
+                    "Reload screens for this box",
+                    true,
+                    cx,
+                )
+                .on_click(cx.listener(|this, _: &ClickEvent, _, cx| {
+                    this.asking_screens_for = None;
+                    this.load_frames_opts(None, false, cx);
+                })),
+            )
+            .child(
+                bar_button_dyn(
+                    format!("plan-screens-close-{node}"),
+                    "✕",
+                    "Hide screens panel",
+                    true,
+                    cx,
+                )
+                .on_click(cx.listener(|this, _: &ClickEvent, _, cx| {
+                    this.screens_for = None;
+                    cx.notify();
+                })),
+            );
+
+        let content: AnyElement = if !self.frames_loaded && mine.is_empty() {
+            div()
+                .p(px(16.))
+                .text_size(px(size::DETAIL))
+                .text_color(style::secondary_text(cx))
+                .child("Loading screens…")
+                .into_any_element()
+        } else if mine.is_empty() {
+            v_flex()
+                .p(px(14.))
+                .gap(px(10.))
+                .child(
+                    div()
+                        .text_size(px(size::DETAIL))
+                        .text_color(style::secondary_text(cx))
+                        .child(format!(
+                            "No screens for \"{box_label}\" yet. Generate 3 layout takes to compare side by side before approving, or mention this box in chat to attach a mockup you already picked."
+                        )),
+                )
+                .child(
+                    h_flex()
+                        .gap(px(8.))
+                        .items_center()
+                        .child(
+                            crate::a11y::A11yRole::a11y_role(
+                                div()
+                                    .id(SharedString::from(format!("plan-screens-generate-{node}")))
+                                    .flex_none()
+                                    .h(px(26.))
+                                    .px(px(10.))
+                                    .flex()
+                                    .items_center()
+                                    .whitespace_nowrap()
+                                    .rounded(px(6.))
+                                    .bg(accent)
+                                    .text_size(px(size::DETAIL))
+                                    .font_weight(FontWeight::SEMIBOLD)
+                                    .text_color(on_accent)
+                                    .when(asking, |d| d.opacity(0.5))
+                                    .when(!asking, |d| {
+                                        d.cursor(CursorStyle::PointingHand)
+                                            .hover(|s| s.opacity(0.9))
+                                    })
+                                    .test_support(),
+                                Role::Button,
+                            )
+                            .aria_label("Generate 3 takes")
+                            .tip("Ask this thread's agent to draw 3 screen takes (A, B, C) for this box")
+                            .child(if asking {
+                                "Asking agent…"
+                            } else {
+                                "Generate 3 takes"
+                            })
+                            .when(!asking, |d| {
+                                d.on_click(cx.listener(move |this, _: &ClickEvent, _, cx| {
+                                    this.ask_screens(&node_for_ask, cx)
+                                }))
                             }),
-                    )
-                    .child(
-                        crate::a11y::A11yRole::a11y_role(
-                            div()
-                                .id(SharedString::from(format!("plan-screen-{id}")))
-                                .w(gpui_kit::px(sr.w))
-                                .h(gpui_kit::px(sr.h))
-                                .rounded(px(6.))
-                                .overflow_hidden()
-                                .border(px(if f.picked { 3. } else { 1. }))
-                                .border_color(edge)
-                                .bg(style::card_background(cx))
-                                .test_support(),
-                            Role::Image,
                         )
-                        .aria_label(SharedString::from(format!(
-                            "Screen {words}{}",
-                            if f.picked { ", picked" } else { "" }
-                        )))
-                        .tip("Put this screen in the message box")
-                        .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
-                        .on_click(cx.listener(move |this, _: &ClickEvent, _, cx| {
-                            this.chip_text(chip.clone(), cx)
-                        }))
-                        .children(picture.map(|p| img(ImageSource::Image(p)).size_full()))
-                        .when(
-                            s > 0.2
-                                && self
-                                    .stills
-                                    .get(&(f.id.clone(), f.version, dark))
-                                    .is_some_and(Option::is_none),
-                            |d| {
+                        .child(
+                            bar_button_dyn(
+                                format!("plan-screens-mention-{node}"),
+                                "Mention box in chat",
+                                "Put this box in the message box so you can describe the screen or reference a mockup",
+                                true,
+                                cx,
+                            )
+                            .on_click(cx.listener(move |this, _: &ClickEvent, _, cx| {
+                                this.select(Hit::Box(node_for_mention.clone()), false, cx)
+                            })),
+                        ),
+                )
+                .into_any_element()
+        } else {
+            let mut strip = h_flex()
+                .id("plan-screens-strip")
+                .w_full()
+                .overflow_x_scroll()
+                .p(px(12.))
+                .gap(px(12.))
+                .items_start();
+            for f in &mine {
+                let picture = self.still(f, dark, cx);
+                let edge = if f.picked {
+                    green
+                } else {
+                    style::card_border(cx)
+                };
+                let (vw, vh) = rules::viewport_size(&f.viewport);
+                let card_w: f32 = 232.;
+                let img_h = (card_w * vh / vw).clamp(112., 165.);
+                let words = format!(
+                    "{} · {} · {} · v{}",
+                    f.title, f.variant, f.viewport, f.version
+                );
+                let chip = rules::frame_chip(board, f);
+                let chip_btn = chip.clone();
+                let (pick_f, open_f) = (f.clone(), f.clone());
+                let id = f.id.clone();
+                let pending = self
+                    .stills
+                    .get(&(f.id.clone(), f.version, dark))
+                    .is_some_and(Option::is_none);
+                strip = strip.child(
+                    v_flex()
+                        .flex_none()
+                        .w(px(card_w))
+                        .gap(px(6.))
+                        .p(px(8.))
+                        .rounded(px(8.))
+                        .bg(style::bubble_background(cx))
+                        .border_1()
+                        .border_color(if f.picked { green } else { style::hairline(cx) })
+                        .child(
+                            h_flex()
+                                .gap(px(6.))
+                                .items_center()
+                                .child(
+                                    div()
+                                        .flex_none()
+                                        .h(px(18.))
+                                        .px(px(6.))
+                                        .flex()
+                                        .items_center()
+                                        .rounded(px(4.))
+                                        .bg(if f.picked {
+                                            green.opacity(0.18)
+                                        } else {
+                                            accent.opacity(0.14)
+                                        })
+                                        .text_size(px(size::SMALL))
+                                        .font_weight(FontWeight::SEMIBOLD)
+                                        .text_color(if f.picked { green } else { accent })
+                                        .child(f.variant.clone()),
+                                )
+                                .child(
+                                    div()
+                                        .flex_1()
+                                        .min_w_0()
+                                        .truncate()
+                                        .text_size(px(size::DETAIL))
+                                        .font_weight(FontWeight::MEDIUM)
+                                        .text_color(style::label_text(cx))
+                                        .child(f.title.clone()),
+                                )
+                                .child(
+                                    div()
+                                        .flex_none()
+                                        .whitespace_nowrap()
+                                        .text_size(px(size::SMALL))
+                                        .text_color(style::quiet_text(cx))
+                                        .child(format!("{} · v{}", f.viewport, f.version)),
+                                )
+                                .when(f.changed, |d| {
+                                    d.child(
+                                        div()
+                                            .flex_none()
+                                            .whitespace_nowrap()
+                                            .text_size(px(size::SMALL))
+                                            .font_weight(FontWeight::SEMIBOLD)
+                                            .text_color(style::needs_you(cx))
+                                            .child("Changed"),
+                                    )
+                                }),
+                        )
+                        .child(
+                            crate::a11y::A11yRole::a11y_role(
+                                div()
+                                    .id(SharedString::from(format!("plan-screen-{id}")))
+                                    .w_full()
+                                    .h(px(img_h))
+                                    .rounded(px(6.))
+                                    .overflow_hidden()
+                                    .border(px(if f.picked { 2. } else { 1. }))
+                                    .border_color(edge)
+                                    .bg(style::card_background(cx))
+                                    .cursor(CursorStyle::PointingHand)
+                                    .test_support(),
+                                Role::Image,
+                            )
+                            .aria_label(SharedString::from(format!(
+                                "Screen {words}{}",
+                                if f.picked { ", picked" } else { "" }
+                            )))
+                            .tip("Click to put this screen in the message box")
+                            .on_click(cx.listener(move |this, _: &ClickEvent, _, cx| {
+                                this.chip_text(chip.clone(), cx)
+                            }))
+                            .children(picture.map(|p| img(ImageSource::Image(p)).size_full()))
+                            .when(pending, |d| {
                                 d.child(
                                     div()
-                                        .p(px(6.))
+                                        .p(px(8.))
                                         .text_size(px(size::SMALL))
                                         .text_color(style::quiet_text(cx))
                                         .child(if f.route.is_some() {
-                                            "A page on the dev server: Open in browser"
+                                            "Dev server page: click Open in browser"
                                         } else {
-                                            "Drawing…"
+                                            "Drawing preview…"
                                         }),
                                 )
-                            },
-                        ),
-                    )
-                    .child(
-                        h_flex()
-                            .gap(px(4.))
-                            .child(
-                                bar_button_dyn(
-                                    format!("plan-pick-{id}"),
-                                    "Pick",
-                                    "Pick this take",
-                                    !f.picked,
-                                    cx,
-                                )
-                                .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
-                                .on_click(cx.listener(
-                                    move |this, _: &ClickEvent, _, cx| this.pick_frame(&pick_f, cx),
-                                )),
-                            )
-                            .when(f.route.is_some(), |r| {
-                                r.child(
+                            }),
+                        )
+                        .child(
+                            h_flex()
+                                .gap(px(6.))
+                                .items_center()
+                                .child(
                                     bar_button_dyn(
-                                        format!("plan-open-{id}"),
-                                        "Open in browser",
-                                        "Open it in the agents' browser",
+                                        format!("plan-pick-{id}"),
+                                        if f.picked { "Picked" } else { "Pick" },
+                                        if f.picked {
+                                            "Selected take for this box"
+                                        } else {
+                                            "Pick this take and reference it in chat"
+                                        },
+                                        !f.picked,
+                                        cx,
+                                    )
+                                    .when(!f.picked, |d| {
+                                        d.on_click(cx.listener(
+                                            move |this, _: &ClickEvent, _, cx| {
+                                                this.pick_frame(&pick_f, cx)
+                                            },
+                                        ))
+                                    }),
+                                )
+                                .child(
+                                    bar_button_dyn(
+                                        format!("plan-chat-{id}"),
+                                        "Chat",
+                                        "Put this screen in the message box",
                                         true,
                                         cx,
                                     )
-                                    .on_mouse_down(MouseButton::Left, |_, _, cx| {
-                                        cx.stop_propagation()
-                                    })
                                     .on_click(cx.listener(
                                         move |this, _: &ClickEvent, _, cx| {
-                                            this.open_frame(&open_f, cx)
+                                            this.chip_text(chip_btn.clone(), cx)
                                         },
                                     )),
                                 )
-                            }),
-                    )
-                    .into_any_element(),
-            );
-        }
-        out
+                                .when(f.route.is_some(), |r| {
+                                    r.child(
+                                        bar_button_dyn(
+                                            format!("plan-open-{id}"),
+                                            "Open in browser",
+                                            "Open it in the agents' browser",
+                                            true,
+                                            cx,
+                                        )
+                                        .on_click(
+                                            cx.listener(move |this, _: &ClickEvent, _, cx| {
+                                                this.open_frame(&open_f, cx)
+                                            }),
+                                        ),
+                                    )
+                                }),
+                        ),
+                );
+            }
+            strip.into_any_element()
+        };
+
+        Some(
+            v_flex()
+                .id("plan-screens-drawer")
+                .flex_none()
+                .w_full()
+                .bg(style::card_background(cx))
+                .border_t_1()
+                .border_color(style::hairline(cx))
+                .child(header)
+                .child(content)
+                .into_any_element(),
+        )
     }
 
     fn pick_frame(&mut self, f: &rules::Frame, cx: &mut Context<Self>) {
@@ -2698,7 +3219,7 @@ impl PlanBoardView {
             x.picked = x.id == f.id;
         }
         self.chip_text(chip, cx);
-        self.load_frames(Some(f.id.clone()), cx);
+        self.load_frames_opts(Some(f.id.clone()), true, cx);
     }
 
     /// Any chip text into the thread's message box.
@@ -2716,7 +3237,7 @@ impl PlanBoardView {
     }
 }
 
-/// `bar_button` with an id made at run time (one per screen).
+/// `bar_button` with an id made at run time (one per screen control).
 fn bar_button_dyn(
     id: String,
     label: &'static str,
@@ -2728,17 +3249,23 @@ fn bar_button_dyn(
     crate::a11y::A11yRole::a11y_role(
         div()
             .id(SharedString::from(id))
-            .h(px(20.))
-            .px(px(6.))
+            .flex_none()
+            .h(px(22.))
+            .px(px(8.))
             .flex()
             .items_center()
+            .whitespace_nowrap()
             .rounded(px(5.))
             .border_1()
             .border_color(style::button_edge(cx))
             .bg(style::button_fill(cx))
             .text_size(px(size::SMALL))
             .text_color(style::label_text(cx))
-            .when(!enabled, |d| d.opacity(0.4))
+            .when(!enabled, |d| d.opacity(0.45))
+            .when(enabled, |d| {
+                d.cursor(CursorStyle::PointingHand)
+                    .hover(|s| s.bg(style::hover_fill(cx)))
+            })
             .test_support(),
         Role::Button,
     )

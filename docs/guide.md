@@ -2519,39 +2519,45 @@ looks the same as before.
    thread's message box as a chip (Shift-click adds more, Esc takes the
    board's chips back out). Say what to change; the agent writes a new
    version, and its note says what changed. Changed boxes are marked.
-4. **Approve.** Nothing can be sent until you press **Approve plan**, which
-   approves the version you see. If the agent changes the plan afterwards,
-   the board says "Changed since you approved" and every box's Send to…
-   greys out until you approve again. Boxes already sent keep running.
+4. **Approve.** You can edit the plan, pick Skills, and open **Screens**
+   while it's still a Draft. Only **Send** (starting build threads) waits
+   for **Approve plan**, which approves the version you see. If the agent
+   changes the plan afterwards, the board says "Changed since you approved"
+   and every box's Send greys out until you approve again. Boxes already
+   sent keep running.
 5. **Skills (optional).** Skills in the board's bar picks skills from the
    ones the thread's folder can run. Every brief names them.
-6. **Send a box.** A box's **Send to…** shows the login (Claude or Codex),
+6. **Send a box.** A box's **Send** shows the login (Claude or Codex),
    the access (the planner's unless you pick another), the title, the
-   skills and the whole brief, which you can edit. **Start** begins one
-   thread nested under the planner. Pressing it twice still starts one. A
-   planner in plan mode sends its boxes with Full access, so they can
-   build; pick another access in the sheet if you want. You can also skip
-   Send to… and tell the planner "build it" once you've approved.
+   skills, any picked screen for that box, and the whole brief, which you
+   can edit. **Start** begins one thread nested under the planner. Pressing
+   it twice still starts one. A planner in plan mode sends its boxes with
+   Full access, so they can build; pick another access in the sheet if you
+   want. You can also skip Send and tell the planner "build it" once you've
+   approved.
 7. **Follow it.** Each sent box shows its thread's state: Working, Needs
-   you, Done, Failed, Archived or Can't see it. Click the badge to open the
-   thread. Needs you also shows in the Inbox, notifications and the Dock
-   badge, the usual way. A failed or archived box offers **Send again**.
+   you, Done, Failed, Archived or Can't see it. Hover for its latest line,
+   or click the badge to open the thread. Needs you also shows in the
+   Inbox, notifications and the Dock badge, the usual way. A failed or
+   archived box offers **Send again**.
 8. **Review.** A box finishing doesn't wake the planner. When every sent
    box is done, **Ask planner to review** sends it one message, if you
    press it. The version button lists the last 10 versions; picking an
    older one asks the agent to bring it back.
 
 **Screens (Plan board mockups experiment).** With it on too, a box's
-**Screens…** shows the agent's screens for it as pictures beside it, up to
-three takes side by side. To ask for them, click the box so its chip is
-in the message box, then type what you want, like "make three takes on
-this screen" or "sketch the empty state and the list with 20 todos", and
-send it. The agent puts them beside the box, not in a review window, and
-nothing is built to make them: each take is one still page. **Changed** on
-a box only means the agent changed that box in the newest version. Click a screen to put it in the message box, or **Pick** one to ring
-it green and send it as a chip. Screens are drawn sealed, with no scripts
-or network, and **Open in browser** opens one in the agents' browser,
-never your own.
+**Screens** opens a tray below the board with the agent's screen takes for
+that box, up to three side by side. Screens work in Draft before approving.
+If a box has no screens yet, press **Generate 3 takes** to ask the agent
+right away, or **Mention box in chat** to describe custom screens or point
+to a mockup you already picked outside the board. The agent puts them in
+the tray, not in a review window, and nothing is built to make them: each
+take is one still page. **Changed** on a box only means the agent changed
+that box in the newest version. Click a screen or **Chat** to put it in
+the message box, or **Pick** one to ring it green, show it on the box pill,
+and include it in the box's Send brief. Screens are drawn sealed, with no
+scripts or network, and **Open in browser** opens a dev server route in
+the agents' browser, never your own.
 
 **Project coordinators (Plan board coordinators experiment).** On a copy
 of Threadbear with Mike's project coordinators, Send to… can also **Give
