@@ -120,6 +120,7 @@ fn mention_chip_body(title: &str, kind: MentionKind, selected: bool, cx: &App) -
     // A speech bubble for a thread, a card for a Notion card, the file's kind for a file.
     let symbol = match kind {
         MentionKind::Thread => "bubble.left",
+        MentionKind::Board => "square.on.square",
         MentionKind::Card => "square.text.square",
         MentionKind::File => file_symbol(title),
     };
@@ -502,6 +503,7 @@ impl Composer {
                     Some(chip) => {
                         let kind = match chip.kind {
                             MentionKind::Thread => "thread",
+                            MentionKind::Board => "box",
                             MentionKind::Card => "card",
                             MentionKind::File => "file",
                         };

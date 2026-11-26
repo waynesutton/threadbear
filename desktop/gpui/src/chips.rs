@@ -241,6 +241,11 @@ enum ChipKind {
         title: String,
         id: String,
     },
+    /// A box on a thread's plan board (`board:<thread>#<box>`, plan_board.rs).
+    Board {
+        title: String,
+        url: String,
+    },
     /// A file on the Mac that isn't uploaded, by its path (`find_files`).
     File {
         name: String,
@@ -252,7 +257,9 @@ impl ChipKind {
     fn label(&self) -> String {
         match self {
             ChipKind::Picture(index) => format!("Picture {}", index + 1),
-            ChipKind::Card { title, .. } | ChipKind::Thread { title, .. } => title.clone(),
+            ChipKind::Card { title, .. }
+            | ChipKind::Thread { title, .. }
+            | ChipKind::Board { title, .. } => title.clone(),
             ChipKind::File { name, .. } => name.clone(),
         }
     }
@@ -264,6 +271,7 @@ impl ChipKind {
             ChipKind::Picture(_) => "photo",
             ChipKind::Card { .. } => "square.text.square",
             ChipKind::Thread { .. } => "bubble.left",
+            ChipKind::Board { .. } => "square.on.square",
             ChipKind::File { name, .. } => crate::composer_inline::file_symbol(name),
         }
     }
@@ -275,6 +283,7 @@ impl ChipKind {
             ChipKind::Picture(_) => "picture",
             ChipKind::Card { .. } => "card",
             ChipKind::Thread { .. } => "thread",
+            ChipKind::Board { .. } => "box",
             ChipKind::File { .. } => "file",
         };
         format!("{kind}: {}", self.label())
@@ -292,6 +301,10 @@ fn chip_kind(mention: &Mention) -> ChipKind {
         (MentionKind::Thread, Some(id)) => ChipKind::Thread {
             title: mention.title.clone(),
             id: id.to_owned(),
+        },
+        (MentionKind::Board, _) => ChipKind::Board {
+            title: mention.title.clone(),
+            url: mention.url.clone(),
         },
         (MentionKind::File, _) => ChipKind::File {
             name: mention.title.clone(),
@@ -662,6 +675,12 @@ impl ThreadPane {
                     .on_click(move |_, _, cx| open_gate::open_file(&path, origin, cx))
                     .children(shown)
             }
+            // A box of a plan board: its board's tab.
+            ChipKind::Board { url, .. } => chip.tip("Show it on the plan board").on_click(
+                cx.listener(move |this, _: &ClickEvent, window, cx| {
+                    this.follow_link(&url, "", false, window, cx)
+                }),
+            ),
             ChipKind::Thread { id, .. } => {
                 let shown = card_shown(&key, QUICK)
                     .then(|| self.thread_card_for(&id, cx))
@@ -780,6 +799,7 @@ pub(crate) fn peek_command(
                     .map(|image| format!("{}={}", kind.label(), image.path)),
                 ChipKind::Card { url, .. } => Some(format!("{}={url}", kind.label())),
                 ChipKind::File { path, .. } => Some(format!("{}={path}", kind.label())),
+                ChipKind::Board { url, .. } => Some(format!("{}={url}", kind.label())),
                 ChipKind::Thread { .. } => None,
             })
             .collect();

@@ -1429,6 +1429,8 @@ impl Threadbear {
                     // An open review window hears its review change whichever
                     // thread is open here (review_window.rs).
                     crate::review_window::receive_event(&params, cx);
+                    // A plan board's tab hears its new versions (plan_board.rs).
+                    crate::plan_board::receive_event(&params, cx);
                     // Each pane takes its own thread's events only: the open
                     // ones, and those kept loaded, which stay subscribed.
                     let id = params["threadId"].as_str().unwrap_or("");

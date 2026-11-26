@@ -949,6 +949,11 @@ fn step(
         | "refusal" | "appearance" | "theme" | "resize" | "canvas" => {
             shell_step(app, cmd, window, cx)
         }
+        // A thread's plan board (plan_board.rs, the planBoard experiment).
+        "board" => {
+            window.render_frame(cx);
+            crate::plan_board::automation(app, cmd, window, cx)
+        }
         "search" => {
             let words = text(cmd, "text").to_string();
             let search = app.read(cx).search.clone();

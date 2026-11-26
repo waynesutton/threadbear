@@ -335,7 +335,7 @@ impl ThreadPane {
                     crate::rows::markdown::percent_decode(rest.strip_prefix("?p=").unwrap_or(rest));
                 Some(LinkTarget::File(self.find_file(&text)))
             }
-            Some("work" | "thread" | "review" | "tbchip" | "button" | "print") => None,
+            Some("work" | "thread" | "review" | "tbchip" | "button" | "print" | "board") => None,
             // `Foo.swift:12` reads as a scheme, but it's a file and a line.
             Some(s) if s.contains('.') && file_refs::strip_line(url) != url => {
                 Some(LinkTarget::File(self.find_file(url)))
@@ -456,6 +456,14 @@ impl ThreadPane {
             .filter(|(s, _)| s.eq_ignore_ascii_case("threadbear-skill"))
         {
             return self.open_skill_link(rest, cx);
+        }
+        // "Drew a plan · Show plan", or a chip of a box: the board's tab.
+        if let Some(rest) = url.strip_prefix("board:") {
+            let thread = rest.split('#').next().unwrap_or_default().to_owned();
+            if let Some(app) = self.composer.read(cx).app.upgrade() {
+                app.update(cx, |a, cx| a.show_plan(&thread, cx));
+            }
+            return;
         }
         // A button: link is its pill's to press, so it goes on as any other.
         match rules::thread_link(url) {

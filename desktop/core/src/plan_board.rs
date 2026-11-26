@@ -504,7 +504,7 @@ pub fn layout(g: &Graph, positions: &BTreeMap<String, (f32, f32)>) -> Layout {
             (d, x)
         })
         .collect();
-    depth_of.sort_by(|a, b| b.0.cmp(&a.0));
+    depth_of.sort_by_key(|d| std::cmp::Reverse(d.0));
     for (_, grp) in depth_of {
         let members = g
             .nodes

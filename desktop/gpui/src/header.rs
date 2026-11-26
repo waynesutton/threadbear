@@ -556,9 +556,14 @@ impl Threadbear {
             .as_ref()
             .map(|t| self.render_more_button(t, cx))
             .or_else(|| self.render_project_more_button(cx));
+        // Only for a thread whose agent drew a plan (plan_board.rs).
+        let plan = thread
+            .as_ref()
+            .and_then(|t| self.render_show_plan_button(&t.id, cx));
         h_flex()
             .flex_none()
             .items_center()
+            .children(plan)
             .child(back)
             .child(forward)
             .children(share)
