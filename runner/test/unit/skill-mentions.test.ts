@@ -44,9 +44,11 @@ test('another agent is sent to the skill file, wherever /name is; with no file, 
 test('store skills in an ACP thread: in the picker, and /name is words for the agent, not a command', async () => {
   const { commandsPart } = await import('../../src/runner/commands.ts');
   const storeSkills = () => [
-    { name: 'inkworks', description: 'Ink pages', path: '/store/inkworks/SKILL.md' },
-    { name: 'handoff', description: 'store handoff', path: '/store/handoff/SKILL.md' },
-    { name: 'status', description: 'store status', path: '/store/status/SKILL.md' },
+    { name: 'inkworks', description: 'Ink pages', path: '/store/inkworks/SKILL.md', scope: 'store', always: true },
+    { name: 'handoff', description: 'store handoff', path: '/store/handoff/SKILL.md', scope: 'store', always: true },
+    { name: 'status', description: 'store status', path: '/store/status/SKILL.md', scope: 'store', always: true },
+    // One of the user's own, from ~/.claude/skills.
+    { name: 'x-search', description: 'Search X', path: '/home/.claude/skills/x-search/SKILL.md', scope: 'user', always: true },
   ];
   // The agent's own /handoff, from its live list.
   const commandCache = new Map([['oc\0/work\0trusted', { at: 0, commands: [{ name: 'handoff', source: 'cli' }] }]]);
@@ -65,6 +67,7 @@ test('store skills in an ACP thread: in the picker, and /name is words for the a
   assert.deepEqual(skills.map((c) => [c.name, c.scope, c.path]), [
     ['inkworks', 'store', '/store/inkworks/SKILL.md'],
     ['status', 'store', '/store/status/SKILL.md'],
+    ['x-search', 'user', '/home/.claude/skills/x-search/SKILL.md'],
   ]);
   assert.equal(commands.find((c) => c.name === 'handoff')?.source, 'cli', "the agent's own /handoff stays its own");
   // Claude and Codex get the store themselves: no rows added here.
@@ -140,4 +143,57 @@ test('/threadbear:name is the store skill name; plugin:name mentions work', () =
   assert.deepEqual(mentionedSkills('/threadbear:nope here', known), []);
   assert.equal(withSkillMentions('draw it with /threadbear:pele', known, 'codex'), 'draw it with $pele');
   assert.equal(withSkillMentions('/threadbear:pele draw it', known, 'claude'), '/threadbear:pele draw it');
+});
+
+import fs from 'node:fs';
+import path from 'node:path';
+import { personalSkills, skillGuidance } from '../../src/skills.ts';
+
+test("personalSkills: the user's own skills with their files, links followed, first-word-only ones marked", () => {
+  const dir = tmpDir();
+  const skill = (at: string, text: string) => {
+    fs.mkdirSync(at, { recursive: true });
+    fs.writeFileSync(path.join(at, 'SKILL.md'), text);
+  };
+  skill(path.join(dir, 'skills', 'x-search'), '---\nname: x-search\ndescription: Search X\n---\nbody');
+  skill(path.join(dir, 'skills', 'deploy'), '---\nname: deploy\ndescription: Ship it\ndisable-model-invocation: true\n---\nbody');
+  skill(path.join(dir, 'elsewhere', 'linked'), '---\ndescription: By a link\n---\nbody');
+  fs.symlinkSync(path.join(dir, 'elsewhere', 'linked'), path.join(dir, 'skills', 'linked'));
+  fs.mkdirSync(path.join(dir, 'skills', 'synced'));
+  assert.deepEqual(personalSkills(dir).map((s) => [s.name, s.description, s.scope, s.always]), [
+    ['deploy', 'Ship it', 'user', false],
+    ['linked', 'By a link', 'user', true],
+    ['x-search', 'Search X', 'user', true],
+  ]);
+  assert.deepEqual(personalSkills(path.join(dir, 'none')), []);
+});
+
+test('skillGuidance: the Always skills with their files, descriptions cut short; none, nothing', () => {
+  const text = skillGuidance([
+    { name: 'pele', description: 'Draws diagrams. '.repeat(30), path: '/s/pele/SKILL.md', scope: 'store', always: true },
+    { name: 'deploy', description: 'Ship it', path: '/s/deploy/SKILL.md', scope: 'user', always: false },
+  ]);
+  const lines = text.split('\n');
+  assert.equal(lines.length, 2);
+  assert.match(lines[0], /read its file in full before you start/);
+  assert.match(lines[1], /^- pele: Draws diagrams\..*… \(\/s\/pele\/SKILL\.md\)$/);
+  assert.ok(lines[1].length < 200);
+  assert.equal(skillGuidance([{ name: 'deploy', description: 'Ship it', path: '/s/deploy/SKILL.md', scope: 'user', always: false }]), '');
+});
+
+test('a skills change empties the picker lists, and a CLI due a fresh start is not asked for its old one', async () => {
+  const { clisPart } = await import('../../src/runner/clis.ts');
+  const { commandsPart } = await import('../../src/runner/commands.ts');
+  const commandCache = new Map([['a\0/w\0trusted', { at: 0, commands: [] }]]);
+  clisPart.refreshForSkills.call({ commandCache, threads: new Map() } as never);
+  assert.equal(commandCache.size, 0);
+  let live = 0;
+  let passed: unknown;
+  const runner = {
+    mustGet: () => ({ rec: { accountId: 'a', cwd: '/w', permissionMode: 'auto' }, rt: { releaseWhenIdle: true, session: { commands: async () => (live++, []) } } }),
+    listCommands: async (_a: string, _c: string, _m: string, fn: unknown) => ((passed = fn), { commands: [] }),
+  };
+  await commandsPart.threadCommands.call(runner as never, 't1');
+  assert.equal(passed, undefined);
+  assert.equal(live, 0);
 });

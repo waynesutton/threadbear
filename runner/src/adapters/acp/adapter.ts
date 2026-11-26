@@ -50,6 +50,9 @@ export type AcpAdapterDeps = {
   log: Logger;
   toolsFor?: (threadId: string) => ToolDefinition[];
   extraGuidance?: () => string;
+  // The user's skills an ACP agent may use unasked, with their files, as it
+  // has no skills of its own to find them as (skills.ts skillGuidance).
+  skillGuidance?: () => string;
   timings?: Partial<AcpTimings>;
   env?: NodeJS.ProcessEnv;
   now?: () => number;
@@ -459,7 +462,7 @@ export class AcpSession implements AgentSession {
     this.noteOptions(res);
     this.ownEfforts = modelEfforts(res.models);
     if (!opts.resume) {
-      this.preamble = [defs.length ? toolGuidance(defs) : '', defs.length ? (deps.extraGuidance?.() ?? '') : '', deps.agent.folderNote?.(opts.cwd) ?? '', opts.instructions ?? ''].filter(Boolean).join('\n\n') || undefined;
+      this.preamble = [defs.length ? toolGuidance(defs) : '', defs.length ? (deps.extraGuidance?.() ?? '') : '', deps.agent.folderNote?.(opts.cwd) ?? '', deps.skillGuidance?.() ?? '', opts.instructions ?? ''].filter(Boolean).join('\n\n') || undefined;
     }
     await this.applyMode();
     if (this.model) await this.applyModel(this.model);

@@ -236,10 +236,17 @@ message names goes to Codex as `$threadbear:<name>`, and one picked as a
 command is sent as a skill item under that name. The ACP agents (Cursor,
 OpenCode, Grok, Antigravity) have no skills of their own to load the
 store's as: their list has the store's skills too, as `<name>` with
-`scope: "store"` and the file as `path`, and a message naming one, as its
-first word or later, reaches the agent with a line sending it to that
-SKILL.md to read and follow. A command of the agent's own with the same
-name stays the agent's, and the skill is left out of its list. Listing a folder's commands
+`scope: "store"` and the file as `path`, then the user's own from
+`<claude folder>/skills` (`scope: "user"`) under any other name. A message
+naming one, as its first word or later, reaches the agent with a line
+sending it to that SKILL.md to read and follow, and a new session starts
+with the Always ones listed (name, the start of the description, file),
+so the agent uses one that fits unasked. A command of the agent's own with
+the same name stays the agent's, and the skill is left out of its list.
+
+A change to the store empties the runner's kept lists, and a thread whose
+CLI is due a fresh start for it is listed afresh rather than by that CLI,
+so a palette opened after the change has the new skills. Listing a folder's commands
 loads the plugin as a session does, so they're in the list whether or not
 the thread has a CLI running. In a mention, `/threadbear:<name>` means
 the store skill `<name>`, and `/plugin:name` names a plugin's skill.

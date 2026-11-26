@@ -147,6 +147,9 @@ export const clisPart = {
   // before its next message, which resumes the same conversation with the
   // new skills; idle ones go now, softly, as for a CLI update.
   refreshForSkills(this: Runner): void {
+    // The picker's lists are from before the change: asked for again when a
+    // palette next opens, rather than ten minutes on (Wayne, 26 Nov 2026).
+    this.commandCache.clear();
     for (const st of this.threads.values()) {
       const { rec, rt } = st;
       if (!rt.session || rt.closing) continue;

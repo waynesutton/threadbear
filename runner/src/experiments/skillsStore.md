@@ -9,7 +9,7 @@ reminder: 080eb958
 
 ## What it does
 
-Skills in the bar on the left opens the Skills page: import a skill from a GitHub link, write your own with New Skill, or add a suggested one. Every thread's agent gets them, on every login, Claude and Codex alike. With Always on an agent uses a skill whenever it fits; with it off, only when you type its slash command. Turning the experiment off takes every skill away from every thread and hides Skills, and keeps your skills for when it's back on. A change reaches each thread when its agent next starts.
+Skills in the bar on the left opens the Skills page: import a skill from a GitHub link, write your own with New Skill, or add a suggested one. Every thread's agent gets them, on every login, Claude and Codex alike. Cursor, OpenCode, Grok and Antigravity threads get them too, with your own skills from `~/.claude/skills`: both are in the slash palette, the agent is told of the Always ones as a thread starts, and it's sent to a skill's file when you name it. With Always on an agent uses a skill whenever it fits; with it off, only when you type its slash command. Turning the experiment off takes every skill away from every thread and hides Skills, and keeps your skills for when it's back on. A change reaches each thread when its agent next starts.
 
 ## Lives in
 

@@ -703,7 +703,7 @@ export type RunnerDeps = {
   /** The skills threads get (skills.ts): none while the store is off. */
   skillNames?: () => string[];
   /** The same skills with their files, for an agent without the store (SkillStore.files). */
-  storeSkills?: () => { name: string; description: string; path: string }[];
+  storeSkills?: () => import('./skills.ts').SharedSkill[];
   // A completed turn asked Mike to Restart to Update, by end_turn or in its
   // closing "What I need from you" (app-restarts.ts signs the thread up).
   appRestartAsked?: (threadId: string) => void;
@@ -816,7 +816,7 @@ export class Runner {
   secrets: SecretStore;
   models?: Pick<Models, 'generate'>;
   skillNames?: () => string[];
-  storeSkills?: () => { name: string; description: string; path: string }[];
+  storeSkills?: () => import('./skills.ts').SharedSkill[];
   projects?: Projects;
   // Bears (bears.ts): what a new thread in a bear's folder starts with.
   // Unset while the experiment is off.
@@ -2466,10 +2466,12 @@ export class Runner {
     // work in this thread's CLI (skill-mentions.ts).
     if (provider) {
       const store = this.skillNames?.() ?? [];
-      const names = [...store, ...(place ? this.listedSkills(place.accountId, place.cwd) : [])];
+      // An agent without skills of its own: the ones it's handed, the user's own too.
+      const handed = provider === 'claude' || provider === 'codex' ? [] : (this.storeSkills?.() ?? []);
+      const names = [...store, ...handed.map((s) => s.name), ...(place ? this.listedSkills(place.accountId, place.cwd) : [])];
       const codexName = provider === 'codex' ? this.codexSkillName(store, place) : undefined;
       // An agent without the store is sent to the skill's file instead.
-      const files = provider === 'claude' || provider === 'codex' ? undefined : new Map((this.storeSkills?.() ?? []).map((s) => [s.name, s.path]));
+      const files = provider === 'claude' || provider === 'codex' ? undefined : new Map(handed.map((s) => [s.name, s.path]));
       if (names.length) msg = { ...msg, text: withSkillMentions(msg.text, names, provider, { codexName, file: files ? (n) => files.get(n) : undefined }) };
     }
     if (msg.beforeMessage) return `${msg.text}\n\nThis ${msg.origin === 'schedule' ? 'reminder' : 'message'} was queued before a later message in this thread. Follow the later instructions, including any request to stop.`;

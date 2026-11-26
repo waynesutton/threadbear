@@ -109,6 +109,69 @@ export function findSkillInPage(html: string): GitHubTarget | null {
 
 // MARK: SKILL.md
 
+/**
+ * A skill as an agent without skills of its own is given it: the store's
+ * (SkillStore.files) or one of the user's own (personalSkills). always: the
+ * agent may use it unasked, when it fits.
+ */
+export type SharedSkill = { name: string; description: string; path: string; scope: 'store' | 'user'; always: boolean };
+
+/**
+ * The user's own skills, <claude folder>/skills/<name>/SKILL.md, which
+ * Claude finds itself and Codex has links to: read here for the agents
+ * that find neither. A link to a folder counts, as Claude follows them. One
+ * with `disable-model-invocation: true` is only for when it's named.
+ */
+export function personalSkills(claudeDir: string): SharedSkill[] {
+  const root = path.join(claudeDir, 'skills');
+  let entries: string[];
+  try {
+    entries = fs.readdirSync(root);
+  } catch {
+    return [];
+  }
+  const out: SharedSkill[] = [];
+  for (const entry of entries.sort()) {
+    if (entry.startsWith('.')) continue;
+    const file = path.join(root, entry, 'SKILL.md');
+    let text: string;
+    try {
+      text = fs.readFileSync(file, 'utf8');
+    } catch {
+      continue;
+    }
+    const front = readFrontmatter(text);
+    const name = /^[a-z0-9][a-z0-9-]*$/.test(front.name ?? '') ? front.name! : entry.toLowerCase();
+    if (!/^[a-z0-9][a-z0-9-]*$/.test(name) || out.some((s) => s.name === name)) continue;
+    const userOnly = /^disable-model-invocation:\s*true\s*$/m.test(/^---\r?\n([\s\S]*?)\r?\n---/.exec(text)?.[1] ?? '');
+    out.push({ name, description: front.description ?? '', path: file, scope: 'user', always: !userOnly });
+  }
+  return out;
+}
+
+// A description in the list a session starts with: enough to tell when the
+// skill fits, as the file has the rest.
+const GUIDANCE_DESCRIPTION_MAX = 160;
+
+/**
+ * What an agent without skills of its own is told as a session starts, so
+ * it uses an Always skill when one fits, as Claude and Codex do from their
+ * own lists. '' with none.
+ */
+export function skillGuidance(skills: SharedSkill[]): string {
+  const always = skills.filter((s) => s.always);
+  if (!always.length) return '';
+  const short = (d: string) => {
+    const one = d.replace(/\s+/g, ' ').trim();
+    return one.length > GUIDANCE_DESCRIPTION_MAX ? `${one.slice(0, GUIDANCE_DESCRIPTION_MAX - 1).trimEnd()}…` : one;
+  };
+  const lines = always.map((s) => `- ${s.name}${s.description ? `: ${short(s.description)}` : ''} (${s.path})`);
+  return [
+    "The user's skills. Each is a file of instructions for one kind of task. When a task fits one, read its file in full before you start, with the files beside it that it points to, and follow it. Leave the others unread, and don't list them to the user unless asked. The user names one as /name.",
+    ...lines,
+  ].join('\n');
+}
+
 export type Frontmatter = { name?: string; description?: string };
 
 /** The name and description in a SKILL.md's frontmatter. */
@@ -313,13 +376,13 @@ export class SkillStore {
   /**
    * Each skill with its file, for an agent that has no skills of its own to
    * load them as (Cursor, OpenCode and the other ACP ones): the picker lists
-   * them, and a message naming one sends the agent to the file. None while
-   * the store is off.
+   * them, a message naming one sends the agent to the file, and the Always
+   * ones are named to it as a session starts. None while the store is off.
    */
-  files(): { name: string; description: string; path: string }[] {
+  files(): SharedSkill[] {
     if (!this.enabled) return [];
     return this.skills
-      .map((s) => ({ name: s.name, description: s.description, path: path.join(this.pluginDir, 'skills', s.name, 'SKILL.md') }))
+      .map((s) => ({ name: s.name, description: s.description, path: path.join(this.pluginDir, 'skills', s.name, 'SKILL.md'), scope: 'store' as const, always: s.always }))
       .filter((s) => fs.existsSync(s.path))
       .sort((a, b) => a.name.localeCompare(b.name));
   }

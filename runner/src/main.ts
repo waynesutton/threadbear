@@ -100,7 +100,7 @@ import { acquireLock } from './lock.ts';
 import { isDirectory, removeTempFiles } from './fsutil.ts';
 import { Models } from './models/index.ts';
 import { SettingsService, modelMethods, settingsMethods } from './settings.ts';
-import { SKILLS_STORE, SkillStore, skillMethods } from './skills.ts';
+import { SKILLS_STORE, SkillStore, personalSkills, skillGuidance, skillMethods, type SharedSkill } from './skills.ts';
 import { PublicProfile, profilePageMethods } from './public-profile.ts';
 import { SelfProfiler, profileMethods, watchStalls } from './self-profile.ts';
 import { TrustOffThread } from './trust-off-thread.ts';
@@ -467,6 +467,13 @@ async function main(): Promise<void> {
   let setSkillsExperiment: ((on: boolean) => void) | undefined;
   const skills = new SkillStore({ dataDir: cfg.home, accounts: () => accounts.list(), publish: (n) => publishSkills(n), log, version: RUNNER_VERSION, onChange: () => refreshSkills(), setExperiment: (on) => setSkillsExperiment?.(on) });
   skills.sync();
+  // For the agents that find no skills themselves (the ACP ones): the
+  // store's, then the user's own under another name.
+  const sharedSkills = (): SharedSkill[] => {
+    const store = skills.files();
+    const taken = new Set(store.map((s) => s.name));
+    return [...store, ...personalSkills(cfg.claudeMainDir).filter((s) => !taken.has(s.name))];
+  };
   // The pages experiment (pages.ts): one store for every thread, made the
   // first time a thread is handed the page tools.
   let pageStore: Pages | undefined;
@@ -563,6 +570,7 @@ async function main(): Promise<void> {
         log,
         toolsFor: codexStyleTools,
         extraGuidance: () => richGuidance(),
+        skillGuidance: () => skillGuidance(sharedSkills()),
         dataDir: cfg.home,
         extraMcpServers: acpGatewayServers(p),
       }),
@@ -607,7 +615,7 @@ async function main(): Promise<void> {
     // are for every thread, and a change to either is news the same way.
     standingInstructions: () => [instructions.given().trim(), recipesHabits?.() ?? ''].filter(Boolean).join('\n\n'),
     skillNames: () => skills.names(),
-    storeSkills: () => skills.files(),
+    storeSkills: () => sharedSkills(),
     projects,
     atMac: () => atMac,
     config: cfg,

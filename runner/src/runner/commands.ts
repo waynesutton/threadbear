@@ -146,7 +146,8 @@ export const commandsPart = {
     const { rec, rt } = this.mustGet(threadId);
     // This CLI, as it is now: listCommands waits on a look first, and a
     // CLI started meanwhile may be in another folder (Codex's review).
-    const session = rt.session;
+    // Not a CLI due a fresh start (a skills change): its list is the old one.
+    const session = rt.releaseWhenIdle ? undefined : rt.session;
     return this.listCommands(rec.accountId, rec.cwd, rec.permissionMode, session?.commands ? async () => (rt.session === session ? session.commands!() : undefined) : undefined);
   },
 
@@ -230,7 +231,7 @@ export const commandsPart = {
     const own = new Set(taken);
     return (this.storeSkills?.() ?? [])
       .filter((s) => !own.has(s.name) && s.name !== 'model' && s.name !== 'effort')
-      .map((s) => ({ name: s.name, source: 'skill' as const, scope: 'store', ...(s.description ? { description: s.description } : {}), path: s.path }));
+      .map((s) => ({ name: s.name, source: 'skill' as const, scope: s.scope, ...(s.description ? { description: s.description } : {}), path: s.path }));
   },
 
   // The names of the commands this thread's agent last listed, from the
