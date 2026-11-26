@@ -113,3 +113,15 @@ Feature: Settings
     Then Settings says the accent is "plum"
     When I press "Rows and turns closer together" in Settings
     Then Settings says the spacing is compact
+
+  # Appearance's New thread box (Wayne, 26 Nov): Bottom holds the page's
+  # stack near the bottom of the window, so the box grows upwards.
+  @settings.general @swift-pending
+  Scenario: The new-thread box can sit near the bottom of the window
+    When I start a new thread
+    Then the new-thread box is at the "middle"
+    When I open Settings
+    And I press "The new-thread box sits near the bottom" in Settings
+    Then the new-thread box is at the "bottom"
+    When I press "The new-thread box sits in the middle" in Settings
+    Then the new-thread box is at the "middle"

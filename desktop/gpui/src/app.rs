@@ -1833,6 +1833,14 @@ impl Threadbear {
         self.look_changed(window, cx);
     }
 
+    /// Appearance's New thread box: near the bottom, or the middle as it
+    /// ships. Only Bottom is saved, so None stays the default.
+    pub(crate) fn set_new_thread_box_bottom(&mut self, bottom: bool, cx: &mut Context<Self>) {
+        self.settings.saved.new_thread_box_bottom = bottom.then_some(true);
+        self.save_settings_soon(cx);
+        cx.notify();
+    }
+
     /// Appearance's Font (`style::Font`).
     pub(crate) fn set_font(
         &mut self,

@@ -22,6 +22,11 @@ Then('the new-thread page asks {string}', async function (this: ThreadbearWorld,
   await this.until(`the heading "${heading}"`, (d) => d.newThread?.heading === heading);
 });
 
+// Appearance's New thread box: "middle" as it ships, or "bottom".
+Then('the new-thread box is at the {string}', async function (this: ThreadbearWorld, place: string) {
+  await this.until(`the box at the ${place}`, (d) => d.newThread?.boxAt === place);
+});
+
 Then('the note under the box says {string}', async function (this: ThreadbearWorld, note: string) {
   await this.until(`the note "${note}"`, (d) => d.newThread?.note === note);
 });

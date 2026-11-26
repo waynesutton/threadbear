@@ -3588,6 +3588,11 @@ app opens.
 - **Font**: Allo (the default, [a free font](https://allo.joshpuckett.me)
   that comes with the app), System, Serif or Monospaced for everything but
   code, which keeps its own.
+- **New thread box**: Middle (the default) puts the message box on a new
+  thread a little above the middle of the window, growing downwards as you
+  type. Bottom puts it near the bottom of the window, with the heading
+  above it and the room cards under it, so it grows upwards as you add
+  lines with Shift-Return.
 
 The website has the same three themes in its settings menu (the gear),
 under the light and dark choices. It remembers the one you pick on that

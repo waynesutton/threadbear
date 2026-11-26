@@ -24,6 +24,10 @@ use threadbear_core::logins::RunnerLogins;
 use threadbear_core::new_thread::{self as draft_rules, Draft, NewThreadPicks, RoomCard, RoomLook};
 use threadbear_core::reducer::ImageRef;
 
+/// With the New thread box at Bottom: the room under the page's stack (the
+/// box, then the note and room cards), so the cards clear the window's edge.
+const BOTTOM_GAP: f32 = 32.;
+
 /// What git said of a folder, for a cloud runner's box to clone it: its
 /// top and origin (None: not a repo, or none), and for one that isn't a
 /// repo, the names of the repos directly inside it.
@@ -1050,7 +1054,8 @@ impl Threadbear {
     // ---- Drawing ----
 
     /// The page: the box about 40% of the way down, the heading above it and
-    /// the note under it (ComposerPlacement). One layout for any window: the
+    /// the note under it (ComposerPlacement), or, with Appearance's New thread
+    /// box at Bottom, the same stack near the bottom. One layout for any window: the
     /// box's top is placed rather than its middle, so it grows downwards as
     /// Mike types instead of creeping up the pane. Unlike ComposerPlacement
     /// it doesn't measure the heading and note to stop them being cut off in a
@@ -1164,17 +1169,22 @@ impl Threadbear {
             .page(cx.reduce_motion(), window)
             .unwrap_or((1., 0.));
         let box_marker = self.opening.box_marker();
+        // Settings > General > Appearance's New thread box at Bottom: the
+        // same stack held by its foot near the bottom of the pane instead,
+        // so the box grows upwards as you type (Wayne, 26 Nov).
+        let bottom = self.settings.new_thread_box_bottom();
+        let stack = v_flex().absolute().left_0().right_0();
+        let stack = if bottom {
+            stack.bottom(px(BOTTOM_GAP - rise))
+        } else {
+            stack.top(relative(0.4)).mt(px(-56. + rise))
+        };
         div()
             .relative()
             .size_full()
             .overflow_hidden()
             .child(
-                v_flex()
-                    .absolute()
-                    .left_0()
-                    .right_0()
-                    .top(relative(0.4))
-                    .mt(px(-56. + rise))
+                stack
                     .opacity(opacity)
                     .child(
                         div()
@@ -1652,6 +1662,7 @@ pub(crate) fn page_dump(t: &Threadbear, _cx: &App) -> Value {
         .map(|p| format!("In {}", p.title));
     json!({
         "heading": draft_rules::HEADING,
+        "boxAt": if t.settings.new_thread_box_bottom() { "bottom" } else { "middle" },
         "note": note,
         "project": project,
         "rooms": rooms.iter().map(|r| json!({ "label": r.label, "line": r.line, "selected": r.selected, "note": r.note })).collect::<Vec<_>>(),

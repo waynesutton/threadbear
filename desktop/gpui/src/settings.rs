@@ -79,6 +79,10 @@ pub struct Saved {
     pub slash_return_runs: Option<bool>,
     /// Use the full palette for skills named inside a message (default on).
     pub inline_skill_palette: Option<bool>,
+    /// `newThreadBoxBottom`: Appearance's New thread box. Some(true) puts
+    /// the new-thread box near the bottom of the window, growing upwards as
+    /// you type. None is the middle, as it ships (Wayne, 26 Nov).
+    pub new_thread_box_bottom: Option<bool>,
     /// `activityLog` (ActivityRecorder): Settings > General's Keep an
     /// activity log (activity.rs). Off until it's turned on.
     pub activity_log: Option<bool>,
@@ -376,6 +380,10 @@ impl Settings {
 
     pub fn panel_background_drag(&self) -> bool {
         self.saved.panel_background_drag.unwrap_or(false)
+    }
+
+    pub fn new_thread_box_bottom(&self) -> bool {
+        self.saved.new_thread_box_bottom.unwrap_or(false)
     }
 
     pub fn slash_return_runs(&self) -> bool {

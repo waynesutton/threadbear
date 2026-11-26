@@ -1137,6 +1137,48 @@ impl SettingsWindow {
         sections
     }
 
+    /// Appearance's New thread box: Middle as it ships, or Bottom.
+    fn new_box_choice(&self, cx: &mut Context<Self>) -> AnyElement {
+        let app = self.app.clone();
+        // Where the box sits on a new thread: the middle as it ships, or
+        // near the bottom so it grows upwards as you type (Wayne, 26 Nov).
+        let bottom = app
+            .upgrade()
+            .is_some_and(|a| a.read(cx).settings.new_thread_box_bottom());
+        segmented(
+            [
+                (
+                    "Middle",
+                    "The new-thread box sits in the middle and grows downwards as you type",
+                    !bottom,
+                    false,
+                ),
+                (
+                    "Bottom",
+                    "The new-thread box sits near the bottom and grows upwards as you type",
+                    bottom,
+                    true,
+                ),
+            ]
+            .map(|(label, tip, on, value)| {
+                let app = app.clone();
+                Segment {
+                    id: SharedString::from(format!("settings-new-box-{}", label.to_lowercase())),
+                    label,
+                    tip,
+                    on,
+                    click: Box::new(move |_: &mut Window, cx: &mut App| {
+                        if let Some(app) = app.upgrade() {
+                            app.update(cx, |app, cx| app.set_new_thread_box_bottom(value, cx));
+                        }
+                        cx.refresh_windows();
+                    }),
+                }
+            }),
+            cx,
+        )
+    }
+
     /// The appearance is this app's own, so it's here while the runner's away
     /// too. Light or dark as pictures, then the accent, spacing, text size
     /// and font (Mike picked these from three directions, 17 Nov). Each
@@ -1276,6 +1318,7 @@ impl SettingsWindow {
             }),
             cx,
         );
+        let box_place = self.new_box_choice(cx);
         let font_now = style::font_choice();
         let font_app = app;
         let font_menu = Button::new("settings-font")
@@ -1311,11 +1354,11 @@ impl SettingsWindow {
             "settings-appearance-section",
             "Appearance",
             if cfg!(target_os = "macos") {
-                "How Threadbear looks, for Threadbear only. Same as the Mac follows System Settings > Appearance, and the first accent is the Mac's own, or the theme's when one is on. Text size is the same as View > Zoom (⌘= and ⌘-). The bear colours are Wayne Sutton's, from his fork."
+                "How Threadbear looks, for Threadbear only. Same as the Mac follows System Settings > Appearance, and the first accent is the Mac's own, or the theme's when one is on. Text size is the same as View > Zoom (⌘= and ⌘-). New thread box puts the message box on a new thread in the middle of the window, or near the bottom so it grows upwards as you type. The bear colours are Wayne Sutton's, from his fork."
             } else if cfg!(target_os = "windows") {
-                "How Threadbear looks, for Threadbear only. Same as Windows follows Settings > Personalization > Colors. Text size is the same as View > Zoom (Ctrl+= and Ctrl+-). The bear colours are Wayne Sutton's, from his fork."
+                "How Threadbear looks, for Threadbear only. Same as Windows follows Settings > Personalization > Colors. Text size is the same as View > Zoom (Ctrl+= and Ctrl+-). New thread box puts the message box on a new thread in the middle of the window, or near the bottom so it grows upwards as you type. The bear colours are Wayne Sutton's, from his fork."
             } else {
-                "How Threadbear looks, for Threadbear only. Text size is the same as View > Zoom (Ctrl+= and Ctrl+-). The bear colours are Wayne Sutton's, from his fork."
+                "How Threadbear looks, for Threadbear only. Text size is the same as View > Zoom (Ctrl+= and Ctrl+-). New thread box puts the message box on a new thread in the middle of the window, or near the bottom so it grows upwards as you type. The bear colours are Wayne Sutton's, from his fork."
             },
             "change any of it for you.",
             vec![
@@ -1335,6 +1378,7 @@ impl SettingsWindow {
                 row("Spacing", spacing, cx),
                 row("Text size", text_size, cx),
                 row("Font", font, cx),
+                row("New thread box", box_place, cx),
             ],
             cx,
         )
