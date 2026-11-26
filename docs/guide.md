@@ -2509,7 +2509,9 @@ looks the same as before.
 2. **Open it.** Show plan opens the board beside the thread. Two fingers
    pan, pinch or ⌘-scroll zooms, Fit (⇧1) shows it all. Drag a box to move
    it: it stays there across the agent's new versions until you press
-   **Tidy**. **✕** at the end of the board's bar closes it; Show plan
+   **Tidy**. **⧉** at the end of the board's bar opens it in a window of
+   its own, and **↙** in that window puts it back beside the thread
+   (right-clicking the tab does both too). **✕** closes it; Show plan
    brings it back.
 3. **Point and talk.** Click a box, group or arrow and it goes in the
    thread's message box as a chip (Shift-click adds more, Esc takes the

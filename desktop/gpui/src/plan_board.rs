@@ -218,7 +218,8 @@ impl Threadbear {
         let view = match existing {
             Some(v) => v,
             None => {
-                let v = cx.new(|cx| PlanBoardView::new(app, client, thread.clone(), cx));
+                let dock = self.dock.clone();
+                let v = cx.new(|cx| PlanBoardView::new(app, client, thread.clone(), dock, cx));
                 cx.default_global::<PlanBoards>()
                     .views
                     .insert(thread, v.clone());
@@ -259,6 +260,9 @@ enum Drag {
 
 pub(crate) struct PlanBoardView {
     app: WeakEntity<Threadbear>,
+    // The window's dock, for Close and Pop out / Put back.
+    dock: Entity<threadbear_dock::DockModel>,
+    _observe_dock: Subscription,
     client: Arc<Client>,
     thread_id: String,
     board: Option<Board>,
@@ -302,14 +306,19 @@ impl PlanBoardView {
         app: WeakEntity<Threadbear>,
         client: Arc<Client>,
         thread_id: String,
+        dock: Entity<threadbear_dock::DockModel>,
         cx: &mut Context<Self>,
     ) -> Self {
+        // Pop out and Put back follow where the tab is.
+        let observe_dock = cx.observe(&dock, |_, _, cx| cx.notify());
         // Badges follow the threads' summaries: redraw when the app's list changes.
         let observe = app
             .upgrade()
             .map(|a| cx.observe(&a, |_, _, cx| cx.notify()));
         let mut v = PlanBoardView {
             app,
+            dock,
+            _observe_dock: observe_dock,
             client,
             thread_id,
             board: None,
@@ -863,10 +872,9 @@ impl PlanBoardView {
             .id("plan-board-bar-tools")
             .flex_1()
             .min_w(px(0.))
-            .h_full()
+            .flex_wrap()
             .gap(px(6.))
             .items_center()
-            .overflow_x_scroll()
             .child(
                 crate::a11y::A11yRole::a11y_role(
                     div()
@@ -986,20 +994,42 @@ impl PlanBoardView {
                 )
                 .on_click(cx.listener(|this, _: &ClickEvent, _, cx| this.tidy(cx))),
             );
-        // The tools scroll when the pane is narrow; Close stays at the end.
+        // The tools wrap onto another row when the pane is narrow, so every
+        // button stays in reach; Pop out and Close stay at the end.
         // The tab's own × shows only on a hover of its title, which is easy
         // to miss (Wayne, 26 Nov): this one's always there.
         h_flex()
             .id("plan-board-bar")
             .flex_none()
             .w_full()
-            .h(px(38.))
+            .min_h(px(38.))
+            .py(px(4.))
             .px(px(10.))
             .gap(px(6.))
-            .items_center()
+            .items_start()
             .border_b_1()
             .border_color(style::hairline(cx))
             .child(bar)
+            .child({
+                let (id, label, tip) = if self.floating(cx) {
+                    (
+                        "plan-board-put-back",
+                        "↙",
+                        "Put the board back beside the thread",
+                    )
+                } else {
+                    (
+                        "plan-board-pop-out",
+                        "⧉",
+                        "Open the board in its own window",
+                    )
+                };
+                div()
+                    .flex_none()
+                    .child(bar_button(id, label, tip, true, cx).on_click(cx.listener(
+                        |this, _: &ClickEvent, window, cx| this.pop_out_or_back(window, cx),
+                    )))
+            })
             .child(div().flex_none().child(
                 bar_button("plan-board-close", "✕", "Close the board", true, cx).on_click(
                     cx.listener(|this, _: &ClickEvent, window, cx| this.close(window, cx)),
@@ -1011,12 +1041,34 @@ impl PlanBoardView {
     /// Closes the board's tab. After this click is handled: closing it lets
     /// go of this view.
     fn close(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        let (app, id) = (self.app.clone(), panel(&self.thread_id));
+        let (dock, id) = (self.dock.clone(), panel(&self.thread_id));
+        window.defer(cx, move |_, cx| dock.update(cx, |m, cx| m.close(&id, cx)));
+    }
+
+    /// Whether the board is in a window of its own.
+    fn floating(&self, cx: &App) -> bool {
+        self.dock
+            .read(cx)
+            .layout()
+            .is_floating(&panel(&self.thread_id))
+    }
+
+    /// Pop out: the board in a window of its own. Put back: beside the
+    /// thread again. The tab's right-click menu has both too.
+    fn pop_out_or_back(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let (dock, id, out) = (
+            self.dock.clone(),
+            panel(&self.thread_id),
+            !self.floating(cx),
+        );
         window.defer(cx, move |_, cx| {
-            if let Some(app) = app.upgrade() {
-                let dock = app.read(cx).dock.clone();
-                dock.update(cx, |m, cx| m.close(&id, cx));
-            }
+            dock.update(cx, |m, cx| {
+                if out {
+                    m.open_in_window(&id, cx);
+                } else {
+                    m.put_back(&id, cx);
+                }
+            })
         });
     }
 
@@ -2186,6 +2238,12 @@ pub(crate) fn automation(
             .find(|n| n.label == label || n.id == label)
             .map(|n| n.id.clone())
     };
+    // The board's Pop out / Put back button, pressed: Put back sits in the
+    // board's own window, which `click` (the main window's) can't reach.
+    if action == "toggle-window" {
+        view.update(cx, |v, cx| v.pop_out_or_back(window, cx));
+        return Ok(json!("ok"));
+    }
     match action {
         "click" => {
             let label = cmd["box"].as_str().unwrap_or_default().to_owned();
@@ -2309,6 +2367,7 @@ pub(crate) fn automation(
     let groups: Vec<Value> = board.graph.groups.iter().map(|g| json!(g.label)).collect();
     Ok(json!({
         "state": board.state().words(),
+        "floating": v.floating(cx),
         "version": board.version,
         "boxes": boxes,
         "groups": groups,

@@ -41,6 +41,16 @@ Feature: The plan board
     Then the board is closed
 
   @plan.board @swift-pending
+  Scenario: The board pops out into its own window and goes back
+    When I open the thread "Plan the Acme dashboard"
+    And I press "Show plan"
+    And I press "Open the board in its own window"
+    Then the board is in its own window
+    And the board has the box "KPI cards"
+    When I put the board back beside the thread
+    Then the board is beside the thread
+
+  @plan.board @swift-pending
   Scenario: Selecting a box puts it in the message box
     When I open the thread "Plan the Acme dashboard"
     And I press "Show plan"

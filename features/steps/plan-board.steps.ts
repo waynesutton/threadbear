@@ -210,3 +210,15 @@ Then('the board is closed', async function (this: ThreadbearWorld) {
   }
   assert.fail(`the board didn't close: ${last}`);
 });
+
+Then('the board is in its own window', async function (this: ThreadbearWorld) {
+  await untilBoard(this, 'the board in a window of its own', (b) => (b as { floating?: boolean }).floating === true);
+});
+
+When('I put the board back beside the thread', async function (this: ThreadbearWorld) {
+  okValue(await this.app.do({ cmd: 'board', do: 'toggle-window' }));
+});
+
+Then('the board is beside the thread', async function (this: ThreadbearWorld) {
+  await untilBoard(this, 'the board back beside the thread', (b) => (b as { floating?: boolean }).floating === false);
+});
