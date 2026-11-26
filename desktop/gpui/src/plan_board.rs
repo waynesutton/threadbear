@@ -285,6 +285,15 @@ pub(crate) struct PlanBoardView {
     asked: Option<String>,
     // Changed badges Wayne has seen, by version.
     seen_changes: Option<u32>,
+    // planBoardMockups: the box whose screens are showing, its screens, and
+    // their stills by (screen, version, dark).
+    screens_for: Option<String>,
+    frames: Vec<rules::Frame>,
+    stills: HashMap<(String, u32, bool), Option<Arc<Image>>>,
+    // One still at a time: they share one sealed view.
+    drawing: bool,
+    // Watching the web runtime start, once.
+    runtime_watch: Option<Subscription>,
     _observe: Option<Subscription>,
 }
 
@@ -324,6 +333,11 @@ impl PlanBoardView {
             folder_skills: None,
             asked: None,
             seen_changes: None,
+            screens_for: None,
+            frames: Vec::new(),
+            stills: HashMap::new(),
+            drawing: false,
+            runtime_watch: None,
             _observe: observe,
         };
         v.reload(cx);
@@ -1168,6 +1182,10 @@ fn status_colour(s: &BoxStatus, cx: &App) -> Hsla {
 }
 
 impl PlanBoardView {
+    #[expect(
+        clippy::too_many_lines,
+        reason = "one board drawn in layers, read top to bottom"
+    )]
     fn render_canvas(
         &mut self,
         statuses: &BTreeMap<String, BoxStatus>,
@@ -1343,6 +1361,8 @@ impl PlanBoardView {
         }
 
         layer = layer.children(note_bubble(&board, &layout, cam, cx));
+        // planBoardMockups: the open box's screens, as stills.
+        layer = layer.children(self.render_screens(&board, &layout, cx));
 
         let bounds_cell = self.bounds.clone();
         let dot: Hsla = rgb(if dark { 0x2E2E36 } else { 0xC4C4CE }).into();
@@ -1450,6 +1470,27 @@ impl PlanBoardView {
                         this.open_thread(t.clone(), window, cx)
                     }))
                 }),
+            );
+        }
+        if self.mockups_on(cx) {
+            let node = id.to_owned();
+            let open = self.screens_for.as_deref() == Some(id);
+            row = row.child(
+                bar_button_dyn(
+                    format!("plan-screens-{id}"),
+                    "Screens…",
+                    if open {
+                        "Hide this box's screens"
+                    } else {
+                        "Show this box's screens"
+                    },
+                    true,
+                    cx,
+                )
+                .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
+                .on_click(
+                    cx.listener(move |this, _: &ClickEvent, _, cx| this.toggle_screens(&node, cx)),
+                ),
             );
         }
         let allowed = rules::send_allowed(board, id, status.cloned());
@@ -2163,6 +2204,34 @@ pub(crate) fn automation(
             })?;
         }
         "reload" => view.update(cx, |v, cx| v.reload(cx)),
+        "screens" => {
+            let label = cmd["box"].as_str().unwrap_or_default().to_owned();
+            view.update(cx, |v, cx| match label_to_id(v, &label) {
+                Some(id) if v.mockups_on(cx) => {
+                    v.toggle_screens(&id, cx);
+                    Ok(())
+                }
+                Some(_) => Err("there's no Screens… with Plan board mockups off".to_owned()),
+                None => Err(format!("no box {label:?}")),
+            })?;
+        }
+        "pick" => {
+            let variant = cmd["variant"].as_str().unwrap_or_default().to_owned();
+            view.update(cx, |v, cx| {
+                let f = v
+                    .frames
+                    .iter()
+                    .find(|f| Some(&f.node) == v.screens_for.as_ref() && f.variant == variant)
+                    .cloned();
+                match f {
+                    Some(f) => {
+                        v.pick_frame(&f, cx);
+                        Ok(())
+                    }
+                    None => Err(format!("no screen {variant}")),
+                }
+            })?;
+        }
         _ => {}
     }
     window.render_frame(cx);
@@ -2208,7 +2277,345 @@ pub(crate) fn automation(
         "skills": board.skills,
         "chips": v.chips,
         "review": rules::review_message(&statuses, &board),
+        "screensButton": v.mockups_on(cx),
+        "screens": v.frames.iter().filter(|f| Some(&f.node) == v.screens_for.as_ref()).map(|f| json!({
+            "id": f.id, "variant": f.variant, "title": f.title, "version": f.version, "picked": f.picked, "changed": f.changed,
+            "drawn": v.stills.iter().any(|((id, ver, _), p)| *id == f.id && *ver == f.version && p.is_some()),
+        })).collect::<Vec<_>>(),
         "asked": v.asked,
         "error": v.error,
     }))
+}
+
+// ---------------------------------------------------------------- Phase 2: screens
+
+impl PlanBoardView {
+    fn mockups_on(&self, cx: &App) -> bool {
+        self.app.upgrade().is_some_and(|a| {
+            let a = a.read(cx);
+            a.experiment_on(rules::EXPERIMENT) && a.experiment_on(rules::MOCKUPS)
+        })
+    }
+
+    /// Screens…: show a box's screens beside it, or hide them.
+    fn toggle_screens(&mut self, node: &str, cx: &mut Context<Self>) {
+        if self.screens_for.as_deref() == Some(node) {
+            self.screens_for = None;
+            cx.notify();
+            return;
+        }
+        self.screens_for = Some(node.to_owned());
+        self.load_frames(None, cx);
+        cx.notify();
+    }
+
+    /// board.frames: the screens, with a pick first when there is one.
+    fn load_frames(&mut self, pick: Option<String>, cx: &mut Context<Self>) {
+        let client = self.client.clone();
+        let mut params = json!({ "threadId": self.thread_id, "seen": true });
+        if let Some(p) = pick {
+            params["pick"] = json!(p);
+        }
+        cx.spawn(async move |this, cx| {
+            let res = call(client, "board.frames", params).await;
+            this.update(cx, |this, cx| {
+                match res {
+                    Ok(v) => {
+                        this.frames = v["frames"]
+                            .as_array()
+                            .into_iter()
+                            .flatten()
+                            .filter_map(|f| serde_json::from_value::<rules::Frame>(f.clone()).ok())
+                            .collect();
+                        this.error = None;
+                    }
+                    Err(e) => this.error = Some(e.message),
+                }
+                cx.notify();
+            })
+            .ok();
+        })
+        .detach();
+    }
+
+    /// A screen's still, drawn sealed at its viewport, once per version and
+    /// look, one at a time, once the web runtime is up (as reply blocks are).
+    fn still(
+        &mut self,
+        f: &rules::Frame,
+        dark: bool,
+        cx: &mut Context<Self>,
+    ) -> Option<Arc<Image>> {
+        let key = (f.id.clone(), f.version, dark);
+        if let Some(got) = self.stills.get(&key) {
+            return got.clone();
+        }
+        if self.drawing {
+            return None;
+        }
+        let path = f.path.clone()?;
+        let runtime = crate::web_runtime::runtime(cx)?;
+        if !runtime.update(cx, |r, cx| r.ensure_engine(cx)) {
+            // Starting: the next frame asks again.
+            if self.runtime_watch.is_none() {
+                self.runtime_watch = Some(cx.observe(&runtime, |_, _, cx| cx.notify()));
+            }
+            return None;
+        }
+        self.stills.insert(key.clone(), None);
+        self.drawing = true;
+        let (w, h) = rules::viewport_size(&f.viewport);
+        cx.spawn(async move |this, cx| {
+            let html = std::fs::read_to_string(&path).unwrap_or_default();
+            let png = threadbear_web::draw_page_at(&html, w as u32, h as u32, 0.5, dark).await;
+            this.update(cx, |this, cx| {
+                this.drawing = false;
+                match png {
+                    Ok(png) => {
+                        this.stills.insert(
+                            key,
+                            Some(Arc::new(Image::from_bytes(ImageFormat::Png, png))),
+                        );
+                    }
+                    Err(e) => this.error = Some(format!("A screen didn't draw: {e}")),
+                }
+                cx.notify();
+            })
+            .ok();
+        })
+        .detach();
+        None
+    }
+
+    /// Open in browser: the agents' own browser (BrowserBear's), never Wayne's
+    /// signed-in one; a route frame is its dev server's page.
+    fn open_frame(&mut self, f: &rules::Frame, cx: &mut Context<Self>) {
+        let url = match (&f.route, &f.path) {
+            (Some(r), _) => r.clone(),
+            (None, Some(p)) => format!("file://{p}"),
+            _ => return,
+        };
+        match crate::agent_browser::model(cx) {
+            Some(b) => {
+                let thread = self.thread_id.clone();
+                b.update(cx, |b, cx| b.open(&url, &thread, cx));
+            }
+            None => {
+                self.error = Some(
+                    "The agents' browser isn't running, so the screen wasn't opened.".to_owned(),
+                );
+                cx.notify();
+            }
+        }
+    }
+
+    /// The strip beside the box: each screen's still, its title, letter,
+    /// size and version, Pick and Open in browser. Pictures only: a screen's
+    /// html is never put in the board as markup.
+    fn render_screens(
+        &mut self,
+        board: &Board,
+        layout: &rules::Layout,
+        cx: &mut Context<Self>,
+    ) -> Vec<AnyElement> {
+        let Some(node) = self.screens_for.clone() else {
+            return Vec::new();
+        };
+        let Some(r) = layout.rect(&node) else {
+            return Vec::new();
+        };
+        let mine: Vec<rules::Frame> = self
+            .frames
+            .iter()
+            .filter(|f| f.node == node)
+            .cloned()
+            .collect();
+        let cam = self.camera;
+        let s = cam.s;
+        let dark = cx.theme().is_dark();
+        if mine.is_empty() {
+            let sr = cam.rect(&r);
+            return vec![div()
+                .absolute()
+                .left(gpui_kit::px(sr.right() + 16.))
+                .top(gpui_kit::px(sr.y))
+                .text_size(px(size::DETAIL))
+                .text_color(style::quiet_text(cx))
+                .child("No screens yet. Ask for some: \"make three takes on this\".")
+                .into_any_element()];
+        }
+        let mut out = Vec::new();
+        for (id, rect) in rules::frame_strip(&r, &mine, board.graph.top_to_bottom()) {
+            let Some(f) = mine.iter().find(|f| f.id == id).cloned() else {
+                continue;
+            };
+            let sr = cam.rect(&rect);
+            let picture = self.still(&f, dark, cx);
+            let edge = if f.picked {
+                rgb(GREEN).into()
+            } else {
+                style::hairline(cx)
+            };
+            let words = format!(
+                "{} · {} · {} · v{}",
+                f.title, f.variant, f.viewport, f.version
+            );
+            let chip = rules::frame_chip(board, &f);
+            let (pick_f, open_f) = (f.clone(), f.clone());
+            out.push(
+                v_flex()
+                    .absolute()
+                    .left(gpui_kit::px(sr.x))
+                    .top(gpui_kit::px(sr.y - 18.))
+                    .w(gpui_kit::px(sr.w))
+                    .gap(px(2.))
+                    .child(
+                        h_flex()
+                            .gap(px(4.))
+                            .text_size(px(size::SMALL))
+                            .text_color(style::secondary_text(cx))
+                            .child(div().truncate().child(words.clone()))
+                            .when(f.changed, |d| {
+                                d.child(div().text_color(style::needs_you(cx)).child("Changed"))
+                            }),
+                    )
+                    .child(
+                        crate::a11y::A11yRole::a11y_role(
+                            div()
+                                .id(SharedString::from(format!("plan-screen-{id}")))
+                                .w(gpui_kit::px(sr.w))
+                                .h(gpui_kit::px(sr.h))
+                                .rounded(px(6.))
+                                .overflow_hidden()
+                                .border(px(if f.picked { 3. } else { 1. }))
+                                .border_color(edge)
+                                .bg(style::card_background(cx))
+                                .test_support(),
+                            Role::Image,
+                        )
+                        .aria_label(SharedString::from(format!(
+                            "Screen {words}{}",
+                            if f.picked { ", picked" } else { "" }
+                        )))
+                        .tip("Put this screen in the message box")
+                        .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
+                        .on_click(cx.listener(move |this, _: &ClickEvent, _, cx| {
+                            this.chip_text(chip.clone(), cx)
+                        }))
+                        .children(picture.map(|p| img(ImageSource::Image(p)).size_full()))
+                        .when(
+                            s > 0.2
+                                && self
+                                    .stills
+                                    .get(&(f.id.clone(), f.version, dark))
+                                    .is_some_and(Option::is_none),
+                            |d| {
+                                d.child(
+                                    div()
+                                        .p(px(6.))
+                                        .text_size(px(size::SMALL))
+                                        .text_color(style::quiet_text(cx))
+                                        .child(if f.route.is_some() {
+                                            "A page on the dev server: Open in browser"
+                                        } else {
+                                            "Drawing…"
+                                        }),
+                                )
+                            },
+                        ),
+                    )
+                    .child(
+                        h_flex()
+                            .gap(px(4.))
+                            .child(
+                                bar_button_dyn(
+                                    format!("plan-pick-{id}"),
+                                    "Pick",
+                                    "Pick this take",
+                                    !f.picked,
+                                    cx,
+                                )
+                                .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
+                                .on_click(cx.listener(
+                                    move |this, _: &ClickEvent, _, cx| this.pick_frame(&pick_f, cx),
+                                )),
+                            )
+                            .child(
+                                bar_button_dyn(
+                                    format!("plan-open-{id}"),
+                                    "Open in browser",
+                                    "Open it in the agents' browser",
+                                    true,
+                                    cx,
+                                )
+                                .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
+                                .on_click(cx.listener(
+                                    move |this, _: &ClickEvent, _, cx| this.open_frame(&open_f, cx),
+                                )),
+                            ),
+                    )
+                    .into_any_element(),
+            );
+        }
+        out
+    }
+
+    fn pick_frame(&mut self, f: &rules::Frame, cx: &mut Context<Self>) {
+        let Some(board) = &self.board else { return };
+        let chip = rules::frame_chip(board, f);
+        for x in self
+            .frames
+            .iter_mut()
+            .filter(|x| x.node == f.node && x.frame == f.frame)
+        {
+            x.picked = x.id == f.id;
+        }
+        self.chip_text(chip, cx);
+        self.load_frames(Some(f.id.clone()), cx);
+    }
+
+    /// Any chip text into the thread's message box.
+    fn chip_text(&mut self, reference: String, cx: &mut Context<Self>) {
+        if !self.chips.contains(&reference) {
+            self.chips.push(reference.clone());
+        }
+        if let Some(app) = self.app.upgrade() {
+            let composer = app.read(cx).composers.get(&self.thread_id).cloned();
+            if let Some(c) = composer {
+                c.update(cx, |c, cx| c.mention_reference(reference, cx));
+            }
+        }
+        cx.notify();
+    }
+}
+
+/// `bar_button` with an id made at run time (one per screen).
+fn bar_button_dyn(
+    id: String,
+    label: &'static str,
+    tip: &'static str,
+    enabled: bool,
+    cx: &App,
+) -> impl StatefulInteractiveElement + ParentElement + IntoElement {
+    let tip: SharedString = tip.into();
+    crate::a11y::A11yRole::a11y_role(
+        div()
+            .id(SharedString::from(id))
+            .h(px(20.))
+            .px(px(6.))
+            .flex()
+            .items_center()
+            .rounded(px(5.))
+            .border_1()
+            .border_color(style::button_edge(cx))
+            .bg(style::button_fill(cx))
+            .text_size(px(size::SMALL))
+            .text_color(style::label_text(cx))
+            .when(!enabled, |d| d.opacity(0.4))
+            .test_support(),
+        Role::Button,
+    )
+    .aria_label(tip.clone())
+    .tip(tip)
+    .child(label)
 }

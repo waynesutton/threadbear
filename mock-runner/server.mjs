@@ -546,6 +546,7 @@ function mockExperiments() {
     // The plan board, with TB_MOCK_PLAN_BOARD (addPlanBoardDemo).
     // Its sent boxes nest under the planner, as they do with nestedThreads on.
     ...(planBoardOn() ? ['planBoard', ...(process.env.TB_MOCK_NESTED ? [] : ['nestedThreads'])] : []),
+    ...(planBoardOn() && process.env.TB_MOCK_PLAN_MOCKUPS ? ['planBoardMockups'] : []),
   ];
 }
 
@@ -922,6 +923,7 @@ function addPlanBoardDemo() {
   other.push({ type: 'turn.completed', outcome: 'completed', durationMs: 4000, needs: 'nothing' }, 'pb_login_t0');
 }
 if (process.env.TB_MOCK_PLAN_BOARD) addPlanBoardDemo();
+const planFrames = new Map();
 const planBoardOn = () => Boolean(process.env.TB_MOCK_PLAN_BOARD) && !process.env.TB_MOCK_PLAN_BOARD_OFF;
 // Parts of a project (docs/protocol/projects.md, Projects, "Parts"): Photo sync as a
 // part of Threadbear, for features/projects.feature.
@@ -2230,6 +2232,34 @@ async function dispatch(client, method, p) {
         setStatus(id, 'idle', false);
       }
       return { thread: entry.summary };
+    }
+    // planBoardMockups's screens (TB_MOCK_PLAN_MOCKUPS; runner/src/board-frames.ts).
+    case 'board.frames': {
+      if (!planBoardOn() || !process.env.TB_MOCK_PLAN_MOCKUPS) throw rpcError(-32010, 'Plan board mockups is off.');
+      const list = planFrames.get(p.threadId) ?? [];
+      if (typeof p.pick === 'string') {
+        const hit = list.find((f) => f.id === p.pick);
+        for (const f of list) if (hit && f.node === hit.node && f.frame === hit.frame) f.picked = f.id === hit.id;
+      }
+      const out = list.map((f) => ({ ...f, changed: f.version > 1 && (f.seen ?? 0) < f.version }));
+      if (p.seen) for (const f of list) f.seen = f.version;
+      return { frames: out };
+    }
+    // The agent writes screens {threadId, node, variants: ['A','B','C'], script?}.
+    case 'mock.boardFrames': {
+      const list = planFrames.get(p.threadId) ?? [];
+      planFrames.set(p.threadId, list);
+      for (const v of p.variants ?? ['A']) {
+        const id = `${p.node}-row-${v}`;
+        let f = list.find((x) => x.id === id);
+        if (!f) { f = { id, node: p.node, frame: 'row', variant: v, title: 'KPI row', viewport: 'desktop', version: 0 }; list.push(f); }
+        f.version += 1;
+        const dir = path.join(os.tmpdir(), 'tb-mock-frames', p.threadId, id, `v${f.version}`);
+        fs.mkdirSync(dir, { recursive: true });
+        f.path = path.join(dir, 'index.html');
+        fs.writeFileSync(f.path, `<!doctype html><html><head><meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'none'"></head><body style="margin:0;font:32px system-ui;background:#fff"><div style="display:flex;gap:16px;padding:24px">${['Revenue', 'Orders', 'Visitors'].map((k) => `<div style="flex:1;border:1px solid #ddd;border-radius:12px;padding:16px">${k} ${v}</div>`).join('')}</div></body></html>`);
+      }
+      return { frames: list };
     }
     case 'mock.savedPlan': {
       // A Plan first turn whose plan the runner saved, as runner.ts

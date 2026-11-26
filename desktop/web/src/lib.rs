@@ -30,7 +30,9 @@ pub use mac::page::Page;
 pub use mac::panel::PanelPage;
 /// The transcript's diagrams and pages, drawn into pictures (mac/rich.rs).
 #[cfg(target_os = "macos")]
-pub use mac::rich::{data_url, draw_diagram, draw_page, page_pdf, reset as reset_rich, Drawn};
+pub use mac::rich::{
+    data_url, draw_diagram, draw_page, draw_page_at, page_pdf, reset as reset_rich, Drawn,
+};
 pub use panel_rules::{site, Event as PanelEvent, Kind as PanelKind};
 pub use preview_rules::PreviewSite;
 
@@ -127,6 +129,16 @@ mod elsewhere {
     }
 
     pub async fn draw_page(_html: &str, _zoom: u32, _scale: f32) -> Result<Drawn, String> {
+        Err("there's no web runtime for this system yet".into())
+    }
+
+    pub async fn draw_page_at(
+        _html: &str,
+        _width: u32,
+        _height: u32,
+        _scale: f32,
+        _dark: bool,
+    ) -> Result<Vec<u8>, String> {
         Err("there's no web runtime for this system yet".into())
     }
 

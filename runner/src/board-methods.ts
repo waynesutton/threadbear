@@ -12,6 +12,7 @@
 // a thread.
 import { ErrorCode, RpcError, type EffortLevel, type PermissionMode, type Provider, type ThreadStartedBy, type ThreadSummary } from './protocol.ts';
 import { BoardError, Boards, buildBrief, withBriefHeader, type PlanBoard } from './boards.ts';
+import type { BoardFrames } from './board-frames.ts';
 
 type Params = Record<string, unknown>;
 
@@ -30,6 +31,8 @@ export type BoardMethodDeps = {
   on: () => boolean;
   coordinatorsOn?: () => boolean;
   coordinators?: () => BoardCoordinatorPort | undefined;
+  // planBoardMockups's screens, while it's on (main.ts framesFor).
+  frames?: () => BoardFrames | undefined;
   runner: {
     get(threadId: string): ThreadSummary;
     has(threadId: string): boolean;
@@ -115,6 +118,15 @@ export function boardMethods(d: BoardMethodDeps): Record<string, (p: Params) => 
       const got = d.boards.version(id, v);
       if (!got) throw bad(`v${v} isn't kept any more: the board keeps the last 10.`);
       return { version: got };
+    }),
+    // planBoardMockups: a board's screens, Pick on one, and seeing them.
+    'board.frames': guard((p) => {
+      const frames = d.frames?.();
+      if (!frames) throw new RpcError(ErrorCode.notAllowed, 'Plan board mockups is off. Turn it on in Settings > General > Experiments.');
+      const id = thread(p);
+      if (typeof p.pick === 'string') frames.pick(id, p.pick);
+      if (p.seen === true) frames.seen(id);
+      return { frames: d.boards.has(id) ? frames.list(id, typeof p.node === 'string' ? p.node : undefined) : [] };
     }),
     // Wayne's Approve plan, for the version he saw. Refused if it isn't the latest.
     'board.approve': guard((p) => {

@@ -51,6 +51,7 @@ import { SECRET_TIMEOUT_DEFAULT_MIN, SECRET_TIMEOUT_MAX_MIN } from './secrets.ts
 import { cutSafely, firstLineSafely } from './safe-cut.ts';
 import { pickRunner } from './moves.ts';
 import { BoardError, boardText, withBriefHeader, type BoardTools } from './boards.ts';
+import { framesText, type BoardFrames } from './board-frames.ts';
 import { MAX_RECIPE, MAX_SUMMARY, MAX_TITLE, PAGE_KINDS, printLink, publishPage, unpublishPage, type PagePublisher, type PageRecord, type Pages } from './pages.ts';
 import { above, LEAST, raises, type Authority } from './access.ts';
 export { above, LEAST, raises, type Authority };
@@ -312,6 +313,9 @@ export function buildThreadbearTools(
     // update_board and create_thread's board_node, only while it's on. Read
     // once, here, as it changes the tools' shape.
     boards?: () => BoardTools | undefined;
+    // Experiment planBoardMockups (experiments/planBoardMockups.md): screens
+    // on a box, only with planBoard on too.
+    frames?: () => BoardFrames | undefined;
     // The once-a-turn note asking for a card in plain words (needs.ts,
     // plainCardNudge). Off only in tests about the rest of end_turn, which
     // would otherwise each have to answer it first.
@@ -326,6 +330,7 @@ export function buildThreadbearTools(
 ) {
   const codex = opts.provider === 'codex';
   const boards = opts.boards?.();
+  const frames = boards ? opts.frames?.() : undefined;
   // A schedule's check (schedule-check.ts).
   const checkArg = (update: boolean): Record<string, z.ZodOptional<z.ZodTypeAny>> => ({
           check: (update ? z.string().nullable() : z.string())
@@ -2351,6 +2356,38 @@ export function buildThreadbearTools(
         }),
       ),
     ] : []),
+    ...(frames ? [
+      tool(
+        'update_frame',
+        "Puts a screen beside a box of this thread's plan board, drawn as a still: up to three takes (variant A, B, C) of a screen. Give html for a sketch: one self-contained file, Tailwind compiled and inlined, pictures and fonts as data: URLs, no <script> (it won't run; render React to static HTML first), under 2 MB. Or give route for a page of the thread's own dev server (http://localhost:<port>/…). Each call is a new version of that screen.",
+        {
+          node: z.string().min(1).describe('The box id on the board.'),
+          frame: z.string().min(1).describe('A short id for the screen, like "kpi-row". The same id with another variant is another take.'),
+          variant: z.enum(['A', 'B', 'C']).optional().describe('Which take. Default A.'),
+          title: z.string().min(1).max(80),
+          viewport: z.enum(['desktop', 'tablet', 'phone']).optional().describe('Default desktop (1280×800); tablet 834×1112; phone 390×844.'),
+          html: z.string().optional(),
+          route: z.string().optional(),
+          baseVersion: z.number().int().min(0).optional(),
+        },
+        handle(async (a) => {
+          try {
+            const f = frames.write(selfId, a);
+            return `Saved screen ${f.id} v${f.version} beside box ${f.node}. Wayne sees it under Screens… on the board.`;
+          } catch (e) {
+            if (e instanceof BoardError) throw new Error(`Not saved. ${e.message}`);
+            throw e;
+          }
+        }),
+      ),
+      tool(
+        'read_frames',
+        "Lists the screens on this thread's plan board (or one box's): their versions, and which take Wayne picked.",
+        { node: z.string().optional() },
+        handle(async ({ node }) => framesText(frames.list(selfId, node))),
+        { annotations: { readOnlyHint: true } },
+      ),
+    ] : []),
     ...(opts.tasks?.() ? [
       tool('list_tasks', 'List synced Tasks; preferences.columns is the board. Follow next with after for more.', { after: z.string().optional() }, handle(async a => JSON.stringify({ ...(await opts.tasks!()!.call('list', a) as object), projects: await opts.tasks!()!.call('projects'), preferences: await opts.tasks!()!.call('preferences') }))),
       tool('create_task', 'Add a synced task. Project is optional: its name, id, or runnerId/id from list_tasks. Supply id to retry safely.', { id: z.string().optional(), title: z.string(), notes: z.string().optional(), columnId: z.string().optional().describe('id or name'), status: z.enum(['backlog', 'todo', 'doing', 'done']).optional(), project: z.union([z.string(), z.object({ runnerId: z.string(), id: z.string() })]).optional(), priority: taskPriority.optional(), dueDate: z.string().optional().describe('YYYY-MM-DD'), dueTime: z.string().optional().describe('HH:MM; reminds') }, handle(async a => JSON.stringify(await opts.tasks!()!.call('create', a, await taskAgent(control, selfId))))),
@@ -2959,14 +2996,14 @@ async function taskAgent(control: ThreadControl, selfId: string): Promise<{ kind
     return { kind: 'agent', name: 'Agent' };
   }
 }
-export function threadbearMcpServer(control: ThreadControl, selfId: string, schedules?: ScheduleControl, projects?: ProjectControl, appRestarts?: AppRestartControl, bulletReplies: () => boolean = () => true, pocket?: () => PocketControl | undefined, oneReply: () => boolean = () => false, gateway?: () => string | undefined, gatewayHealth?: () => Promise<ConnectorService[] | undefined>, remote?: () => RemoteControl | undefined, loadEndTurn?: () => boolean, reviewCanvas?: () => boolean, livePages?: () => boolean, pages?: () => Pages | undefined, printPublisher?: () => PagePublisher | undefined, printsWhenAsked?: () => boolean, tasks?: () => import('./tasks.ts').Tasks | undefined, clearerCompletion?: () => boolean, progressPrints?: () => boolean, boards?: () => BoardTools | undefined): McpSdkServerConfigWithInstance {
+export function threadbearMcpServer(control: ThreadControl, selfId: string, schedules?: ScheduleControl, projects?: ProjectControl, appRestarts?: AppRestartControl, bulletReplies: () => boolean = () => true, pocket?: () => PocketControl | undefined, oneReply: () => boolean = () => false, gateway?: () => string | undefined, gatewayHealth?: () => Promise<ConnectorService[] | undefined>, remote?: () => RemoteControl | undefined, loadEndTurn?: () => boolean, reviewCanvas?: () => boolean, livePages?: () => boolean, pages?: () => Pages | undefined, printPublisher?: () => PagePublisher | undefined, printsWhenAsked?: () => boolean, tasks?: () => import('./tasks.ts').Tasks | undefined, clearerCompletion?: () => boolean, progressPrints?: () => boolean, boards?: () => BoardTools | undefined, frames?: () => BoardFrames | undefined): McpSdkServerConfigWithInstance {
   const one = oneReply();
   const board = boards?.();
   const server = createSdkMcpServer({
     name: SERVER_NAME,
     version: RUNNER_VERSION,
     instructions: serverInstructions(selfId, { one, bulletReplies: bulletReplies(), pocket: Boolean(pocket?.()), projects: Boolean(projects), livePages: livePages?.() ?? false, planBoard: Boolean(board) }),
-    tools: buildThreadbearTools(control, selfId, Date.now, schedules, projects, appRestarts, { bulletReplies, pocket, oneReply: () => one, gateway, gatewayHealth, remote, pages, printPublisher, printsWhenAsked, tasks, clearerCompletion, progressPrints, loadEndTurn, reviewCanvas, boards: () => board }),
+    tools: buildThreadbearTools(control, selfId, Date.now, schedules, projects, appRestarts, { bulletReplies, pocket, oneReply: () => one, gateway, gatewayHealth, remote, pages, printPublisher, printsWhenAsked, tasks, clearerCompletion, progressPrints, loadEndTurn, reviewCanvas, boards: () => board, frames }),
   });
   server.tools = [...ALWAYS_ASK_TOOLS].map((name) => ({ name: name.split('__').at(-1)!, permission_policy: 'always_ask' as const }));
   return server;

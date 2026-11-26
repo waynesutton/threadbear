@@ -5,46 +5,10 @@
 import { Given, Then, When } from '@cucumber/cucumber';
 import assert from 'node:assert/strict';
 import { okValue, sleep } from '../support/driver.ts';
+import { board, box, untilBoard, type Board } from '../support/plan-board.ts';
 import type { ThreadbearWorld } from '../support/world.ts';
 
-type Box = { id: string; label: string; status: string | null; sendEnabled: boolean; changed: boolean };
-type Board = {
-  state?: string;
-  version?: number;
-  boxes?: Box[];
-  groups?: string[];
-  arrows?: { from: string; to: string; label: string | null }[];
-  skills?: string[];
-  chips?: string[];
-  review?: string | null;
-  asked?: string | null;
-  loading?: boolean;
-  error?: string | null;
-};
-
 const PLANNER = 'Plan the Acme dashboard';
-
-async function board(world: ThreadbearWorld, cmd: Record<string, unknown> = {}): Promise<Board> {
-  return JSON.parse(okValue(await world.app.do({ cmd: 'board', ...cmd }, 30))) as Board;
-}
-
-async function untilBoard<T>(world: ThreadbearWorld, what: string, check: (b: Board) => T | undefined | false | null, cmd: Record<string, unknown> = {}): Promise<T> {
-  const deadline = Date.now() + 15_000;
-  let last: Board | string = 'no answer yet';
-  for (;;) {
-    try {
-      last = await board(world, cmd);
-      const got = check(last);
-      if (got) return got;
-    } catch (e) {
-      last = (e as Error).message;
-    }
-    if (Date.now() > deadline) throw new Error(`Never saw: ${what}\n\nThe board said: ${JSON.stringify(last)}`);
-    await sleep(150);
-  }
-}
-
-const box = (b: Board, label: string) => b.boxes?.find((x) => x.label === label);
 
 async function showBoard(world: ThreadbearWorld, title = PLANNER): Promise<void> {
   const d = await world.app.dump();
