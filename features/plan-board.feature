@@ -51,6 +51,12 @@ Feature: The plan board
     Then the board is beside the thread
 
   @plan.board @swift-pending
+  Scenario: Highlights has a link that opens the board
+    When I open the thread "Plan the Acme dashboard"
+    And I click the highlight "Plan board"
+    Then the board has the box "KPI cards"
+
+  @plan.board @swift-pending
   Scenario: Selecting a box puts it in the message box
     When I open the thread "Plan the Acme dashboard"
     And I press "Show plan"

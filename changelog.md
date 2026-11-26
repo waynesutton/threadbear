@@ -22,6 +22,7 @@ How the Tasks section works today (an experiment: turn it on in Settings > Exper
 
 ### Added
 
+- A thread with a plan board has a Plan board link in Highlights that opens it.
 - A line under the plan board's bar says what to do next (talk about a box, approve, send or say "build it"), and an empty board says to start one with "plan board".
 - The plan board's bar has ⧉ to open the board in a window of its own and ↙ to put it back beside the thread. Its buttons wrap onto a second row in a narrow pane instead of running off the end.
 - Plan board (experiment, off by default): say "plan board" in a message and the thread's agent draws the plan beside the thread as boxes, groups and labelled arrows. Click a box to talk about it, drag boxes where you like, press Approve plan, then send boxes one at a time to nested Claude Code or Codex threads whose state shows on each box. Ask planner to review sends one message once every box is done. Plan board mockups adds sealed screens beside a box, up to three takes; Plan board coordinators hands a box to the project's coordinator where Threadbear has them. How to use it: docs/guide.md, "Plan board (experiment)".

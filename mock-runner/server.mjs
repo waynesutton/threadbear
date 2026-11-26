@@ -923,6 +923,8 @@ function addPlanBoardDemo() {
     planner.push({ type: 'tool.result', itemId, ok, text: ok ? 'Done.' : 'Not ended: try again.', truncated: false, images: [] }, 'pb_planner_t0');
   };
   tool('pb_planner_u0', 'update_board', true, () => planner.push({ type: 'board.updated', board }, 'pb_planner_t0'));
+  // Its Highlights row, as the runner's highlights.ts finds it.
+  highlights.set('pb_planner', { highlights: [{ id: 'board', kind: 'link', title: 'Plan board', url: 'board:pb_planner', how: 'created', seq: 4, lastSeq: 4, at: now }], edited: [] });
   tool('pb_planner_e0', 'end_turn', false);
   tool('pb_planner_e1', 'end_turn', true);
   planner.push({ type: 'assistant.text', itemId: 'pb_planner_m0', text: planner.summary.preview }, 'pb_planner_t0');

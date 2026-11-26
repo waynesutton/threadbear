@@ -2504,8 +2504,8 @@ looks the same as before.
    plan mode, gets the plan you always got, with no board. Once a thread
    has a board, the agent changes it whenever you ask. The agent draws
    boxes, groups and labelled arrows with a short note, and builds nothing
-   yet. The transcript says "Drew a plan (v1) · Show plan" and the thread's
-   header gets **Show plan**. A line under the board's bar always says
+   yet. The transcript says "Drew a plan (v1) · Show plan", the thread's
+   header gets **Show plan**, and Highlights gets a **Plan board** link. A line under the board's bar always says
    what to do next. Drawing and redrawing the board never stops on an Allow
    card, in Ask before edits or plan mode too: it changes no project files.
 2. **Open it.** Show plan opens the board beside the thread. Two fingers
