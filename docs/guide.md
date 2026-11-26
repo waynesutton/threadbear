@@ -2490,6 +2490,58 @@ The ones there are now, and what each does, are in
 themselves so it stays true.
 <!-- experiments:end -->
 
+## Plan board (experiment)
+<!-- slug: plan-board -->
+
+Agree a piece of work as a diagram before anything is built, then send its
+parts to Claude Code or Codex threads one at a time. Turn on Plan board in
+Settings > General > Experiments. A thread whose agent never draws a plan
+looks the same as before.
+
+1. **Ask for a plan.** In any thread: "Plan a live sales dashboard for Acme
+   on a board." The agent draws boxes, groups and labelled arrows with a
+   short note, and builds nothing yet. The transcript says "Drew a plan
+   (v1)" and the thread's header gets **Show plan**.
+2. **Open it.** Show plan opens the board beside the thread. Two fingers
+   pan, pinch or ⌘-scroll zooms, Fit (⇧1) shows it all. Drag a box to move
+   it: it stays there across the agent's new versions until you press
+   **Tidy**.
+3. **Point and talk.** Click a box, group or arrow and it goes in the
+   thread's message box as a chip (Shift-click adds more, Esc takes the
+   board's chips back out). Say what to change; the agent writes a new
+   version, and its note says what changed. Changed boxes are marked.
+4. **Approve.** Nothing can be sent until you press **Approve plan**, which
+   approves the version you see. If the agent changes the plan afterwards,
+   the board says "Changed since you approved" and every box's Send to…
+   greys out until you approve again. Boxes already sent keep running.
+5. **Skills (optional).** Skills in the board's bar picks skills from the
+   ones the thread's folder can run. Every brief names them.
+6. **Send a box.** A box's **Send to…** shows the login (Claude or Codex),
+   the access (the planner's unless you pick another), the title, the
+   skills and the whole brief, which you can edit. **Start** begins one
+   thread nested under the planner. Pressing it twice still starts one.
+7. **Follow it.** Each sent box shows its thread's state: Working, Needs
+   you, Done, Failed, Archived or Can't see it. Click the badge to open the
+   thread. Needs you also shows in the Inbox, notifications and the Dock
+   badge, the usual way. A failed or archived box offers **Send again**.
+8. **Review.** A box finishing doesn't wake the planner. When every sent
+   box is done, **Ask planner to review** sends it one message, if you
+   press it. The version button lists the last 10 versions; picking an
+   older one asks the agent to bring it back.
+
+**Screens (Plan board mockups experiment).** With it on too, a box's
+**Screens…** shows the agent's screens for it as pictures beside it, up to
+three takes side by side. Ask "make three takes on this" with the box's
+chip. Click a screen to put it in the message box, or **Pick** one to ring
+it green and send it as a chip. Screens are drawn sealed, with no scripts
+or network, and **Open in browser** opens one in the agents' browser,
+never your own.
+
+**Project coordinators (Plan board coordinators experiment).** On a copy
+of Threadbear with Mike's project coordinators, Send to… can also **Give
+to the project coordinator**, handing the box over as one to-do with the
+same brief. Your copy has no coordinators, so it never shows there.
+
 ## Connectors
 <!-- slug: connectors -->
 

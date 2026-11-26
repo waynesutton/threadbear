@@ -227,6 +227,12 @@ File references are where to look.
   app's `desktop/gpui/src/activity.rs` write the same files), and
   with the standing instructions experiment on, `instructions.md`, which every
   agent is given, and `instructions.sig`, which says Settings saved it, and
+  with the Plan board experiment on, `boards/<thread id>/`, a thread's plan
+  board: `v<n>.json` for each of the last 10 versions its agent wrote,
+  `board.json` with what you approved, the boxes you dragged, the board's
+  skills and where each box was sent, and with Plan board mockups on,
+  `frames/`, its agent's screens (each version's `index.html`, a scripts-off
+  policy first, the last 10 kept), all kept on this Mac and never sent anywhere,
   with the Prints experiment on, `pages/`, the prints agents make for you:
   `index.json` and the last 10 versions of each page's files, kept on this
   Mac (diagrams include `source.mmd` and `diagram.svg`, rendered offline with the bundled Pele library); one you choose to Publish has its page sent to your Convex backend,
