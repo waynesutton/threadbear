@@ -28,6 +28,8 @@ Status and gap list: prds/prints-status.md
 
 ## Completed
 
+- [x] 2026-11-26 01:23 UTC Make Canvas yield to the bottom sidebar panels and Settings. The first click reveals a panel already behind Canvas instead of closing it. Ten Canvas scenarios pass, including six regressions. prds/canvas-sidebar-controls.md
+
 - [x] 2026-11-25 22:55 UTC Land Terminal shortcut fix `2f0ef927f` (216-second landing check) and verify the automatic installation through release metadata, running process and startup log. Shortcut behavior passed in the headless build; no keys were injected into the live release. prds/terminal-shortcut-reopen.md
 
 - [x] 2026-11-25 22:40 UTC Fix repeated Command-J Terminal toggling in `desktop/gpui/src/terminal.rs`; add `features/terminal.feature` regression coverage and update the guide. Verified: 35 Terminal scenarios (664 steps), automation build, Rust formatting, feature pairing, feature TypeScript check and reopened-panel screenshot. Landing and installed verification are separate. prds/terminal-shortcut-reopen.md

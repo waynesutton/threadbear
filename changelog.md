@@ -46,6 +46,8 @@ How the Tasks section works today (an experiment: turn it on in Settings > Exper
 
 ### Fixed
 
+- Open the bottom sidebar panels and Settings on the first click from Canvas.
+
 - Reopen Terminal with Command-J after hiding it, keeping the same shell running.
 
 - Restore sign-in discovery alongside Usage refresh after the 20 November merge, and include new deployment helpers in the isolated deploy tests.

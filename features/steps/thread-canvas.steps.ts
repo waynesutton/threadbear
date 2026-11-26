@@ -103,3 +103,7 @@ When('I go to the Threads view', async function (this: ThreadbearWorld) {
 Then('the Canvas page is down', async function (this: ThreadbearWorld) {
   await untilBoard(this, 'the page down', (b) => !b.showing);
 });
+
+When('I click the Settings gear on the activity bar', async function (this: ThreadbearWorld) {
+  await this.app.do({ cmd: 'click', tipPrefix: 'Settings' });
+});

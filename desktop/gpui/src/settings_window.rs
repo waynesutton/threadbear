@@ -125,6 +125,11 @@ impl Threadbear {
     /// All entry points share the main panel. Defer creation because the
     /// form observes and reads the app, which is borrowed by this update.
     pub(crate) fn open_settings(&mut self, tab: Option<Tab>, cx: &mut Context<Self>) {
+        // Settings lives in the main dock, which Canvas replaces.
+        if self.thread_canvas.showing {
+            self.hide_thread_canvas();
+            cx.notify();
+        }
         self.close_tasks(cx);
         self.close_notes(cx);
         self.close_skills(cx);

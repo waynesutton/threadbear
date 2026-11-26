@@ -1,5 +1,12 @@
 # Files
 
+## Canvas sidebar controls
+
+- `desktop/gpui/src/shell.rs`: leave Canvas before revealing an activity panel in the dock.
+- `desktop/gpui/src/settings_window.rs`: leave Canvas before opening Settings in the dock.
+- `features/thread-canvas.feature`, `features/steps/thread-canvas.steps.ts`: cover bottom sidebar clicks from Canvas.
+- `prds/canvas-sidebar-controls.md`: scope, upstream comparison and verification.
+
 ## Terminal shortcut
 
 - `desktop/gpui/src/terminal.rs`: shell sessions and Terminal controls, including focus when the panel hides.

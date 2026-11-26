@@ -41,3 +41,40 @@ Feature: The Canvas page
     When I open the Canvas page
     And I go to the Threads view
     Then the Canvas page is down
+
+  @thread.canvas @swift-pending
+  Scenario Outline: Bottom activity panels take the board down
+    When I open the Canvas page
+    And I click "<panel>" at the foot of the activity bar
+    Then the Canvas page is down
+    And the <panel> panel is open
+
+    Examples:
+      | panel      |
+      | Connectors |
+      | Runners    |
+      | Updates    |
+
+  @thread.canvas @swift-pending
+  Scenario: The honey pot opens Usage from the board
+    When I open the Canvas page
+    And I click the honey pot in the activity bar
+    Then the Canvas page is down
+    And the Usage panel is open
+
+  @thread.canvas @swift-pending
+  Scenario: An open panel behind the board is revealed before it can be toggled shut
+    When I open the Updates panel
+    And I open the Canvas page
+    And I click "Updates" at the foot of the activity bar
+    Then the Canvas page is down
+    And the Updates panel is open
+    When I click "Updates" at the foot of the activity bar
+    Then the Updates panel is closed
+
+  @thread.canvas @swift-pending
+  Scenario: The Settings gear opens Settings from the board
+    When I open the Canvas page
+    And I click the Settings gear on the activity bar
+    Then the Canvas page is down
+    And Settings shows "general"

@@ -838,11 +838,15 @@ impl Threadbear {
     /// as a tab beside another of them if one's open, else under the threads
     /// list (`setShownUnderThreads`).
     pub(crate) fn toggle_under_threads(&mut self, panel: &str, cx: &mut Context<Self>) {
-        // Folded away with ⌥⇧⌘B, its icon brings the sidebar back with the
-        // panel in front, rather than closing a panel nobody can see.
-        let folded = self.sidebar_collapsed();
+        // Canvas replaces the dock. Like a folded sidebar, reveal a panel
+        // that's already open there instead of toggling it shut.
+        let hidden = self.thread_canvas.showing || self.sidebar_collapsed();
+        if self.thread_canvas.showing {
+            self.hide_thread_canvas();
+            cx.notify();
+        }
         self.set_sidebar_collapsed(false, cx);
-        if !folded && self.is_panel_showing(panel, cx) {
+        if !hidden && self.is_panel_showing(panel, cx) {
             self.dock.update(cx, |m, cx| m.close(panel, cx));
             return;
         }
