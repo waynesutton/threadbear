@@ -32,6 +32,8 @@ Status and gap list: prds/prints-status.md
 
 - [x] 2026-11-25 22:55 UTC Land Terminal shortcut fix `2f0ef927f` (216-second landing check) and verify the automatic installation through release metadata, running process and startup log. Shortcut behavior passed in the headless build; no keys were injected into the live release. prds/terminal-shortcut-reopen.md
 
+- [x] 2026-11-26 01:29 UTC Fix desktop backgrounds that stopped short of the page edges at 90% app zoom. Five pages pass screenshot checks at 90% and 125%. prds/desktop-background-fill.md
+
 - [x] 2026-11-25 22:40 UTC Fix repeated Command-J Terminal toggling in `desktop/gpui/src/terminal.rs`; add `features/terminal.feature` regression coverage and update the guide. Verified: 35 Terminal scenarios (664 steps), automation build, Rust formatting, feature pairing, feature TypeScript check and reopened-panel screenshot. Landing and installed verification are separate. prds/terminal-shortcut-reopen.md
 
 - [x] 2026-11-20 18:26 UTC Repair the deploy fixture and duplicate login-refresh RPC after the release merge. Deploy stage passes (34 cases), all 119 focused RPC/account/access tests pass, final runner typecheck/lint and diff checks pass. Earlier full run passed all other stages (5,218 runner tests passed, 53 skipped). Not landed or deployed. prds/bring-in-2026-11-20-verification.md

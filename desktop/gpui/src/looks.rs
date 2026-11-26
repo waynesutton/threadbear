@@ -147,7 +147,7 @@ pub(crate) struct LooksState {
     problems: HashMap<String, String>,
     /// Pictures being copied in, by the same key: their buttons spin.
     importing: HashSet<String>,
-    /// The size each background was last drawn at, in points before zoom,
+    /// The size each background was last drawn at, in window coordinates,
     /// for Position's preview (`BackdropSizes`).
     sizes: Rc<RefCell<HashMap<Slot, (f32, f32)>>>,
     /// Where a Position drag started: the focus then, and the pointer.
@@ -657,10 +657,11 @@ impl Threadbear {
                             .role(Role::Image)
                             .aria_label("Page background photo")
                             .absolute()
-                            .left(px(x))
-                            .top(px(y))
-                            .w(px(w))
-                            .h(px(h))
+                            // The crop comes from measured bounds, not zoomable UI sizes.
+                            .left(gpui_kit::px(x))
+                            .top(gpui_kit::px(y))
+                            .w(gpui_kit::px(w))
+                            .h(gpui_kit::px(h))
                             .child(img(path).size_full().object_fit(ObjectFit::Fill).id(
                                 SharedString::from(format!(
                                     "look-background-frames-{}",
@@ -674,11 +675,7 @@ impl Threadbear {
                 .child(
                     canvas(
                         move |bounds, _, cx| {
-                            let one = style::zoomed(1.);
-                            let now = (
-                                f32::from(bounds.size.width) / one,
-                                f32::from(bounds.size.height) / one,
-                            );
+                            let now = (f32::from(bounds.size.width), f32::from(bounds.size.height));
                             let was = sizes.borrow().get(&slot).copied();
                             if now.0 > 1.
                                 && now.1 > 1.
@@ -1236,9 +1233,10 @@ impl Threadbear {
         // window's shape doesn't make a tower.
         let width = max_w.min(max_h * ratio);
         let height = width / ratio;
-        let preview = (width, height);
+        // Crop in the same coordinates as the laid-out preview and the pointer.
+        let preview = (style::zoomed(width), style::zoomed(height));
         let (x, y, w, h) = focus.frame(image, preview);
-        let moves = w - width > 0.5 || h - height > 0.5;
+        let moves = w - preview.0 > 0.5 || h - preview.1 > 0.5;
         let dragging = self.looks.drag.is_some_and(|(s, _, _)| s == slot) && cx.has_active_drag();
         let edge = if dragging {
             style::control_accent(cx)
@@ -1275,10 +1273,10 @@ impl Threadbear {
                 d.child(
                     img(path)
                         .absolute()
-                        .left(px(x))
-                        .top(px(y))
-                        .w(px(w))
-                        .h(px(h))
+                        .left(gpui_kit::px(x))
+                        .top(gpui_kit::px(y))
+                        .w(gpui_kit::px(w))
+                        .h(gpui_kit::px(h))
                         .object_fit(ObjectFit::Fill),
                 )
             })
@@ -1305,10 +1303,9 @@ impl Threadbear {
                         else {
                             return;
                         };
-                        let one = style::zoomed(1.);
                         let by = (
-                            f32::from(ev.event.position.x - from.x) / one,
-                            f32::from(ev.event.position.y - from.y) / one,
+                            f32::from(ev.event.position.x - from.x),
+                            f32::from(ev.event.position.y - from.y),
                         );
                         let next = BackdropFocus::dragged(start, by, image, preview);
                         if next != this.backdrop_focus(at) {

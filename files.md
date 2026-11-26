@@ -82,6 +82,8 @@
 
 ## GPUI Looks
 
+- `prds/desktop-background-fill.md`: scope and checks for filling desktop backgrounds at every zoom.
+- `features/page-looks.feature`: customization, background coverage, and profile drafts.
 - `desktop/core/src/looks/` the Librarian, Scheduled and Projects pages' looks in the Swift app's JSON, the background's focus and crop, the greeting, GitHub contributions, Threadbear activity, the quote of the day and the profile page made from the Librarian's look.
 - `desktop/gpui/src/looks.rs` the pictures in `looks/` (import, sizes, removal), the background photo and its Position preview, the Customize panel's shared sections, and the app's look settings.
 - `desktop/gpui/src/librarian_look.rs` the customized Librarian page and its Customize panel.

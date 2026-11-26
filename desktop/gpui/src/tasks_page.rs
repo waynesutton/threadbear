@@ -451,6 +451,7 @@ pub(crate) struct TasksPage {
     scrolls: RefCell<HashMap<String, ScrollHandle>>,
     task_bounds: Rc<RefCell<HashMap<String, Bounds<Pixels>>>>,
     viewport_height: f32,
+    // The photo uses the viewport's measured size, independent of app zoom.
     background_size: (f32, f32),
     // The photo's fade and place: drawn live while dragged, saved on release.
     fade_slider: Entity<SliderState>,
@@ -4630,10 +4631,10 @@ impl Render for TasksPage {
                     img(ImageSource::Image(image.clone()))
                         .id("tasks-background-photo")
                         .absolute()
-                        .left(px(x))
-                        .top(px(y))
-                        .w(px(w))
-                        .h(px(h))
+                        .left(gpui_kit::px(x))
+                        .top(gpui_kit::px(y))
+                        .w(gpui_kit::px(w))
+                        .h(gpui_kit::px(h))
                         .object_fit(ObjectFit::Fill)
                         .opacity((1. - self.prefs["fade"].as_f64().unwrap_or(0.85)) as f32),
                 );
@@ -4642,11 +4643,7 @@ impl Render for TasksPage {
             shell = shell.child(
                 canvas(
                     move |bounds, _, cx| {
-                        let one = style::zoomed(1.);
-                        let size = (
-                            f32::from(bounds.size.width) / one,
-                            f32::from(bounds.size.height) / one,
-                        );
+                        let size = (f32::from(bounds.size.width), f32::from(bounds.size.height));
                         let page = page;
                         cx.defer(move |cx| {
                             page.update(cx, |p, cx| {

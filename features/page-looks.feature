@@ -27,6 +27,24 @@ Feature: Customize the home pages
     When I ask for another quote
     Then the customized page draws a different quote
 
+  @looks.librarian @looks.scheduled @looks.projects @tasks.page @swift-pending
+  Scenario Outline: A background fills the page at any zoom
+    When I choose a solid red background for "<page>"
+    Then the background reaches the window edges at 90 percent zoom
+    And the background reaches the window edges at 125 percent zoom
+
+    Examples:
+      | page      |
+      | main      |
+      | librarian |
+      | scheduled |
+      | projects  |
+
+    @native-tasks
+    Examples: Tasks
+      | page  |
+      | tasks |
+
   @looks.scheduled @swift-pending
   Scenario: The Scheduled page takes a look and keeps it when Customize goes off
     When I customize the Scheduled page without its bear or its On number

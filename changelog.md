@@ -50,6 +50,8 @@ How the Tasks section works today (an experiment: turn it on in Settings > Exper
 
 - Reopen Terminal with Command-J after hiding it, keeping the same shell running.
 
+- Fill desktop backgrounds to the page edges at any app zoom.
+
 - Restore sign-in discovery alongside Usage refresh after the 20 November merge, and include new deployment helpers in the isolated deploy tests.
 
 - make-print's screenshot check captures the whole print, not just its first chart.

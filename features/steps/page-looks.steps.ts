@@ -4,7 +4,9 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
-import type { Dump } from '../support/driver.ts';
+import { sleep, type Dump } from '../support/driver.ts';
+import { readPng, type Picture } from '../support/png.ts';
+import { tempFolder } from '../support/temp.ts';
 import type { ThreadbearWorld } from '../support/world.ts';
 
 type Looks = { on: { librarian: boolean }; librarian: { greeting?: string; quote?: string; picture: string; background?: string }; };
@@ -61,6 +63,57 @@ When('I choose a Librarian background', async function(this: ThreadbearWorld) {
 });
 Then('the customized page draws its background', async function(this: ThreadbearWorld) {
   await this.app.do({ cmd: 'label-point', label: 'Page background photo' });
+});
+
+When('I choose a solid red background for {string}', async function(this: ThreadbearWorld, page: string) {
+  // Hide the default Highlights pane so the page ends at the right window edge.
+  await this.app.do({ cmd: 'menu-key', modifiers: ['cmd', 'opt'], key: 'b' });
+  const file = path.join(tempFolder('look-wallpaper-'), 'red.png');
+  // An opaque 64-by-64 PNG makes the photo easy to distinguish from the window colour.
+  fs.writeFileSync(file, Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAIAAAAlC+aJAAAAb0lEQVR4nO3PAQkAAAyEwO9feoshgnABdLep8QUNyPEFDcjxBQ3I8QUNyPEFDcjxBQ3I8QUNyPEFDcjxBQ3I8QUNyPEFDcjxBQ3I8QUNyPEFDcjxBQ3I8QUNyPEFDcjxBQ3I8QUNyPEFDcjxBQ3IPanc8OLDQitxAAAAAElFTkSuQmCC', 'base64'));
+  if (page === 'tasks') {
+    await this.app.do({ cmd: 'tasks' });
+    const tasks = (d: Dump) => (d as { tasksPage?: { loaded?: boolean; photoLoaded?: boolean } }).tasksPage;
+    await this.until('Tasks is loaded', d => tasks(d)?.loaded);
+    await this.app.do({ cmd: 'tasks', photoPath: file });
+    await this.until('the Tasks background is decoded', d => tasks(d)?.photoLoaded);
+    return;
+  }
+  if (page === 'main') {
+    await this.app.do({ cmd: 'new' });
+    await this.app.do({ cmd: 'look', page, mainOn: true, background: file });
+  } else {
+    await this.app.do({ cmd: 'mode', mode: page });
+    await this.app.do({ cmd: 'look', page, on: true, background: file });
+  }
+  await this.until('the background is copied', d => {
+    const current = (d as unknown as { looks: Record<string, { file?: string; background?: string }> }).looks[page];
+    return current?.file || current?.background;
+  });
+});
+
+function redAt({ width, height, channels, data }: Picture, x: number, y: number): boolean {
+  const i = (Math.floor(y * height) * width + Math.floor(x * width)) * channels;
+  return data[i] - data[i + 1] > 24;
+}
+
+Then('the background reaches the window edges at {int} percent zoom', async function(this: ThreadbearWorld, percent: number) {
+  await this.app.do({ cmd: 'appearance', mode: 'dark' });
+  await this.app.do({ cmd: 'zoom', percent });
+  await this.app.do({ cmd: 'resize', w: percent < 100 ? 1180 : 1040, h: 740 });
+  const file = path.join(tempFolder('look-wallpaper-shot-'), 'window.png');
+  // Wait for both the layout frame and the async image decode before checking the edges.
+  let picture: Picture | undefined;
+  for (let n = 0; n < 20; n++) {
+    await this.app.shot(file);
+    picture = readPng(file);
+    if (redAt(picture, 0.6, 0.15)) break;
+    await sleep(80);
+  }
+  assert.ok(picture && redAt(picture, 0.6, 0.15), 'the photo is visible in the page');
+  assert.ok(redAt(picture, 0.6, 0.075), `the photo reaches below the title bar at ${percent}% zoom`);
+  assert.ok(redAt(picture, 0.6, 0.975), `the photo reaches the bottom at ${percent}% zoom`);
+  assert.ok(redAt(picture, 0.975, 0.15), `the photo reaches the right edge at ${percent}% zoom`);
 });
 
 type ScheduledLook = { hidden: string[]; hiddenNumbers: string[] };
