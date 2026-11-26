@@ -11,6 +11,7 @@
   "accounts": "users-three",
   "keyboard": "keyboard",
   "experiments": "flask",
+  "plan-board": "columns",
   "connectors": "plugs-connected",
   "macos-prompts": "warning-circle",
   "phone-and-browser": "device-mobile",

@@ -5,7 +5,7 @@
 import { Given, Then, When } from '@cucumber/cucumber';
 import assert from 'node:assert/strict';
 import { okValue, sleep } from '../support/driver.ts';
-import { board, box, untilBoard, type Board } from '../support/plan-board.ts';
+import { board, box, untilBoard } from '../support/plan-board.ts';
 import type { ThreadbearWorld } from '../support/world.ts';
 
 const PLANNER = 'Plan the Acme dashboard';
