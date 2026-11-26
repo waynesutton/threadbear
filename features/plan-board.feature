@@ -33,6 +33,14 @@ Feature: The plan board
     Then the board has the box "KPI cards"
 
   @plan.board @swift-pending
+  Scenario: The board closes from its own bar
+    When I open the thread "Plan the Acme dashboard"
+    And I press "Show plan"
+    Then the board has the box "KPI cards"
+    When I press "Close the board"
+    Then the board is closed
+
+  @plan.board @swift-pending
   Scenario: Selecting a box puts it in the message box
     When I open the thread "Plan the Acme dashboard"
     And I press "Show plan"

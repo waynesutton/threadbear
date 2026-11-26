@@ -48,6 +48,7 @@ How the Tasks section works today (an experiment: turn it on in Settings > Exper
 
 ### Fixed
 
+- The plan board's bar has a ✕ at its end that closes the board, always in view, as the tab's own × only shows when you hover its title.
 - Show plan in a "Drew a plan" line in the transcript did nothing when clicked. Links in a centred note are now clickable where they're drawn.
 - Open the bottom sidebar panels and Settings on the first click from Canvas.
 

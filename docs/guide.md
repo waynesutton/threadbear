@@ -2509,7 +2509,8 @@ looks the same as before.
 2. **Open it.** Show plan opens the board beside the thread. Two fingers
    pan, pinch or ⌘-scroll zooms, Fit (⇧1) shows it all. Drag a box to move
    it: it stays there across the agent's new versions until you press
-   **Tidy**.
+   **Tidy**. **✕** at the end of the board's bar closes it; Show plan
+   brings it back.
 3. **Point and talk.** Click a box, group or arrow and it goes in the
    thread's message box as a chip (Shift-click adds more, Esc takes the
    board's chips back out). Say what to change; the agent writes a new
@@ -2535,8 +2536,10 @@ looks the same as before.
 
 **Screens (Plan board mockups experiment).** With it on too, a box's
 **Screens…** shows the agent's screens for it as pictures beside it, up to
-three takes side by side. Ask "make three takes on this" with the box's
-chip. Click a screen to put it in the message box, or **Pick** one to ring
+three takes side by side. To ask for them, click the box so its chip is
+in the message box, then type what you want, like "make three takes on
+this screen" or "sketch the empty state and the list with 20 todos", and
+send it. Click a screen to put it in the message box, or **Pick** one to ring
 it green and send it as a chip. Screens are drawn sealed, with no scripts
 or network, and **Open in browser** opens one in the agents' browser,
 never your own.

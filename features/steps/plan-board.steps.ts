@@ -194,3 +194,19 @@ Then('the board shows {string}', async function (this: ThreadbearWorld, _words: 
 Then('the planner of {string} has one new message asking it to review the plan', async function (this: ThreadbearWorld, _title: string) {
   await this.until('one review message in the planner', (d) => d.transcript.rows.filter((r) => r.kind === 'user' && r.text.includes('Please review the plan')).length === 1);
 });
+
+Then('the board is closed', async function (this: ThreadbearWorld) {
+  const deadline = Date.now() + 10_000;
+  let last = '';
+  while (Date.now() < deadline) {
+    try {
+      await board(this);
+      last = 'the board is still open';
+    } catch (e) {
+      last = (e as Error).message;
+      if (last.includes("isn't open")) return;
+    }
+    await sleep(200);
+  }
+  assert.fail(`the board didn't close: ${last}`);
+});

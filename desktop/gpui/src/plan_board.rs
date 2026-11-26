@@ -860,15 +860,13 @@ impl PlanBoardView {
             rules::PlanState::Draft(_) => style::secondary_text(cx),
         };
         let mut bar = h_flex()
-            .id("plan-board-bar")
-            .flex_none()
-            .w_full()
-            .h(px(38.))
-            .px(px(10.))
+            .id("plan-board-bar-tools")
+            .flex_1()
+            .min_w(px(0.))
+            .h_full()
             .gap(px(6.))
             .items_center()
-            .border_b_1()
-            .border_color(style::hairline(cx))
+            .overflow_x_scroll()
             .child(
                 crate::a11y::A11yRole::a11y_role(
                     div()
@@ -944,7 +942,8 @@ impl PlanBoardView {
             );
         }
         let pct = format!("{}%", (self.camera.s * 100.).round());
-        bar.child(div().flex_1())
+        let bar = bar
+            .child(div().flex_1())
             .child(
                 bar_button("plan-board-zoom-out", "−", "Zoom out", true, cx).on_click(cx.listener(
                     |this, _: &ClickEvent, _, cx| {
@@ -986,8 +985,39 @@ impl PlanBoardView {
                     cx,
                 )
                 .on_click(cx.listener(|this, _: &ClickEvent, _, cx| this.tidy(cx))),
-            )
+            );
+        // The tools scroll when the pane is narrow; Close stays at the end.
+        // The tab's own × shows only on a hover of its title, which is easy
+        // to miss (Wayne, 26 Nov): this one's always there.
+        h_flex()
+            .id("plan-board-bar")
+            .flex_none()
+            .w_full()
+            .h(px(38.))
+            .px(px(10.))
+            .gap(px(6.))
+            .items_center()
+            .border_b_1()
+            .border_color(style::hairline(cx))
+            .child(bar)
+            .child(div().flex_none().child(
+                bar_button("plan-board-close", "✕", "Close the board", true, cx).on_click(
+                    cx.listener(|this, _: &ClickEvent, window, cx| this.close(window, cx)),
+                ),
+            ))
             .into_any_element()
+    }
+
+    /// Closes the board's tab. After this click is handled: closing it lets
+    /// go of this view.
+    fn close(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let (app, id) = (self.app.clone(), panel(&self.thread_id));
+        window.defer(cx, move |_, cx| {
+            if let Some(app) = app.upgrade() {
+                let dock = app.read(cx).dock.clone();
+                dock.update(cx, |m, cx| m.close(&id, cx));
+            }
+        });
     }
 
     fn skills_menu(&mut self, board: &Board, cx: &mut Context<Self>) -> AnyElement {
@@ -2447,7 +2477,7 @@ impl PlanBoardView {
                 .top(gpui_kit::px(sr.y))
                 .text_size(px(size::DETAIL))
                 .text_color(style::quiet_text(cx))
-                .child("No screens yet. Ask for some: \"make three takes on this\".")
+                .child("No screens yet. Click the box, then type in the message box: \"make three takes on this screen\".")
                 .into_any_element()];
         }
         let mut out = Vec::new();
