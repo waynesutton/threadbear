@@ -107,6 +107,20 @@ export type PlanBoard = {
 
 export class BoardError extends Error {}
 
+// A thread's first board only when Wayne asked for one in so many words:
+// "plan board" (or plan-board, planboard) in his message. A plan asked for any
+// other way, Claude's plan mode among them, stays as it always was. Once a
+// thread has a board, its agent changes it whenever he asks (a chip of a box
+// says which). Not "board" alone: "put it on my board" is the Tasks board.
+export const ASK_FOR_BOARD = /\bplan[\s-]?board\b/i;
+
+export function asksForBoard(text: string): boolean {
+  return ASK_FOR_BOARD.test(text);
+}
+
+export const NOT_ASKED =
+  "Not drawn: Wayne didn't ask for a plan board. Plan the way you would without one (in your reply, or plan mode's own plan). He starts a board by saying \"plan board\" in his message.";
+
 const emptyFile = (): BoardFile => ({ approved: null, positions: {}, skills: [], links: {}, sends: {} });
 
 // --- The Mermaid subset -------------------------------------------------

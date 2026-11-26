@@ -2498,10 +2498,14 @@ parts to Claude Code or Codex threads one at a time. Turn on Plan board in
 Settings > General > Experiments. A thread whose agent never draws a plan
 looks the same as before.
 
-1. **Ask for a plan.** In any thread: "Plan a live sales dashboard for Acme
-   on a board." The agent draws boxes, groups and labelled arrows with a
-   short note, and builds nothing yet. The transcript says "Drew a plan
-   (v1)" and the thread's header gets **Show plan**.
+1. **Ask for a plan board.** Say "plan board" in your message, for example
+   "Plan board: a live sales dashboard for Acme." Those two words are the
+   only way a board starts. Asking for a plan any other way, or Claude's
+   plan mode, gets the plan you always got, with no board. Once a thread
+   has a board, the agent changes it whenever you ask. The agent draws
+   boxes, groups and labelled arrows with a short note, and builds nothing
+   yet. The transcript says "Drew a plan (v1) · Show plan" and the thread's
+   header gets **Show plan**.
 2. **Open it.** Show plan opens the board beside the thread. Two fingers
    pan, pinch or ⌘-scroll zooms, Fit (⇧1) shows it all. Drag a box to move
    it: it stays there across the agent's new versions until you press

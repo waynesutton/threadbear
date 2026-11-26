@@ -42,7 +42,7 @@ import { StuckJobs } from './stuck-jobs.ts';
 import { FrozenClis } from './frozen-cli.ts';
 import { KeepAwake } from './keep-awake.ts';
 import { experimentOn } from './experiments.ts';
-import { Boards, type BoardTools } from './boards.ts';
+import { asksForBoard, BoardError, Boards, NOT_ASKED, type BoardTools } from './boards.ts';
 import { boardMethods } from './board-methods.ts';
 import { BoardFrames } from './board-frames.ts';
 import { AgentThreads, agentCommands, agentsMethods, EXPERIMENT as OUTSIDE_AGENTS } from './outside-agents.ts';
@@ -513,9 +513,17 @@ async function main(): Promise<void> {
   // Experiment planBoard (experiments/planBoard.md): each thread's plan
   // board, under <dataDir>/boards. The agent's tools only while it's on.
   const boards = new Boards(path.join(cfg.home, 'boards'));
+  const askedForBoard = (id: string): boolean => {
+    if (!runner.has(id)) return false;
+    const { events } = runner.events(id, { limit: 500 });
+    return events.some((e) => e.type === 'user.message' && typeof e.text === 'string' && asksForBoard(e.text));
+  };
   const boardTools: BoardTools = {
     read: (id) => boards.get(id),
     write: (id, u) => {
+      // A thread's first board only once Wayne has asked for one in it
+      // (boards.ts, ASK_FOR_BOARD): "plan board", then "yes, go" still counts.
+      if (!boards.has(id) && !askedForBoard(id)) throw new BoardError(NOT_ASKED);
       const r = boards.update(id, u);
       runner.emitBoard(id, r.board);
       return r;

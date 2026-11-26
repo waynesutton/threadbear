@@ -1058,6 +1058,10 @@ impl ThreadPane {
             .text_center();
         // A note with a link in it (the saved plan's) keeps the link, so a
         // click opens it in the pane as a reply's does (`noteText`).
+        // The kit hit-tests a link as if its line started at the left, so a
+        // centred line's link was drawn in one place and clicked in another
+        // (Wayne, 26 Nov: Show plan did nothing). A linked note is one short
+        // line: its own box sized to the words, centred, keeps the two together.
         if row.content.is_linked_note() {
             let doc = self.markdown_state(&row.id, note, cx);
             let style = self
@@ -1071,7 +1075,16 @@ impl ThreadPane {
                 &self.summary.id,
                 cx,
             );
-            return row_wrap(row, content.child(text));
+            let centred = div()
+                .py(px(ROW_TOP))
+                .w_full()
+                .flex()
+                .justify_center()
+                .text_size(px(size::SMALL))
+                .line_height(px(17.))
+                .text_color(quiet)
+                .child(div().flex_none().max_w_full().child(text));
+            return row_wrap(row, centred);
         }
         row_wrap(row, content.child(note.to_owned()))
     }

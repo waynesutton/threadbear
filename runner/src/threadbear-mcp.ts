@@ -2324,14 +2324,14 @@ export function buildThreadbearTools(
         {},
         handle(async () => {
           const board = boards.read(selfId);
-          if (!board) return 'This thread has no plan board yet. Draw one with update_board when the user asks for a plan.';
+          if (!board) return 'This thread has no plan board yet. Draw one with update_board only when the user asks for a plan board.';
           return boardText(board, (id) => boards.statusOf(id));
         }),
         { annotations: { readOnlyHint: true } },
       ),
       tool(
         'update_board',
-        "Draws or changes this thread's plan as a board beside the thread: boxes, groups and labelled arrows Wayne can point at, approve, then send to threads one box at a time. A Mermaid flowchart subset: `flowchart LR` or `TB`, id[label], id[(label)] for data, id((label)), `subgraph id[label]` … `end`, a -->|label| b, a --- b, `%% note:` lines. At most 25 boxes, 40 arrows, labels of 60 characters. Ids stay the same across versions; labels can change. Each call is a new version; a change after Wayne approved returns the plan to draft. Writes no project files.",
+        "A thread's first board only once the user asked for a plan board by name (refused otherwise). Draws or changes this thread's plan as a board beside the thread: boxes, groups and labelled arrows Wayne can point at, approve, then send to threads one box at a time. A Mermaid flowchart subset: `flowchart LR` or `TB`, id[label], id[(label)] for data, id((label)), `subgraph id[label]` … `end`, a -->|label| b, a --- b, `%% note:` lines. At most 25 boxes, 40 arrows, labels of 60 characters. Ids stay the same across versions; labels can change. Each call is a new version; a change after Wayne approved returns the plan to draft. Writes no project files.",
         {
           mermaid: z.string().min(1).describe('The whole plan, as a Mermaid flowchart in the subset above.'),
           note: z.string().max(400).optional().describe('A short note in plain words: what this version changed, or how the plan works. Shown as a bubble on the board.'),
@@ -2904,7 +2904,7 @@ export const LIVE_PAGES_LINE =
 // Only with the planBoard experiment on (experiments/planBoard.md). One line,
 // so boards stay rare and ordinary threads stay ordinary.
 export const PLAN_BOARD_LINE =
-  'When the user asks for a plan, or the work clearly has several parts they would want to agree first, draw it on a board with update_board (25 boxes at most, no secrets) rather than as prose; then wait: build nothing and send no boxes until Wayne presses Approve plan. read_board shows its state and skills.';
+  'Draw a plan board with update_board only when the user asks for one by name ("plan board"); any other plan, plan mode\'s included, stays as you would write it without boards. On a board: 25 boxes at most, no secrets, then wait: build nothing and send no boxes until Wayne presses Approve plan. read_board shows its state and skills.';
 
 // Only for a thread that has the pocket tool: the Pocket lives in the Convex
 // backend, so with phone sync off there's no tool to tell it about.

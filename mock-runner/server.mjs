@@ -915,7 +915,16 @@ function addPlanBoardDemo() {
   };
   const planner = make('pb_planner', 'Plan the Acme dashboard', 'The plan is on the board. Approve it and I can start the boxes.');
   const board = writePlanVersion('pb_planner', ACME_GRAPH(), 'Orders reach the dashboard every 5 s.');
-  planner.push({ type: 'board.updated', board }, 'pb_planner_t0');
+  // As a real planner's turn goes: the board arrives while its update_board
+  // call is still open, among other work, one of which failed.
+  const tool = (itemId, name, ok, during) => {
+    planner.push({ type: 'tool.call', itemId, name, kind: 'mcp', title: `threadbear: ${name}`, input: {} }, 'pb_planner_t0');
+    during?.();
+    planner.push({ type: 'tool.result', itemId, ok, text: ok ? 'Done.' : 'Not ended: try again.', truncated: false, images: [] }, 'pb_planner_t0');
+  };
+  tool('pb_planner_u0', 'update_board', true, () => planner.push({ type: 'board.updated', board }, 'pb_planner_t0'));
+  tool('pb_planner_e0', 'end_turn', false);
+  tool('pb_planner_e1', 'end_turn', true);
   planner.push({ type: 'assistant.text', itemId: 'pb_planner_m0', text: planner.summary.preview }, 'pb_planner_t0');
   planner.push({ type: 'turn.completed', outcome: 'completed', durationMs: 9000, needs: 'nothing' }, 'pb_planner_t0');
   const other = make('pb_login', 'Fix the login bug', 'Fixed: the session cookie now survives a reload.');

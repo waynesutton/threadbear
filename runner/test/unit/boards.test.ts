@@ -5,7 +5,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
-import { BoardError, Boards, MAX_VERSIONS, boardText, buildBrief, parseBoard } from '../../src/boards.ts';
+import { BoardError, Boards, MAX_VERSIONS, asksForBoard, boardText, buildBrief, parseBoard } from '../../src/boards.ts';
 import { tmpDir } from '../helpers/fakes.ts';
 
 const ACME = `flowchart LR
@@ -178,4 +178,10 @@ test('boards: a thread id that is not one is refused, so no path leaves the fold
   const b = new Boards(path.join(tmpDir(), 'boards'));
   assert.throws(() => b.update('../../etc', { mermaid: ACME }), BoardError);
   assert.equal(b.has('../x'), false);
+});
+
+test('a first board only when Wayne says "plan board"', () => {
+  for (const yes of ['Plan board: a todo app on Convex', 'can you make a plan board for this?', 'plan-board the auth work', 'PlanBoard it']) assert.ok(asksForBoard(yes), yes);
+  // A plan asked for any other way, plan mode's included, and the Tasks board.
+  for (const no of ['Plan the todo app', 'make a plan first', 'put it on my board', 'add to the board', 'a planning boarder']) assert.ok(!asksForBoard(no), no);
 });

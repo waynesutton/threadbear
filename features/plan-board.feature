@@ -26,6 +26,13 @@ Feature: The plan board
     And the board says "Draft v1"
 
   @plan.board @swift-pending
+  Scenario: Show plan in the transcript opens the board
+    When I open the thread "Plan the Acme dashboard"
+    And I rest on the link "Show plan" in the note "Drew a plan"
+    And I click the link "Show plan" in the note "Drew a plan"
+    Then the board has the box "KPI cards"
+
+  @plan.board @swift-pending
   Scenario: Selecting a box puts it in the message box
     When I open the thread "Plan the Acme dashboard"
     And I press "Show plan"

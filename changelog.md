@@ -22,7 +22,7 @@ How the Tasks section works today (an experiment: turn it on in Settings > Exper
 
 ### Added
 
-- Plan board (experiment, off by default): ask a thread for a plan and its agent draws it beside the thread as boxes, groups and labelled arrows. Click a box to talk about it, drag boxes where you like, press Approve plan, then send boxes one at a time to nested Claude Code or Codex threads whose state shows on each box. Ask planner to review sends one message once every box is done. Plan board mockups adds sealed screens beside a box, up to three takes; Plan board coordinators hands a box to the project's coordinator where Threadbear has them. How to use it: docs/guide.md, "Plan board (experiment)".
+- Plan board (experiment, off by default): say "plan board" in a message and the thread's agent draws the plan beside the thread as boxes, groups and labelled arrows. Click a box to talk about it, drag boxes where you like, press Approve plan, then send boxes one at a time to nested Claude Code or Codex threads whose state shows on each box. Ask planner to review sends one message once every box is done. Plan board mockups adds sealed screens beside a box, up to three takes; Plan board coordinators hands a box to the project's coordinator where Threadbear has them. How to use it: docs/guide.md, "Plan board (experiment)".
 
 - Settings > General > Appearance has a Theme row with three pictures: Stock, Harbor and Squall. Stock is the usual look and stays the default. Harbor is charcoal with blue-slate code blocks and a sea-blue accent, light or dark. Squall is blue-grey with a steel-blue accent and always dark. A theme colours the window, cards, menus, code and the Terminal, and the first accent dot becomes the theme's own accent. The website's gear menu has the same three. The choice is saved as `palette` in `desktop-settings.json`.
 - Settings > Runners has a Cloud runners section. Add a cloud runner… sets up Fly from one org token, or from flyctl's own sign-in: it makes the Fly app, saves the token and keys to your backend, builds the box image, makes the runner and tries a test box, showing each step as it goes. Afterwards the section lists each cloud runner's box size and threads, with Check again, Rebuild and Edit…. `tb cloud setup`, `check` and `rebuild` do the same from a terminal. Needs the `virtualRunners` experiment and flyctl.
@@ -48,6 +48,7 @@ How the Tasks section works today (an experiment: turn it on in Settings > Exper
 
 ### Fixed
 
+- Show plan in a "Drew a plan" line in the transcript did nothing when clicked. Links in a centred note are now clickable where they're drawn.
 - Open the bottom sidebar panels and Settings on the first click from Canvas.
 
 - Reopen Terminal with Command-J after hiding it, keeping the same shell running.

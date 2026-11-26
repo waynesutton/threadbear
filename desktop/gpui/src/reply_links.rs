@@ -1731,6 +1731,12 @@ pub(crate) fn peek_command(
         window.pointer_up(at, MouseButton::Right, cx);
         return Some(Ok(json!("ok right-clicked")));
     }
+    // The pointer moved onto the link and left there, as a person's rests
+    // before they click: the rest's own hit test runs (`rested`).
+    if cmd["hover"].as_bool() == Some(true) {
+        window.pointer_move(at, None, cx);
+return Some(Ok(json!("ok")));
+    }
     if cmd["follow"].as_bool() == Some(true) {
         let modifiers = if cmd["command"].as_bool() == Some(true) {
             Modifiers::secondary_key(cx)
