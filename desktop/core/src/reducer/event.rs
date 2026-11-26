@@ -2197,6 +2197,11 @@ pub enum EventPayload {
     /// A reply button made, pressed or failed: no row of its own, but kept
     /// as sent for whatever draws the reply that links it.
     ButtonUpdated(Value),
+    /// The agent wrote a new version of the thread's plan board (the
+    /// planBoard experiment): the whole board as sent, read with
+    /// `plan_board::Board::decode` by whatever draws it, and one note row
+    /// here saying so.
+    BoardUpdated(Value),
     ApprovalResolved(ApprovalResolution),
     /// The calls queued on an approval card, the whole list each time.
     ApprovalQueued(ApprovalQueue),
@@ -2417,6 +2422,7 @@ fn decode_payload(type_: &str, c: &Object) -> Result<EventPayload, ()> {
         // read; either way it makes no row, so the raw JSON is kept instead
         // of porting ReplyButton for no gain.
         "button.updated" => EventPayload::ButtonUpdated(c.get("button").ok_or(())?.clone()),
+        "board.updated" => EventPayload::BoardUpdated(c.get("board").ok_or(())?.clone()),
         "approval.resolved" => EventPayload::ApprovalResolved(ApprovalResolution::decode(c)),
         "approval.queued" => EventPayload::ApprovalQueued(ApprovalQueue::decode(c)),
         "plan.updated" => EventPayload::PlanUpdated(lossy(c, "entries", PlanEntry::decode)),

@@ -449,6 +449,7 @@ fn row_ids_for(
             }
         )],
         P::SystemNote(_) => vec![format!("n:{seq}")],
+        P::BoardUpdated(_) => vec![format!("board:{seq}")],
         P::ThreadRewound(_) => vec![format!("rw:{seq}")],
         P::Error(_) => vec![format!("e:{seq}")],
         P::ActionRun(_) => vec![format!("t:{}", ActionRun::item_id(seq))],
