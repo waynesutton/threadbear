@@ -8,7 +8,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { makeHarness } from '../helpers/fakes.ts';
-import { buildThreadbearTools, serverInstructions, PLAN_BOARD_LINE, PLAN_BOARD_SCREENS_LINE } from '../../src/threadbear-mcp.ts';
+import { buildThreadbearTools, NEVER_ASK_TOOLS, serverInstructions, PLAN_BOARD_LINE, PLAN_BOARD_SCREENS_LINE } from '../../src/threadbear-mcp.ts';
 import { Boards, type BoardTools } from '../../src/boards.ts';
 import { boardMethods, type BoardCoordinatorPort } from '../../src/board-methods.ts';
 
@@ -17,9 +17,9 @@ const PLAN = `flowchart LR
   summary --> revenue[Revenue chart]
 `;
 
-function setup(opts: { coordinators?: BoardCoordinatorPort; coordinatorsOn?: boolean; on?: boolean } = {}) {
+function setup(opts: { coordinators?: BoardCoordinatorPort; coordinatorsOn?: boolean; on?: boolean; plannerMode?: 'plan' } = {}) {
   const h = makeHarness();
-  const { thread } = h.runner.create({ text: 'Plan the Acme dashboard', accountId: 'claude-3' });
+  const { thread } = h.runner.create({ text: 'Plan the Acme dashboard', accountId: 'claude-3', ...(opts.plannerMode ? { permissionMode: opts.plannerMode } : {}) });
   const boards = new Boards(path.join(h.home, 'boards'));
   let on = opts.on ?? true;
   const control: BoardTools = {
@@ -196,4 +196,20 @@ test('boards on disk are left alone with the experiment off', () => {
   s.setOn(false);
   assert.ok(fs.existsSync(path.join(s.boards.dir, s.thread.id, 'v1.json')));
   assert.equal(s.tools().some((t) => t.name === 'read_board'), false);
+});
+
+test('a box sent from a planner in plan mode starts with full access, so it can build', () => {
+  const s = setup({ plannerMode: 'plan' });
+  assert.equal(s.h.runner.get(s.thread.id).permissionMode, 'plan');
+  s.boards.update(s.thread.id, { mermaid: PLAN });
+  s.methods['board.approve']({ threadId: s.thread.id, version: 1 });
+  const a = s.methods['board.send']({ threadId: s.thread.id, nodeId: 'revenue', requestId: 'r1' }) as { thread: { id: string } };
+  assert.equal(s.h.runner.get(a.thread.id).permissionMode, 'full');
+  // Picked in the sheet, it's kept.
+  const b = s.methods['board.send']({ threadId: s.thread.id, nodeId: 'kpi', requestId: 'r2', permissionMode: 'ask' }) as { thread: { id: string } };
+  assert.equal(s.h.runner.get(b.thread.id).permissionMode, 'ask');
+});
+
+test('the board tools never stop on an Allow card', () => {
+  for (const n of ['read_board', 'update_board', 'read_frames', 'update_frame']) assert.ok(NEVER_ASK_TOOLS.has(`mcp__threadbear__${n}`), n);
 });

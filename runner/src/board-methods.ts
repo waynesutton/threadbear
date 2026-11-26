@@ -194,8 +194,9 @@ export function boardMethods(d: BoardMethodDeps): Record<string, (p: Params) => 
         ...(!accountId && !poolId && (provider === 'codex' || provider === 'claude') ? { provider: provider as Provider } : {}),
         ...(str(p, 'model', false) ? { model: str(p, 'model', false) } : {}),
         ...(effort ? { effort: effort as EffortLevel } : {}),
-        // Inherits the planner's access unless Wayne picked another in the sheet.
-        permissionMode: (mode as PermissionMode | undefined) ?? planner.permissionMode,
+        // Inherits the planner's access unless Wayne picked another in the
+        // sheet, but never plan mode: a box's thread is there to build it.
+        permissionMode: (mode as PermissionMode | undefined) ?? (planner.permissionMode === 'plan' ? 'full' : planner.permissionMode),
         title,
         // Nested under the planner (docs/protocol/threads.md, "Nested threads").
         startedBy: { kind: 'thread', label: 'Plan board', threadId: id, why: `Box "${node.label}" of the plan` },

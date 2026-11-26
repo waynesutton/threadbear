@@ -1743,7 +1743,9 @@ impl SendSheet {
         let title = cx.new(|cx| InputState::new(window, cx));
         title.update(cx, |t, cx| t.set_value(label, window, cx));
         let brief = cx.new(|cx| TextareaState::new(window, cx).auto_grow(8, 18));
-        let mode = if planner.permission_mode.is_empty() {
+        // The planner's access, but never Plan first: a box's thread is
+        // there to build it (a planner in plan mode is the usual way in).
+        let mode = if planner.permission_mode.is_empty() || planner.permission_mode == "plan" {
             "full".to_owned()
         } else {
             planner.permission_mode.clone()
@@ -2148,18 +2150,41 @@ impl Render for PlanBoardView {
         let body = if self.board.is_some() {
             let bar = self.render_bar(&statuses, cx);
             let canvas = self.render_canvas(&statuses, window, cx);
+            let hint = self
+                .board
+                .as_ref()
+                .map(rules::next_step)
+                .unwrap_or_default();
             v_flex()
                 .size_full()
                 .child(bar)
+                .child(
+                    crate::a11y::A11yRole::a11y_role(
+                        div()
+                            .id("plan-board-next")
+                            .flex_none()
+                            .px(px(12.))
+                            .py(px(5.))
+                            .text_size(px(size::DETAIL))
+                            .text_color(style::quiet_text(cx))
+                            .border_b_1()
+                            .border_color(style::hairline(cx))
+                            .test_support(),
+                        Role::Label,
+                    )
+                    .aria_label(SharedString::from(hint))
+                    .child(hint),
+                )
                 .child(canvas)
                 .into_any_element()
         } else {
             let words = if self.loading {
                 "Reading the plan…".to_owned()
             } else {
-                self.error
-                    .clone()
-                    .unwrap_or_else(|| "This thread has no plan yet.".to_owned())
+                self.error.clone().unwrap_or_else(|| {
+                    "This thread has no plan yet. Say \"plan board\" in a message to start one."
+                        .to_owned()
+                })
             };
             crate::files::pane_note(&words, crate::highlights::palette(cx)).into_any_element()
         };

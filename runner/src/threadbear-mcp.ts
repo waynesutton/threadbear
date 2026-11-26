@@ -186,7 +186,11 @@ export const ALWAYS_ASK_TOOLS = new Set([`mcp__${SERVER_NAME}__delete_thread`]);
 // Restart to Update asks only wake or file this thread, with the runner's
 // words, and the turn they start runs in its mode then, so they stay in.
 export const NEVER_ASK_TOOLS = new Set(
-  ['end_turn', 'list_tasks', 'list_threads', 'read_thread', 'list_accounts', 'list_schedules', 'list_projects', 'read_project', 'unpin', 'ask_secret', 'add_button', 'list_prints', 'read_print', 'list_pages', 'read_page'].map(
+  // The plan board's tools only change the board beside this thread
+  // (Threadbear's own files, never the project's), and Wayne asked for it by
+  // name and approves it himself: an Allow card on every redraw in Ask
+  // before edits, or plan mode, would stall the plan it's for.
+  ['end_turn', 'list_tasks', 'list_threads', 'read_thread', 'list_accounts', 'list_schedules', 'list_projects', 'read_project', 'unpin', 'ask_secret', 'add_button', 'list_prints', 'read_print', 'list_pages', 'read_page', 'read_board', 'update_board', 'read_frames', 'update_frame'].map(
     (n) => `mcp__${SERVER_NAME}__${n}`,
   ),
 );

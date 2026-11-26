@@ -2505,7 +2505,9 @@ looks the same as before.
    has a board, the agent changes it whenever you ask. The agent draws
    boxes, groups and labelled arrows with a short note, and builds nothing
    yet. The transcript says "Drew a plan (v1) · Show plan" and the thread's
-   header gets **Show plan**.
+   header gets **Show plan**. A line under the board's bar always says
+   what to do next. Drawing and redrawing the board never stops on an Allow
+   card, in Ask before edits or plan mode too: it changes no project files.
 2. **Open it.** Show plan opens the board beside the thread. Two fingers
    pan, pinch or ⌘-scroll zooms, Fit (⇧1) shows it all. Drag a box to move
    it: it stays there across the agent's new versions until you press
@@ -2526,7 +2528,10 @@ looks the same as before.
 6. **Send a box.** A box's **Send to…** shows the login (Claude or Codex),
    the access (the planner's unless you pick another), the title, the
    skills and the whole brief, which you can edit. **Start** begins one
-   thread nested under the planner. Pressing it twice still starts one.
+   thread nested under the planner. Pressing it twice still starts one. A
+   planner in plan mode sends its boxes with Full access, so they can
+   build; pick another access in the sheet if you want. You can also skip
+   Send to… and tell the planner "build it" once you've approved.
 7. **Follow it.** Each sent box shows its thread's state: Working, Needs
    you, Done, Failed, Archived or Can't see it. Click the badge to open the
    thread. Needs you also shows in the Inbox, notifications and the Dock

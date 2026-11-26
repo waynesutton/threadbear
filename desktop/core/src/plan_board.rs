@@ -228,6 +228,19 @@ impl PlanState {
     }
 }
 
+/// The board's one line on what to do next, under its bar, so someone new
+/// to it isn't left guessing (Wayne, 26 Nov: "make sense for newbies").
+pub fn next_step(board: &Board) -> &'static str {
+    match board.state() {
+        PlanState::Draft(_) => "Click a box, then say what to change in the message box. Press Approve plan when it's right.",
+        PlanState::Changed { .. } => "The plan changed after you approved it. Look it over, then press Approve plan again to send more boxes.",
+        PlanState::Approved(_) if board.links.is_empty() => {
+            "Approved. Press Send to… on a box to build it in its own thread, or tell this thread \"build it\"."
+        }
+        PlanState::Approved(_) => "Each sent box shows its thread's state. Click a badge to open that thread.",
+    }
+}
+
 /// Whether a box's Send to… (or Send again) can be used, and the hint when not.
 /// Approval is per version: every box greys together.
 pub fn send_allowed(
@@ -1154,6 +1167,19 @@ mod tests {
         };
         f(&mut t);
         t
+    }
+
+    #[test]
+    fn the_next_step_line_follows_the_plan() {
+        let mut b = acme();
+        assert!(next_step(&b).contains("Approve plan when it's right"));
+        b.approved = Some(Approved {
+            version: 1,
+            at: String::new(),
+        });
+        assert!(next_step(&b).contains("Send to…"));
+        b.version = 2;
+        assert!(next_step(&b).contains("changed after you approved"));
     }
 
     #[test]
