@@ -2923,6 +2923,9 @@ hook. A header Threadbear can't read line by line keeps only its name and
 description.
 
 Every skill works in every thread, on every login, Claude and Codex alike.
+Cursor, OpenCode, Grok and Antigravity threads list them in the slash
+palette too, and use one when you name it with its slash command; they
+don't pick one up by themselves, so Always makes no difference there.
 With Always on, agents use it whenever it fits what you ask. Turn it off
 and it's there only when you ask by name: type its slash command, like
 /pele, in a message. Typing / at the start of a word opens the slash
@@ -2936,7 +2939,7 @@ the ones Claude or Codex find themselves, such as those in
 `~/.claude/skills` or the folder's own. Click one for the Skills page,
 or for one that isn't there, its SKILL.md. In the GPUI app, the link
 opens its SKILL.md beside the thread. It works anywhere in
-the message, in Claude and Codex threads alike. A change reaches threads
+the message, in every agent's threads. A change reaches threads
 that are already running too: each gets a fresh start before its next
 message, carrying on the same conversation with the new skills. Remove
 takes a skill away everywhere. The store is an experiment, Skills store

@@ -6,7 +6,7 @@ import path from 'node:path';
 import type { Runner, ThreadState } from '../runner.ts';
 import { effortTitle, modelRow } from './models.ts';
 import type { RunnerPart } from './part.ts';
-import type { Account, EffortLevel, PermissionMode } from '../protocol.ts';
+import type { Account, EffortLevel, PermissionMode, Provider } from '../protocol.ts';
 import { ErrorCode, RpcError, isEffortLevel } from '../protocol.ts';
 import { expandHome } from '../config.ts';
 import type { QueuedSend } from '../store.ts';
@@ -24,6 +24,11 @@ export const commandsPart = {
   commandPlan(this: Runner, st: ThreadState, text: string): CommandPlan | undefined {
     const cmd = parseCommand(text);
     if (!cmd) return undefined;
+    // A store skill in a thread whose agent has no skills of its own to
+    // load it as: words for the agent, which forAgent sends to its file.
+    // Not one named as something the runner does itself (/clear, /status).
+    const name = cmd.name.toLowerCase();
+    if (planCommand(st.rec.provider, cmd).kind === 'cli' && this.storeRows(st.rec.provider, this.liveCommandNames(st)).some((c) => c.name === name)) return undefined;
     const listed = [...this.commandCache.entries()].find(([k]) => k.startsWith(`${st.rec.accountId}\0${st.rec.cwd}\0`))?.[1].commands ?? [];
     // By either name: Codex lists a store skill as `threadbear:<name>`.
     const skills = listed.filter((c) => c.source === 'skill');
@@ -214,7 +219,27 @@ export const commandsPart = {
         this.log.warn('could not list commands', { accountId, cwd, error: String(e) });
       }
     }
-    return { commands: commandList(provider, cli) };
+    return { commands: commandList(provider, [...cli, ...this.storeRows(provider, cli.map((c) => c.name))]) };
+  },
+
+  // The store's skills as picker rows, for an agent that isn't given them
+  // itself (Claude gets the plugin, Codex the links): every ACP one. Not a
+  // skill named as one of the agent's own commands, which /name runs.
+  storeRows(this: Runner, provider: Provider, taken: string[]): SlashCommand[] {
+    if (provider === 'claude' || provider === 'codex') return [];
+    const own = new Set(taken);
+    return (this.storeSkills?.() ?? [])
+      .filter((s) => !own.has(s.name) && s.name !== 'model' && s.name !== 'effort')
+      .map((s) => ({ name: s.name, source: 'skill' as const, scope: 'store', ...(s.description ? { description: s.description } : {}), path: s.path }));
+  },
+
+  // The names of the commands this thread's agent last listed, from the
+  // picker's cache.
+  liveCommandNames(this: Runner, st: ThreadState): string[] {
+    const prefix = `${st.rec.accountId}\0${st.rec.cwd}\0`;
+    const out: string[] = [];
+    for (const [key, entry] of this.commandCache) if (key.startsWith(prefix)) for (const c of entry.commands) out.push(c.name);
+    return out;
   },
 };
 

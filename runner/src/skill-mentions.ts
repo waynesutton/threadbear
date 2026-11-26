@@ -37,20 +37,38 @@ export function mentionedSkills(text: string, names: Iterable<string>): string[]
  * codexName: Codex's own name for a skill, `threadbear:<name>` for a store
  * one; Codex loads a skill only for `$` and that exact name, so `$inkworks`
  * for the store's would load nothing (tried 25 Nov 2026).
+ * file: a skill's SKILL.md, for an agent with no skills of its own to load
+ * the store's as (Cursor, OpenCode and the other ACP ones). It gets a line
+ * sending it to the file, for a /name anywhere in the message, the first
+ * word too: /name is no command of its own.
  */
-export function withSkillMentions(text: string, names: Iterable<string>, provider: Provider, codexName: (name: string) => string = (n) => n): string {
+export function withSkillMentions(
+  text: string,
+  names: Iterable<string>,
+  provider: Provider,
+  opts: { codexName?: (name: string) => string; file?: (name: string) => string | undefined } = {},
+): string {
   const skills = mentionedSkills(text, names);
   if (!skills.length) return text;
   if (provider === 'codex') {
     const set = new Set(skills);
+    const own = opts.codexName ?? ((n: string) => n);
     return text.replace(MENTION, (whole, before: string, word: string) => {
       const name = known(word, set);
-      return name ? `${before}$${codexName(name)}` : whole;
+      return name ? `${before}$${own(name)}` : whole;
     });
   }
-  // Only Claude has a Skill tool and the store; another agent gets the
-  // words as typed rather than a line about a tool it hasn't got.
-  if (provider !== 'claude') return text;
+  if (provider !== 'claude') {
+    // Without a file there is nothing to send it to: the words as typed.
+    const found = skills.flatMap((s) => {
+      const file = opts.file?.(s);
+      return file ? [{ name: s, file }] : [];
+    });
+    if (!found.length) return text;
+    const list = found.map((f) => `"${f.name}" (/${f.name}): ${f.file}`).join('; ');
+    const one = found.length === 1;
+    return `${text}\n\n(Threadbear: the user named ${one ? 'a skill' : 'skills'} from their Skills store. ${one ? 'It is a file' : 'Each is a file'} of instructions, not a command of yours: read ${one ? 'it' : 'each'} in full, with the files beside it that it points to, and follow it for this. ${list})`;
+  }
   // Claude: the first word runs as a slash command already; any other needs asking for.
   const first = /^\s*\/([a-z0-9][a-z0-9-]*(?::[a-z0-9][a-z0-9-]*)?)/i.exec(text)?.[1];
   const leading = first ? known(first, new Set(skills)) : undefined;

@@ -702,6 +702,8 @@ export type RunnerDeps = {
   standingInstructions?: () => string;
   /** The skills threads get (skills.ts): none while the store is off. */
   skillNames?: () => string[];
+  /** The same skills with their files, for an agent without the store (SkillStore.files). */
+  storeSkills?: () => { name: string; description: string; path: string }[];
   // A completed turn asked Mike to Restart to Update, by end_turn or in its
   // closing "What I need from you" (app-restarts.ts signs the thread up).
   appRestartAsked?: (threadId: string) => void;
@@ -814,6 +816,7 @@ export class Runner {
   secrets: SecretStore;
   models?: Pick<Models, 'generate'>;
   skillNames?: () => string[];
+  storeSkills?: () => { name: string; description: string; path: string }[];
   projects?: Projects;
   // Bears (bears.ts): what a new thread in a bear's folder starts with.
   // Unset while the experiment is off.
@@ -958,6 +961,7 @@ export class Runner {
     this.projects = deps.projects;
     this.standingInstructions = deps.standingInstructions;
     this.skillNames = deps.skillNames;
+    this.storeSkills = deps.storeSkills;
     this.appRestartAsked = deps.appRestartAsked;
     this.awaitingAppRestart = deps.awaitingAppRestart;
     this.appRestartWant = deps.appRestartWant;
@@ -2464,7 +2468,9 @@ export class Runner {
       const store = this.skillNames?.() ?? [];
       const names = [...store, ...(place ? this.listedSkills(place.accountId, place.cwd) : [])];
       const codexName = provider === 'codex' ? this.codexSkillName(store, place) : undefined;
-      if (names.length) msg = { ...msg, text: withSkillMentions(msg.text, names, provider, codexName) };
+      // An agent without the store is sent to the skill's file instead.
+      const files = provider === 'claude' || provider === 'codex' ? undefined : new Map((this.storeSkills?.() ?? []).map((s) => [s.name, s.path]));
+      if (names.length) msg = { ...msg, text: withSkillMentions(msg.text, names, provider, { codexName, file: files ? (n) => files.get(n) : undefined }) };
     }
     if (msg.beforeMessage) return `${msg.text}\n\nThis ${msg.origin === 'schedule' ? 'reminder' : 'message'} was queued before a later message in this thread. Follow the later instructions, including any request to stop.`;
     if (msg.origin !== 'phone') return msg.text;

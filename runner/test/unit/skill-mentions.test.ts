@@ -24,11 +24,59 @@ test('Codex: /name becomes $name', () => {
 // Codex loads a store skill only by its own name, threadbear:<name>.
 test("Codex: a store skill becomes $ and Codex's own name for it", () => {
   const own = (n: string) => (n === 'pele' ? 'threadbear:pele' : n);
-  assert.equal(withSkillMentions('draw it with /pele and /threadbear:pele, in /brand-voice', names, 'codex', own), 'draw it with $threadbear:pele and $threadbear:pele, in $brand-voice');
+  assert.equal(withSkillMentions('draw it with /pele and /threadbear:pele, in /brand-voice', names, 'codex', { codexName: own }), 'draw it with $threadbear:pele and $threadbear:pele, in $brand-voice');
 });
 
-test('another agent gets the words as typed, with no line about a Skill tool', () => {
+// Cursor, OpenCode and the other ACP agents have no skills of their own to
+// load the store's as, so they're sent to the file (Wayne, 26 Nov 2026).
+test('another agent is sent to the skill file, wherever /name is; with no file, the words as typed', () => {
+  const file = (n: string) => (n === 'pele' ? '/store/pele/SKILL.md' : undefined);
   assert.equal(withSkillMentions('Draw the flow with /pele please', names, 'grok'), 'Draw the flow with /pele please');
+  assert.equal(withSkillMentions('use /brand-voice', names, 'cursor', { file }), 'use /brand-voice');
+  for (const text of ['/pele draw the flow', 'Draw the flow with /pele please']) {
+    const out = withSkillMentions(text, names, 'opencode', { file });
+    assert.ok(out.startsWith(`${text}\n\n(Threadbear: the user named a skill from their Skills store.`), out);
+    assert.match(out, /not a command of yours: read it in full.*"pele" \(\/pele\): \/store\/pele\/SKILL\.md\)$/);
+    assert.doesNotMatch(out, /Skill tool/);
+  }
+});
+
+test('store skills in an ACP thread: in the picker, and /name is words for the agent, not a command', async () => {
+  const { commandsPart } = await import('../../src/runner/commands.ts');
+  const storeSkills = () => [
+    { name: 'inkworks', description: 'Ink pages', path: '/store/inkworks/SKILL.md' },
+    { name: 'handoff', description: 'store handoff', path: '/store/handoff/SKILL.md' },
+    { name: 'status', description: 'store status', path: '/store/status/SKILL.md' },
+  ];
+  // The agent's own /handoff, from its live list.
+  const commandCache = new Map([['oc\0/work\0trusted', { at: 0, commands: [{ name: 'handoff', source: 'cli' }] }]]);
+  const runner = {
+    ...commandsPart,
+    storeSkills,
+    commandCache,
+    accounts: { get: (id: string) => ({ id, provider: id === 'oc' ? 'opencode' : 'claude', title: id, configDir: '/c' }) },
+    adapters: {},
+    clock: { now: () => 1 },
+    log: { warn() {} },
+    patchTrust: {},
+  };
+  const { commands } = await commandsPart.listCommands.call(runner as never, 'oc', '/work', 'auto');
+  const skills = commands.filter((c) => c.source === 'skill');
+  assert.deepEqual(skills.map((c) => [c.name, c.scope, c.path]), [
+    ['inkworks', 'store', '/store/inkworks/SKILL.md'],
+    ['status', 'store', '/store/status/SKILL.md'],
+  ]);
+  assert.equal(commands.find((c) => c.name === 'handoff')?.source, 'cli', "the agent's own /handoff stays its own");
+  // Claude and Codex get the store themselves: no rows added here.
+  assert.deepEqual(commandsPart.storeRows.call(runner as never, 'claude', []), []);
+  assert.deepEqual(commandsPart.storeRows.call(runner as never, 'codex', []), []);
+
+  const st = (provider: string) => ({ rec: { provider, accountId: 'oc', cwd: '/work' } });
+  const plan = (provider: string, text: string) => commandsPart.commandPlan.call(runner as never, st(provider) as never, text);
+  assert.equal(plan('opencode', '/inkworks a piston pump'), undefined, 'a store skill is words for the agent');
+  assert.deepEqual(plan('opencode', '/handoff'), { kind: 'cli' }, "the agent's own command still runs");
+  assert.deepEqual(plan('opencode', '/status'), { kind: 'status' }, "the runner's own commands win");
+  assert.deepEqual(plan('claude', '/inkworks a piston pump'), { kind: 'cli' });
 });
 
 test("codexSkillName: the cached list's name, else threadbear:<name> for a store skill", async () => {

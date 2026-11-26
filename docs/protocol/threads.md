@@ -233,8 +233,13 @@ Claude names `threadbear:<name>`, and Codex, through the links in its
 has that name, and then they keep the prefix. Another plugin's skills keep
 theirs. Codex loads a skill only by its own name, so a store skill a Codex
 message names goes to Codex as `$threadbear:<name>`, and one picked as a
-command is sent as a skill item under that name. Agents without the store
-(ACP ones) get the words as typed. Listing a folder's commands
+command is sent as a skill item under that name. The ACP agents (Cursor,
+OpenCode, Grok, Antigravity) have no skills of their own to load the
+store's as: their list has the store's skills too, as `<name>` with
+`scope: "store"` and the file as `path`, and a message naming one, as its
+first word or later, reaches the agent with a line sending it to that
+SKILL.md to read and follow. A command of the agent's own with the same
+name stays the agent's, and the skill is left out of its list. Listing a folder's commands
 loads the plugin as a session does, so they're in the list whether or not
 the thread has a CLI running. In a mention, `/threadbear:<name>` means
 the store skill `<name>`, and `/plugin:name` names a plugin's skill.

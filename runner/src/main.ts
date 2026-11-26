@@ -607,6 +607,7 @@ async function main(): Promise<void> {
     // are for every thread, and a change to either is news the same way.
     standingInstructions: () => [instructions.given().trim(), recipesHabits?.() ?? ''].filter(Boolean).join('\n\n'),
     skillNames: () => skills.names(),
+    storeSkills: () => skills.files(),
     projects,
     atMac: () => atMac,
     config: cfg,

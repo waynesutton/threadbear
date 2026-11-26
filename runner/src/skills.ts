@@ -310,6 +310,20 @@ export class SkillStore {
     return this.enabled ? this.skills.map((s) => s.name) : [];
   }
 
+  /**
+   * Each skill with its file, for an agent that has no skills of its own to
+   * load them as (Cursor, OpenCode and the other ACP ones): the picker lists
+   * them, and a message naming one sends the agent to the file. None while
+   * the store is off.
+   */
+  files(): { name: string; description: string; path: string }[] {
+    if (!this.enabled) return [];
+    return this.skills
+      .map((s) => ({ name: s.name, description: s.description, path: path.join(this.pluginDir, 'skills', s.name, 'SKILL.md') }))
+      .filter((s) => fs.existsSync(s.path))
+      .sort((a, b) => a.name.localeCompare(b.name));
+  }
+
   list(): { skills: Skill[]; suggested: SuggestedSkill[]; enabled: boolean } {
     return { skills: this.skills.map((s) => ({ ...s })).sort(byName), suggested: this.suggested(), enabled: this.enabled };
   }
