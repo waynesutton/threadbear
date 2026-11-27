@@ -36,6 +36,7 @@ export type BoardMethodDeps = {
   runner: {
     get(threadId: string): ThreadSummary;
     has(threadId: string): boolean;
+    settleBoardNeeds?(threadId: string): void;
     hello(): { accounts: { id: string; provider: Provider; models?: { id: string; model?: string }[] }[]; pools?: { id: string; accountIds: string[] }[] };
     create(params: {
       text: string;
@@ -124,7 +125,10 @@ export function boardMethods(d: BoardMethodDeps): Record<string, (p: Params) => 
       const frames = d.frames?.();
       if (!frames) throw new RpcError(ErrorCode.notAllowed, 'Plan board mockups is off. Turn it on in Settings > General > Experiments.');
       const id = thread(p);
-      if (typeof p.pick === 'string') frames.pick(id, p.pick);
+      if (typeof p.pick === 'string') {
+        frames.pick(id, p.pick);
+        d.runner.settleBoardNeeds?.(id);
+      }
       const list = d.boards.has(id) ? frames.list(id, typeof p.node === 'string' ? p.node : undefined) : [];
       if (p.seen === true) frames.seen(id);
       return { frames: list };
@@ -134,7 +138,9 @@ export function boardMethods(d: BoardMethodDeps): Record<string, (p: Params) => 
       const id = thread(p);
       const v = p.version;
       if (typeof v !== 'number' || !Number.isSafeInteger(v)) throw bad('version must be a whole number');
-      return { board: d.boards.approve(id, v) };
+      const board = d.boards.approve(id, v);
+      d.runner.settleBoardNeeds?.(id);
+      return { board };
     }),
     // Boxes Wayne dragged ({ id: [x, y] | null }), or tidy: true to clear them.
     'board.move': guard((p) => {
@@ -174,6 +180,7 @@ export function boardMethods(d: BoardMethodDeps): Record<string, (p: Params) => 
         const text = withBriefHeader(brief ?? buildBrief(board, nodeId, 'claude'), id, node, board.version, board.skills, 'claude');
         const { taskId } = port.addTask(where.projectId, { title, doneWhen: `The plan board's box "${node.label}" is built, as its brief says.`, brief: text });
         const next = d.boards.link(id, nodeId, { kind: 'coordinator', projectId: where.projectId, taskId, threadId: where.threadId, planVersion: board.version, at }, requestId);
+        d.runner.settleBoardNeeds?.(id);
         return { board: next, taskId };
       }
       if (p.destination !== undefined && p.destination !== 'thread') throw bad('destination must be "thread" or "coordinator"');
@@ -203,6 +210,7 @@ export function boardMethods(d: BoardMethodDeps): Record<string, (p: Params) => 
         startedBy: { kind: 'thread', label: 'Plan board', threadId: id, why: `Box "${node.label}" of the plan` },
       });
       const next = d.boards.link(id, nodeId, { threadId: res.thread.id, harness: res.thread.provider, planVersion: board.version, at }, requestId);
+      d.runner.settleBoardNeeds?.(id);
       return { board: next, thread: res.thread };
     }),
   };

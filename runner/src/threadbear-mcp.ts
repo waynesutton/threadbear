@@ -2349,7 +2349,8 @@ export function buildThreadbearTools(
             const g = board.graph;
             return [
               `Saved plan v${board.version}: ${g.nodes.length} box${g.nodes.length === 1 ? '' : 'es'}, ${g.groups.length} group${g.groups.length === 1 ? '' : 's'}, ${g.edges.length} arrow${g.edges.length === 1 ? '' : 's'}. Wayne sees it under Show plan.`,
-              backToDraft ? `This changed a plan Wayne had approved (v${board.approved?.version}), so it's a draft again: no box can be sent until he presses Approve plan. Boxes already sent keep running.` : `It's a draft until Wayne presses Approve plan. Don't build anything or send boxes until then.`,
+              backToDraft ? `This changed a plan Wayne had approved (v${board.approved?.version}), so it's a draft again: no box can be sent until he presses Approve plan on the board. Boxes already sent keep running.` : `It's a draft until Wayne presses Approve plan on the board. Don't build anything or send boxes until then.`,
+              `Because the board has its own Approve plan, Screens, and Send buttons, end this turn with end_turn needs "nothing" (no asks card) unless you need an answer to a question before he can use the board.`,
               g.skipped ? `${g.skipped} line${g.skipped === 1 ? '' : 's'} aren't drawn (outside the subset).` : '',
               redacted ? 'Something that looked like a secret was masked before it was kept.' : '',
             ].filter(Boolean).join(' ');
@@ -2377,7 +2378,7 @@ export function buildThreadbearTools(
         handle(async (a) => {
           try {
             const f = frames.write(selfId, a);
-            return `Saved screen ${f.id} v${f.version} beside box ${f.node}. Wayne sees it under Screens… on the board.`;
+            return `Saved screen ${f.id} v${f.version} beside box ${f.node}. Wayne sees and picks it under Screens on the board, so end this turn with end_turn needs "nothing" (no asks card) unless you have a real blocking question.`;
           } catch (e) {
             if (e instanceof BoardError) throw new Error(`Not saved. ${e.message}`);
             throw e;
@@ -2908,14 +2909,14 @@ export const LIVE_PAGES_LINE =
 // Only with the planBoard experiment on (experiments/planBoard.md). One line,
 // so boards stay rare and ordinary threads stay ordinary.
 export const PLAN_BOARD_LINE =
-  'Draw a plan board with update_board only when the user asks for one by name ("plan board"); any other plan, plan mode\'s included, stays as you would write it without boards. On a board: 25 boxes at most, no secrets, then wait: build nothing and send no boxes until Wayne presses Approve plan. read_board shows its state and skills.';
+  'Draw a plan board with update_board only when the user asks for one by name ("plan board"); any other plan, plan mode\'s included, stays as you would write it without boards. On a board: 25 boxes at most, no secrets, then wait: build nothing and send no boxes until Wayne presses Approve plan on the board, and end the turn with needs "nothing" (the board itself has the Approve plan, Screens, and Send buttons, so don\'t put an asks card on the composer unless you have a blocking question). read_board shows its state and skills.';
 
 // planBoardMockups's screens: without this, an agent asked for a box's
 // mockups wrote HTML files and put them in show_options, so the box's
 // Screens… stayed empty (Wayne, 26 Nov). One file either way, so no more
 // tokens; on the board it stays beside the box, versioned, and Pick is there.
 export const PLAN_BOARD_SCREENS_LINE =
-  "Mockups, takes or screens for a box of this thread's plan board (a message with the box's board: chip, or one naming it) go beside the box with update_frame, one call per take, not in show_options or loose files: Wayne sees them under the box's Screens…, compares them side by side and picks one there.";
+  "Mockups, takes or screens for a box of this thread's plan board (a message with the box's board: chip, or one naming it) go beside the box with update_frame, one call per take, not in show_options or loose files: Wayne sees them under the box's Screens…, compares them side by side and picks one there (end the turn with needs \"nothing\" rather than an asks card for picking a take).";
 
 // Only for a thread that has the pocket tool: the Pocket lives in the Convex
 // backend, so with phone sync off there's no tool to tell it about.

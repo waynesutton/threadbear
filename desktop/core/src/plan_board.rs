@@ -1052,13 +1052,13 @@ pub fn activity_rows(
     let mut rows: Vec<(u8, usize, ActivityRow)> = Vec::new();
     if let Some(p) = planner {
         let p_status = status(Some(p));
-        let active = matches!(p_status, BoxStatus::Working(_) | BoxStatus::NeedsYou);
-        if active || planner_note.is_some() {
+        let working = matches!(p_status, BoxStatus::Working(_));
+        if working || planner_note.is_some() {
             let shown_status = match (&p_status, planner_note) {
                 (BoxStatus::Working(line), Some(note)) if line.is_empty() => {
                     BoxStatus::Working(note.to_owned())
                 }
-                (BoxStatus::Working(_), _) | (BoxStatus::NeedsYou, _) => p_status.clone(),
+                (BoxStatus::Working(_), _) => p_status.clone(),
                 (_, Some(note)) => BoxStatus::Working(note.to_owned()),
                 _ => p_status.clone(),
             };
@@ -1957,5 +1957,15 @@ mod tests {
         let rows = activity_rows(&b, Some(&planner), None, &BTreeMap::new(), |_| None);
         assert!(rows.is_empty());
         assert_eq!(activity_summary(&rows), None);
+
+        // Even if the planner thread has needs="you" (shown on the main thread's
+        // own composer card), the board's Activity pill does not duplicate it.
+        let waiting_planner = summary(|t| {
+            t.status = "waiting".into();
+            t.needs = Some("you".into());
+        });
+        let rows_waiting =
+            activity_rows(&b, Some(&waiting_planner), None, &BTreeMap::new(), |_| None);
+        assert!(rows_waiting.is_empty());
     }
 }

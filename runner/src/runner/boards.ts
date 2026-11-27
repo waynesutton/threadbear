@@ -14,6 +14,19 @@ export const boardsPart = {
     const st = this.mustGet(threadId);
     this.emit(st, { type: 'board.updated', board });
   },
+
+  // When Wayne acts on the Plan board itself (Approve plan, Pick take, Send box),
+  // any open asks card on the planner thread is settled to needs "nothing" so
+  // the thread doesn't stay stuck saying "Needs you" in two places at once.
+  settleBoardNeeds(this: Runner, threadId: string): void {
+    if (!this.has(threadId)) return;
+    const st = this.mustGet(threadId);
+    const { rec } = st;
+    if (rec.needs?.needs === 'you') {
+      rec.needs = { seq: rec.needs.seq, needs: 'nothing' };
+      this.markDirty(st);
+    }
+  },
 };
 
 export type BoardsPart = RunnerPart<typeof boardsPart>;

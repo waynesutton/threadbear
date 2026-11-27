@@ -482,12 +482,35 @@ impl PlanBoardView {
         )
     }
 
-    /// Called after SendSheet starts a box thread: update board links and open
-    /// the live Activity tray so Wayne immediately sees where it is running.
+    /// Called after SendSheet starts a box thread: update board links, settle
+    /// any open asks card on the planner thread, and open the live Activity tray.
     fn on_box_sent(&mut self, board: Option<Board>, cx: &mut Context<Self>) {
         self.take_board(board);
         self.activity_open = true;
+        self.dismiss_planner_asks(cx);
         cx.notify();
+    }
+
+    /// When Wayne acts directly on the Plan board (Approve plan, Pick take,
+    /// Send box), dismiss any open asks card on the planner's composer so the
+    /// main thread input box and the board never wait on duplicate asks.
+    fn dismiss_planner_asks(&self, cx: &mut Context<Self>) {
+        let Some(app) = self.app.upgrade() else {
+            return;
+        };
+        let tid = self.thread_id.clone();
+        let pane = {
+            let a = app.read(cx);
+            a.pane
+                .iter()
+                .chain(a.thread_panels.panes())
+                .find(|p| p.read(cx).summary.id == tid)
+                .cloned()
+                .or_else(|| a.kept.get(&tid, cx))
+        };
+        if let Some(p) = pane {
+            p.update(cx, |p, cx| p.dismiss_open_asks(cx));
+        }
     }
 
     /// Center the canvas on a box and highlight it (used from the Activity tray).
@@ -586,6 +609,7 @@ impl PlanBoardView {
             json!({ "threadId": self.thread_id, "version": version }),
             cx,
         );
+        self.dismiss_planner_asks(cx);
         cx.notify();
     }
 
@@ -3679,6 +3703,7 @@ impl PlanBoardView {
             x.picked = x.id == f.id;
         }
         self.chip_text(chip, cx);
+        self.dismiss_planner_asks(cx);
         self.load_frames_opts(Some(f.id.clone()), true, cx);
     }
 

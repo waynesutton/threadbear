@@ -295,6 +295,10 @@ impl ThreadFeed {
         self.model.set_ask_picks(seq, picks)
     }
 
+    pub fn dismiss_open_asks(&mut self) -> TranscriptChange {
+        self.model.dismiss_open_asks()
+    }
+
     pub fn set_start_request(
         &mut self,
         approval_id: &str,

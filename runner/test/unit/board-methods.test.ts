@@ -230,3 +230,25 @@ test('board.frames shows Changed once when seen is true, then clears it', () => 
   const secondOpen = methods['board.frames']({ threadId: s.thread.id, seen: true }) as { frames: { changed: boolean }[] };
   assert.equal(secondOpen.frames[0].changed, false, 'second open clears Changed');
 });
+
+test('board.approve and board.frames pick settle an open needs-you card on the planner thread', () => {
+  const s = setup();
+  s.boards.update(s.thread.id, { mermaid: PLAN });
+  const frames = new BoardFrames(s.boards);
+  const methods = boardMethods({ boards: s.boards, on: () => true, frames: () => frames, runner: s.h.runner });
+  const html = '<!doctype html><html><body><div>v</div></body></html>';
+  const written = frames.write(s.thread.id, { node: 'kpi', frame: 'row', variant: 'A', title: 'Row', html });
+
+  const st = s.h.runner.mustGet(s.thread.id);
+  st.rec.lastTurnCompletedSeq = 10;
+  st.rec.needs = { seq: 10, needs: 'you', asks: [{ action: 'Pick a screen?' }] };
+  assert.equal(s.h.runner.get(s.thread.id).needs, 'you');
+
+  methods['board.frames']({ threadId: s.thread.id, pick: written.id });
+  assert.equal(s.h.runner.get(s.thread.id).needs, 'nothing');
+
+  st.rec.needs = { seq: 10, needs: 'you', asks: [{ action: 'Approve the plan?' }] };
+  assert.equal(s.h.runner.get(s.thread.id).needs, 'you');
+  methods['board.approve']({ threadId: s.thread.id, version: 1 });
+  assert.equal(s.h.runner.get(s.thread.id).needs, 'nothing');
+});

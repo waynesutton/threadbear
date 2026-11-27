@@ -573,6 +573,16 @@ impl TranscriptModel {
         });
     }
 
+    /// Closes an open asks card when the user resolves the step directly on
+    /// the Plan board (Approve plan, Pick take, or Send box).
+    pub fn dismiss_open_asks(&mut self) -> TranscriptChange {
+        if self.open_asks_row.is_none() {
+            return TranscriptChange::default();
+        }
+        self.close_open_asks();
+        self.refresh_rows()
+    }
+
     /// Mike picked (or unpicked) answers on the card from `seq`.
     pub fn set_ask_picks(&mut self, seq: i64, picks: BTreeMap<i64, i64>) -> TranscriptChange {
         if self.ask_picks.get(&seq).cloned().unwrap_or_default() == picks {
