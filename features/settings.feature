@@ -129,8 +129,8 @@ Feature: Settings
   @settings.general @swift-pending
   Scenario: Searching General settings brings matching toggles to the top
     When I open Settings
-    And I search General settings for "canvas"
-    Then Settings says the experiment "threadCanvas" is off
-    When I press "Try Canvas" in Settings without resizing
-    Then Settings says the experiment "threadCanvas" is on
+    And I search General settings for "clearer"
+    Then Settings says the experiment "clearerCompletion" is off
+    When I press "Try Clearer completion" in Settings without resizing
+    Then Settings says the experiment "clearerCompletion" is on
 

@@ -788,7 +788,7 @@ test("a box with logins and projects listed sends neither, so its thread's messa
     log: nullLogger,
     post: onlyBoxCalls(async (_kind, fn) => {
       calls.push(fn);
-      if (fn === 'sync:heartbeat') return { apiVersion: 111 };
+      if (fn === 'sync:heartbeat') return { apiVersion: 117 };
       if (fn === 'sync:messageHeads') return [];
       return null;
     }),

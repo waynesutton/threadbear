@@ -30,7 +30,7 @@ function relay(box: boolean) {
   };
   const asked: string[] = [];
   const r = new Relay({
-    source: () => ({ key: 'owner', apiVersion: 111, upload: async () => '', download: async () => new Uint8Array(), post: async (_k, fn, args) => { asked.push(`${fn}:${args.runnerId}`); return rows[String(args.runnerId)] ?? []; } }),
+    source: () => ({ key: 'owner', apiVersion: 117, upload: async () => '', download: async () => new Uint8Array(), post: async (_k, fn, args) => { asked.push(`${fn}:${args.runnerId}`); return rows[String(args.runnerId)] ?? []; } }),
     remote: () => remote,
     publish: () => undefined,
     subscribed: () => false,
@@ -44,7 +44,8 @@ function relay(box: boolean) {
 test("a box's thread offers this Mac's login its cloud token is for, with its models", async () => {
   const { r, asked } = relay(true);
   const got = await r.logins(BOX);
-  assert.deepEqual(asked, [`relay:remoteAccounts:${MAC}`]);
+  // The pools read is Mike's (backend 101+): Usage follows the box's own pools.
+  assert.deepEqual(asked, [`relay:remoteAccounts:${MAC}`, `relay:remotePools:${BOX}`]);
   assert.deepEqual((got.accounts as { id: string }[]).map((a) => a.id), ['claude-main']);
   assert.deepEqual((got.accounts as { models: { id: string }[] }[])[0]!.models.map((m) => m.id), ['opus', 'fable']);
 });
@@ -52,7 +53,7 @@ test("a box's thread offers this Mac's login its cloud token is for, with its mo
 test("another Mac's thread still offers that Mac's own logins", async () => {
   const { r, asked } = relay(false);
   await r.logins(BOX);
-  assert.deepEqual(asked, [`relay:remoteAccounts:${BOX}`]);
+  assert.deepEqual(asked, [`relay:remoteAccounts:${BOX}`, `relay:remotePools:${BOX}`]);
 });
 
 test("a box's thread is named after its virtual runner where the relay names it", async () => {

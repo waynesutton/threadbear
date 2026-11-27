@@ -84,7 +84,7 @@ function harness(o: { tools?: Record<string, Handler>; tasks?: NativeTask[]; con
   const l = new LinearTasks({
     call: () => call,
     connected: () => o.connected ?? true,
-    apiVersion: () => o.api ?? 109,
+    apiVersion: () => o.api ?? 115,
     tasksOn: () => true,
     tasks: async (op, args) => {
       if (op === 'get') return rows.get(String(args?.id)) ?? null;

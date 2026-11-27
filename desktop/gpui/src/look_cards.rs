@@ -395,8 +395,7 @@ impl Threadbear {
     ) -> AnyElement {
         let home = crate::files::home_dir();
         let private: Vec<String> = self
-            .runner_settings
-            .as_ref()
+            .runner_settings()
             .and_then(|s| s["models"]["privateFolders"].as_array())
             .map(|a| {
                 a.iter()

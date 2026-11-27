@@ -29,7 +29,7 @@ test('Tasks bridge supplies its own credentials and preserves retry ids', async 
 test('Tasks bridge rejects disabled, offline and unknown operations', async () => {
   await assert.rejects(
     new Tasks(
-      () => ({ key: 'owner', apiVersion: 102, post: async () => { throw new Error('Must not reach the old backend'); } }),
+      () => ({ key: 'owner', apiVersion: 108, post: async () => { throw new Error('Must not reach the old backend'); } }),
       () => true,
       () => {},
     ).call('create', { title: 'Work in progress', status: 'doing' }),
@@ -148,14 +148,14 @@ test('native photo upload preserves image MIME and selects the uploaded storage 
 
 
 test('new task controls give an update message against an older backend', async () => {
-  const tasks = new Tasks(() => ({ key: 'owner', apiVersion: 104, post: async () => { throw Error('must not reach backend'); } }), () => true, () => {});
+  const tasks = new Tasks(() => ({ key: 'owner', apiVersion: 110, post: async () => { throw Error('must not reach backend'); } }), () => true, () => {});
   for (const [operation, args] of [['startThread', {id:'task'}], ['create', {title:'Task', columnId:'todo'}], ['setPreferences', {columns:[]}]] as const) {
     await assert.rejects(tasks.call(operation, args), /Update the Threadbear backend/);
   }
 });
 
 test('deleting a column gives an update message against a backend before 89', async () => {
-  const tasks = new Tasks(() => ({ key: 'owner', apiVersion: 107, post: async () => { throw Error('must not reach backend'); } }), () => true, () => {});
+  const tasks = new Tasks(() => ({ key: 'owner', apiVersion: 113, post: async () => { throw Error('must not reach backend'); } }), () => true, () => {});
   await assert.rejects(tasks.call('deleteColumn', { id: 'paused' }), /delete task columns/);
 });
 
@@ -174,19 +174,19 @@ test('native picker can upload bytes without granting the runner access to its s
 
 
 test('issue fields and comments give an update message against a backend before 87', async () => {
-  const tasks = new Tasks(() => ({ key: 'owner', apiVersion: 105, post: async () => { throw Error('must not reach backend'); } }), () => true, () => {});
+  const tasks = new Tasks(() => ({ key: 'owner', apiVersion: 111, post: async () => { throw Error('must not reach backend'); } }), () => true, () => {});
   for (const [operation, args] of [['update', { id: 't', priority: 'urgent' }], ['update', { id: 't', dueDate: '2026-11-20' }], ['create', { title: 'T', parentId: 'p' }], ['update', { id: 't', links: [] }], ['comment', { id: 't', body: 'Hi' }], ['activity', { id: 't' }], ['removeComment', { id: 't', commentId: 'c' }], ['imageData', { id: 't', base64: '' }]] as const) {
     await assert.rejects(tasks.call(operation, args), /Update the Threadbear backend/, operation);
   }
   // Plain edits still go to an 86 backend, without an author it would refuse.
   const sent: unknown[] = [];
-  await new Tasks(() => ({ key: 'owner', apiVersion: 105, post: async (_k, _f, a) => void sent.push(a) }), () => true, () => {}).call('update', { id: 't', title: 'Plain', author: { kind: 'agent', name: 'x' } });
+  await new Tasks(() => ({ key: 'owner', apiVersion: 111, post: async (_k, _f, a) => void sent.push(a) }), () => true, () => {}).call('update', { id: 't', title: 'Plain', author: { kind: 'agent', name: 'x' } });
   assert.deepEqual(sent, [{ id: 't', title: 'Plain', auth: { key: 'owner' } }]);
 });
 
 test('writes carry who they are from, and a client cannot choose it', async () => {
   const sent: [string, Record<string, unknown>][] = [];
-  const tasks = new Tasks(() => ({ key: 'owner', apiVersion: 106, post: async (_k, fn, a) => void sent.push([fn, a]) }), () => true, () => {});
+  const tasks = new Tasks(() => ({ key: 'owner', apiVersion: 112, post: async (_k, fn, a) => void sent.push([fn, a]) }), () => true, () => {});
   await tasks.call('comment', { id: 't', body: 'Hi', author: { kind: 'agent', name: 'Forged' } });
   await tasks.call('update', { id: 't', priority: 'high' }, { kind: 'agent', name: 'Fix login' });
   assert.equal((sent[0]![1].author as { kind: string }).kind, 'user');
@@ -202,7 +202,7 @@ test('writes carry who they are from, and a client cannot choose it', async () =
 test('a task image uploads checked bytes and appends a link', async () => {
   const base64 = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aD1sAAAAASUVORK5CYII=';
   const calls: [string, unknown][] = [];
-  const tasks = new Tasks(() => ({ key: 'owner', apiVersion: 106, post: async (_k, fn, a) => { calls.push([fn, a]); return fn === 'tasks:uploadPhoto' ? 'https://example.test/upload' : { id: 'image-s' }; },
+  const tasks = new Tasks(() => ({ key: 'owner', apiVersion: 112, post: async (_k, fn, a) => { calls.push([fn, a]); return fn === 'tasks:uploadPhoto' ? 'https://example.test/upload' : { id: 'image-s' }; },
     upload: async (_url, _bytes, mime) => { assert.equal(mime, 'image/png'); return 'storage-1'; } }), () => true, () => {});
   assert.deepEqual(await tasks.call('imageData', { id: 't', base64, name: 'shot.png' }), { id: 'image-s' });
   assert.deepEqual(calls.at(-1), ['tasks:addImage', { id: 't', storageId: 'storage-1', title: 'shot.png', auth: { key: 'owner' } }]);
@@ -230,7 +230,7 @@ test('related lists this runner\'s threads and prints for a task in one of its p
   const asked: string[] = [];
   const project = (runnerId: string) => ({ id: 't', project: { runnerId, id: 'p1' } });
   let row = project('mac');
-  const tasks = new Tasks(() => ({ key: 'owner', apiVersion: 106, post: async (_k, fn) => (fn === 'tasks:get' ? row : null) }), () => true, () => {},
+  const tasks = new Tasks(() => ({ key: 'owner', apiVersion: 112, post: async (_k, fn) => (fn === 'tasks:get' ? row : null) }), () => true, () => {},
     () => ({ runnerId: 'mac', related: (id) => (asked.push(id), { threads: [{ id: 'x', title: 'X', status: 'idle', lastActivityAt: '' }], prints: [] }) }));
   assert.equal((await tasks.call('related', { id: 't' }) as { threads: unknown[] }).threads.length, 1);
   row = project('other-mac');

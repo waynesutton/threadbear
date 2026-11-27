@@ -921,7 +921,7 @@ impl Composer {
             return None;
         }
         let app = self.app.upgrade()?;
-        let choices = crate::fast_lane::Choices::read(app.read(cx).runner_settings.as_ref())?;
+        let choices = crate::fast_lane::Choices::read(app.read(cx).runner_settings())?;
         Some((choices, self.app.clone()))
     }
 

@@ -11,7 +11,7 @@ reminder: cb15fc10
 
 Tasks sits below Notes (Command-7). It opens on a quick-add list: type a task, press Return, tick it off. Switch to a board with Backlog, On Deck, Shaping, Building, Observing, Done, Paused and Canceled (rename or delete any but Building), drag cards, columns, sections and projects into the order you like, and choose which view opens by default. Tasks can belong to a project or stand alone. Their titles, notes, status and appearance are kept in your own Convex deployment, so the signed-in website works while your Mac is off. Agents can add and update tasks when you ask. With Linear connected in Connectors, a task can be sent to Linear, linked to an issue, or brought in from one, and kept in sync from Linear; without it nothing about Linear shows. Notes stay private to your Mac and Notion boards remain separate.
 
-Requires backend API 107 for Linear, 106 for the eight columns and deleting them, 103 for custom columns and Send to thread (100 for the original collection, 101 for Doing and saved orders). Editing needs a connection; an open page retains its last loaded tasks if it loses contact. The desktop and agent tools follow this switch. The authenticated website offers Tasks once its backend supports it.
+Requires backend API 115 for Linear, 114 for the eight columns and deleting them, 111 for custom columns and Send to thread (100 for the original collection, 101 for Doing and saved orders). Editing needs a connection; an open page retains its last loaded tasks if it loses contact. The desktop and agent tools follow this switch. The authenticated website offers Tasks once its backend supports it.
 
 ## Lives in
 

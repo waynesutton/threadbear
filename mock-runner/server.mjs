@@ -400,7 +400,6 @@ const settings = {
   experiments: [
     { id: 'pages', name: 'Prints', does: 'Threads make Prints you keep: charts, dashboards, reports, docs and diagrams, with versions, in a reply as a card.', on: !process.env.TB_MOCK_PAGES_OFF },
     { id: 'clearerCompletion', name: 'Clearer completion', does: 'Shows task completion on the reply card.', on: Boolean(process.env.TB_MOCK_COMPLETION) },
-    { id: 'threadCanvas', name: 'Canvas', does: 'Shows your threads as cards on a board you can drag and zoom.', on: Boolean(process.env.TB_MOCK_THREAD_CANVAS) },
   ],
 };
 const pagesOn = () => settings.experiments.some((e) => e.id === 'pages' && e.on);
