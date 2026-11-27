@@ -22,7 +22,11 @@ How the Tasks section works today (an experiment: turn it on in Settings > Exper
 
 ### Added
 
-- Settings > General has a search bar at the top, above Appearance, that filters sections and rows by name, description and choices, including Experiments toggles such as Canvas and fork settings such as New thread box.
+- Brought in Mike's release of 27 November. It adds project coordinators as an experiment: a project gets one agent that keeps its goals, state and notes current, hands routine work to helpers you don't see in the inbox, and shows tasks and decisions on a project home with Conversation, Activity, Tasks and Threads tabs. It also brings a model picker grouped by pool and provider, sidebar sections you can drag into your own order, code reviews shown as checklists, smoother scrolling on ProMotion screens, and a Usage hint when a reset would give you more room. Its security fixes stop a compromised cloud box from turning off other threads on its login, put small size limits on public relay requests, and stop a limited thread on Windows from making itself a runner's owner.
+- Project coordinators is on for you in Settings > General > Experiments. Open a project's page and choose Add a coordinator to try it. The print "Coordinators and bears, side by side" compares it with bears and tables, feature by feature.
+- With Mike's release, the review board and end_turn up front are standard, so their switches are gone, and the Canvas page is taken out. This copy's own backend API numbers moved from 100 to 111 to 106 to 117, after Mike's 100 to 105.
+
+- Settings > General has a search bar at the top, above Appearance, that filters sections and rows by name, description and choices, including Experiments toggles such as Clearer completion and fork settings such as New thread box.
 - Removed the Plan board experiment from the app and Settings, and parked its commits on `plan-board-parked` (`plan-board-final`).
 - Settings > General > Appearance has a Theme row with three pictures: Stock, Harbor and Squall. Stock is the usual look and stays the default. Harbor is charcoal with blue-slate code blocks and a sea-blue accent, light or dark. Squall is blue-grey with a steel-blue accent and always dark. A theme colours the window, cards, menus, code and the Terminal, and the first accent dot becomes the theme's own accent. The website's gear menu has the same three. The choice is saved as `palette` in `desktop-settings.json`.
 - Settings > Runners has a Cloud runners section. Add a cloud runner… sets up Fly from one org token, or from flyctl's own sign-in: it makes the Fly app, saves the token and keys to your backend, builds the box image, makes the runner and tries a test box, showing each step as it goes. Afterwards the section lists each cloud runner's box size and threads, with Check again, Rebuild and Edit…. `tb cloud setup`, `check` and `rebuild` do the same from a terminal. Needs the `virtualRunners` experiment and flyctl.
@@ -47,8 +51,6 @@ How the Tasks section works today (an experiment: turn it on in Settings > Exper
 - Tasks can go to Linear when Linear is connected in Connectors. Send to Linear makes one issue in the team and project you pick, with sub-tasks as a checklist and the task's pictures uploaded. Add from Linear brings issues in as tasks, and Link to Linear issue ties a task to one that exists. Tasks you keep in sync copy status, priority, due date, title and comments from Linear every hour (or 6, 12 or 24 hours), with no tokens spent. Without Linear, Tasks is unchanged.
 
 ### Fixed
-
-- Open the bottom sidebar panels and Settings on the first click from Canvas.
 
 - Reopen Terminal with Command-J after hiding it, keeping the same shell running.
 
