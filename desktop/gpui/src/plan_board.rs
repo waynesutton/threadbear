@@ -60,11 +60,17 @@ pub(crate) struct PlanBoards {
 
 impl Global for PlanBoards {}
 
-/// A `board.updated` from the runner: the board's tab, if open, reads the
-/// board again (it carries Wayne's own state too, which the event doesn't
-/// change). Called from the app's update, so it reads no app state.
+/// A `board.updated` or `update_frame` tool event from the runner: the
+/// board's tab, if open, reads the board or its screens again right away.
+/// Called from the app's update, so it reads no app state.
 pub(crate) fn receive_event(params: &Value, cx: &mut App) {
-    if params["event"]["type"].as_str() != Some("board.updated") {
+    let ev_type = params["event"]["type"].as_str().unwrap_or("");
+    let is_board = ev_type == "board.updated";
+    let is_frame_tool = matches!(ev_type, "tool.completed" | "tool.started")
+        && params["event"]["name"]
+            .as_str()
+            .is_some_and(|n| n.ends_with("update_frame"));
+    if !is_board && !is_frame_tool {
         return;
     }
     let Some(thread) = params["threadId"].as_str() else {
@@ -74,15 +80,25 @@ pub(crate) fn receive_event(params: &Value, cx: &mut App) {
         return;
     }
     let boards = cx.global_mut::<PlanBoards>();
-    if let Some(e) = boards.has.get_mut(thread) {
-        e.1 = true;
-    } else {
-        boards.has.insert(thread.to_owned(), (0, true));
+    if is_board {
+        if let Some(e) = boards.has.get_mut(thread) {
+            e.1 = true;
+        } else {
+            boards.has.insert(thread.to_owned(), (0, true));
+        }
     }
     let view = boards.views.get(thread).cloned();
     if let Some(view) = view {
-        let board = Board::decode(&params["event"]["board"]);
-        view.update(cx, |v, cx| v.agent_wrote(board, cx));
+        if is_board {
+            let board = Board::decode(&params["event"]["board"]);
+            view.update(cx, |v, cx| v.agent_wrote(board, cx));
+        } else {
+            view.update(cx, |v, cx| {
+                if v.board.is_some() && v.mockups_on(cx) {
+                    v.load_frames_opts(None, false, cx);
+                }
+            });
+        }
     }
 }
 
@@ -955,7 +971,6 @@ fn bar_button(
 impl PlanBoardView {
     fn render_approve_button(&self, cx: &mut Context<Self>) -> AnyElement {
         let accent = style::accent(cx);
-        let on_accent = style::over_background(accent, cx);
         let enabled = !self.approving;
         crate::a11y::A11yRole::a11y_role(
             div()
@@ -970,7 +985,7 @@ impl PlanBoardView {
                 .bg(accent)
                 .text_size(px(size::DETAIL))
                 .font_weight(FontWeight::SEMIBOLD)
-                .text_color(on_accent)
+                .text_color(gpui_kit::white())
                 .when(!enabled, |d| d.opacity(0.5))
                 .when(enabled, |d| {
                     d.cursor(CursorStyle::PointingHand)
@@ -2927,7 +2942,9 @@ pub(crate) fn automation(
             let label = cmd["box"].as_str().unwrap_or_default().to_owned();
             view.update(cx, |v, cx| match label_to_id(v, &label) {
                 Some(id) if v.mockups_on(cx) => {
-                    v.toggle_screens(&id, cx);
+                    v.screens_for = Some(id);
+                    v.load_frames_opts(None, true, cx);
+                    cx.notify();
                     Ok(())
                 }
                 Some(_) => Err("there's no Screens… with Plan board mockups off".to_owned()),
@@ -3056,6 +3073,7 @@ impl PlanBoardView {
         cx.spawn(async move |this, cx| {
             let res = call(client, "board.frames", params).await;
             this.update(cx, |this, cx| {
+                let first_load = !this.frames_loaded;
                 this.frames_loaded = true;
                 match res {
                     Ok(v) => {
@@ -3065,6 +3083,19 @@ impl PlanBoardView {
                             .flatten()
                             .filter_map(|f| serde_json::from_value::<rules::Frame>(f.clone()).ok())
                             .collect();
+                        if this.screens_for.is_none() {
+                            if let Some(asked_node) = this.asking_screens_for.clone() {
+                                if this.frames.iter().any(|f| f.node == asked_node) {
+                                    this.screens_for = Some(asked_node);
+                                }
+                            } else if first_load {
+                                if let Some(first_node) =
+                                    this.frames.first().map(|f| f.node.clone())
+                                {
+                                    this.screens_for = Some(first_node);
+                                }
+                            }
+                        }
                         this.error = None;
                     }
                     Err(e) => this.error = Some(e.message),
@@ -3205,12 +3236,23 @@ impl PlanBoardView {
             .collect();
         let dark = cx.theme().is_dark();
         let accent = style::accent(cx);
-        let on_accent = style::over_background(accent, cx);
         let green: Hsla = rgb(GREEN).into();
         let picked_variant = mine.iter().find(|f| f.picked).map(|f| f.variant.clone());
         let asking = self.asking_screens_for.as_deref() == Some(node.as_str());
         let node_for_ask = node.clone();
         let node_for_mention = node.clone();
+        let mut boxes_with_screens: Vec<(String, String, usize, Option<String>)> = Vec::new();
+        for n in &board.graph.nodes {
+            let count = self.frames.iter().filter(|f| f.node == n.id).count();
+            if count > 0 || n.id == node {
+                let picked = self
+                    .frames
+                    .iter()
+                    .find(|f| f.node == n.id && f.picked)
+                    .map(|f| f.variant.clone());
+                boxes_with_screens.push((n.id.clone(), n.label.clone(), count, picked));
+            }
+        }
 
         let mut header = h_flex()
             .flex_none()
@@ -3228,6 +3270,66 @@ impl PlanBoardView {
                     .truncate()
                     .child(format!("Screens · {box_label}")),
             );
+        if boxes_with_screens.len() > 1 {
+            let mut tabs = h_flex().gap(px(4.)).items_center();
+            for (bid, blabel, bcount, bpicked) in boxes_with_screens {
+                let active = bid == node;
+                let tab_label = match bpicked {
+                    Some(v) => format!("{blabel} · {v}"),
+                    None if bcount > 0 => format!("{blabel} ({bcount})"),
+                    None => blabel.clone(),
+                };
+                let switch_id = bid.clone();
+                tabs = tabs.child(
+                    crate::a11y::A11yRole::a11y_role(
+                        div()
+                            .id(SharedString::from(format!("plan-screens-tab-{bid}")))
+                            .flex_none()
+                            .h(px(20.))
+                            .px(px(7.))
+                            .flex()
+                            .items_center()
+                            .whitespace_nowrap()
+                            .rounded(px(5.))
+                            .border_1()
+                            .border_color(if active {
+                                accent
+                            } else {
+                                style::button_edge(cx)
+                            })
+                            .bg(if active {
+                                accent.opacity(0.16)
+                            } else {
+                                style::button_fill(cx)
+                            })
+                            .text_size(px(size::SMALL))
+                            .font_weight(if active {
+                                FontWeight::SEMIBOLD
+                            } else {
+                                FontWeight::NORMAL
+                            })
+                            .text_color(if active {
+                                accent
+                            } else {
+                                style::secondary_text(cx)
+                            })
+                            .cursor(CursorStyle::PointingHand)
+                            .test_support(),
+                        Role::Button,
+                    )
+                    .aria_label(SharedString::from(format!("Screens for {blabel}")))
+                    .tip("Switch to this box's screens")
+                    .child(tab_label)
+                    .on_click(cx.listener(
+                        move |this, _: &ClickEvent, _, cx| {
+                            this.screens_for = Some(switch_id.clone());
+                            cx.notify();
+                        },
+                    )),
+                );
+            }
+            header = header.child(tabs);
+        }
         if let Some(v) = picked_variant {
             header = header.child(
                 div()
@@ -3242,7 +3344,7 @@ impl PlanBoardView {
                     .text_size(px(size::SMALL))
                     .font_weight(FontWeight::SEMIBOLD)
                     .text_color(green)
-                    .child(format!("Picked: {v}")),
+                    .child(format!("Picked: {v} · saved to box brief")),
             );
         } else if !board.state().approved() {
             header = header.child(
@@ -3257,7 +3359,7 @@ impl PlanBoardView {
                     .bg(accent.opacity(0.14))
                     .text_size(px(size::SMALL))
                     .text_color(accent)
-                    .child("Works before approving"),
+                    .child("Pick a take here, then click Approve plan"),
             );
         }
         header = header
@@ -3326,7 +3428,7 @@ impl PlanBoardView {
                                     .bg(accent)
                                     .text_size(px(size::DETAIL))
                                     .font_weight(FontWeight::SEMIBOLD)
-                                    .text_color(on_accent)
+                                    .text_color(gpui_kit::white())
                                     .when(asking, |d| d.opacity(0.5))
                                     .when(!asking, |d| {
                                         d.cursor(CursorStyle::PointingHand)
@@ -3499,11 +3601,11 @@ impl PlanBoardView {
                                 .child(
                                     bar_button_dyn(
                                         format!("plan-pick-{id}"),
-                                        if f.picked { "Picked" } else { "Pick" },
+                                        if f.picked { "Picked ✓" } else { "Pick take" },
                                         if f.picked {
-                                            "Selected take for this box"
+                                            "Selected take for this box (automatically included when you Send this box)"
                                         } else {
-                                            "Pick this take and reference it in chat"
+                                            "Save this take as the chosen design for this box and put its chip in chat"
                                         },
                                         !f.picked,
                                         cx,
@@ -3519,8 +3621,8 @@ impl PlanBoardView {
                                 .child(
                                     bar_button_dyn(
                                         format!("plan-chat-{id}"),
-                                        "Chat",
-                                        "Put this screen in the message box",
+                                        "Discuss in chat",
+                                        "Put this screen in the main thread message box so you can ask for changes",
                                         true,
                                         cx,
                                     )
