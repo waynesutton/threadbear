@@ -125,3 +125,12 @@ Feature: Settings
     Then the new-thread box is at the "bottom"
     When I press "The new-thread box sits in the middle" in Settings
     Then the new-thread box is at the "middle"
+
+  @settings.general @swift-pending
+  Scenario: Searching General settings brings matching toggles to the top
+    When I open Settings
+    And I search General settings for "canvas"
+    Then Settings says the experiment "threadCanvas" is off
+    When I press "Try Canvas" in Settings without resizing
+    Then Settings says the experiment "threadCanvas" is on
+

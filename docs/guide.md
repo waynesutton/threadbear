@@ -3855,7 +3855,9 @@ panel for now.
 
 Over the main panel, Settings widens with the window, up to the width its
 rows reach. Its own window can be dragged wider too; each tab still sets
-how tall it is.
+how tall it is. Settings > General has a search bar at the top, above
+Appearance, that filters sections and rows as you type, including
+Experiments toggles and any custom settings in your fork.
 
 ### The activity log
 

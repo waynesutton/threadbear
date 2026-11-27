@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import type { ThreadbearWorld } from '../support/world.ts';
 
 /** The Settings window while it's open, from either app's dump. */
-type SettingsInfo = { tab: string; instructions?: string; instructionsStatus?: string; accent?: string; compact?: boolean; keepAwake?: boolean | null; fullSync?: boolean | null; printsWhenAsked?: boolean | null; spareWeek?: boolean | null; modelWeeks?: { switch: string; on: boolean } | null; privateFolders?: string[] | null; labReviewers?: string[] | null; labPanel?: string[] | null };
+type SettingsInfo = { tab: string; generalSearch?: string; instructions?: string; instructionsStatus?: string; accent?: string; compact?: boolean; keepAwake?: boolean | null; fullSync?: boolean | null; printsWhenAsked?: boolean | null; spareWeek?: boolean | null; modelWeeks?: { switch: string; on: boolean } | null; privateFolders?: string[] | null; labReviewers?: string[] | null; labPanel?: string[] | null; experiments?: Array<{ id: string; name: string; on: boolean }> | null };
 const shown = (d: unknown) => (d as { settingsWindow?: SettingsInfo | null }).settingsWindow;
 
 Then('Settings is inside the main window', async function (this: ThreadbearWorld) {
@@ -134,3 +134,17 @@ Then('Settings says spare week nudges are {word}', async function (this: Threadb
 Then("Settings' {string} switch is {word}", async function (this: ThreadbearWorld, words: string, state: string) {
   await this.until(`"${words}" ${state}`, (d) => shown(d)?.modelWeeks?.switch === words && shown(d)?.modelWeeks?.on === (state === 'on'));
 });
+
+When('I search General settings for {string}', async function (this: ThreadbearWorld, words: string) {
+  await this.app.do({ cmd: 'settings', search: words });
+  await this.until(`General search "${words}"`, (d) => shown(d)?.generalSearch === words);
+});
+
+When('I press {string} in Settings without resizing', async function (this: ThreadbearWorld, tip: string) {
+  await this.app.do({ cmd: 'click', tipPrefix: tip, settings: true });
+});
+
+Then('Settings says the experiment {string} is {word}', async function (this: ThreadbearWorld, id: string, state: string) {
+  await this.until(`experiment ${id} ${state}`, (d) => shown(d)?.experiments?.find((e) => e.id === id)?.on === (state === 'on'));
+});
+

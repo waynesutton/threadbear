@@ -17,7 +17,7 @@ use crate::spinner::Spinner;
 use crate::{call, icons, style};
 use gpui_kit::base::TestSupportExt as _;
 use gpui_kit::component::button::{Button, ButtonVariants as _};
-use gpui_kit::component::input::{InputEvent, Textarea, TextareaState};
+use gpui_kit::component::input::{Input, InputEvent, InputState, Textarea, TextareaState};
 use gpui_kit::component::menu::{DropdownMenu as _, PopupMenu, PopupMenuItem};
 use gpui_kit::component::slider::{Slider, SliderEvent, SliderState};
 use gpui_kit::component::{
@@ -33,7 +33,8 @@ use std::time::Duration;
 use threadbear_core::completion_sound::{self, Ding};
 use threadbear_core::new_thread::abbreviate_home;
 use threadbear_core::runner_settings::{
-    experiment_about, BringIn, Experiment, RunnerSettings, StandingInstructions,
+    experiment_about, general_matches, BringIn, Experiment, RunnerSettings, StandingInstructions,
+    GENERAL_SEARCH_PROMPT,
 };
 
 mod cloud;
@@ -293,6 +294,8 @@ pub(crate) struct SettingsWindow {
     cloud: cloud::CloudDraft,
     /// Keyboard's search and the key being listened for (`settings_window/keyboard.rs`).
     keyboard: keyboard::KeyboardDraft,
+    /// General's search box, made the first time General is drawn.
+    general_search: Option<Entity<InputState>>,
     /// The ding's volume (Notifications).
     volume: Entity<SliderState>,
     scroll: ScrollHandle,
@@ -510,6 +513,7 @@ impl SettingsWindow {
             devices: Default::default(),
             cloud: Default::default(),
             keyboard: Default::default(),
+            general_search: None,
             volume,
             scroll: ScrollHandle::new(),
             sidebar_focus: cx.focus_handle(),
@@ -834,49 +838,175 @@ impl SettingsWindow {
             )
     }
 
-    #[expect(
-        clippy::too_many_lines,
-        reason = "baselined at 288 lines when the lint was turned on (20 Nov 2026); split it when it's next worked on"
-    )]
+    /// General's search box, made the first time General is drawn.
+    fn general_search_box(
+        &mut self,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> Entity<InputState> {
+        if let Some(search) = &self.general_search {
+            return search.clone();
+        }
+        let search = cx.new(|cx| InputState::new(window, cx).placeholder(GENERAL_SEARCH_PROMPT));
+        let sub = cx.subscribe_in(&search, window, |this, _, ev: &InputEvent, _, cx| {
+            if matches!(ev, InputEvent::Change) {
+                this.scroll
+                    .set_offset(point(gpui_kit::px(0.), gpui_kit::px(0.)));
+                cx.notify();
+            }
+        });
+        self._subs.push(sub);
+        self.general_search = Some(search.clone());
+        search
+    }
+
+    fn general_search_text(&self, cx: &App) -> String {
+        self.general_search
+            .as_ref()
+            .map(|s| s.read(cx).value().to_string())
+            .unwrap_or_default()
+    }
+
+    fn render_general_search_bar(
+        &mut self,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> AnyElement {
+        let search = self.general_search_box(window, cx);
+        let faint = style::faint_text(cx);
+        let field = div()
+            .id("settings-general-search")
+            .test_support()
+            .a11y_role(Role::GenericContainer)
+            .aria_label(GENERAL_SEARCH_PROMPT)
+            .tip(GENERAL_SEARCH_PROMPT)
+            .h(px(29.))
+            .pl(px(16.))
+            .pr(px(9.))
+            .flex()
+            .items_center()
+            .gap(px(8.))
+            .rounded(px(8.))
+            .bg(style::primary_opacity(cx, 0.035))
+            .border(gpui_kit::px(0.5))
+            .border_color(style::hairline(cx))
+            .child(
+                div().flex_none().w(px(16.)).flex().justify_center().child(
+                    icons::symbol("magnifyingglass")
+                        .with_size(px(12.5))
+                        .text_color(faint),
+                ),
+            )
+            .child(
+                div().flex_1().min_w_0().child(
+                    Input::new(&search)
+                        .appearance(false)
+                        .small()
+                        .cleanable(true)
+                        .pl(px(0.))
+                        .text_size(px(14.)),
+                ),
+            );
+        h_flex()
+            .flex_none()
+            .w_full()
+            .justify_center()
+            .child(
+                div()
+                    .w_full()
+                    .max_w(px(700.))
+                    .px(px(20.))
+                    .pt(px(14.))
+                    .pb(px(4.))
+                    .child(field),
+            )
+            .into_any_element()
+    }
+
     fn render_general(
         &mut self,
         settings: Option<&RunnerSettings>,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> Vec<AnyElement> {
+        let search = self.general_search_text(cx);
+        let searching = !search.trim().is_empty();
         // This Mac's own, so they're here while the runner's away too.
-        let mut sections = vec![
-            self.appearance_section(cx),
-            self.panels_section(cx),
-            self.browser_section(cx),
-            self.files_section(cx),
-            self.slash_section(cx),
-            self.turn_modes_section(cx),
-            self.quitting_section(cx),
-            self.look_section(cx),
-            self.notifications_section(cx),
-        ];
+        let mut sections: Vec<AnyElement> = [
+            self.appearance_section(&search, cx),
+            self.panels_section(&search, cx),
+            self.browser_section(&search, cx),
+            self.files_section(&search, cx),
+            self.slash_section(&search, cx),
+            self.turn_modes_section(&search, cx),
+            self.quitting_section(&search, cx),
+            self.look_section(&search, cx),
+            self.notifications_section(&search, cx),
+        ]
+        .into_iter()
+        .flatten()
+        .collect();
         // The web runtime is this Mac's too (web_runtime.rs), last, so it
         // moves nothing the Swift app's General has.
-        let web_runtime = section(
+        let web_words = crate::web_runtime::settings_words(cx);
+        let web_runtime = filtered_section(
             "settings-web-runtime",
             "Web runtime",
             crate::web_runtime::SETTINGS_ABOUT,
             "check whether it's installed and working, or why a diagram or panel isn't showing.",
-            vec![row(
-                "Web runtime",
-                crate::web_runtime::settings_control(cx),
-                cx,
+            &search,
+            vec![(
+                &["Web runtime", &web_words],
+                row("Web runtime", crate::web_runtime::settings_control(cx), cx),
             )],
             cx,
         );
         let Some(settings) = settings else {
-            sections.push(plain_note(&waiting_text(&self.app, cx), cx));
+            if !searching {
+                sections.push(plain_note(&waiting_text(&self.app, cx), cx));
+            }
             // Notes is this Mac's, so it's here while the runner's away too.
-            sections.push(self.experiments_section(&[], cx));
-            sections.push(web_runtime);
+            if let Some(exp) = self.experiments_section(&[], &search, cx) {
+                sections.push(exp);
+            }
+            if let Some(web_runtime) = web_runtime {
+                sections.push(web_runtime);
+            }
+            if sections.is_empty() {
+                sections.push(plain_note("No matching settings.", cx));
+            }
             return sections;
         };
+        sections.extend(
+            [
+                self.new_threads_section(settings, &search, cx),
+                self.instructions_section(&search, window, cx),
+                self.code_review_section(settings, &search, cx),
+                self.activity_section(&search, cx),
+                self.sleep_section(settings, &search, cx),
+                self.prints_section(settings, &search, cx),
+                self.usage_section(settings, &search, cx),
+                self.full_sync_section(settings, &search, cx),
+                self.updates_section(settings, &search, cx),
+                self.experiments_section(&settings.experiments, &search, cx),
+                self.runner_section(&search, cx),
+                web_runtime,
+            ]
+            .into_iter()
+            .flatten(),
+        );
+        if sections.is_empty() {
+            sections.push(plain_note("No matching settings.", cx));
+        }
+        sections
+    }
+
+    fn new_threads_section(
+        &mut self,
+        settings: &RunnerSettings,
+        search: &str,
+        cx: &mut Context<Self>,
+    ) -> Option<AnyElement> {
         let home = std::env::var("HOME").unwrap_or_default();
         let folder = abbreviate_home(&settings.default_cwd, &home);
         let full = settings.default_cwd.clone();
@@ -892,8 +1022,8 @@ impl SettingsWindow {
                     .overflow_hidden()
                     .text_size(px(13.))
                     .text_color(style::secondary_text(cx))
-                    .tip(full)
-                    .child(folder),
+                    .tip(full.clone())
+                    .child(folder.clone()),
             )
             .child(self.button(
                 "settings-choose-folder",
@@ -902,58 +1032,109 @@ impl SettingsWindow {
                 cx,
                 |this, window, cx| this.choose_default_folder(window, cx),
             ));
-        sections.push(section(
+        filtered_section(
             "settings-new-threads",
             "New threads",
             "Where a new thread starts when you don't pick a folder.",
             "change it, or anything else about how threads run. Most settings aren't shown here, and your agent edits them in runner.json.",
-            vec![row("Default folder", folder_control, cx)],
+            search,
+            vec![(
+                &[
+                    "Default folder",
+                    &folder,
+                    &full,
+                    "Choose…",
+                    "Pick the folder new threads start in",
+                ],
+                row("Default folder", folder_control, cx),
+            )],
             cx,
-        ));
-        if let Some(instructions) = self.instructions_section(window, cx) {
-            sections.push(instructions);
+        )
+    }
+
+    fn code_review_section(
+        &mut self,
+        settings: &RunnerSettings,
+        search: &str,
+        cx: &mut Context<Self>,
+    ) -> Option<AnyElement> {
+        if !settings.lab_review_supported {
+            return None;
         }
-        if settings.lab_review_supported {
-            let on = settings.lab_review;
-            let switch = self.switch(
-                "settings-lab-review",
-                on,
-                "Have another lab check each code change a thread makes",
-                cx,
-                |this, on, cx| this.update(json!({ "labReview": on }), cx),
-            );
-            let rows = vec![row(
+        let on = settings.lab_review;
+        let about = "When a thread changes code and is done, another lab tries to break the change in a review thread of its own. Your thread waits for what it finds, fixes what holds up, and tells you in its reply.\n\nA change gets one reviewer: the first in Every change that isn't the thread's own provider and has a login with room, so when one runs out the next takes over. Drag them to change the order. A big or risky change gets everyone in Big or risky changes at once, or one reviewer from Every change if fewer than two of them can review. With no other lab to hand, a fresh session of the thread's own provider reviews.";
+        let reviewer_names: Vec<String> = settings
+            .lab_reviewers
+            .iter()
+            .chain(settings.lab_panel.iter())
+            .flatten()
+            .flat_map(|r| {
+                let mut names = vec![r.provider.clone()];
+                if let Some(m) = &r.model {
+                    names.push(m.clone());
+                }
+                if let Some(lab) = r.lab() {
+                    names.push(lab.to_owned());
+                }
+                names
+            })
+            .collect();
+        let reviewer_refs: Vec<&str> = reviewer_names.iter().map(String::as_str).collect();
+        let mut terms = vec![
+            "Code review",
+            about,
+            "Review code changes before a thread is done",
+            "Have another lab check each code change a thread makes",
+            "Every change",
+            "Big or risky changes",
+            "Add Reviewer",
+            "toggle",
+            "switch",
+        ];
+        terms.extend(reviewer_refs);
+        if !general_matches(search, &terms) {
+            return None;
+        }
+        let switch = self.switch(
+            "settings-lab-review",
+            on,
+            "Have another lab check each code change a thread makes",
+            cx,
+            |this, on, cx| this.update(json!({ "labReview": on }), cx),
+        );
+        let review = section(
+            "settings-code-review",
+            "Code review",
+            about,
+            "explain what a review found, change who reviews, or turn reviews on or off for you.",
+            vec![row(
                 "Review code changes before a thread is done",
                 switch,
                 cx,
-            )];
-            let review = section(
-                "settings-code-review",
-                "Code review",
-                "When a thread changes code and is done, another lab tries to break the change in a review thread of its own. Your thread waits for what it finds, fixes what holds up, and tells you in its reply.\n\nA change gets one reviewer: the first in Every change that isn't the thread's own provider and has a login with room, so when one runs out the next takes over. Drag them to change the order. A big or risky change gets everyone in Big or risky changes at once, or one reviewer from Every change if fewer than two of them can review. With no other lab to hand, a fresh session of the thread's own provider reviews.",
-                "explain what a review found, change who reviews, or turn reviews on or off for you.",
-                rows,
-                cx,
-            );
-            // Who reviews, while reviews are on (reviewers.rs): two lists
-            // under the switch, kept closer to it than the next section.
-            let lists = if on {
-                self.review_lists(settings, cx)
-            } else {
-                Vec::new()
-            };
-            if lists.is_empty() {
-                sections.push(review);
-            } else {
-                sections.push(
-                    v_flex()
-                        .gap(px(20.))
-                        .child(review)
-                        .children(lists)
-                        .into_any_element(),
-                );
-            }
+            )],
+            cx,
+        );
+        // Who reviews, while reviews are on (reviewers.rs): two lists
+        // under the switch, kept closer to it than the next section.
+        let lists = if on {
+            self.review_lists(settings, cx)
+        } else {
+            Vec::new()
+        };
+        if lists.is_empty() {
+            Some(review)
+        } else {
+            Some(
+                v_flex()
+                    .gap(px(20.))
+                    .child(review)
+                    .children(lists)
+                    .into_any_element(),
+            )
         }
+    }
+
+    fn activity_section(&mut self, search: &str, cx: &mut Context<Self>) -> Option<AnyElement> {
         // Why it's worth turning on, then what's in it, for anyone wary of
         // turning it on (the Swift app's, Mike, 29 Oct). This Mac's own
         // (activity.rs), but where the Swift app has it.
@@ -972,33 +1153,67 @@ impl SettingsWindow {
                     .ok();
             },
         );
-        sections.push(section(
+        filtered_section(
             "settings-activity",
             "Activity log",
             "When you ask a thread to change Threadbear, its agent can check this log first to see how you really use the app. It notes the buttons, rows and menu items you use (by their tooltips and titles), your shortcuts, the threads and pages you open, and when you send or answer something, never what you type. It stays on this Mac for 30 days and Threadbear never sends it anywhere.",
             "read it with tb activity and tell you what's in it.",
-            vec![row("Keep an activity log", switch, cx)],
+            search,
+            vec![(
+                &[
+                    "Keep an activity log",
+                    "Note what you click and open in this app",
+                    "tb activity",
+                    "toggle",
+                    "switch",
+                ],
+                row("Keep an activity log", switch, cx),
+            )],
             cx,
-        ));
-        if let Some(on) = settings.keep_awake {
-            let switch = self.switch(
-                "settings-keep-awake",
-                on,
-                "Stop your Mac sleeping on its own while a thread is working",
-                cx,
-                |this, on, cx| this.update(json!({ "keepAwake": on }), cx),
-            );
-            sections.push(section(
-                "settings-sleep",
-                "Sleep",
-                "While any thread is working, and for three minutes after, your Mac won't go to sleep on its own, so a long turn, or one you started from your phone, isn't cut off halfway. The screen still sleeps.",
-                "check whether it's holding your Mac awake right now.",
-                vec![row("Keep the Mac awake while threads work", switch, cx)],
-                cx,
-            ));
-        }
+        )
+    }
+
+    fn sleep_section(
+        &mut self,
+        settings: &RunnerSettings,
+        search: &str,
+        cx: &mut Context<Self>,
+    ) -> Option<AnyElement> {
+        let on = settings.keep_awake?;
+        let switch = self.switch(
+            "settings-keep-awake",
+            on,
+            "Stop your Mac sleeping on its own while a thread is working",
+            cx,
+            |this, on, cx| this.update(json!({ "keepAwake": on }), cx),
+        );
+        filtered_section(
+            "settings-sleep",
+            "Sleep",
+            "While any thread is working, and for three minutes after, your Mac won't go to sleep on its own, so a long turn, or one you started from your phone, isn't cut off halfway. The screen still sleeps.",
+            "check whether it's holding your Mac awake right now.",
+            search,
+            vec![(
+                &[
+                    "Keep the Mac awake while threads work",
+                    "Stop your Mac sleeping on its own while a thread is working",
+                    "toggle",
+                    "switch",
+                ],
+                row("Keep the Mac awake while threads work", switch, cx),
+            )],
+            cx,
+        )
+    }
+
+    fn prints_section(
+        &mut self,
+        settings: &RunnerSettings,
+        search: &str,
+        cx: &mut Context<Self>,
+    ) -> Option<AnyElement> {
         // Only while Prints is on (RunnerSettings::prints_switch, progress_switch).
-        let mut print_rows = Vec::new();
+        let mut print_rows: Vec<(&[&str], AnyElement)> = Vec::new();
         if let Some(on) = settings.prints_switch() {
             let switch = self.switch(
                 "settings-prints-when-asked",
@@ -1007,35 +1222,82 @@ impl SettingsWindow {
                 cx,
                 |this, on, cx| this.update(json!({ "printsWhenAsked": on }), cx),
             );
-            print_rows.push(row("Only make Prints when I ask", switch, cx));
-        }
-        if let Some(on) = settings.progress_switch() {
-            let switch = self.switch("settings-progress-prints", on, "Let threads keep a progress Print on long tasks. Off, they start the work without one", cx, |this, on, cx| this.update(json!({ "progressPrints": on }), cx));
-            print_rows.push(row("Progress prints for long tasks", switch, cx));
-        }
-        if !print_rows.is_empty() {
-            sections.push(section(
-                "settings-prints",
-                "Prints",
-                "Only make Prints when I ask: if a thread goes to make a Print your message didn't ask for, it asks you first, and No means none is made. Saying print, chart, graph, dashboard or diagram counts as asking. Progress prints for long tasks: on, a long task keeps a Print of where it's up to. Off, threads skip it and start straight away, with no question about it. The task list in Highlights still tracks the work when Clearer thread completion is on.",
-                "make a Print for something, or turn these on or off.",
-                print_rows,
-                cx,
+            print_rows.push((
+                &[
+                    "Only make Prints when I ask",
+                    "Have threads ask before making a Print you didn't ask for",
+                    "toggle",
+                    "switch",
+                ],
+                row("Only make Prints when I ask", switch, cx),
             ));
         }
+        if let Some(on) = settings.progress_switch() {
+            let switch = self.switch(
+                "settings-progress-prints",
+                on,
+                "Let threads keep a progress Print on long tasks. Off, they start the work without one",
+                cx,
+                |this, on, cx| this.update(json!({ "progressPrints": on }), cx),
+            );
+            print_rows.push((
+                &[
+                    "Progress prints for long tasks",
+                    "Let threads keep a progress Print on long tasks. Off, they start the work without one",
+                    "toggle",
+                    "switch",
+                ],
+                row("Progress prints for long tasks", switch, cx),
+            ));
+        }
+        if print_rows.is_empty() {
+            return None;
+        }
+        filtered_section(
+            "settings-prints",
+            "Prints",
+            "Only make Prints when I ask: if a thread goes to make a Print your message didn't ask for, it asks you first, and No means none is made. Saying print, chart, graph, dashboard or diagram counts as asking. Progress prints for long tasks: on, a long task keeps a Print of where it's up to. Off, threads skip it and start straight away, with no question about it. The task list in Highlights still tracks the work when Clearer thread completion is on.",
+            "make a Print for something, or turn these on or off.",
+            search,
+            print_rows,
+            cx,
+        )
+    }
+
+    fn usage_section(
+        &mut self,
+        settings: &RunnerSettings,
+        search: &str,
+        cx: &mut Context<Self>,
+    ) -> Option<AnyElement> {
         // The Usage panel's own settings (Mike, 18 Nov: not dumped at the
         // foot of the panel). The spare week nudge is the runner's; whether
         // to show a model's own week is this app's, and only while a login
         // has one.
-        let mut usage_rows = Vec::new();
+        let mut usage_rows: Vec<(Vec<String>, AnyElement)> = Vec::new();
         if let Some(on) = settings.spare_week {
-            let switch = self.switch("settings-spare-week", on, "Start a thread with ideas a day before a login's week resets with lots of it unused", cx, |this, on, cx| this.update(json!({ "spareWeek": on }), cx));
-            usage_rows.push(row("Tell me when a week's about to go unused", switch, cx));
+            let switch = self.switch(
+                "settings-spare-week",
+                on,
+                "Start a thread with ideas a day before a login's week resets with lots of it unused",
+                cx,
+                |this, on, cx| this.update(json!({ "spareWeek": on }), cx),
+            );
+            usage_rows.push((
+                vec![
+                    "Tell me when a week's about to go unused".into(),
+                    "Start a thread with ideas a day before a login's week resets with lots of it unused".into(),
+                    "toggle".into(),
+                    "switch".into(),
+                ],
+                row("Tell me when a week's about to go unused", switch, cx),
+            ));
         }
         if let Some(app) = self.app.upgrade() {
             let titles = threadbear_core::usage::model_week_titles(&app.read(cx).logins.accounts);
             if !titles.is_empty() {
                 let on = app.read(cx).usage.show_model_weeks;
+                let label_text = threadbear_core::usage::model_weeks_switch(&titles);
                 let switch = self.switch(
                     "settings-model-weeks",
                     on,
@@ -1047,94 +1309,138 @@ impl SettingsWindow {
                             .ok();
                     },
                 );
-                usage_rows.push(row_with(
-                    div()
-                        .child(threadbear_core::usage::model_weeks_switch(&titles))
-                        .into_any_element(),
-                    switch,
-                    cx,
+                usage_rows.push((
+                    vec![
+                        label_text.clone(),
+                        threadbear_core::usage::MODEL_WEEKS_TIP.into(),
+                        "toggle".into(),
+                        "switch".into(),
+                    ],
+                    row_with(div().child(label_text).into_any_element(), switch, cx),
                 ));
             }
         }
-        if !usage_rows.is_empty() {
-            sections.push(section(
-                "settings-usage",
-                "Usage",
-                "A day before a login's week resets, if at the rate it's going 30% or more of it would be left, a thread on that login suggests work to spend it on and asks before starting any. The Usage panel's Find work for it does the same whenever you like.",
-                "suggest work for a login with room left, or turn this off for you.",
-                usage_rows,
-                cx,
-            ));
+        if usage_rows.is_empty() {
+            return None;
         }
-        if let Some(on) = settings.full_sync {
-            let switch = self.switch(
-                "settings-full-sync",
-                on,
-                "Send tool output and diffs to your Convex deployment",
-                cx,
-                |this, on, cx| this.update(json!({ "fullSync": on }), cx),
-            );
-            sections.push(section(
-                "settings-full-sync",
-                "Full sync",
-                FULL_SYNC_ABOUT,
-                FULL_SYNC_ASK,
-                vec![row("Send tool output to Convex", switch, cx)],
-                cx,
-            ));
-        }
-        if settings.bring_in_supported && self.app.upgrade().is_some_and(|a| a.read(cx).upstream_on)
+        filtered_owned_section(
+            "settings-usage",
+            "Usage",
+            "A day before a login's week resets, if at the rate it's going 30% or more of it would be left, a thread on that login suggests work to spend it on and asks before starting any. The Usage panel's Find work for it does the same whenever you like.",
+            "suggest work for a login with room left, or turn this off for you.",
+            search,
+            usage_rows,
+            cx,
+        )
+    }
+
+    fn full_sync_section(
+        &mut self,
+        settings: &RunnerSettings,
+        search: &str,
+        cx: &mut Context<Self>,
+    ) -> Option<AnyElement> {
+        let on = settings.full_sync?;
+        let switch = self.switch(
+            "settings-full-sync",
+            on,
+            "Send tool output and diffs to your Convex deployment",
+            cx,
+            |this, on, cx| this.update(json!({ "fullSync": on }), cx),
+        );
+        filtered_section(
+            "settings-full-sync",
+            "Full sync",
+            FULL_SYNC_ABOUT,
+            FULL_SYNC_ASK,
+            search,
+            vec![(
+                &[
+                    "Send tool output to Convex",
+                    "Send tool output and diffs to your Convex deployment",
+                    "toggle",
+                    "switch",
+                ],
+                row("Send tool output to Convex", switch, cx),
+            )],
+            cx,
+        )
+    }
+
+    fn updates_section(
+        &mut self,
+        settings: &RunnerSettings,
+        search: &str,
+        cx: &mut Context<Self>,
+    ) -> Option<AnyElement> {
+        if !settings.bring_in_supported
+            || !self.app.upgrade().is_some_and(|a| a.read(cx).upstream_on)
         {
-            let current = settings.bring_in;
-            let choices: Vec<(String, bool, Value)> = BringIn::choices(current)
-                .into_iter()
-                .map(|b| (b.title(), b == current, json!({ "bringIn": b.json() })))
-                .collect();
-            let menu = self.menu(
-                "settings-bring-in",
-                current.title(),
-                None,
-                "How often a thread starts to bring in Mike's new releases",
-                choices,
-                cx,
-            );
-            let menu = h_flex().child(menu);
-            sections.push(section(
-                "settings-updates",
-                "Updates from Mike",
-                "When Mike has a release your copy doesn't have, Threadbear starts a thread that merges it in and runs the checks, then asks you before it lands. Never more than one at a time. A release Mike marks important doesn't wait.",
-                "bring in Mike's latest release now, or change how often this happens.",
-                vec![row("Bring them in", menu, cx)],
-                cx,
-            ));
+            return None;
         }
-        sections.push(self.experiments_section(&settings.experiments, cx));
+        let current = settings.bring_in;
+        let current_title = current.title();
+        let choices: Vec<(String, bool, Value)> = BringIn::choices(current)
+            .into_iter()
+            .map(|b| (b.title(), b == current, json!({ "bringIn": b.json() })))
+            .collect();
+        let menu = self.menu(
+            "settings-bring-in",
+            current_title.clone(),
+            None,
+            "How often a thread starts to bring in Mike's new releases",
+            choices,
+            cx,
+        );
+        let menu = h_flex().child(menu);
+        filtered_section(
+            "settings-updates",
+            "Updates from Mike",
+            "When Mike has a release your copy doesn't have, Threadbear starts a thread that merges it in and runs the checks, then asks you before it lands. Never more than one at a time. A release Mike marks important doesn't wait.",
+            "bring in Mike's latest release now, or change how often this happens.",
+            search,
+            vec![(
+                &[
+                    "Bring them in",
+                    "How often a thread starts to bring in Mike's new releases",
+                    &current_title,
+                ],
+                row("Bring them in", menu, cx),
+            )],
+            cx,
+        )
+    }
+
+    fn runner_section(&mut self, search: &str, cx: &mut Context<Self>) -> Option<AnyElement> {
         let version = self
             .app
             .upgrade()
             .map(|a| a.read(cx).runner_version.clone())
             .unwrap_or_default();
-        sections.push(section(
+        let shown = if version.is_empty() {
+            "Not connected".to_owned()
+        } else {
+            version
+        };
+        filtered_section(
             "settings-runner",
             "Runner",
             "The background program that runs your threads. It updates itself.",
             "check on it if something seems wrong. Your agent can read its status and logs.",
-            vec![row(
-                "Version",
-                div()
-                    .text_size(px(13.))
-                    .text_color(style::secondary_text(cx))
-                    .child(if version.is_empty() {
-                        "Not connected".to_owned()
-                    } else {
-                        version
-                    }),
-                cx,
+            search,
+            vec![(
+                &["Version", &shown],
+                row(
+                    "Version",
+                    div()
+                        .text_size(px(13.))
+                        .text_color(style::secondary_text(cx))
+                        .child(shown.clone()),
+                    cx,
+                ),
             )],
             cx,
-        ));
-        sections.push(web_runtime);
-        sections
+        )
     }
 
     /// Appearance's New thread box: Middle as it ships, or Bottom.
@@ -1179,11 +1485,10 @@ impl SettingsWindow {
         )
     }
 
-    /// The appearance is this app's own, so it's here while the runner's away
-    /// too. Light or dark as pictures, then the accent, spacing, text size
-    /// and font (Mike picked these from three directions, 17 Nov). Each
-    /// changes every window as it's clicked.
-    fn appearance_section(&mut self, cx: &mut Context<Self>) -> AnyElement {
+    fn appearance_looks_and_themes(
+        &self,
+        cx: &mut Context<Self>,
+    ) -> (AnyElement, AnyElement, &'static str) {
         let app = self.app.clone();
         let current = style::appearance();
         let palette_now = style::palette_choice();
@@ -1241,6 +1546,30 @@ impl SettingsWindow {
                     .text_color(style::secondary_text(cx))
                     .child(theme_help),
             );
+        (
+            div()
+                .px(px(ROW_INSET))
+                .pt(px(12.))
+                .pb(px(10.))
+                .child(looks)
+                .into_any_element(),
+            div()
+                .px(px(ROW_INSET))
+                .pt(px(8.))
+                .pb(px(10.))
+                .child(themes)
+                .into_any_element(),
+            theme_help,
+        )
+    }
+
+    /// The appearance is this app's own, so it's here while the runner's away
+    /// too. Light or dark as pictures, then the accent, spacing, text size
+    /// and font (Mike picked these from three directions, 17 Nov). Each
+    /// changes every window as it's clicked.
+    fn appearance_section(&mut self, search: &str, cx: &mut Context<Self>) -> Option<AnyElement> {
+        let app = self.app.clone();
+        let (looks_row, themes_row, theme_help) = self.appearance_looks_and_themes(cx);
         let accent_now = style::accent_choice();
         let accents =
             h_flex()
@@ -1350,7 +1679,7 @@ impl SettingsWindow {
             .aria_label(FONT_TIP)
             .flex_none()
             .child(font_menu);
-        section(
+        filtered_section(
             "settings-appearance-section",
             "Appearance",
             if cfg!(target_os = "macos") {
@@ -1361,24 +1690,66 @@ impl SettingsWindow {
                 "How Threadbear looks, for Threadbear only. Text size is the same as View > Zoom (Ctrl+= and Ctrl+-). New thread box puts the message box on a new thread in the middle of the window, or near the bottom so it grows upwards as you type. The bear colours are Wayne Sutton's, from his fork."
             },
             "change any of it for you.",
+            search,
             vec![
-                div()
-                    .px(px(ROW_INSET))
-                    .pt(px(12.))
-                    .pb(px(10.))
-                    .child(looks)
-                    .into_any_element(),
-                div()
-                    .px(px(ROW_INSET))
-                    .pt(px(8.))
-                    .pb(px(10.))
-                    .child(themes)
-                    .into_any_element(),
-                row("Accent", accents, cx),
-                row("Spacing", spacing, cx),
-                row("Text size", text_size, cx),
-                row("Font", font, cx),
-                row("New thread box", box_place, cx),
+                (
+                    &[
+                        "Same as the Mac",
+                        "Same as Windows",
+                        "Same as the system",
+                        "Light",
+                        "Dark",
+                        APPEARANCE_TIP,
+                        "Always light, whatever the system is set to",
+                        "Always dark, whatever the system is set to",
+                    ],
+                    looks_row,
+                ),
+                (
+                    &["Theme", "Stock", "Harbor", "Squall", theme_help],
+                    themes_row,
+                ),
+                (
+                    &[
+                        "Accent", "colour", "color", "Bear", "Honey", "Forest", "Berry", "Slate",
+                        "Plum", "Ember",
+                    ],
+                    row("Accent", accents, cx),
+                ),
+                (
+                    &[
+                        "Spacing",
+                        "Roomy",
+                        "Compact",
+                        "More room between rows and turns",
+                        "Rows and turns closer together, so more fit",
+                    ],
+                    row("Spacing", spacing, cx),
+                ),
+                (
+                    &[
+                        "Text size",
+                        "Zoom",
+                        "Smaller",
+                        "Normal",
+                        "Larger",
+                        "Text and everything else a step smaller (90%)",
+                        "Text at its usual size (100%)",
+                        "Text and everything else a step larger (110%)",
+                    ],
+                    row("Text size", text_size, cx),
+                ),
+                (&["Font", FONT_TIP, font_now.title()], row("Font", font, cx)),
+                (
+                    &[
+                        "New thread box",
+                        "Middle",
+                        "Bottom",
+                        "The new-thread box sits in the middle and grows downwards as you type",
+                        "The new-thread box sits near the bottom and grows upwards as you type",
+                    ],
+                    row("New thread box", box_place, cx),
+                ),
             ],
             cx,
         )
@@ -1386,7 +1757,7 @@ impl SettingsWindow {
 
     /// Whether a press held on a panel's background picks it up, or only one
     /// on its title or tab (`panelBackgroundDrag`, off to begin with).
-    fn panels_section(&mut self, cx: &mut Context<Self>) -> AnyElement {
+    fn panels_section(&mut self, search: &str, cx: &mut Context<Self>) -> Option<AnyElement> {
         let on = self
             .app
             .upgrade()
@@ -1402,19 +1773,28 @@ impl SettingsWindow {
                     .ok();
             },
         );
-        section(
+        filtered_section(
             "settings-panels",
             "Panels",
             "To move a panel, drag its title or tab. With this on, pressing and holding anywhere on a panel picks it up too. A panel with its title hidden can always be moved that way, as it has nothing else to drag it by.",
             "change it for you.",
-            vec![row("Move panels by their background", switch, cx)],
+            search,
+            vec![(
+                &[
+                    "Move panels by their background",
+                    "Press and hold anywhere on a panel to move it, not just on its title or tab",
+                    "toggle",
+                    "switch",
+                ],
+                row("Move panels by their background", switch, cx),
+            )],
             cx,
         )
     }
 
     /// Whether Show window and Select on page put the page's window beside
     /// this one (`browserBeside`, off to begin with).
-    fn browser_section(&mut self, cx: &mut Context<Self>) -> AnyElement {
+    fn browser_section(&mut self, search: &str, cx: &mut Context<Self>) -> Option<AnyElement> {
         let on = self
             .app
             .upgrade()
@@ -1430,12 +1810,23 @@ impl SettingsWindow {
                     .ok();
             },
         );
-        section(
+        filtered_section(
             "settings-browser",
             "Browser",
             "With this on, Show window and Select on page put the page's window next to Threadbear's, on the side with more room, and Threadbear comes back to the front on the thread you picked for. Move or resize the page's window and it opens that way from then on. Only windows in the agents' own browser are moved, never your own Chrome's.",
             "change it for you.",
-            vec![row("Open pages beside Threadbear", switch, cx)],
+            search,
+            vec![(
+                &[
+                    "Open pages beside Threadbear",
+                    "Open an agent's page beside this window, narrowing this window if it leaves no room, and come back here after picking from it",
+                    "Show window",
+                    "Select on page",
+                    "toggle",
+                    "switch",
+                ],
+                row("Open pages beside Threadbear", switch, cx),
+            )],
             cx,
         )
     }
@@ -1443,7 +1834,7 @@ impl SettingsWindow {
     /// `PlanFirstToggle`: whether Shift-Tab turns Plan first on and off.
     /// Its key, `turnModesEnabled`, is from when Shift-Tab also stepped
     /// through Ask, so the setting carries over.
-    fn turn_modes_section(&mut self, cx: &mut Context<Self>) -> AnyElement {
+    fn turn_modes_section(&mut self, search: &str, cx: &mut Context<Self>) -> Option<AnyElement> {
         let on = self
             .app
             .upgrade()
@@ -1463,19 +1854,28 @@ impl SettingsWindow {
                     .ok();
             },
         );
-        section(
+        filtered_section(
             "settings-turn-modes",
             "Shift-Tab",
             "Shift-Tab in the message box turns Plan first on (the agent reads and plans, changes nothing, and puts its plan to you on a card to approve or send back; the plan is also saved in the thread's plans/ folder, named for the date and project, and opens beside the thread) and off again, back to the access the thread had. Turning this off takes Shift-Tab back to what it did before; Plan first stays in the access menu.",
             "explain or change what Plan first does.",
-            vec![row("Use Shift-Tab for Plan first", switch, cx)],
+            search,
+            vec![(
+                &[
+                    "Use Shift-Tab for Plan first",
+                    "Shift-Tab in the message box turns Plan first on and off",
+                    "toggle",
+                    "switch",
+                ],
+                row("Use Shift-Tab for Plan first", switch, cx),
+            )],
             cx,
         )
     }
 
     /// Files (Wayne's 41275129 and 0a003c67): how a text file opens in the
     /// side pane, and when what's typed in it is written. This Mac's own.
-    fn files_section(&mut self, cx: &mut Context<Self>) -> AnyElement {
+    fn files_section(&mut self, search: &str, cx: &mut Context<Self>) -> Option<AnyElement> {
         let (editor, autosave) = self.app.upgrade().map_or((true, true), |a| {
             let s = &a.read(cx).settings;
             (
@@ -1507,19 +1907,40 @@ impl SettingsWindow {
                 })
                 .ok();
         });
-        section(
+        filtered_section(
             "settings-files",
             "Files",
             "Edit files like an editor opens a text file in the side pane ready to type in, with line numbers and a bar under it showing the line and column. Save files automatically writes what you type a second after you stop, and ⌘S saves at once; with it off, nothing is written until you save, and leaving a file with changes asks whether to save them.",
             "change either for you.",
-            vec![row("Edit files like an editor", editor_switch, cx), row("Save files automatically", autosave_switch, cx)],
+            search,
+            vec![
+                (
+                    &[
+                        "Edit files like an editor",
+                        "Open text files ready to type in, with line numbers and a line and column bar",
+                        "toggle",
+                        "switch",
+                    ],
+                    row("Edit files like an editor", editor_switch, cx),
+                ),
+                (
+                    &[
+                        "Save files automatically",
+                        "autosave",
+                        "Write what you type a second after you stop. Off, ⌘S saves and leaving a file with changes asks first",
+                        "toggle",
+                        "switch",
+                    ],
+                    row("Save files automatically", autosave_switch, cx),
+                ),
+            ],
             cx,
         )
     }
 
     /// `SlashReturn`'s switch: whether Return in the slash palette sends the
     /// command at once, or puts it in the box for the next Return to send.
-    fn slash_section(&mut self, cx: &mut Context<Self>) -> AnyElement {
+    fn slash_section(&mut self, search: &str, cx: &mut Context<Self>) -> Option<AnyElement> {
         let on = self
             .app
             .upgrade()
@@ -1545,12 +1966,32 @@ impl SettingsWindow {
                 app.save_settings_soon(cx);
             }).ok();
         });
-        section(
+        filtered_section(
             "settings-slash",
             "Slash commands",
             "Typing / in the message box opens the slash palette: every command and skill, with a search field, categories you can step through with the left and right arrows, and Esc or its X to close. Return puts the picked command in the box, and the next Return sends it; turn on Return sends a command right away to skip that step (the Run button always sends).",
             "change what the slash palette lists or how it looks.",
-            vec![row("Return sends a command right away", switch, cx), row("Use full palette for skills inside a message", skills, cx)],
+            search,
+            vec![
+                (
+                    &[
+                        "Return sends a command right away",
+                        "Off: Return puts the command in the box and the next Return sends it, so a new thread doesn't start by surprise. The Run button always sends",
+                        "toggle",
+                        "switch",
+                    ],
+                    row("Return sends a command right away", switch, cx),
+                ),
+                (
+                    &[
+                        "Use full palette for skills inside a message",
+                        "Use the full palette for a /skill inside a message. Off shows a small skill list instead",
+                        "toggle",
+                        "switch",
+                    ],
+                    row("Use full palette for skills inside a message", skills, cx),
+                ),
+            ],
             cx,
         )
     }
@@ -1561,9 +2002,19 @@ impl SettingsWindow {
     fn experiments_section(
         &mut self,
         experiments: &[Experiment],
+        search: &str,
         cx: &mut Context<Self>,
-    ) -> AnyElement {
-        let mut rows = vec![self.notes_row(cx)];
+    ) -> Option<AnyElement> {
+        let mut rows: Vec<(Vec<String>, AnyElement)> = vec![(
+            vec![
+                "Notes".into(),
+                "Show Notes in the bar on the left".into(),
+                "Notes (in the bar on the left, ⌘6) are yours alone: kept on this Mac, each encrypted with a key kept beside Threadbear's other secrets, and never sent to the runner, an agent, your phone or the website. Hiding Notes keeps them; turn it back on to see them again.".into(),
+                "toggle".into(),
+                "switch".into(),
+            ],
+            self.notes_row(cx),
+        )];
         rows.extend(experiments.iter().map(|e| {
             let (id, on) = (e.id.clone(), e.on);
             let tip = if on {
@@ -1571,10 +2022,11 @@ impl SettingsWindow {
             } else {
                 format!("Try {}", e.name)
             };
+            let about = experiment_about(&e.does);
             let switch = self.switch_owned(
                 format!("settings-experiment-{id}"),
                 on,
-                tip,
+                tip.clone(),
                 cx,
                 move |this, on, cx| this.update(json!({ "experiments": { id.clone(): on } }), cx),
             );
@@ -1585,17 +2037,28 @@ impl SettingsWindow {
                 .when(!e.does.is_empty(), |s| {
                     s.child(info_tip(
                         SharedString::from(format!("experiment-{}", e.id)),
-                        experiment_about(&e.does),
+                        about.clone(),
                         cx,
                     ))
                 });
-            row_with(label.into_any_element(), switch, cx)
+            (
+                vec![
+                    e.name.clone(),
+                    e.id.clone(),
+                    about,
+                    tip,
+                    "toggle".into(),
+                    "switch".into(),
+                ],
+                row_with(label.into_any_element(), switch, cx),
+            )
         }));
-        section(
+        filtered_owned_section(
             "settings-experiments",
             "Experiments",
             "New features still being tried out. Turn one on to try it, and off again whenever you like. Once one has proved itself it becomes a standard part of Threadbear and its switch goes. The ⓘ beside each says what it does.",
             "explain an experiment, or turn one on or off for you.",
+            search,
             rows,
             cx,
         )
@@ -1631,24 +2094,64 @@ impl SettingsWindow {
     /// Look (`LookSettings`): Customize on the Librarian, Scheduled and
     /// Projects pages, and a background picture in the main window. All kept
     /// on this Mac, off until turned on, and never sent anywhere.
-    fn look_section(&mut self, cx: &mut Context<Self>) -> AnyElement {
+    fn look_section(&mut self, search: &str, cx: &mut Context<Self>) -> Option<AnyElement> {
         use crate::looks::Page;
-        let Some(app) = self.app.upgrade() else {
-            return div().into_any_element();
-        };
-        let mut rows = vec![];
-        for (page, label, tip) in [
-            (Page::Librarian, "Customize the Librarian page", "Add Customize to the Librarian page: its picture, a background, the layout, and what shows"),
-            (Page::Scheduled, "Customize the Scheduled page", "Add Customize to the Scheduled page: its picture, a background, the layout, and what shows"),
-            (Page::Projects, "Customize the Projects page", "Add Customize to the Projects page: a picture of yours, a background, the layout, and what each card shows"),
+        let app = self.app.upgrade()?;
+        let mut rows: Vec<(&[&str], AnyElement)> = vec![];
+        for (page, label, tip, terms) in [
+            (
+                Page::Librarian,
+                "Customize the Librarian page",
+                "Add Customize to the Librarian page: its picture, a background, the layout, and what shows",
+                &[
+                    "Customize the Librarian page",
+                    "Add Customize to the Librarian page: its picture, a background, the layout, and what shows",
+                    "toggle",
+                    "switch",
+                ][..],
+            ),
+            (
+                Page::Scheduled,
+                "Customize the Scheduled page",
+                "Add Customize to the Scheduled page: its picture, a background, the layout, and what shows",
+                &[
+                    "Customize the Scheduled page",
+                    "Add Customize to the Scheduled page: its picture, a background, the layout, and what shows",
+                    "toggle",
+                    "switch",
+                ][..],
+            ),
+            (
+                Page::Projects,
+                "Customize the Projects page",
+                "Add Customize to the Projects page: a picture of yours, a background, the layout, and what each card shows",
+                &[
+                    "Customize the Projects page",
+                    "Add Customize to the Projects page: a picture of yours, a background, the layout, and what each card shows",
+                    "toggle",
+                    "switch",
+                ][..],
+            ),
         ] {
             let on = app.read(cx).customizable(page);
             let switch = self.switch_owned(format!("settings-look-{}", page.name()), on, tip.to_owned(), cx, move |this, on, cx| {
                 this.app.update(cx, |app, cx| app.set_customizable(page, on, cx)).ok();
             });
-            rows.push(row(label, switch, cx));
+            rows.push((terms, row(label, switch, cx)));
         }
         let background = app.read(cx).main_background();
+        let bg_terms: &[&str] = &[
+            "Background picture in the main window",
+            "A photo or animated GIF of yours behind new threads",
+            "Show behind open threads too",
+            "Off, only a new thread has it. On, every thread's transcript sits over it",
+            "Picture",
+            "Dim",
+            "Focus",
+            "wallpaper",
+            "toggle",
+            "switch",
+        ];
         let switch = self.switch(
             "settings-look-main",
             background.on,
@@ -1660,7 +2163,10 @@ impl SettingsWindow {
                     .ok();
             },
         );
-        rows.push(row("Background picture in the main window", switch, cx));
+        rows.push((
+            bg_terms,
+            row("Background picture in the main window", switch, cx),
+        ));
         if background.on {
             let made = app.update(cx, |app, cx| {
                 app.background_rows(
@@ -1674,7 +2180,7 @@ impl SettingsWindow {
             });
             let mut made = made.into_iter();
             if let Some(picture) = made.next() {
-                rows.push(row_with(div().into_any_element(), picture, cx));
+                rows.push((bg_terms, row_with(div().into_any_element(), picture, cx)));
             }
             if background.file.is_some() {
                 let everywhere = self.switch(
@@ -1690,17 +2196,21 @@ impl SettingsWindow {
                             .ok();
                     },
                 );
-                rows.push(row("Show behind open threads too", everywhere, cx));
+                rows.push((
+                    bg_terms,
+                    row("Show behind open threads too", everywhere, cx),
+                ));
             }
             for rest in made {
-                rows.push(row_with(div().into_any_element(), rest, cx));
+                rows.push((bg_terms, row_with(div().into_any_element(), rest, cx)));
             }
         }
-        section(
+        filtered_section(
             "settings-look",
             "Look",
             "Customize the Librarian page adds Customize at the top right of the Librarian page: change or remove the bear, put a photo behind the page, move each part to the top, middle or bottom, hide parts and numbers, and show your GitHub activity. Customize the Scheduled page does the same for the Scheduled page: its picture, a background photo, and the picture, title and numbers each at the top, middle or bottom, or hidden. Customize the Projects page adds a picture of your own (it has none as it ships), a background photo, the title and search and the cards each at the top, middle or bottom, or hidden, and what each card shows. Turning any of them off puts its page back as it ships and keeps your changes for next time. Background picture puts a photo of yours (choose one, or drop it on the Picture row from Finder) behind a new thread in the main window, or behind every thread, faded so text stays readable in light and dark. A background can be an animated GIF, which plays (and holds still with Reduce Motion on). Pictures are copied into Threadbear's data folder and never sent anywhere.",
             "change the Librarian, Scheduled or Projects page, or the background, for you.",
+            search,
             rows,
             cx,
         )
@@ -1708,7 +2218,7 @@ impl SettingsWindow {
 
     /// `QuitPrompt`'s switch: ticking Don't ask again turns it off, and this
     /// turns it back on.
-    fn quitting_section(&mut self, cx: &mut Context<Self>) -> AnyElement {
+    fn quitting_section(&mut self, search: &str, cx: &mut Context<Self>) -> Option<AnyElement> {
         let on = self
             .app
             .upgrade()
@@ -1727,18 +2237,32 @@ impl SettingsWindow {
                     .ok();
             },
         );
-        section(
+        filtered_section(
             "settings-quitting",
             "Quitting",
             "Quit Threadbear (⌘Q or the Threadbear menu) asks first, so a stray ⌘Q doesn't close the app. Ticking Don't ask again turns this off; turn it back on here. Your threads keep running on the runner while the app is closed.",
             "change it for you.",
-            vec![row("Ask before quitting", switch, cx)],
+            search,
+            vec![(
+                &[
+                    "Ask before quitting",
+                    "Ask to confirm when you quit Threadbear",
+                    "⌘Q",
+                    "toggle",
+                    "switch",
+                ],
+                row("Ask before quitting", switch, cx),
+            )],
             cx,
         )
     }
 
     /// The ding when a thread finishes (ding.rs): on or off, which, how loud.
-    fn notifications_section(&mut self, cx: &mut Context<Self>) -> AnyElement {
+    fn notifications_section(
+        &mut self,
+        search: &str,
+        cx: &mut Context<Self>,
+    ) -> Option<AnyElement> {
         let (on, ding) = self.app.upgrade().map_or((false, Ding::default()), |a| {
             let s = &a.read(cx).settings;
             (s.ding_on(), s.ding())
@@ -1812,15 +2336,31 @@ impl SettingsWindow {
                     }
                 },
             ));
-        section(
+        filtered_section(
             "settings-notifications",
             "Notifications",
             "A soft ding when a thread finishes working: its reply is done, it's waiting for your answer, or it hit an error. It plays wherever you are, even in another app, and stays quiet for a thread you stopped yourself. Notifications themselves are in System Settings > Notifications.",
             "change when the ding plays.",
+            search,
             vec![
-                row("Play a sound when a thread finishes", switch, cx),
-                row("Sound", div().id("settings-ding-sound-holder").test_support().a11y_role(Role::GenericContainer).aria_label("Which ding plays").child(picker), cx),
-                row("Volume", volume, cx),
+                (
+                    &[
+                        "Play a sound when a thread finishes",
+                        "A soft ding when a thread is done and ready for you",
+                        "ding",
+                        "toggle",
+                        "switch",
+                    ],
+                    row("Play a sound when a thread finishes", switch, cx),
+                ),
+                (
+                    &["Sound", "Which ding plays", ding.title(), "ding"],
+                    row("Sound", div().id("settings-ding-sound-holder").test_support().a11y_role(Role::GenericContainer).aria_label("Which ding plays").child(picker), cx),
+                ),
+                (
+                    &["Volume", "How loud the ding is", "Play", "Hear the ding"],
+                    row("Volume", volume, cx),
+                ),
             ],
             cx,
         )
@@ -1830,10 +2370,24 @@ impl SettingsWindow {
     /// Settings, what it holds with Use These and Clear.
     fn instructions_section(
         &mut self,
+        search: &str,
         _window: &mut Window,
         cx: &mut Context<Self>,
     ) -> Option<AnyElement> {
         let current = self.app.upgrade()?.read(cx).standing_instructions.clone()?;
+        let about = "Threadbear gives these to every thread's agent in every session, on every login, Claude and Codex alike. A chat that's already going hears a change before your next message.";
+        if !general_matches(
+            search,
+            &[
+                "Instructions",
+                "Standing instructions",
+                "What every thread's agent should always keep in mind",
+                &current.text,
+                about,
+            ],
+        ) {
+            return None;
+        }
         let secondary = style::secondary_text(cx);
         let body: AnyElement = if current.outside {
             let reviewed = self
@@ -2347,6 +2901,77 @@ fn section(
     section_with_body(id, title, about, ask, rows_with_dividers(rows, cx), cx)
 }
 
+/// A section of General whose rows filter down to the ones matching `search`.
+/// If `search` matches the section's title or ⓘ text rather than a single row,
+/// the whole section stays; when nothing in it matches, the section hides.
+fn filtered_section(
+    id: &'static str,
+    title: &'static str,
+    about: &str,
+    ask: &'static str,
+    search: &str,
+    rows: Vec<(&[&str], AnyElement)>,
+    cx: &App,
+) -> Option<AnyElement> {
+    if search.trim().is_empty() {
+        let all = rows.into_iter().map(|(_, el)| el).collect();
+        return Some(section(id, title, about, ask, all, cx));
+    }
+    let mut matched = Vec::new();
+    let mut all = Vec::with_capacity(rows.len());
+    for (terms, el) in rows {
+        let mut haystacks = Vec::with_capacity(terms.len() + 1);
+        haystacks.push(title);
+        haystacks.extend_from_slice(terms);
+        if general_matches(search, &haystacks) {
+            matched.push(el);
+        } else {
+            all.push(el);
+        }
+    }
+    if !matched.is_empty() {
+        Some(section(id, title, about, ask, matched, cx))
+    } else if general_matches(search, &[title, about]) {
+        Some(section(id, title, about, ask, all, cx))
+    } else {
+        None
+    }
+}
+
+fn filtered_owned_section(
+    id: &'static str,
+    title: &'static str,
+    about: &str,
+    ask: &'static str,
+    search: &str,
+    rows: Vec<(Vec<String>, AnyElement)>,
+    cx: &App,
+) -> Option<AnyElement> {
+    if search.trim().is_empty() {
+        let all = rows.into_iter().map(|(_, el)| el).collect();
+        return Some(section(id, title, about, ask, all, cx));
+    }
+    let mut matched = Vec::new();
+    let mut all = Vec::with_capacity(rows.len());
+    for (terms, el) in rows {
+        let mut haystacks: Vec<&str> = Vec::with_capacity(terms.len() + 1);
+        haystacks.push(title);
+        haystacks.extend(terms.iter().map(String::as_str));
+        if general_matches(search, &haystacks) {
+            matched.push(el);
+        } else {
+            all.push(el);
+        }
+    }
+    if !matched.is_empty() {
+        Some(section(id, title, about, ask, matched, cx))
+    } else if general_matches(search, &[title, about]) {
+        Some(section(id, title, about, ask, all, cx))
+    } else {
+        None
+    }
+}
+
 /// A grouped Form's rows, with its line between each two: inset as the
 /// rows' words are, and as faint as macOS 27 draws it (#2d2d2d on the
 /// group's #232323 dark, #ebebeb on #f7f7f7 light).
@@ -2849,6 +3474,8 @@ impl Render for SettingsWindow {
                 )
                 .child(crate::tips::window_presses());
         }
+        let general_search =
+            (self.tab == Tab::General).then(|| self.render_general_search_bar(window, cx));
         let mut sections = match self.tab {
             Tab::General => self.render_general(settings.as_ref(), window, cx),
             Tab::Models => self.render_models(settings.as_ref(), cx),
@@ -2879,27 +3506,34 @@ impl Render for SettingsWindow {
             .text_color(cx.theme().foreground)
             .child(sidebar)
             .child(
-                div()
-                    .id("settings-pane")
+                v_flex()
                     .flex_1()
                     .min_w_0()
                     .h_full()
-                    .overflow_y_scroll()
-                    .track_scroll(&self.scroll)
+                    .when_some(general_search, |s, bar| s.child(bar))
                     .child(
-                        // A grouped form stops its rows at about 700 points; wider
-                        // than that adds even sides. Its sections are 30 apart
-                        // (57 from one group to the next, with the heading).
-                        h_flex().w_full().justify_center().child(
-                            v_flex()
-                                .w_full()
-                                .max_w(px(700.))
-                                .px(px(20.))
-                                .pt(px(20.))
-                                .pb(px(24.))
-                                .gap(px(30.))
-                                .children(sections),
-                        ),
+                        div()
+                            .id("settings-pane")
+                            .flex_1()
+                            .min_w_0()
+                            .min_h_0()
+                            .overflow_y_scroll()
+                            .track_scroll(&self.scroll)
+                            .child(
+                                // A grouped form stops its rows at about 700 points; wider
+                                // than that adds even sides. Its sections are 30 apart
+                                // (57 from one group to the next, with the heading).
+                                h_flex().w_full().justify_center().child(
+                                    v_flex()
+                                        .w_full()
+                                        .max_w(px(700.))
+                                        .px(px(20.))
+                                        .pt(px(20.))
+                                        .pb(px(24.))
+                                        .gap(px(30.))
+                                        .children(sections),
+                                ),
+                            ),
                     ),
             )
             // Last: every press in the window, for the activity log (tips.rs).
@@ -2920,6 +3554,7 @@ impl SettingsWindow {
         });
         json!({
             "tab": self.tab.name(),
+            "generalSearch": self.general_search_text(cx),
             "instructions": self.instructions.read(cx).value().to_string(),
             "instructionsStatus": self.instructions_status,
             "appearance": style::appearance().name(),
@@ -2945,6 +3580,12 @@ impl SettingsWindow {
             "labPanel": settings.as_ref().and_then(|s| s.lab_panel.as_ref()).map(|l| l.iter().map(|r| r.provider.clone()).collect::<Vec<_>>()),
             "privateFolders": settings.as_ref().map(|s| s.private_folders.clone()),
             "smallJobsPool": settings.as_ref().and_then(|s| s.pool.clone()),
+            "experiments": settings.as_ref().map(|s| {
+                s.experiments
+                    .iter()
+                    .map(|e| json!({ "id": e.id, "name": e.name, "on": e.on }))
+                    .collect::<Vec<_>>()
+            }),
             // General's Web runtime row, as it reads.
             "webRuntime": crate::web_runtime::settings_words(cx),
             "runners": self.runners_dump(cx),
@@ -2963,6 +3604,19 @@ pub(crate) fn automation(
     window: &mut Window,
     cx: &mut App,
 ) -> Result<Option<Value>, String> {
+    use gpui_kit::test::TestWindowExt as _;
+    if let Some(words) = cmd["search"].as_str() {
+        window.render_frame(cx);
+        let (_, view) = app
+            .read(cx)
+            .settings_window
+            .clone()
+            .ok_or("the Settings window isn't open")?;
+        let search = view.update(cx, |this, cx| this.general_search_box(window, cx));
+        search.update(cx, |s, cx| s.set_value(words.to_owned(), window, cx));
+        window.render_frame(cx);
+        return Ok(Some(json!("ok")));
+    }
     if let Some(done) = runners::automation(app, cmd, window, cx)? {
         return Ok(Some(done));
     }

@@ -22,6 +22,7 @@ How the Tasks section works today (an experiment: turn it on in Settings > Exper
 
 ### Added
 
+- Settings > General has a search bar at the top, above Appearance, that filters sections and rows by name, description and choices, including Experiments toggles such as Canvas and fork settings such as New thread box.
 - A thread with a plan board has a Plan board link in Highlights that opens it.
 - A line under the plan board's bar says what to do next (talk about a box, approve, send or say "build it"), and an empty board says to start one with "plan board".
 - The plan board's bar has ⧉ to open the board in a window of its own and ↙ to put it back beside the thread. Its buttons wrap onto a second row in a narrow pane instead of running off the end.

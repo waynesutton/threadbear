@@ -298,6 +298,21 @@ impl RunnerSettings {
 
 /// The Prints experiment's id (`Page.experiment`).
 pub const PAGES_EXPERIMENT: &str = "pages";
+/// Placeholder and label for the search bar at the top of Settings > General.
+pub const GENERAL_SEARCH_PROMPT: &str = "Search General settings";
+
+/// Whether a setting or section in General matches `search`: every word typed
+/// appears somewhere in `haystacks`, whatever its case. Empty shows everything.
+pub fn general_matches(search: &str, haystacks: &[&str]) -> bool {
+    let words: Vec<String> = search.split_whitespace().map(str::to_lowercase).collect();
+    if words.is_empty() {
+        return true;
+    }
+    let lower: Vec<String> = haystacks.iter().map(|h| h.to_lowercase()).collect();
+    words
+        .iter()
+        .all(|word| lower.iter().any(|h| h.contains(word.as_str())))
+}
 
 /// An experiment's paragraph as plain text for its ⓘ: the guide writes it in
 /// Markdown, so code marks and doubled spaces go (`experimentAbout`).
@@ -601,5 +616,16 @@ mod tests {
         assert_eq!(lab_of_model("openai/gpt-6.1"), Some("GPT"));
         assert_eq!(lab_of_model("xai/grok-4.7"), Some("Grok"));
         assert_eq!(lab_of_model("zai/glm-5"), None);
+    }
+
+    #[test]
+    fn general_search_matches_every_word_case_insensitively() {
+        let canvas = ["Experiments", "Canvas", "threadCanvas", "Try Canvas"];
+        assert!(general_matches("", &canvas));
+        assert!(general_matches("   ", &canvas));
+        assert!(general_matches("canvas", &canvas));
+        assert!(general_matches("CANVAS", &canvas));
+        assert!(general_matches("experiments canvas", &canvas));
+        assert!(!general_matches("canvas prints", &canvas));
     }
 }
