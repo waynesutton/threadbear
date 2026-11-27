@@ -219,7 +219,13 @@ impl Threadbear {
             Some(v) => v,
             None => {
                 let dock = self.dock.clone();
-                let v = cx.new(|cx| PlanBoardView::new(app, client, thread.clone(), dock, cx));
+                let planner_busy = self
+                    .threads
+                    .get(&thread)
+                    .is_some_and(|t| t.busy() || t.working());
+                let v = cx.new(|cx| {
+                    PlanBoardView::new(app, client, thread.clone(), dock, planner_busy, cx)
+                });
                 cx.default_global::<PlanBoards>()
                     .views
                     .insert(thread, v.clone());
@@ -298,6 +304,12 @@ pub(crate) struct PlanBoardView {
     frames_loaded: bool,
     // Box currently asking the agent to generate 3 screen takes (prevents double-send).
     asking_screens_for: Option<String>,
+    // Live Activity tray showing where each sent box or planner request is running.
+    activity_open: bool,
+    // Optimistic note right after a board action (Generate 3 takes / Ask planner to review).
+    planner_activity: Option<String>,
+    // Tracks planner busy -> idle so new screens load automatically without manual Refresh.
+    planner_was_busy: bool,
     stills: HashMap<(String, u32, bool), Option<Arc<Image>>>,
     // One still at a time: they share one sealed view.
     drawing: bool,
@@ -312,14 +324,32 @@ impl PlanBoardView {
         client: Arc<Client>,
         thread_id: String,
         dock: Entity<threadbear_dock::DockModel>,
+        planner_was_busy: bool,
         cx: &mut Context<Self>,
     ) -> Self {
         // Pop out and Put back follow where the tab is.
         let observe_dock = cx.observe(&dock, |_, _, cx| cx.notify());
-        // Badges follow the threads' summaries: redraw when the app's list changes.
-        let observe = app
-            .upgrade()
-            .map(|a| cx.observe(&a, |_, _, cx| cx.notify()));
+        // Badges and the Activity tray follow the threads' live summaries; when
+        // the planner finishes a turn, auto-refresh screens so new takes appear.
+        let observe = app.upgrade().map(|a| {
+            cx.observe(&a, |this, a, cx| {
+                let busy = a
+                    .read(cx)
+                    .threads
+                    .get(&this.thread_id)
+                    .is_some_and(|t| t.busy() || t.working());
+                if this.planner_was_busy && !busy {
+                    this.asking_screens_for = None;
+                    this.asked = None;
+                    this.planner_activity = None;
+                    if this.board.is_some() && this.mockups_on(cx) {
+                        this.load_frames_opts(None, false, cx);
+                    }
+                }
+                this.planner_was_busy = busy;
+                cx.notify();
+            })
+        });
         let mut v = PlanBoardView {
             app,
             dock,
@@ -352,6 +382,9 @@ impl PlanBoardView {
             frames: Vec::new(),
             frames_loaded: false,
             asking_screens_for: None,
+            activity_open: false,
+            planner_activity: None,
+            planner_was_busy,
             stills: HashMap::new(),
             drawing: false,
             runtime_watch: None,
@@ -406,7 +439,57 @@ impl PlanBoardView {
         }
         self.asked = None;
         self.asking_screens_for = None;
+        self.planner_activity = None;
         self.reload(cx);
+        cx.notify();
+    }
+
+    fn activity_rows(
+        &self,
+        statuses: &BTreeMap<String, BoxStatus>,
+        cx: &App,
+    ) -> Vec<rules::ActivityRow> {
+        let Some(board) = &self.board else {
+            return Vec::new();
+        };
+        let app = self.app.upgrade();
+        let threads = app.as_ref().map(|a| &a.read(cx).threads);
+        let planner = threads
+            .and_then(|t| t.get(&self.thread_id))
+            .map(|t| (**t).clone());
+        rules::activity_rows(
+            board,
+            planner.as_ref(),
+            self.planner_activity.as_deref(),
+            statuses,
+            |id| threads.and_then(|t| t.get(id)).map(|t| (**t).clone()),
+        )
+    }
+
+    /// Called after SendSheet starts a box thread: update board links and open
+    /// the live Activity tray so Wayne immediately sees where it is running.
+    fn on_box_sent(&mut self, board: Option<Board>, cx: &mut Context<Self>) {
+        self.take_board(board);
+        self.activity_open = true;
+        cx.notify();
+    }
+
+    /// Center the canvas on a box and highlight it (used from the Activity tray).
+    fn focus_box(&mut self, id: &str, cx: &mut Context<Self>) {
+        let Some(board) = &self.board else { return };
+        let layout = rules::layout(&board.graph, &self.positions());
+        if let Some(r) = layout.rect(id) {
+            let (w, h) = self.view_size();
+            let s = self.camera.s.max(0.85);
+            let cx_world = r.x + r.w / 2.;
+            let cy_world = r.y + r.h / 2.;
+            self.camera = Camera {
+                s,
+                tx: w / 2. - cx_world * s,
+                ty: h / 2. - cy_world * s,
+            };
+        }
+        self.selection = vec![Hit::Box(id.to_owned())];
         cx.notify();
     }
 
@@ -595,12 +678,15 @@ impl PlanBoardView {
             return;
         }
         self.asked = Some(message.clone());
+        self.planner_activity = Some("Asking planner to review the plan".to_owned());
+        self.activity_open = true;
         let client = self.client.clone();
         let params = json!({ "threadId": self.thread_id, "text": message });
         cx.spawn(async move |this, cx| {
             if let Err(e) = call(client, "threads.send", params).await {
                 this.update(cx, |this, cx| {
                     this.asked = None;
+                    this.planner_activity = None;
                     this.error = Some(e.message);
                     cx.notify();
                 })
@@ -906,9 +992,251 @@ impl PlanBoardView {
         .into_any_element()
     }
 
+    fn render_activity_pill(
+        &self,
+        summary: &rules::ActivitySummary,
+        cx: &mut Context<Self>,
+    ) -> AnyElement {
+        let dot_colour = if summary.needs_you > 0 {
+            style::needs_you(cx)
+        } else if summary.running > 0 {
+            style::accent(cx)
+        } else if summary.failed > 0 {
+            style::failed(cx)
+        } else if summary.done > 0 {
+            rgb(GREEN).into()
+        } else {
+            style::secondary_text(cx)
+        };
+        let open = self.activity_open;
+        let label = summary.label.clone();
+        crate::a11y::A11yRole::a11y_role(
+            div()
+                .id("plan-board-activity")
+                .flex_none()
+                .h(px(24.))
+                .px(px(8.))
+                .flex()
+                .items_center()
+                .gap(px(5.))
+                .whitespace_nowrap()
+                .rounded(px(6.))
+                .border_1()
+                .border_color(if open {
+                    dot_colour.opacity(0.85)
+                } else {
+                    dot_colour.opacity(0.45)
+                })
+                .bg(dot_colour.opacity(if open { 0.16 } else { 0.08 }))
+                .text_size(px(size::DETAIL))
+                .font_weight(FontWeight::MEDIUM)
+                .text_color(dot_colour)
+                .cursor(CursorStyle::PointingHand)
+                .hover(|s| s.bg(dot_colour.opacity(0.2)))
+                .test_support(),
+            Role::Button,
+        )
+        .aria_label(SharedString::from(format!("Activity: {label}")))
+        .tip("Show or hide what is running and where each box thread went")
+        .child(
+            div()
+                .flex_none()
+                .w(px(6.))
+                .h(px(6.))
+                .rounded_full()
+                .bg(dot_colour),
+        )
+        .child(label)
+        .on_click(cx.listener(|this, _: &ClickEvent, _, cx| {
+            this.activity_open = !this.activity_open;
+            cx.notify();
+        }))
+        .into_any_element()
+    }
+
+    fn render_activity_row(
+        &self,
+        index: usize,
+        row: &rules::ActivityRow,
+        cx: &mut Context<Self>,
+    ) -> AnyElement {
+        let colour = status_colour(&row.status, cx);
+        let where_text = if !row.thread_title.is_empty() && row.thread_title != row.label {
+            format!("{} · {}", row.where_name, row.thread_title)
+        } else {
+            row.where_name.clone()
+        };
+        let target_el: AnyElement = if let Some(node_id) = row.node_id.clone() {
+            let focus_id = node_id.clone();
+            crate::a11y::A11yRole::a11y_role(
+                div()
+                    .id(SharedString::from(format!("plan-activity-focus-{node_id}")))
+                    .flex_none()
+                    .max_w(px(170.))
+                    .truncate()
+                    .text_size(px(size::DETAIL))
+                    .font_weight(FontWeight::SEMIBOLD)
+                    .text_color(style::label_text(cx))
+                    .cursor(CursorStyle::PointingHand)
+                    .hover(|s| s.text_color(style::accent(cx)))
+                    .test_support(),
+                Role::Button,
+            )
+            .aria_label(SharedString::from(format!("Center box {}", row.label)))
+            .tip("Center this box on the board")
+            .child(row.label.clone())
+            .on_click(cx.listener(move |this, _: &ClickEvent, _, cx| {
+                this.focus_box(&focus_id, cx);
+            }))
+            .into_any_element()
+        } else {
+            div()
+                .flex_none()
+                .text_size(px(size::DETAIL))
+                .font_weight(FontWeight::SEMIBOLD)
+                .text_color(style::label_text(cx))
+                .child(row.label.clone())
+                .into_any_element()
+        };
+        let mut line = h_flex()
+            .id(SharedString::from(format!("plan-activity-row-{index}")))
+            .w_full()
+            .min_h(px(28.))
+            .px(px(12.))
+            .py(px(4.))
+            .gap(px(8.))
+            .items_center()
+            .border_t_1()
+            .border_color(style::hairline(cx).opacity(0.6))
+            .child(
+                h_flex()
+                    .flex_none()
+                    .w(px(88.))
+                    .gap(px(5.))
+                    .items_center()
+                    .child(
+                        div()
+                            .flex_none()
+                            .w(px(6.))
+                            .h(px(6.))
+                            .rounded_full()
+                            .bg(colour),
+                    )
+                    .child(
+                        div()
+                            .whitespace_nowrap()
+                            .text_size(px(size::SMALL))
+                            .font_weight(FontWeight::MEDIUM)
+                            .text_color(colour)
+                            .child(row.status.word()),
+                    ),
+            )
+            .child(target_el)
+            .child(
+                div()
+                    .flex_none()
+                    .max_w(px(200.))
+                    .px(px(6.))
+                    .py(px(1.))
+                    .truncate()
+                    .rounded(px(4.))
+                    .bg(style::button_fill(cx))
+                    .border_1()
+                    .border_color(style::button_edge(cx))
+                    .text_size(px(size::SMALL))
+                    .text_color(style::secondary_text(cx))
+                    .child(where_text),
+            )
+            .child(
+                div()
+                    .flex_1()
+                    .min_w(px(0.))
+                    .truncate()
+                    .text_size(px(size::SMALL))
+                    .text_color(style::quiet_text(cx))
+                    .child(row.detail.clone()),
+            );
+        if let Some(tid) = row.thread_id.clone() {
+            line = line.child(
+                bar_button_dyn(
+                    format!("plan-activity-open-{index}"),
+                    "Open thread",
+                    "Open this thread",
+                    true,
+                    cx,
+                )
+                .on_click(cx.listener(move |this, _: &ClickEvent, window, cx| {
+                    this.open_thread(tid.clone(), window, cx);
+                })),
+            );
+        }
+        line.into_any_element()
+    }
+
+    fn render_activity_tray(
+        &self,
+        rows: &[rules::ActivityRow],
+        cx: &mut Context<Self>,
+    ) -> Option<AnyElement> {
+        if !self.activity_open || rows.is_empty() {
+            return None;
+        }
+        let summary = rules::activity_summary(rows)?;
+        let header = h_flex()
+            .id("plan-activity-header")
+            .w_full()
+            .px(px(12.))
+            .py(px(5.))
+            .gap(px(8.))
+            .items_center()
+            .child(
+                div()
+                    .text_size(px(size::SMALL))
+                    .font_weight(FontWeight::SEMIBOLD)
+                    .text_color(style::label_text(cx))
+                    .child("Running & sent"),
+            )
+            .child(
+                div()
+                    .text_size(px(size::SMALL))
+                    .text_color(style::secondary_text(cx))
+                    .child(summary.label),
+            )
+            .child(div().flex_1())
+            .child(
+                bar_button("plan-activity-close", "✕", "Hide activity tray", true, cx).on_click(
+                    cx.listener(|this, _: &ClickEvent, _, cx| {
+                        this.activity_open = false;
+                        cx.notify();
+                    }),
+                ),
+            );
+        let mut list = v_flex()
+            .id("plan-activity-list")
+            .w_full()
+            .max_h(px(164.))
+            .overflow_y_scroll();
+        for (i, row) in rows.iter().enumerate() {
+            list = list.child(self.render_activity_row(i, row, cx));
+        }
+        Some(
+            v_flex()
+                .id("plan-board-activity-tray")
+                .flex_none()
+                .w_full()
+                .bg(style::card_background(cx))
+                .border_b_1()
+                .border_color(style::hairline(cx))
+                .child(header)
+                .child(list)
+                .into_any_element(),
+        )
+    }
+
     fn render_bar(
         &mut self,
         statuses: &BTreeMap<String, BoxStatus>,
+        activity: &[rules::ActivityRow],
         cx: &mut Context<Self>,
     ) -> AnyElement {
         let Some(board) = self.board.clone() else {
@@ -951,6 +1279,9 @@ impl PlanBoardView {
             );
         if !state.approved() {
             bar = bar.child(self.render_approve_button(cx));
+        }
+        if let Some(summary) = rules::activity_summary(activity) {
+            bar = bar.child(self.render_activity_pill(&summary, cx));
         }
         bar = bar.child(self.skills_menu(&board, cx));
         bar = bar.child(self.versions_menu(&board));
@@ -2138,8 +2469,7 @@ impl SendSheet {
                         let board = Board::decode(&v["board"]);
                         s.view
                             .update(cx, |b, cx| {
-                                b.take_board(board);
-                                cx.notify();
+                                b.on_box_sent(board, cx);
                             })
                             .ok();
                         window.close_dialog(cx);
@@ -2413,7 +2743,9 @@ impl Render for PlanBoardView {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let statuses = self.statuses(cx);
         let body = if let Some(board) = self.board.clone() {
-            let bar = self.render_bar(&statuses, cx);
+            let activity = self.activity_rows(&statuses, cx);
+            let bar = self.render_bar(&statuses, &activity, cx);
+            let activity_tray = self.render_activity_tray(&activity, cx);
             let canvas = self.render_canvas(&statuses, window, cx);
             let screens_drawer = self.render_screens_drawer(&board, cx);
             let hint = rules::next_step(&board);
@@ -2438,6 +2770,7 @@ impl Render for PlanBoardView {
                     .aria_label(SharedString::from(hint))
                     .child(hint),
                 )
+                .children(activity_tray)
                 .child(canvas)
                 .children(screens_drawer)
                 .into_any_element()
@@ -2653,6 +2986,21 @@ pub(crate) fn automation(
         .iter()
         .map(|e| json!({ "from": name(&e.from), "to": name(&e.to), "label": e.label }))
         .collect();
+    let activity: Vec<Value> = v
+        .activity_rows(&statuses, cx)
+        .into_iter()
+        .map(|r| {
+            json!({
+                "nodeId": r.node_id,
+                "label": r.label,
+                "where": r.where_name,
+                "threadId": r.thread_id,
+                "threadTitle": r.thread_title,
+                "status": r.status.word(),
+                "detail": r.detail,
+            })
+        })
+        .collect();
     let groups: Vec<Value> = board.graph.groups.iter().map(|g| json!(g.label)).collect();
     Ok(json!({
         "state": board.state().words(),
@@ -2664,6 +3012,8 @@ pub(crate) fn automation(
         "skills": board.skills,
         "chips": v.chips,
         "review": rules::review_message(&statuses, &board),
+        "activityOpen": v.activity_open,
+        "activity": activity,
         "screensButton": v.mockups_on(cx),
         "screens": v.frames.iter().filter(|f| Some(&f.node) == v.screens_for.as_ref()).map(|f| json!({
             "id": f.id, "variant": f.variant, "title": f.title, "version": f.version, "picked": f.picked, "changed": f.changed,
@@ -2732,14 +3082,22 @@ impl PlanBoardView {
             return;
         }
         let Some(board) = &self.board else { return };
+        let label = board
+            .graph
+            .node(node)
+            .map(|n| n.label.clone())
+            .unwrap_or_else(|| node.to_owned());
         let message = rules::ask_screens_message(board, node);
         self.asking_screens_for = Some(node.to_owned());
+        self.planner_activity = Some(format!("Generating 3 screen takes for {label}"));
+        self.activity_open = true;
         let client = self.client.clone();
         let params = json!({ "threadId": self.thread_id, "text": message });
         cx.spawn(async move |this, cx| {
             if let Err(e) = call(client, "threads.send", params).await {
                 this.update(cx, |this, cx| {
                     this.asking_screens_for = None;
+                    this.planner_activity = None;
                     this.error = Some(e.message);
                     cx.notify();
                 })

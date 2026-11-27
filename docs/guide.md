@@ -2535,11 +2535,17 @@ looks the same as before.
    Full access, so they can build; pick another access in the sheet if you
    want. You can also skip Send and tell the planner "build it" once you've
    approved.
-7. **Follow it.** Each sent box shows its thread's state: Working, Needs
-   you, Done, Failed, Archived or Can't see it. Hover for its latest line,
-   or click the badge to open the thread. Needs you also shows in the
-   Inbox, notifications and the Dock badge, the usual way. A failed or
-   archived box offers **Send again**.
+7. **Follow it.** Sending a box, requesting screens, or asking the planner
+   to review opens the **Running & sent** tray under the bar, and a live
+   pill in the toolbar shows counts such as `1 needs you · 2 running`.
+   Each row names the box or Planner, where it is running (Claude, Codex,
+   or Coordinator), its live status line, and an **Open thread** button;
+   clicking a box name centers it on the canvas. Each sent box also shows
+   a compact badge (`Claude · Working`, `Codex · Needs you`, etc.) that
+   opens its thread on click. Needs you shows in the Inbox, notifications,
+   and Dock badge the usual way, and when the planner finishes drawing
+   screens the board refreshes them on its own. A failed or archived box
+   offers **Send again**.
 8. **Review.** A box finishing doesn't wake the planner. When every sent
    box is done, **Ask planner to review** sends it one message, if you
    press it. The version button lists the last 10 versions; picking an

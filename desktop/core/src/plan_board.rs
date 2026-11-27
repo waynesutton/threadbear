@@ -988,6 +988,193 @@ pub fn statuses(
         .collect()
 }
 
+/// One row in the board's live Activity tray: either the planner thread itself
+/// (when working, waiting on you, or just asked from the board) or a sent box.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ActivityRow {
+    /// Box id for a sent box, or None for the planner thread itself.
+    pub node_id: Option<String>,
+    /// Box label, or "Planner" for the board's own thread.
+    pub label: String,
+    /// Where it runs: "Claude", "Codex", or "Coordinator".
+    pub where_name: String,
+    /// Thread id to open on click, when known.
+    pub thread_id: Option<String>,
+    /// Linked thread's title, shown when it adds context beyond `label`.
+    pub thread_title: String,
+    /// Live status through the same inbox rules as box badges.
+    pub status: BoxStatus,
+    /// Short plain words on what it is doing right now.
+    pub detail: String,
+}
+
+/// Counts and toolbar pill wording for the board's live Activity tray.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ActivitySummary {
+    pub running: usize,
+    pub needs_you: usize,
+    pub done: usize,
+    pub failed: usize,
+    pub label: String,
+}
+
+fn status_detail(st: &BoxStatus) -> String {
+    match st {
+        BoxStatus::Working(line) if !line.is_empty() => line.clone(),
+        BoxStatus::Working(_) => "Working on it".to_owned(),
+        BoxStatus::NeedsYou => "Waiting for your answer".to_owned(),
+        BoxStatus::Done => "Finished".to_owned(),
+        BoxStatus::Failed => "Stopped with an error".to_owned(),
+        BoxStatus::Archived => "Thread archived".to_owned(),
+        BoxStatus::CantSee => "Thread is offline or on another Mac".to_owned(),
+    }
+}
+
+fn status_rank(st: &BoxStatus) -> u8 {
+    match st {
+        BoxStatus::NeedsYou => 0,
+        BoxStatus::Working(_) => 1,
+        BoxStatus::Failed => 2,
+        BoxStatus::Done => 3,
+        BoxStatus::Archived | BoxStatus::CantSee => 4,
+    }
+}
+
+/// Live rows for the board's Activity tray: the planner thread when active
+/// or just asked from the board, plus every sent box sorted by urgency.
+pub fn activity_rows(
+    board: &Board,
+    planner: Option<&ThreadSummary>,
+    planner_note: Option<&str>,
+    statuses: &BTreeMap<String, BoxStatus>,
+    summary: impl Fn(&str) -> Option<ThreadSummary>,
+) -> Vec<ActivityRow> {
+    let mut rows: Vec<(u8, usize, ActivityRow)> = Vec::new();
+    if let Some(p) = planner {
+        let p_status = status(Some(p));
+        let active = matches!(p_status, BoxStatus::Working(_) | BoxStatus::NeedsYou);
+        if active || planner_note.is_some() {
+            let shown_status = match (&p_status, planner_note) {
+                (BoxStatus::Working(line), Some(note)) if line.is_empty() => {
+                    BoxStatus::Working(note.to_owned())
+                }
+                (BoxStatus::Working(_), _) | (BoxStatus::NeedsYou, _) => p_status.clone(),
+                (_, Some(note)) => BoxStatus::Working(note.to_owned()),
+                _ => p_status.clone(),
+            };
+            let where_name = if p.provider == "codex" {
+                "Codex"
+            } else {
+                "Claude"
+            };
+            rows.push((
+                status_rank(&shown_status),
+                0,
+                ActivityRow {
+                    node_id: None,
+                    label: "Planner".to_owned(),
+                    where_name: where_name.to_owned(),
+                    thread_id: Some(p.id.clone()),
+                    thread_title: p.title.clone(),
+                    detail: status_detail(&shown_status),
+                    status: shown_status,
+                },
+            ));
+        }
+    }
+    let order: HashMap<&str, usize> = board
+        .graph
+        .nodes
+        .iter()
+        .enumerate()
+        .map(|(i, n)| (n.id.as_str(), i + 1))
+        .collect();
+    for (id, link) in &board.links {
+        let st = statuses.get(id).cloned().unwrap_or(BoxStatus::CantSee);
+        let label = board
+            .graph
+            .node(id)
+            .map(|n| n.label.clone())
+            .unwrap_or_else(|| id.clone());
+        let where_name = if link.is_coordinator() {
+            "Coordinator"
+        } else if link.harness.as_deref() == Some("codex") {
+            "Codex"
+        } else {
+            "Claude"
+        };
+        let thread_title = link
+            .thread_id
+            .as_deref()
+            .and_then(&summary)
+            .map(|t| t.title)
+            .unwrap_or_default();
+        let rank = status_rank(&st);
+        let pos = order.get(id.as_str()).copied().unwrap_or(usize::MAX);
+        rows.push((
+            rank,
+            pos,
+            ActivityRow {
+                node_id: Some(id.clone()),
+                label,
+                where_name: where_name.to_owned(),
+                thread_id: link.thread_id.clone(),
+                thread_title,
+                detail: status_detail(&st),
+                status: st,
+            },
+        ));
+    }
+    rows.sort_by(|a, b| {
+        a.0.cmp(&b.0)
+            .then(a.1.cmp(&b.1))
+            .then(a.2.label.cmp(&b.2.label))
+    });
+    rows.into_iter().map(|(_, _, r)| r).collect()
+}
+
+/// Summary counts and toolbar pill label for the board's live Activity tray.
+pub fn activity_summary(rows: &[ActivityRow]) -> Option<ActivitySummary> {
+    if rows.is_empty() {
+        return None;
+    }
+    let mut running = 0;
+    let mut needs_you = 0;
+    let mut done = 0;
+    let mut failed = 0;
+    for r in rows {
+        match r.status {
+            BoxStatus::Working(_) => running += 1,
+            BoxStatus::NeedsYou => needs_you += 1,
+            BoxStatus::Done => done += 1,
+            BoxStatus::Failed => failed += 1,
+            BoxStatus::Archived | BoxStatus::CantSee => {}
+        }
+    }
+    let label = if needs_you > 0 && running > 0 {
+        format!("{needs_you} needs you · {running} running")
+    } else if needs_you > 0 {
+        format!("{needs_you} needs you")
+    } else if running > 0 {
+        format!("{running} running")
+    } else if failed > 0 && done > 0 {
+        format!("{done} done · {failed} failed")
+    } else if failed > 0 {
+        format!("{failed} failed")
+    } else if done > 0 {
+        format!("{done} done")
+    } else {
+        format!("{} sent", rows.len())
+    };
+    Some(ActivitySummary {
+        running,
+        needs_you,
+        done,
+        failed,
+        label,
+    })
+}
+
 // ---------------------------------------------------------------- Ask planner to review
 
 /// The one message Ask planner to review sends, or None while the button
@@ -1678,5 +1865,97 @@ mod tests {
             region_css(&still, "phone", (0., 0.), (1000., 1000.)),
             [0., 0., 390., 844.]
         );
+    }
+
+    #[test]
+    fn activity_rows_rank_needs_you_and_running_ahead_of_done_and_include_planner() {
+        let mut b = acme();
+        b.links.insert(
+            "store".into(),
+            Link {
+                kind: Some("thread".into()),
+                thread_id: Some("t-store".into()),
+                harness: Some("claude".into()),
+                ..Default::default()
+            },
+        );
+        b.links.insert(
+            "kpi".into(),
+            Link {
+                kind: Some("thread".into()),
+                thread_id: Some("t-kpi".into()),
+                harness: Some("codex".into()),
+                ..Default::default()
+            },
+        );
+        b.links.insert(
+            "revenue".into(),
+            Link {
+                kind: Some("coordinator".into()),
+                thread_id: Some("t-coord".into()),
+                task_id: Some("task-1".into()),
+                ..Default::default()
+            },
+        );
+
+        let mut sts = BTreeMap::new();
+        sts.insert("store".into(), BoxStatus::Done);
+        sts.insert("kpi".into(), BoxStatus::NeedsYou);
+        sts.insert("revenue".into(), BoxStatus::Working("Running tests".into()));
+
+        let planner = summary(|t| {
+            t.id = "t-plan".into();
+            t.title = "Plan".into();
+            t.status = "idle".into();
+            t.provider = "claude".into();
+        });
+        let lookup = |id: &str| {
+            Some(summary(|t| {
+                t.id = id.into();
+                t.title = format!("Thread {id}");
+            }))
+        };
+
+        let rows = activity_rows(
+            &b,
+            Some(&planner),
+            Some("Generating 3 screen takes for KPI cards"),
+            &sts,
+            lookup,
+        );
+        // Order: NeedsYou (kpi) -> Working (Planner, then revenue) -> Done (store)
+        assert_eq!(rows.len(), 4);
+        assert_eq!(rows[0].node_id.as_deref(), Some("kpi"));
+        assert_eq!(rows[0].where_name, "Codex");
+        assert_eq!(rows[0].status, BoxStatus::NeedsYou);
+        assert_eq!(rows[0].thread_title, "Thread t-kpi");
+
+        assert_eq!(rows[1].node_id, None);
+        assert_eq!(rows[1].label, "Planner");
+        assert_eq!(rows[1].where_name, "Claude");
+        assert_eq!(rows[1].detail, "Generating 3 screen takes for KPI cards");
+
+        assert_eq!(rows[2].node_id.as_deref(), Some("revenue"));
+        assert_eq!(rows[2].where_name, "Coordinator");
+        assert_eq!(rows[2].detail, "Running tests");
+
+        assert_eq!(rows[3].node_id.as_deref(), Some("store"));
+        assert_eq!(rows[3].status, BoxStatus::Done);
+
+        let sum = activity_summary(&rows).expect("summary");
+        assert_eq!(sum.needs_you, 1);
+        assert_eq!(sum.running, 2);
+        assert_eq!(sum.done, 1);
+        assert_eq!(sum.failed, 0);
+        assert_eq!(sum.label, "1 needs you · 2 running");
+    }
+
+    #[test]
+    fn activity_summary_is_none_when_nothing_is_sent_or_running() {
+        let b = acme();
+        let planner = summary(|t| t.status = "idle".into());
+        let rows = activity_rows(&b, Some(&planner), None, &BTreeMap::new(), |_| None);
+        assert!(rows.is_empty());
+        assert_eq!(activity_summary(&rows), None);
     }
 }
