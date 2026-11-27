@@ -192,11 +192,61 @@ its own environment so what it starts doesn't carry them; a runner started by la
 systemd, a terminal or the app has none. So a thread of runner A gets
 nothing on runner B unless it started B: it's refused, never given B's owner
 (it can't be given its own limits there, as B doesn't have the thread).
-Windows can't read another process's environment, so a Windows runner
-can't make this check: there tb asks first instead (a thread's tb pointed at
-another runner's data dir goes ahead only once its own runner, asked with
-its key, says it's on Full access), which a thread that wipes its own
-environment gets round, as with the rest of the same-user boundary on Windows below. One that deliberately starts a new session and reads
+On Windows the runner's helper reads each process's environment block from
+its PEB (as a debugger does; one Windows won't open, another user's or an
+elevated or protected process, reads as having none: no thread's CLI is
+one), but that isn't enough there: Git Bash, Claude's shell on Windows, keeps
+its programs' environment where the PEB doesn't show it, and each exec
+leaves a process whose Windows parent has gone, so nothing above a tool
+command's `tb` can be read. What does hold is the job: the runner puts each
+thread's CLI in a Job Object of its own (`Local\threadbear-job-<hex>`), and
+everything the CLI starts is in it and can't leave. So on Windows the runner
+also asks its helper which Threadbear jobs each process holding the
+connection is in (the jobs named in that process's session's object
+directory, opened from the listing): one of this runner's threads' jobs
+makes the connection that thread (its own thread with its key wiped too,
+which Git Bash's lost parents used to let through as the owner), one this
+runner was itself started in (a dev runner started from a thread's shell)
+is the owner's, and any other is another runner's thread, closed with 4403;
+a holder that has gone, that can't be opened even to ask its session
+(Windows allows that for any process of yours, elevated or protected, so
+one that can't has denied it to itself), or a look that fails, closes it
+with 4503. Under one of its threads' CLIs, found by its parents, a job of
+another of its threads is turned away. Every object listed under a job's
+name is asked about, so one made to look like a thread's job can't hide the
+real one, and the directory is read in one call (paging could skip one).
+The CLI is given a handle to its own job (query only) as it goes in, so the
+job keeps its name while the CLI lives even if the helper is restarted; the
+job ends whatever is still in it once its last handle goes (the helper's
+and the CLI's), so nothing of a thread's runs on in a job that has lost its
+name; and a thread's CLI the helper couldn't put in a job (tried twice; a
+first try that took the CLI before failing still counts as the thread's) is
+stopped rather than left running outside one. A process in no job at all (a
+terminal, the app) is answered without looking further. For one in some
+job, a job named like a thread's that refuses to be asked about (a thread
+can make one) leaves the runner unable to place it, so such connections in
+that session are closed until it's gone: no answer rather than a guess.
+What a CLI started in the moment before it went in its job (a launcher's
+real CLI, an MCP server) is put in with it: every descendant by parent (each
+the same process the look saw, not one that took its pid), swept until none
+is left outside, and if a fifth look still finds some, or one can't be put
+in, the job fails. One started by a process that had already exited by then
+isn't found: what a CLI starts as it starts is its own startup (its hooks
+and MCP servers, which a repo's settings only add once trusted). The helper's questions asked
+together go as one, so many connections can't queue each other past their
+time. Jobs made by a helper from before this change don't keep their name
+past that helper or end what's left when they lose it, so until such a
+CLI next starts (an upgrade's draining runner's), a helper restart there
+leaves its thread's processes unplaced again. A runner in another session
+than a connection's process (one started over ssh, in session 0, and the
+desktop app in session 1) can't read that session's directory, so a
+connection from a process there that's in some job is no answer. A thread's process that deliberately gets a process
+started outside its job (through another of your processes, as Explorer or
+Task Scheduler start things, by naming another process as its parent, or by
+changing its own job's limits) is the Windows same-user boundary below. tb in a thread on Windows also asks its own runner first
+before using another runner's data dir, and goes ahead only on Full access,
+which gives a plainer refusal. Tested on a Windows machine with two real
+runners and a real Ask thread under Git Bash. One that deliberately starts a new session and reads
 the token can still pass as the owner, which is why outside Full access
 Claude's file and shell tools are denied the runner's `secrets` folder as well;
 that deny is defence in depth (`SECURITY.md` says what's out of scope). A
@@ -227,8 +277,9 @@ limited, and with any thread key found (tb's own environment's included) it must
 name the thread, every key being one that token makes for a thread id beside it.
 No answer is refused. tb runner resolves the data dir to its path on disk once,
 before the check, and the command uses that path. A thread's process that leaves
-its process tree (a new session; on a Mac or Windows, orphaned and in a process
-group of its own) gets past this as it gets past the runner's own look: the
+its process tree (a new session; on a Mac, orphaned and in a process group of
+its own) gets past this as it gets past the runner's own look; on Windows tb
+can't tell and asks the runner, which places it by its job: the
 same-user boundary in `SECURITY.md`. On Linux a process whose session leader has
 gone is no answer. An `lsof` that exits with anything but 1 (nothing
 matched) is a failed look even if it printed something, and on Linux the runner
@@ -322,8 +373,8 @@ is done, so a client that waits for it can send big frames straight after.
 | `threads.panelShown` | `{ threadId, requestId }` | `{ thread: ThreadSummary }`. The app has shown the thread's `panelRequest` (see Showing panels), which clears it. Another id (a newer request replaced it, or it's gone already) changes nothing |
 | `threads.showPanel` | `{ threadId, panel, reload?: boolean }` | `{ available, request?, shown? }`. Queues the same request as `show_panel` when the Mac app is connected. Otherwise returns `available: false` without queuing anything. Used by `tb show-panel` and BrowserBear handoff |
 | `schedules.list` | `{ threadId?: string }` | `{ schedules: Schedule[] }`, soonest `nextRunAt` first, then the paused and finished ones. With `threadId`, only the ones that send to that thread or were made by it |
-| `schedules.create` | `{ text: string, title?: string, at?: string, cron?: string, timezone?: string, threadId?: string, cwd?, accountId?, poolId?, provider?, model?, effort?, permissionMode?, check?: string, checkTimeoutSecs?: number, paused?: boolean, createdBy?: string, runnerId?: string }` | `{ schedule: Schedule }`. Exactly one of `at` and `cron`. `provider` only with `poolId` (else `-32602`): which kind of its logins each run starts on, as `threads.create`'s. `check` (at most 2,000 characters) and `checkTimeoutSecs` (1 to 300; 60 without): see "Schedule checks" below. `accountId` and `poolId` together, or a `poolId` this runner doesn't have, is `-32602`. An `at` in the past runs straight away. With `threadId` it sends there, otherwise it starts a new thread each time (`cwd` defaults like `threads.create`'s, checked now). A bad cron or zone is `-32602` with a message saying what's wrong. `runnerId` (an id or a name from `runners.list`) puts a new-thread schedule on another runner: its folder and account are checked there when it runs, and an absent `cwd` means that runner's default. Absent, it's this runner. Needs schedules in the backend (see Schedules, "Runners"); otherwise `-32602` |
-| `schedules.update` | `{ scheduleId, title?, text?, at?: string, cron?: string, timezone?: string \| null, paused?: boolean, cwd?, accountId?, poolId?: string \| null, provider?: Provider \| null, model?: string \| null, effort?: EffortLevel \| null, permissionMode?, check?: string \| null, checkTimeoutSecs?: number \| null }` | `{ schedule: Schedule }`. A new `poolId`, `accountId` or `model` without `provider` drops the one it had, so a model never goes to a login of another kind; with no pool left `provider` goes too. `check: null` or `""` takes the check off (its `checkTimeoutSecs` stays); `checkTimeoutSecs: null` puts it back to 60. Setting `at` drops `cron` and the other way round; setting `accountId` drops `poolId` and the other way round (`poolId: null` leaves neither). The folder, login and model are only for one that starts a new thread: on one that sends to a thread they're `-32602`. A new time works out `nextRunAt` again; so does unpausing. Setting `at` on a finished one-off makes it run again then. The target thread can't be changed (make a new schedule) |
+| `schedules.create` | `{ text: string, title?: string, at?: string, cron?: string, timezone?: string, threadId?: string, cwd?, accountId?, poolId?, provider?, model?, effort?, permissionMode?, starThreads?: boolean, check?: string, checkTimeoutSecs?: number, paused?: boolean, createdBy?: string, runnerId?: string }` | `{ schedule: Schedule }`. Exactly one of `at` and `cron`. `starThreads` (only without `threadId`, else `-32602`) starts each run's thread starred. `provider` only with `poolId` (else `-32602`): which kind of its logins each run starts on, as `threads.create`'s. `check` (at most 2,000 characters) and `checkTimeoutSecs` (1 to 300; 60 without): see "Schedule checks" below. `accountId` and `poolId` together, or a `poolId` this runner doesn't have, is `-32602`. An `at` in the past runs straight away. With `threadId` it sends there, otherwise it starts a new thread each time (`cwd` defaults like `threads.create`'s, checked now). A bad cron or zone is `-32602` with a message saying what's wrong. `runnerId` (an id or a name from `runners.list`) puts a new-thread schedule on another runner: its folder and account are checked there when it runs, and an absent `cwd` means that runner's default. Absent, it's this runner. Needs schedules in the backend (see Schedules, "Runners"); otherwise `-32602` |
+| `schedules.update` | `{ scheduleId, title?, text?, at?: string, cron?: string, timezone?: string \| null, paused?: boolean, cwd?, accountId?, poolId?: string \| null, provider?: Provider \| null, model?: string \| null, effort?: EffortLevel \| null, permissionMode?, starThreads?: boolean, check?: string \| null, checkTimeoutSecs?: number \| null }` | `{ schedule: Schedule }`. `starThreads: false` takes it off. A new `poolId`, `accountId` or `model` without `provider` drops the one it had, so a model never goes to a login of another kind; with no pool left `provider` goes too. `check: null` or `""` takes the check off (its `checkTimeoutSecs` stays); `checkTimeoutSecs: null` puts it back to 60. Setting `at` drops `cron` and the other way round; setting `accountId` drops `poolId` and the other way round (`poolId: null` leaves neither). The folder, login, model and `starThreads: true` are only for one that starts a new thread: on one that sends to a thread they're `-32602`. A new time works out `nextRunAt` again; so does unpausing. Setting `at` on a finished one-off makes it run again then. The target thread can't be changed (make a new schedule) |
 | `schedules.delete` | `{ scheduleId }` | `{}`. From a thread's key not on Full access, refused (`-32060`, pointing at `delete_schedule`, which asks on a card) when the schedule's runs have more access than the thread, it has a check, or it isn't this runner's. On such a schedule `schedules.update` refuses lowering its `permissionMode`, taking its `check` off (`null` or blank), or changing its `timezone`, `accountId`, `poolId`, `model` or `effort` too, and `threads.update` refuses lowering the mode of a thread with more access than the caller's, so none of them can be chained into a delete; pausing it is free |
 | `schedules.run` | `{ scheduleId }` | `{ schedule: Schedule, threadId?: string, turnId?: string, queued?: boolean }` runs it now, as if it were due, even when paused. A repeating schedule keeps its `nextRunAt`; a one-off is finished. For a schedule on another runner it answers at once with `queued: true` and no thread: that runner runs it when it next hears (`runRequestedAt` is set until then) |
 | `runners.list` | `{}` | `{ runners: RunnerInfo[] }`, this runner first, then the rest by name. Without a backend, just this runner |
@@ -391,9 +442,11 @@ is done, so a client that waits for it can send big frames straight after.
 | `runner.reinstall` | `{}` | `{ reinstall: RunnerUpdates["reinstall"] \| null }`. The Updates panel's Update it and Try again: the runner runs `install-runner.sh --stage` as a launchd job of its own (runner/src/reinstall.ts) straight away, stopping nothing, and says how it's going in `runner.updates`. `null` when the LaunchAgent isn't behind main. Refused to a thread's own key (rpc-gate.ts). A runner older than 14 Nov 2026 answers `-32601` |
 | `clis.list` | `{}` | `{ clis: CliStatus[] }` |
 | `clis.check` | `{ provider?: Provider }` | `{ clis: CliStatus[] }`. Starts a version check (both CLIs when `provider` is absent) and returns at once, with the state as it was when the call arrived; the result comes through `clis.updated` |
-| `accounts.useReset` | `{ accountId }` | `{ outcome: "reset" \| "nothingToReset" \| "noCredit" \| "alreadyRedeemed", account?: Account }`. Spends one of a Codex login's usage resets (Pools, "Usage resets"): Mike's click on the limit box, never a thread's (the thread-key gate refuses it). `account` is the login after the reading taken straight after. `-32010` for an unknown login, `-32602` for one whose provider has no resets, `-32020` while a reset for the same login is still on its way, `-32000` with Codex's words when it fails. A runner older than this answers `-32601` |
+| `accounts.useReset` | `{ accountId, runnerId? }` | `{ outcome: "reset" \| "nothingToReset" \| "noCredit" \| "alreadyRedeemed", account?: Account }`. Spends one of a Codex login's usage resets (Pools, "Usage resets"): Mike's click on the limit box, a login's Use a reset in the Usage panel or a login list, never a thread's (the thread-key gate refuses it). `account` is the login after the reading taken straight after. With another runner's `runnerId` (a login in a remote thread's login list), it's spent here on this runner's login with the same provider and email, since that's the same subscription, and only without one through Convex on that runner (a `call` only the main Mac's key may queue, backend API 104); the answer's `account` is then the login it was spent on. `-32010` for an unknown login, `-32602` for one whose provider has no resets, `-32020` while a reset for the same login is still on its way, `-32000` with Codex's words when it fails. A runner older than this answers `-32601` |
 | `accounts.findWork` | `{ accountId }` | `{ threadId, started: boolean, thread: ThreadSummary }`. The Usage panel's Find work for it, on a login whose week will go partly unused: starts a thread pinned to that login that suggests 2 to 4 jobs to spend the rest of its week on and asks before starting any (runner/src/spare-week.ts), whatever `Settings.spareWeek` says. While that login's last such thread is still open (not archived) it answers that one, `started: false`, rather than starting another. The app opens the thread either way. `-32010` for an unknown login. The app's, never a thread's (the thread-key gate refuses it). A runner older than this answers `-32601` |
 | `accounts.yearToken` | `{ accountId, runnerId?, code?, check?: boolean, cancel?: boolean }` | `{ state: "idle" \| "starting" \| "waiting" \| "checking" \| "done" \| "failed", url?, message?, madeAt? }`. Year-long token… for a Claude login on another runner (Accounts, "Year-long tokens", "On another runner"), with `runnerId` that runner's, through Convex as a `call` (backend API 90); without it this runner's own. With none of `code`, `check` or `cancel` it starts `claude setup-token` for the login, or joins the one already going, and answers within a few seconds: `starting` until setup-token has printed its sign-in page, then `waiting` with `url`, the claude.ai page to approve it on in any browser. `code` is what the page shows after Authorize (`<code>#<state>`, letters, digits, `-` and `_`, its state the url's own): the runner types it in and answers `checking`, then `done` (with `madeAt`) once the token is in the login's `threadbear-token.json`, or `failed` with `message`. `check` only reports (`idle` when nothing has been started, or the last one ended over 10 minutes ago); `cancel` stops it. One not finished within 10 minutes is stopped. The token is never in an answer. `-32010` for an unknown login, `-32602` for one that isn't Claude's or a code of the wrong shape or for another page, `-32020` while a code is being checked. The app's, never a thread's (the thread-key gate refuses it). A runner older than this answers `-32601`, or through Convex an error naming the method |
+| `runners.sharedLogins` | `{}` | `{ blocked?: string, runners: { runnerId, on: boolean, state: "off" \| "sending" \| "ok" \| "waiting" \| "failed", at?, message?, logins?: { email, state, accountId?, message? }[] }[] }`: each other runner's Use this Mac's Claude logins switch and how its last send went (Accounts, "This Mac's logins on another runner"). `blocked` says why this runner can't share at all (a runner key, sync off, a backend older than 105), and the app then shows no switch. A runner older than this answers `-32601` |
+| `runners.shareLogins` | `{ runnerId, on: boolean }` | That runner's row as in `runners.sharedLogins`, once the first send has landed (`ok`), failed, or found the runner offline (`waiting`: it goes when it's back). On, this Mac's shareable Claude logins go to that runner sealed, and again whenever they change; off, it removes the ones it got this way. `-32602` for an unknown runner, this runner itself or a box; an error on a runner key ("Only the main Mac's runner shares its logins"). The app's, never a thread's (the thread-key gate refuses it). A runner older than this answers `-32601` |
 | `clis.update` | `{ provider: Provider, version?: string, force?: boolean }` | `{ clis: CliStatus[] }`. Starts an update and returns at once, with `update.state` `running` or `waiting`; progress comes through `clis.updated`. `version` picks a kept Codex version (how "Go back" works). `force: true` installs a held version anyway |
 | `clis.setPolicy` | `{ provider: Provider, policy: "auto" \| "notify" \| "off" }` | `{ clis: CliStatus[] }` |
 | `usage.stats` | `{ days?: number }` | `UsageStats` (see Usage history): each login's tokens by the hour and its limit readings over time, for the Usage panel's charts. `days` is 1 to 14 (default 8). A runner older than this answers `-32601` |
@@ -444,22 +497,29 @@ answering `-32602`, because an older app always sends a model and can't
 recover from an error. (An `effort` that isn't an `EffortLevel` at all is
 still `-32602`.)
 
-- Claude models are `opus`, `sonnet`, `haiku` and anything starting
-  `claude-`. Codex models are those in a Codex account's `models`, or
-  anything starting `gpt-` before the list is known.
-- A model of the other provider, or a Codex id that isn't in the account's
-  `models` once they're known, is replaced by the provider's default, with a
-  `system.note` ("sonnet isn't a Codex model, so this thread uses
-  GPT-6.1-Sol").
+- When a login's model list is known, the runner uses its picker ids and
+  resolved model ids. Before the list is known, Claude can try its native
+  ids and aliases, and Codex can try `gpt-` ids, unless another provider
+  already advertises the id. A new thread with no exact picker id and an
+  unresolved ACP login in scope waits for the login's model probe (up to
+  25 seconds per login). If the needed lists are still unavailable when
+  the probes finish, it returns `-32020` without making a thread.
+- A model the chosen account doesn't support is replaced by the provider's
+  default, with a `system.note` ("sonnet isn't a Codex model, so this
+  thread uses GPT-6.1-Sol").
 - An effort the model doesn't list in `effortLevels` (when known) is dropped
-  with a note. `ultra` on a Claude thread always is.
-- An ACP agent's model counts only if that account's `models` lists it, never
-  by its name, and a Claude or Codex id goes to them first. OpenCode and
-  Cursor have no effort levels (`ProviderInfo.effort` is `"none"`): an
-  `effort` is dropped. Grok's models list theirs (`effortLevels`, from
-  `_meta.reasoningEfforts` in its `session/new`), and a thread's effort is set
-  as the session's `thought_level` config option, the model's own default for
-  none.
+  with a note; when other models on the same account list `effortLevels`, a
+  model that omits them takes no effort level. `ultra` on a provider with
+  `effort: "claude"` is always dropped.
+- An ACP agent's model counts only if that account's `models` lists it. A
+  new thread checks the model lists before inferring a provider from the id
+  (see Pools, "New threads"). Cursor has no
+  effort levels (`ProviderInfo.effort` is `"none"`): an `effort` is dropped.
+  Grok, Antigravity (Gemini) and OpenCode models list theirs (`effortLevels`),
+  from `_meta.reasoningEfforts` (Grok), `<model>-<level>` entries in
+  `models.availableModels` (Antigravity), or per-model `thought_level` options
+  (OpenCode). A thread's effort is set as the session's `thought_level` config
+  option, `"default"` (when offered) or the model's own default for none.
 
 ## Notifications (runner to app)
 

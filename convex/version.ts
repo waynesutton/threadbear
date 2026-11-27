@@ -488,55 +488,77 @@
 //    (onThreads, landing, appRestart) is in view "inbox" though hibernating.
 //    A runner sends it only to a backend of 99 or later. An older app ignores
 //    it, and leaves out those three, as it skips a hibernating inbox row.
-// 100 to 111 are this copy's: 98 to 109 until Mike's release took 98 and 99
-//    (25 Nov 2026), and 96 to 106 before his took 96 and 97 (21 Nov 2026).
-// 100: Prints can be published (this copy's; it was 73, then 77, then 80,
+// 100: an owned schedule can carry `starThreads`: each thread it starts
+//    begins starred. A runner sends it only to a backend of 100 or later;
+//    an older runner starts them unstarred.
+// 101: sidebar rows carry poolId and heartbeats carry effective usagePools,
+//    read owner-only by relay:remotePools, so Usage follows a remote thread's pool.
+// 102: thread and sidebar rows carry optional coordinatorProjectId. Clients
+//    show it in Coordinators before Starred; archived still wins.
+// 103: thread rows can carry nextPick ("one") and nextSuggested (index into
+//    next) for mutually exclusive done-card follow-ups. A runner sends them
+//    only to a backend of 103 or later; older apps ignore them.
+// 104: an accounts row can carry `resetHint` (why a usage reset is worth
+//    using now, how many are left, when the soonest expires) and
+//    `usage.resets` with its `readAt`, so other runners merge the newest read
+//    of a login's resets and the phone, the website and another Mac draw the
+//    hint. relay:queueCommand's `call` takes accounts.useReset, the Mac's Use
+//    a reset for a login only that runner has. A runner sends the fields only
+//    to a backend of 104 or later.
+// 105: relay:queueCommand's `call` takes logins.sealKey and logins.share,
+//    the Runners panel's Use this Mac's Claude logins (docs/protocol/settings.md,
+//    "This Mac's logins on another runner"): owner key only, and a share
+//    carries each login sealed to that runner's key, never in the clear.
+// 106 to 117 are this copy's: 100 to 111 until Mike's release took 100 to 105
+//    (27 Nov 2026), 98 to 109 until his took 98 and 99 (25 Nov 2026), and 96 to
+//    106 before his took 96 and 97 (21 Nov 2026).
+// 106: Prints can be published (this copy's; it was 73, then 77, then 80,
 //    then 81, until Mike's releases took 73 to 95, 12 to 20 Nov 2026).
 //    sync:publishPrint stores one print's index.html (static, at most
 //    700,000 characters) under a link its runner made, sync:unpublishPrint
 //    removes it, prints:view answers the website's /p/<slug> page for anyone
 //    with the link, and prints:list gives the phone and the website the
-//    published ones. A runner publishes only from 100; nothing about a print
+//    published ones. A runner publishes only from 106; nothing about a print
 //    is stored before it's published.
-// 101: webhooks (this copy's, 13 Nov 2026, experiment webhooks; it was 78,
+// 107: webhooks (this copy's, 13 Nov 2026, experiment webhooks; it was 78,
 //    then 81, then 82, until Mike's releases took 77 to 95, 14 to 20 Nov 2026).
 //    POST /hook/<key> takes a delivery (webhooks:deliver, capped, limited,
 //    deduped, batched); webhooks:issueWebhook, listWebhooks and
-//    revokeWebhook take the owner key. A runner offers webhooks only from 101.
-// 102 to 108 were 83 to 89 until Mike's release took 81 to 95 (20 Nov 2026),
-//    then 100 to 106 until 25 Nov.
-// 102: Native Tasks, cloud-owned and editable while the runner is offline.
-// 103: Tasks take a Doing status and a position on create, and preferences
+//    revokeWebhook take the owner key. A runner offers webhooks only from 107.
+// 108 to 114 were 83 to 89 until Mike's release took 81 to 95 (20 Nov 2026),
+//    then 100 to 106 until 25 Nov, then 102 to 108 until 27 Nov.
+// 108: Native Tasks, cloud-owned and editable while the runner is offline.
+// 109: Tasks take a Doing status and a position on create, and preferences
 //    keep projectOrder and listOrder; a columnOrder saved before Doing comes
 //    back with it.
-// 104: clearer completion task summaries on thread cards (experiment clearerCompletion).
-// 105: Tasks custom columns and ordered sections, with a retry-safe thread launch command.
-// 106: Tasks grow issue fields (this copy's): priority, dueDate, parentId
+// 110: clearer completion task summaries on thread cards (experiment clearerCompletion).
+// 111: Tasks custom columns and ordered sections, with a retry-safe thread launch command.
+// 112: Tasks grow issue fields (this copy's): priority, dueDate, parentId
 //    (one level of sub-tasks; deleting a parent deletes them, restoring
 //    brings them back), links (link, print, image, thread; list adds
 //    imageUrl), commentCount and createdBy, and tasks:activity, comment,
 //    removeComment and addImage. create and update take an `author`
-//    from a runner key. A runner sends any of them only from 106.
-// 107: (this copy's) Tasks take an optional dueTime (HH:MM, the Macs' local time) on a
+//    from a runner key. A runner sends any of them only from 112.
+// 113: (this copy's) Tasks take an optional dueTime (HH:MM, the Macs' local time) on a
 //    dueDate, preferences take reminders { mac, channel, to, lead }, and
 //    tasks:claimReminder hands each due time's reminder to one Mac. A runner
-//    sends dueTime and reminders, and claims, only from 107.
-// 108: (this copy's) Tasks start on eight columns (Backlog, On Deck, Shaping,
+//    sends dueTime and reminders, and claims, only from 113.
+// 114: (this copy's) Tasks start on eight columns (Backlog, On Deck, Shaping,
 //    Building, Observing, Done, Paused, Canceled) until columns are saved, and
 //    preferences always return columns, boardColumnOrder and sectionOrder in
 //    full. tasks:deleteColumn removes any column but Building (id todo) and
 //    moves its tasks. columnId also takes a column's name. A runner sends
-//    deleteColumn only from 108.
-// 109: (this copy's) Tasks and Linear. Tasks take an optional `linear`
+//    deleteColumn only from 114.
+// 115: (this copy's) Tasks and Linear. Tasks take an optional `linear`
 //    (the issue a task was sent to, imported from or linked with, its status
 //    and a per-task sync switch), activity takes source 'linear' and an
 //    externalId, and preferences take linear { syncEvery, lastSweepAt,
 //    defaults }. tasksLinear:* claims a send, settles it, links and imports
 //    issues, applies what Linear says and claims the sync sweep. A runner
-//    offers Linear only from 109.
-// 110: (this copy's) task favorites. Tasks take an optional `favorite`, and
-//    tasks:update sets it. A runner sends favorite only from 110.
-// 111: (this copy's) boxes:removeRunnerService deletes a virtual runner once
+//    offers Linear only from 115.
+// 116: (this copy's) task favorites. Tasks take an optional `favorite`, and
+//    tasks:update sets it. A runner sends favorite only from 116.
+// 117: (this copy's) boxes:removeRunnerService deletes a virtual runner once
 //    none of its boxes is left but archived ones. The runner's cloud.remove
-//    uses it only from 111.
-export const API_VERSION = 111;
+//    uses it only from 117.
+export const API_VERSION = 117;

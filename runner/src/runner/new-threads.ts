@@ -17,12 +17,13 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import type { ThreadState } from '../runner.ts';
 import { checkImages, oneLine, titleFrom, userMessage } from './messages.ts';
-import { effortTitle, isClaudeModel, modelRow, modelTitle } from './models.ts';
+import { effortTitle, explicitModelKind, modelRow, modelTitle, ModelListsPending, nativeModelProvider } from './models.ts';
 import { newRuntime } from './runtime.ts';
 import { providerInfo, providerName } from '../providers.ts';
 import { cutSafely } from '../safe-cut.ts';
 import { experimentOn } from '../experiments.ts';
 import { parseFastQuery } from '../fast-lane.ts';
+import type { Spare } from './warm-start.ts';
 
 // What a box's thread says when it was made again (boxThreadLost).
 export const BOX_THREAD_LOST_NOTE = "This thread's earlier messages are gone: its last cloud machine stopped before it saved them. It carries on here in a fresh copy of the repo.";
@@ -35,6 +36,7 @@ export const newThreadsPart = {
     accountId?: string;
     poolId?: string;
     provider?: Provider;
+    onlyProvider?: Provider;
     model?: string;
     effort?: EffortLevel;
     permissionMode?: PermissionMode;
@@ -54,6 +56,8 @@ export const newThreadsPart = {
     projectIds?: string[];
     // Box mode's one thread, made under the id the backend gave it (boxThread).
     id?: string;
+    // Starts starred, in the Starred section (a schedule's starThreads).
+    starred?: boolean;
     // The CLI the app had started ahead of it (threads.warm,
     // runner/warm-start.ts): the thread is made under its id.
     warmId?: string;
@@ -103,15 +107,10 @@ export const newThreadsPart = {
         /* a project that's gone since is skipped */
       }
     }
-    const spare = params.id === undefined && !projectIds.length && !bear && !fastRequested ? this.claimSpare(params.warmId) : undefined;
-    let made;
-    try {
-      made = this.makeThread(withBear, spare ? { id: spare.id, sessionId: spare.sessionId } : undefined);
-    } catch (e) {
-      spare?.session.kill();
-      throw e;
-    }
-    const { st, notes, loginNote } = made;
+    // A bear's folder or a Fast lane turn starts its own CLI, not the warm one.
+    const warmId = params.id === undefined && !projectIds.length && !bear && !fastRequested ? params.warmId : undefined;
+    const { st, notes, loginNote, spare } = this.makeThread(withBear, warmId);
+    if (params.starred) st.rec.starredAt = this.isoNow();
     if (spare) this.cli(st, { kind: 'claim', spare });
     if (projectIds.length) this.projects!.changeMembership(st.rec.id, { add: projectIds, by: 'mike' });
     const turnId = this.sendTo(st, params.text ?? '', params.images ?? [], { origin: params.origin, wakeReason: params.wakeReason, scheduleId: params.scheduleId, ...(params.fast === true ? { fast: true } : {}) });
@@ -164,12 +163,13 @@ export const newThreadsPart = {
     // login can't run would write a note into the thread.
     const usable = this.usableAccounts();
     const speed = usable.some((a) => a.provider === 'claude')
-      ? { model: HAIKU }
+      ? { model: HAIKU, onlyProvider: 'claude' as const }
       : usable.some((a) => a.provider === 'codex')
-        ? { model: ASK_CODEX_MODEL, effort: 'low' as const }
+        ? { model: ASK_CODEX_MODEL, onlyProvider: 'codex' as const, effort: 'low' as const }
         : {};
     const { st, notes } = this.makeThread({ text: question, origin: 'phone', worktree: false, ...speed });
     const { rec } = st;
+    delete rec.explicitModel;
     const turnId = crypto.randomUUID();
     const sources = (params.sources ?? []).filter((x) => x?.url).slice(0, 10);
     const links = sources.map((x) => `- [${(x.title || x.url).replace(/[[\]]/g, '')}](${x.url})`).join('\n');
@@ -246,6 +246,7 @@ export const newThreadsPart = {
     accountId?: string;
     poolId?: string;
     provider?: Provider;
+    onlyProvider?: Provider;
     model?: string;
     effort?: EffortLevel;
     permissionMode?: PermissionMode;
@@ -255,22 +256,38 @@ export const newThreadsPart = {
     worktree?: boolean;
     startedBy?: ThreadStartedBy;
     detached?: boolean;
+    coordinatorHelperFor?: string;
     id?: string;
     // A bear's defaults filled it in: not what Wayne picked last.
     keepPick?: true;
-  }, ids?: { id: string; sessionId: string }): { st: ThreadState; notes: string[]; loginNote?: string } {
-    this.checkAccepting();
-    const { rec, account, poolId, notes, loginNote } = this.draftRecord(params, ids);
-    this.store.create(rec);
+  }, warmId?: string): { st: ThreadState; notes: string[]; loginNote?: string; spare?: Spare } {
+    // A request waiting for model catalogs can try again with the warm CLI.
+    const warm = warmId && this.spare?.id === warmId && !this.threads.has(warmId) ? this.spare : undefined;
+    let draft;
+    try {
+      this.checkAccepting();
+      draft = this.draftRecord(params, warm);
+    } catch (e) {
+      if (!(e instanceof ModelListsPending)) this.claimSpare(warm?.id)?.session.kill();
+      throw e;
+    }
+    const spare = this.claimSpare(warm?.id);
+    const { rec, account, poolId, notes, loginNote } = draft;
+    try {
+      this.store.create(rec);
+    } catch (e) {
+      spare?.session.kill();
+      throw e;
+    }
     const st: ThreadState = { rec, rt: newRuntime(this.clock.now()) };
     this.threads.set(rec.id, st);
     // What Mike picked last is what the next thread starts on, so a
     // schedule's own login or pool (a 9:00 standup's) doesn't move it.
-    if (params.origin === 'schedule' || params.keepPick) {
+    if (params.origin === 'schedule' || params.keepPick || params.coordinatorHelperFor) {
       /* keep the last pick */
     } else if (!poolId) this.rememberAccount(account.id);
     else if (params.poolId !== undefined) this.rememberPool(poolId);
-    return { st, notes, loginNote };
+    return { st, notes, loginNote, spare };
   },
 
   // A new thread's record as create works it out, without making the
@@ -282,6 +299,7 @@ export const newThreadsPart = {
     accountId?: string;
     poolId?: string;
     provider?: Provider;
+    onlyProvider?: Provider;
     model?: string;
     effort?: EffortLevel;
     permissionMode?: PermissionMode;
@@ -291,6 +309,7 @@ export const newThreadsPart = {
     worktree?: boolean;
     startedBy?: ThreadStartedBy;
     detached?: boolean;
+    coordinatorHelperFor?: string;
     id?: string;
   }, ids?: { id: string; sessionId: string }): { rec: ThreadRecord; account: Account; poolId?: string; notes: string[]; loginNote?: string } {
     // A box runs one thread (docs/virtual-runners.md, decision 1): only that
@@ -309,7 +328,7 @@ export const newThreadsPart = {
     let poolId: string | undefined;
     let accountId = params.accountId;
     if (accountId === undefined && (params.poolId !== undefined || !peekRunnerJson(this.cfg.home).defaults?.keepAccount)) {
-      const picked = this.pickForNew({ poolId: params.poolId, cwd, model: params.model, provider: params.provider });
+      const picked = this.pickForNew({ poolId: params.poolId, cwd, model: params.model, provider: params.provider, onlyProvider: params.onlyProvider });
       if (picked) ({ poolId, accountId } = picked);
     }
     // A schedule pinned to a signed-out login runs this time on a pool
@@ -329,6 +348,7 @@ export const newThreadsPart = {
     const account = this.accounts.get(accountId);
     if (!account) throw new RpcError(ErrorCode.accountNotFound, `No account called ${accountId}`);
     this.checkProvider(account);
+    if (params.model && account.models === undefined && account.provider !== 'claude' && account.provider !== 'codex') throw new ModelListsPending([account]);
     if (!isDirectory(cwd)) throw new RpcError(ErrorCode.badParams, `Folder not found: ${cwd}`);
     // A folder the old sandbox experiment shut threads in (config.ts).
     const retired = this.retiredSandbox(cwd);
@@ -357,9 +377,13 @@ export const newThreadsPart = {
       lastTurnCompletedSeq: 0,
       queue: [],
       pendingApprovals: [],
+      ...(params.coordinatorHelperFor ? { coordinatorHelperFor: params.coordinatorHelperFor } : {}),
     };
     const checked = this.checkSettings(account, params.model || this.defaultModelFor(account.provider), params.effort ?? this.defaultEffortFor(account.provider));
-    if (checked.model) rec.model = checked.model;
+    if (checked.model) {
+      rec.model = checked.model;
+      if (params.model === checked.model) rec.explicitModel = explicitModelKind(account, checked.model);
+    }
     if (checked.effort) rec.effort = checked.effort;
     // Whether the first turn should look for a worktree patch. Reading the
     // patch files is async, so it happens there; a folder with no patch
@@ -408,7 +432,8 @@ export const newThreadsPart = {
     if (effort) {
       const row = modelRow(account, model ?? account.defaultModel);
       const noUltra = providerInfo(provider).effort === 'claude';
-      const offered = (e: EffortLevel) => !(noUltra && e === 'ultra') && (!row?.effortLevels || row.effortLevels.includes(e));
+      const hasEffortList = Boolean(account.models?.some((m) => m.effortLevels?.length));
+      const offered = (e: EffortLevel) => !(noUltra && e === 'ultra') && (row?.effortLevels ? row.effortLevels.includes(e) : !(row && hasEffortList));
       if (!offered(effort)) {
         const fallback = this.defaultEffortFor(provider);
         const next = fallback && fallback !== effort && offered(fallback) ? fallback : undefined;
@@ -420,18 +445,13 @@ export const newThreadsPart = {
     return { ...(model ? { model } : {}), ...(effort ? { effort } : {}), notes };
   },
 
-  // Whether a thread on this account can run this model id. Codex: one the
-  // account lists, or before the list is known anything starting gpt-.
-  // Claude: anything but another provider's id, unless the account itself
-  // lists it.
+  // A loaded list is authoritative. A native id can be tried while its
+  // list loads unless another provider already lists that id.
   modelFits(this: Runner, account: Account, model: string): boolean {
     if (modelRow(account, model)) return true;
-    if (account.provider === 'codex') return !account.models?.length && model.startsWith('gpt-');
-    // An ACP agent runs what it lists, and nothing can be told from the name.
-    if (account.provider !== 'claude') return false;
-    if (isClaudeModel(model)) return true;
-    const elsewhere = this.safeAccounts().filter((a) => a.provider !== 'claude').some((a) => modelRow(a, model));
-    return !model.startsWith('gpt-') && !elsewhere;
+    if (account.models !== undefined) return false;
+    return nativeModelProvider(model) === account.provider
+      && !this.safeAccounts().some((a) => a.provider !== account.provider && modelRow(a, model));
   },
 };
 

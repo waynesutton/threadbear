@@ -1132,6 +1132,9 @@ pub struct Schedule {
     pub effort: Option<String>,
     #[serde(default, deserialize_with = "crate::wire::field")]
     pub permission_mode: Option<String>,
+    /// Each thread it starts begins starred, above the Inbox.
+    #[serde(default, deserialize_with = "crate::wire::field")]
+    pub star_threads: bool,
     /// The thread whose agent made it; None for a person.
     #[serde(default, deserialize_with = "crate::wire::field")]
     pub created_by: Option<String>,

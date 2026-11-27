@@ -20,6 +20,7 @@ import { makePrivate } from './win-acl.ts';
 import { loadConfig, ensureHome, readToken, paths, recordListening, defaultHome, DEFAULT_CWD, RUNNER_VERSION, RunnerJsonError, readRunnerJson, peekRunnerJson, expandHome } from './config.ts';
 import { configureGitPanel, gitPanelSettings, handleGitPanel } from './git-panel.ts';
 import { startHousekeeping } from './housekeeping.ts';
+import { BuildCacheCleaner } from './build-cache-cleanup.ts';
 import { startBorrowSweep } from './runner/worktrees.ts';
 import { win32Helper } from './win32-helper.ts';
 import { RELEASE, markConfigStop, markGoodLater, onStopRequest, onSupervisorGone, ownCheckout, readRelease, readState, requestHandover, supervised, takeRollbackNotice, tellLaunchListening } from './release.ts';
@@ -57,6 +58,7 @@ import { fastLaneFromConfig } from './fast-lane.ts';
 import { DEFAULT_FAST_LANE_CHOICE, HY4_MODEL } from './fast-lane-models.ts';
 import { cliDir } from './models/claude-pool.ts';
 import { Projects, drainProjectMethods, projectMethods } from './projects.ts';
+import { Coordinators, coordinatorMethods } from './coordinators.ts';
 import { Librarian, librarianMethods } from './librarian.ts';
 import { ConnectorsMonitor, connectorsMethods, findLauncher, gatewayBase, gatewayIsLocal, readLocalIds, type StaticClientDeps } from './connectors.ts';
 import { ownsGateway } from './static-clients.ts';
@@ -68,7 +70,7 @@ import { hidIdleMs, isAtMac, screenLocked } from './presence.ts';
 import { ThreadStore } from './store.ts';
 import { AccountRegistry } from './accounts.ts';
 import { ClaudeAdapter, cliEnv } from './adapters/claude/adapter.ts';
-import { SignInState } from './sign-in-state.ts';
+import { REFUSALS_FILE, SignInState } from './sign-in-state.ts';
 import { ProcessRegistry, killGroup } from './proc.ts';
 import { Runner } from './runner.ts';
 import { startOwnThread } from './own-threads.ts';
@@ -79,6 +81,7 @@ import { CodexAdapter } from './adapters/codex/adapter.ts';
 import { AcpAdapter } from './adapters/acp/adapter.ts';
 import { ACP_AGENTS, ACP_PROVIDERS, type AcpProvider } from './adapters/acp/agents.ts';
 import { acpAsker, type Asker } from './models/acp-oneshot.ts';
+import { codexAsker } from './models/codex-oneshot.ts';
 import { PROVIDER_INFO } from './providers.ts';
 import { resolveCodexBinary } from './adapters/codex/appserver.ts';
 import { checkSurface, testedVersion } from './adapters/codex/surface.ts';
@@ -90,6 +93,7 @@ import { UsageHistory } from './usage-history.ts';
 import { TokenTally } from './token-tally.ts';
 import { usageStatsMethods } from './usage-stats.ts';
 import { Relay } from './relay.ts';
+import { applyShared, LoginSharer, mergedList, openShared, type SharedLogin } from './login-share.ts';
 import { VirtualRunners } from './virtual-runners.ts';
 import { CloudSetup, realExec } from './cloud-setup.ts';
 import { convexCli } from './runner-keys.ts';
@@ -105,7 +109,7 @@ import { PublicProfile, profilePageMethods } from './public-profile.ts';
 import { SelfProfiler, profileMethods, watchStalls } from './self-profile.ts';
 import { TrustOffThread } from './trust-off-thread.ts';
 import { InstructionsStore, instructionsMethods } from './instructions.ts';
-import { ConvexSync, convexPoster, convexUploader, defaultRunnerName, ensureRunnerId, keyRejected, readSyncKey, WEBHOOKS_API_VERSION } from './sync.ts';
+import { ConvexSync, convexPoster, convexUploader, defaultRunnerName, ensureRunnerId, keyRejected, readSyncKey, SHARE_LOGINS_API_VERSION, WEBHOOKS_API_VERSION } from './sync.ts';
 import { BOX_NO_SCHEDULES, BoxFolderBroken, bootBox, readBoxSecrets, enterBoxEnv, markSetUp, prepareBoxFolder, readBoxBoot, repoFolderName, setBaseline, setSaveHold, type ActionPost, type BoxSecrets } from './box-mode.ts';
 import { BoxProcesses } from './box-procs.ts';
 import { asSave, closeSpawns, installSpawnGate, openSpawns } from './spawn-gate.ts';
@@ -331,7 +335,7 @@ async function main(): Promise<void> {
   const accounts = new AccountRegistry(cfg, usage);
   // Which Claude logins are signed out or ending soon, from the CLI's own
   // `auth status` (sign-in-state.ts); the registry puts it on every account.
-  const signIn = new SignInState({ claudePath: cfg.claudePath, accounts: () => accounts.list(), env: (a) => cliEnv(a), clock: realClock, log });
+  const signIn = new SignInState({ claudePath: cfg.claudePath, accounts: () => accounts.list(), env: (a) => cliEnv(a), clock: realClock, log, file: path.join(cfg.home, REFUSALS_FILE) });
   accounts.signIn = signIn;
   signIn.start();
   // Year-long token… asked from another Mac (docs/protocol.md, accounts.yearToken).
@@ -513,7 +517,7 @@ async function main(): Promise<void> {
     registry,
     log,
     mcpServersFor: (threadId) => ({
-      [SERVER_NAME]: threadbearMcpServer(router(), threadId, scheduleControl(), projectControl(), appRestarts, () => cfg.bulletReplies, pocketControl, () => cfg.oneReply, () => cfg.connectorsUrl, gatewayHealth, remoteControl, () => experimentOn(cfg.home, 'loadEndTurn'), () => experimentOn(cfg.home, 'reviewCanvas'), () => experimentOn(cfg.home, 'livePages'), pagesFor, () => printPublisher, () => cfg.printsWhenAsked, () => experimentOn(cfg.home, 'tasks') ? nativeTasks : undefined, () => experimentOn(cfg.home, 'clearerCompletion'), () => cfg.progressPrints),
+      [SERVER_NAME]: threadbearMcpServer(router(), threadId, scheduleControl(), projectControl(), appRestarts, () => cfg.bulletReplies, pocketControl, () => cfg.oneReply, () => cfg.connectorsUrl, gatewayHealth, remoteControl, () => experimentOn(cfg.home, 'livePages'), () => runner.coordinators, pagesFor, () => printPublisher, () => cfg.printsWhenAsked, () => experimentOn(cfg.home, 'tasks') ? nativeTasks : undefined, () => experimentOn(cfg.home, 'clearerCompletion'), () => cfg.progressPrints),
       ...Object.fromEntries(Object.entries(archiveServers()).map(([name, server]) => [name, { type: 'stdio' as const, ...server }])),
     }),
     oneReply: () => cfg.oneReply,
@@ -523,8 +527,8 @@ async function main(): Promise<void> {
   // The threadbear tools for an agent that isn't given them in-process.
   // What Codex and ACP agents get beside the tools: the rich blocks, and
   // live pages with that experiment on.
-  const richGuidance = () => (experimentOn(cfg.home, 'livePages') ? `${RICH_BLOCKS_LINE} ${LIVE_PAGES_LINE}` : RICH_BLOCKS_LINE);
-  const codexStyleTools = (threadId: string) => buildThreadbearTools(router(), threadId, Date.now, scheduleControl(), projectControl(), appRestarts, { provider: 'codex', bulletReplies: () => cfg.bulletReplies, oneReply: () => cfg.oneReply, pocket: pocketControl, gateway: () => cfg.connectorsUrl, gatewayHealth, remote: remoteControl, pages: pagesFor, printPublisher: () => printPublisher, printsWhenAsked: () => cfg.printsWhenAsked, tasks: () => experimentOn(cfg.home, 'tasks') ? nativeTasks : undefined, clearerCompletion: () => experimentOn(cfg.home, 'clearerCompletion'), progressPrints: () => cfg.progressPrints, reviewCanvas: () => experimentOn(cfg.home, 'reviewCanvas') });
+  const richGuidance = () => [RICH_BLOCKS_LINE, experimentOn(cfg.home, 'livePages') ? LIVE_PAGES_LINE : ''].filter(Boolean).join(' ');
+  const codexStyleTools = (threadId: string) => buildThreadbearTools(router(), threadId, Date.now, scheduleControl(), projectControl(), appRestarts, { provider: 'codex', bulletReplies: () => cfg.bulletReplies, oneReply: () => cfg.oneReply, pocket: pocketControl, gateway: () => cfg.connectorsUrl, gatewayHealth, remote: remoteControl, coordinators: () => runner.coordinators, pages: pagesFor, printPublisher: () => printPublisher, printsWhenAsked: () => cfg.printsWhenAsked, tasks: () => experimentOn(cfg.home, 'tasks') ? nativeTasks : undefined, clearerCompletion: () => experimentOn(cfg.home, 'clearerCompletion'), progressPrints: () => cfg.progressPrints });
   // One app-server per live Codex thread, each starting what E says is
   // current, with the same threadbear tools as dynamic tools.
   const codex = new CodexAdapter({
@@ -573,11 +577,12 @@ async function main(): Promise<void> {
         skillGuidance: () => skillGuidance(sharedSkills()),
         dataDir: cfg.home,
         extraMcpServers: acpGatewayServers(p),
+        mcpServers: archiveServers,
       }),
     ]),
   );
   const askers: Partial<Record<AcpProvider, Asker>> = Object.fromEntries(ACP_PROVIDERS.filter((p) => PROVIDER_INFO[p].smallJobs).map((p) => [p, acpAsker({ agent: ACP_AGENTS[p], binary: acpBinary(p), registry, log, dataDir: cfg.home })]));
-  // The runner's own small-model calls, on the settings' Claude pool.
+  // The runner's own small-model calls, on the settings' pool.
   const models = new Models({
     home: cfg.home,
     clock: realClock,
@@ -585,7 +590,7 @@ async function main(): Promise<void> {
     settings: () => cfg.models,
     claudePath: cfg.claudePath,
     registry,
-    askers,
+    askers: { codex: codexAsker({ codexBinary: () => updates.codexBinary(), registry }), ...askers },
     poolHost: { pool: (id) => runner.smallModelPool(id), ranDry: (id) => runner.noteRanDry(id) },
   });
   const projects = new Projects({ home: cfg.home, clock: realClock, log });
@@ -743,6 +748,10 @@ async function main(): Promise<void> {
   // Before any queue is started: a reminder an older release queued goes by
   // its schedule's ceiling, Ask until the Scheduler is up (runner/ceiling.ts).
   runner.scheduleCeiling = (id) => (scheduler ? scheduler.ceilingById(id) : 'ask');
+  // Load shared project memory before recovery can dispatch a coordinator.
+  projects.start(runner);
+  const coordinators = new Coordinators({ home: cfg.home, host: runner, projects, clock: realClock, log, enabled: () => !box && experimentOn(cfg.home, 'coordinators'), elsewhere: (id) => peers.find(id) });
+  runner.coordinators = coordinators;
   runner.start({ skip: kept });
   // App-restart watches with words from before ceilings: bound now.
   appRestarts.bindOldCeilings((id) => (runner.has(id) ? runner.authoritySaved(id).mode : undefined));
@@ -752,6 +761,41 @@ async function main(): Promise<void> {
   // Its runner id and name are the mirror's (sync.ts), since that's how other
   // runners and the backend know this one (step 6, docs/archive/step6-plan.md).
   const syncRunnerId = cfg.sync.runnerId ?? ensureRunnerId(cfg.home);
+  // The main Mac's logins, one share at a time (login-share.ts applyShared).
+  let sharing: Promise<unknown> = Promise.resolve();
+  const takeSharedLogins = (entries: { email: unknown; box: unknown }[]): Promise<unknown> => {
+    const go = async () => {
+      const wanted: SharedLogin[] = [];
+      const failed: { email: string; message: string }[] = [];
+      for (const e of entries.slice(0, 20)) {
+        try {
+          wanted.push(openShared((b, info) => runner.secrets.openBytes(b, info), syncRunnerId, e));
+        } catch (err) {
+          if (typeof e.email === 'string') failed.push({ email: e.email.toLowerCase(), message: (err as Error).message });
+        }
+      }
+      accounts.rescanNow();
+      const answer = await applyShared(
+        {
+          accountsDir: cfg.accountsDir ?? path.join(cfg.home, 'accounts'),
+          tokenStatsAccountsDir: cfg.tokenStatsAccountsDir,
+          claudeMainDir: cfg.claudeMainDir,
+          claudeMainJson: cfg.claudeMainJson,
+          makePrivate: (dir) => makePrivate(dir),
+        },
+        wanted,
+        failed,
+        runner.safeAccounts(),
+      );
+      accounts.rescanNow();
+      runner.rescanAccounts();
+      log.info('took logins from the main Mac', { logins: answer.logins.map((l) => `${l.email} ${l.state}`), removed: answer.removed.map((r) => r.accountId) });
+      return answer;
+    };
+    const p = sharing.then(go, go);
+    sharing = p.catch(() => undefined);
+    return p;
+  };
   // When this process started: the heartbeat sends it, and runners.list
   // gives it for this runner too (the app's Runners panel says "up 3h").
   const startedAt = new Date().toISOString();
@@ -868,9 +912,8 @@ async function main(): Promise<void> {
   // The list as it starts, so the first change to it re-sends the threads it moves.
   runner.recheckWaitStates();
   runner.scheduleChecks = () => scheduler.localChecks();
-  // Projects need the threads loaded (their counts, and the thread side of
-  // membership); the librarian needs both.
-  projects.start(runner);
+  // The librarian needs both the loaded projects and the recovered threads.
+  if (!copyOfReal && !box) coordinators.start();
   const librarian = new Librarian({ host: runner, projects, models, clock: realClock, log, home: cfg.home, pocket: pocketControl });
   // Bear notes (experiment bearNotes): the opted-in bears, never on a bear's
   // own thread or with bears off.
@@ -1201,6 +1244,7 @@ async function main(): Promise<void> {
             listProjects: () => projects.list({ archived: true }),
             listSchedules: () => scheduler.list(),
             listAccounts: () => runner.hello().accounts,
+            listPools: () => runner.listPools(),
           }),
       buttons: (id) => runner.listButtons(id).buttons,
     },
@@ -1234,12 +1278,18 @@ async function main(): Promise<void> {
       // The Mac's Runners panel's Year-long token… (year-token-maker.ts); a
       // box's login is its cloud token, so not there.
       ...(box ? {} : { yearToken: (accountId: string, p: { code?: string; check?: boolean; cancel?: boolean }) => runner.yearToken(accountId, p) }),
+      // The main Mac's Use a reset for a login here that it has no twin of.
+      useReset: (accountId: string) => runner.useReset(accountId),
+      // The main Mac's Use this Mac's Claude logins (login-share.ts): its
+      // logins sealed to this runner's secrets key, set up in accounts/.
+      // A box's login is its cloud token, so not there.
+      ...(box ? {} : { loginsSealKey: () => runner.secrets.publicKey(), loginsShare: (logins: { email: unknown; box: unknown }[]) => takeSharedLogins(logins) }),
       // A box's one thread, under its own id, in its clone, on its one login.
       ...(box
         ? {
             create: (p: Parameters<typeof runner.create>[0]) => {
               if (box.broken) throw new Error(`This box can't start its thread: ${box.broken}`);
-              return runner.create({ ...p, id: box.secrets.threadId, cwd: box.cwd, accountId: 'claude-main' });
+              return runner.createAfterModelProbe({ ...p, id: box.secrets.threadId, cwd: box.cwd, accountId: 'claude-main' });
             },
             save: saveBox,
           }
@@ -1406,6 +1456,15 @@ async function main(): Promise<void> {
     setTimeout(() => void lookAtFailures(), 30_000).unref();
     setInterval(() => void lookAtFailures(), 2 * 60_000).unref();
   }
+  // Stale desktop, worktree, iPhone and local-check build caches cleared
+  // before the disk fills (build-cache-cleanup.ts, buildCacheCleanup experiment).
+  const buildCacheCleaner = new BuildCacheCleaner({
+    home: cfg.home,
+    log,
+    enabled: cfg.home === defaultHome() && !box,
+    on: () => experimentOn(cfg.home, 'buildCacheCleanup'),
+    records: () => [...runner.threads.values()].map((t) => t.rec),
+  });
   // Follows main once this release has been marked good (below).
   const updater = new RunnerUpdater({
     home: cfg.home,
@@ -1420,6 +1479,7 @@ async function main(): Promise<void> {
     restart: (p) => restarter.request({ when: 'idle', ...p }),
     pendingRestart: () => Boolean(restarter.status().pendingRestart),
     followsOrigin: () => followOriginOn(cfg.home),
+    beforeBuild: () => buildCacheCleaner.ifLow('before a build'),
     onChange: () => {
       // updaterReady: the first onChange can come before the reinstaller exists.
       if (updaterReady) reinstaller.consider();
@@ -1552,6 +1612,14 @@ async function main(): Promise<void> {
     // A release signed with a Touch ID key waits for Mike at the Mac, and
     // with it unlocked: over the lock screen the key signs nothing.
     atMac: async () => isAtMac(true, await hidIdleMs()) && !(await screenLocked()),
+    // The weekly release key's reminder (release-delegate.ts): starred, so
+    // Mike can't miss it.
+    remind: (r) => {
+      const id = startOwnThread(runner, r, thisRelease?.checkout);
+      runner.update({ threadId: id, starred: true });
+      return id;
+    },
+    isOpen: openThread,
     onChange: () => publishUpdates(),
     onChecked: (status) => {
       void bringIn.consider(status);
@@ -1677,7 +1745,7 @@ async function main(): Promise<void> {
     if (n.method === 'thread.updated') updates.threadChanged(n.params.thread.id);
     else if (n.method === 'thread.deleted') updates.threadChanged(n.params.threadId);
   });
-  const methods = { ...taskMethods(nativeTasks), ...linearMethods(linearTasks), ...profilePageMethods(publicProfile), ...restartMethods(restarter), ...scheduleMethods(scheduler), ...projectMethods(projects), ...pageMethods(pagesFor, askAboutPage, printPublisher), ...drainProjectMethods(projects), ...librarianMethods(librarian), ...connectorsMethods(connectors, { on: () => experimentOn(cfg.home, 'connectorsSetup'), start: (r) => startOwnThread(runner, r, undefined), open: openThread, local: () => experimentOn(cfg.home, 'localConnectors'), findLauncher: (l) => findLauncher(l) }, staticClients), ...recipeMethods(recipes), ...settingsMethods(settings), ...skillMethods(skills), ...instructionsMethods(instructions), ...modelMethods(models), ...devicesMethods(sync), ...agentsMethods(sync, () => experimentOn(cfg.home, OUTSIDE_AGENTS)), ...tablesMethods({ tables: () => tables, on: tablesOn }), ...bearsMethods({ bears, on: bearsOn, mention: (p) => mentions.ask(p), unseat: (id) => tables.unseatEverywhere(id), touch: () => runner.touchThreads(runner.list(['inbox', 'snoozed', 'archived']).filter((t) => bears.forCwd(t.cwd)).map((t) => t.id)), cwdOf: (id) => (runner.has(id) ? runner.get(id).cwd : undefined), revokeHooks: (folder) => (webhooksOn() ? revokeHooksFor(sync, folder) : Promise.resolve(0)) }), ...webhooksMethods({ backend: sync, registry: hookRegistry, on: webhooksOn, runnerId: syncRunnerId, needApi: WEBHOOKS_API_VERSION, modeOf: (id) => (runner.has(id) ? runner.get(id).permissionMode : undefined), bearFolder: (b) => { if (!bearsOn()) return undefined; try { return bears.get(b, { faces: false }).folder; } catch { return undefined; } } }), ...usageStatsMethods({ tally, history: usageHistory, clock: realClock }), ...archiveMethods(agentArchive) };
+  const methods = { ...taskMethods(nativeTasks), ...linearMethods(linearTasks), ...profilePageMethods(publicProfile), ...restartMethods(restarter), ...scheduleMethods(scheduler), ...projectMethods(projects), ...coordinatorMethods(coordinators), ...pageMethods(pagesFor, askAboutPage, printPublisher), ...drainProjectMethods(projects), ...librarianMethods(librarian), ...connectorsMethods(connectors, { on: () => experimentOn(cfg.home, 'connectorsSetup'), start: (r) => startOwnThread(runner, r, undefined), open: openThread, local: () => experimentOn(cfg.home, 'localConnectors'), findLauncher: (l) => findLauncher(l) }, staticClients), ...recipeMethods(recipes), ...settingsMethods(settings), ...skillMethods(skills), ...instructionsMethods(instructions), ...modelMethods(models), ...devicesMethods(sync), ...agentsMethods(sync, () => experimentOn(cfg.home, OUTSIDE_AGENTS)), ...tablesMethods({ tables: () => tables, on: tablesOn }), ...bearsMethods({ bears, on: bearsOn, mention: (p) => mentions.ask(p), unseat: (id) => tables.unseatEverywhere(id), touch: () => runner.touchThreads(runner.list(['inbox', 'snoozed', 'archived']).filter((t) => bears.forCwd(t.cwd)).map((t) => t.id)), cwdOf: (id) => (runner.has(id) ? runner.get(id).cwd : undefined), revokeHooks: (folder) => (webhooksOn() ? revokeHooksFor(sync, folder) : Promise.resolve(0)) }), ...webhooksMethods({ backend: sync, registry: hookRegistry, on: webhooksOn, runnerId: syncRunnerId, needApi: WEBHOOKS_API_VERSION, modeOf: (id) => (runner.has(id) ? runner.get(id).permissionMode : undefined), bearFolder: (b) => { if (!bearsOn()) return undefined; try { return bears.get(b, { faces: false }).folder; } catch { return undefined; } } }), ...usageStatsMethods({ tally, history: usageHistory, clock: realClock }), ...archiveMethods(agentArchive) };
   // runner.status carries the CLI statuses too (protocol, "runner.status").
   const restartStatus = methods['runner.status'];
   methods['runner.status'] = (p) => {
@@ -1713,6 +1781,9 @@ async function main(): Promise<void> {
   // another Mac (files.ts).
   Object.assign(methods, filesMethods());
   methods['upstream.check'] = async () => ({ upstream: await upstream.check() });
+  // Mike's runner: today's release, tagged and signed now, Touch ID asked
+  // at once (`tb updates publish`; publishOnce's `now`).
+  methods['upstream.publish'] = async () => ({ tag: await upstream.publishOnce({ now: true }), upstream: upstream.status() });
   // The Updates panel's "Not in the new app yet" (docs/protocol/updates.md, "Your
   // changes to the old app").
   const swiftCommit = (p: unknown): string => {
@@ -1757,6 +1828,66 @@ async function main(): Promise<void> {
     clock: realClock,
     log,
   }));
+  // Use this Mac's Claude logins on another runner (login-share.ts): the
+  // Runners panel's switches, the main Mac's key only.
+  const loginSharer = new LoginSharer({
+    file: path.join(cfg.home, 'login-share.json'),
+    accounts: () => runner.safeAccounts(),
+    pools: () => runner.pools(),
+    claudeMainJson: cfg.claudeMainJson,
+    blocked: () => {
+      const src = sync.relaySource();
+      if (!src) return 'Sharing logins needs sync on.';
+      if (!sync.ownerKey()) return "Only the main Mac's runner shares its logins.";
+      if (src.apiVersion < SHARE_LOGINS_API_VERSION) return `Sharing logins needs backend API ${SHARE_LOGINS_API_VERSION}; it's on ${src.apiVersion}. Deploy it from the main Mac.`;
+      return undefined;
+    },
+    runner: (id) => {
+      if (id === syncRunnerId) return { name: 'this Mac', online: true, self: true };
+      const r = sync.remoteNow().runners.find((x) => x.id === id);
+      return r ? { name: r.name, online: r.online, ...(r.box ? { box: true } : {}) } : undefined;
+    },
+    sealKey: (id) => relay.loginsSealKey(id),
+    // Checked in LoginSharer (cleanAnswer): only what's that runner's word.
+    share: async (id, logins) => (await relay.shareLogins(id, logins)) as never,
+    online: async () => {
+      const rows = (await sync.ownerCall('query', 'sync:runnersList', {})) as { runnerId: string; lastSeenAt: number }[] | null;
+      return rows ? new Set(rows.filter((r) => Date.now() - r.lastSeenAt < 3 * 60_000).map((r) => r.runnerId)) : undefined;
+    },
+    setShared: async (id, add, remove) => {
+      const rows = ((await sync.ownerCall('query', 'sync:runnerLogins', {})) ?? []) as { runnerId: string; live: boolean; shared: { provider: string; email: string }[] }[];
+      const row = rows.find((r) => r.runnerId === id && r.live);
+      // A runner on the main key needs no list.
+      if (!row) return;
+      const next = mergedList(row.shared, add, remove);
+      // Handed over while that was read: the new runner writes it now.
+      if (loginSharer.isStopped()) throw new Error('This runner handed over.');
+      if (next) await sync.ownerCall('mutation', 'sync:setRunnerLogins', { runnerId: id, logins: next });
+    },
+    known: async (id) => {
+      const rows = (await sync.ownerCall('query', 'sync:runnersList', {})) as { runnerId: string }[] | null;
+      return rows ? rows.some((r) => r.runnerId === id) : undefined;
+    },
+    clock: realClock,
+    log,
+  });
+  if (!copyOfReal) {
+    runner.onAccountsChanged = () => void loginSharer.check();
+    loginSharer.start();
+  }
+  methods['runners.sharedLogins'] = () => {
+    const blocked = loginSharer.blocked();
+    return { runners: loginSharer.list(), ...(blocked ? { blocked } : {}) };
+  };
+  methods['runners.shareLogins'] = async (p) => {
+    const { runnerId, on } = (p ?? {}) as { runnerId?: unknown; on?: unknown };
+    if (typeof runnerId !== 'string' || !runnerId || typeof on !== 'boolean') throw new RpcError(ErrorCode.badParams, 'runnerId and on, please');
+    try {
+      return await loginSharer.set(runnerId, on);
+    } catch (e) {
+      throw new RpcError(ErrorCode.badParams, (e as Error).message);
+    }
+  };
   // Virtual runners from the Mac (virtual-runners.ts): a thread started on
   // one, and a login's cloud token for its boxes, on the main Mac's key.
   const virtualRunners = new VirtualRunners({
@@ -2194,7 +2325,9 @@ async function main(): Promise<void> {
   });
   // Borrowed worktrees nobody gave back (borrows.ts), on this Mac's real
   // data dir only: a dev runner's threads aren't the ones that borrowed.
-  const stopBorrowSweep = cfg.home === defaultHome() && !box ? startBorrowSweep(runner, log) : () => {};
+  const stopBorrowSweep = cfg.home === defaultHome() && !box
+    ? ((stops) => () => stops.forEach((stop) => stop()))([startBorrowSweep(runner, log), buildCacheCleaner.start()])
+    : () => {};
   const cancelMarkGood = markGoodLater(cfg.home, RELEASE.release, log, process.env, () => {
     restarter.proven();
     // A box never updates itself or anything else: a new release is a new image.
@@ -2219,6 +2352,8 @@ async function main(): Promise<void> {
   step('resume after restart', () => restarter.resumeAfterRestart());
   step('tell stopped work', () => runner.tellStoppedWork());
   step('carry on stopped', () => runner.carryOnStopped());
+  // Coordinators' hidden helpers a restart cut off (coordinators.ts).
+  if (!copyOfReal && !box) step('carry on coordinator helpers', () => coordinators.carryOnAfterRestart());
   // A thread waited on may have finished while the runner was down. Only
   // now: waking one starts its CLI, whose tools need what's set up above.
   runner.holdWaits = false;
@@ -2254,6 +2389,7 @@ async function main(): Promise<void> {
     if (leavingAfterError) armStopDeadline();
     cancelMarkGood();
     clockJumps.stop();
+    loginSharer.stop();
     updater.stop();
     reinstaller.stop();
     upstream.stop();
@@ -2286,6 +2422,9 @@ async function main(): Promise<void> {
     nativeTasks?.stop();
     taskReminders.stop();
     projects.stop();
+    // Not after an uncaught error, which may have been a helper's doing
+    // (coordinators.ts, start()).
+    coordinators.stop({ graceful: !leavingAfterError });
     usage.stop();
     spareWeek.stop();
     mailWatch.stop();
@@ -2343,11 +2482,15 @@ async function main(): Promise<void> {
     mailFirst = false;
     if (draining || stopping) return;
     // A thread that look started or woke is busy now: it's kept like the rest.
-    const keeps = [...new Set([...busy, ...restarter.busyThreads()])];
+    const keeps = [...new Set([...busy, ...restarter.busyThreads()])].filter((id) => !coordinators.forThread(id) && !coordinators.helperOwner(id));
     draining = true;
     log.info('starting the handover', { keeps });
     try {
+      await coordinators.handover({ afterError: leavingAfterError });
       cancelMarkGood();
+      // The new runner sends shared logins from here on, from the same file.
+      loginSharer.stop();
+      runner.onAccountsChanged = undefined;
       updater.stop();
       reinstaller.stop();
       upstream.stop();

@@ -6,6 +6,32 @@ check the code against it before running anything. If the code does
 something that isn't on this list, treat that as a problem and say so.
 File references are where to look.
 
+With the optional `coordinators` experiment on (`runner/src/coordinators.ts`),
+each project coordinator uses an ordinary CLI session on any supported provider
+and pool, and delegates work to hidden runner-managed helper sessions (kept out
+of the inbox and readable from Activity). It keeps a durable registry in
+`coordinators.json`, completed work archived in `coordinator-history.jsonl`, and
+its working folder under `coordinators/<project id>/` in the runner data folder.
+Shared project prose remains in `projects.json`. Helper transcripts stay in
+normal thread storage hidden from lists and sync; work records retain the brief,
+helper identity and latest result without copying every helper transcript into
+each wake.
+
+Project-thread completions and literal keyword matches are batched for ten
+minutes. A coordinator may also set a one-shot wake time. Failed delivery waits
+a minute before retrying. A helper's result is saved in the same write as its
+run's end and kept until the coordinator's turn that reads it finishes, not
+just until that turn starts: a crash, restart or pause that cuts the turn off
+sends it again, marked as possibly repeated. Report retries keep their own
+one-minute timer, apart from the event batch. There is no polling model heartbeat. After fifty
+idle minutes, at a safe boundary with no helper running, a context over 100,000
+tokens is compacted; over 150,000 tokens triggers a safe-boundary compaction
+sooner. These are experimental thresholds, not a guarantee about cache lifetime.
+Pause or turning the experiment off stops the coordinator CLI and its helpers.
+No new external source is polled by this experiment. Coordinator identity is
+mirrored through the existing Convex sync; its private work registry stays on
+the owning runner.
+
 ## What setup and install add
 
 - **Git remotes** (`scripts/setup.mjs`, "Your copy"): Mike's repo becomes
@@ -130,9 +156,14 @@ File references are where to look.
   life (`runner/src/win32-helper.ps1`), which lists processes
   (`Get-CimInstance Win32_Process`) and finds who holds a connection
   (`Get-NetTCPConnection`). It also puts each CLI the runner starts in a
-  Job Object of its own (`Local\threadbear-job-<random>`), and ends the job
-  when the CLI exits, so nothing a thread started outlives it, as a CLI's
-  process group does on a Mac. Each start, before it writes its key there, that
+  Job Object of its own (`Local\threadbear-job-<random>`), with what the CLI
+  had already started, gives the CLI a query-only handle to it, sets it to
+  end what's in it when its last handle closes, and ends the job when the
+  CLI exits, so nothing a thread started outlives it, as a CLI's process
+  group does on a Mac. To see who's calling it also reads a connecting
+  process's environment block from its memory (as a debugger does) and lists
+  the Job Objects named `threadbear-job-*` in that process's session's
+  object directory. Each start, before it writes its key there, that
   helper sets `secrets\`'s access list to you and SYSTEM only, inheriting
   nothing from `%LOCALAPPDATA%`, with everything already in it following, in
   place of the Mac's `chmod 700` (`runner/src/win-acl.ts`). The same
@@ -206,6 +237,8 @@ File references are where to look.
   `run/error-exits.json`, when the runner last restarted itself after an
   unexpected error (times only, so it can stop restarting after three in
   ten minutes),
+  `sign-in-refusals.json`, the Claude logins a turn was lately refused on and
+  when (ids and times), so pools still skip them after a restart,
   `shared-pools.json`, the last pools your Convex backend had, which every
   runner shares, so one starts with them while the backend can't be reached,
   `profiles/`, the last ten CPU profiles of the runner, made only when
@@ -539,7 +572,10 @@ the host's `CLAUDE.md`. Faces are drawn by the `open-bot-avatar` package
   `THREADBEAR_THREAD_KEY` and `THREADBEAR_THREAD_ID` (and their old
   `THREADBARE_` names), keeps nothing from a connection's, and keeps the
   ones its own parents had (a dev runner's starting thread) in memory while
-  it runs, taking them out of its own environment.
+  it runs, taking them out of its own environment. On Windows its helper
+  reads each such process's environment block from its memory (as a
+  debugger does) and lists the Job Objects named `threadbear-job-*` in that
+  process's session, to see which thread's job it's in.
   `tb runner` runs `/bin/ps` (or reads `/proc/<pid>/environ` on Linux) on
   its own parents to see whether it's in a thread's shell
   (`runner/src/tb-connect.ts`).
@@ -579,9 +615,33 @@ the host's `CLAUDE.md`. Faces are drawn by the `open-bot-avatar` package
   sends back through your Convex backend only the claude.ai page to approve
   it on and whether it worked. The code you paste goes the other way and is
   dropped from the backend once used. The helper writes the same file there;
-  the token never leaves that machine. The one other place a year-long
-  token can go is your own Convex backend, if you pick Use this Mac's token
-  on a cloud token card (below).
+  the token never leaves that machine. A year-long token goes somewhere
+  else in two cases only: your own Convex backend, if you pick Use this
+  Mac's token on a cloud token card (below), and another of your runners,
+  if you switch on Use this Mac's Claude logins for it (next).
+- **This Mac's Claude logins on another of your runners, if you switch it
+  on** (`runner/src/login-share.ts`): Use this Mac's Claude logins on a
+  runner's card in the Runners panel, on your main Mac. Its runner then
+  reads the year-long token and `.claude.json` profile of each Claude login
+  here that has a token (not hidden ones, ones with a note like "Convex work
+  only", or ones only in pools tied to folders), asks that runner through
+  your Convex backend for its public key, seals each login to it (X25519,
+  HKDF-SHA256, AES-256-GCM) and sends them through the backend, which only
+  ever holds the sealed bytes, and only until that runner has taken them.
+  That runner opens them with the private key in its `secrets/` folder and
+  makes a login folder for each in its data folder's `accounts/`
+  (`claude-<n>`: the token file only you can read, a `.claude.json` that is
+  its own with this login's profile, links to its own `~/.claude`'s
+  `CLAUDE.md`, `settings.json` and `skills`, and a `threadbear-shared.json`
+  marker). It sends again when a token here is made or renewed (looked at
+  on every login change and every 10 minutes), and adds those emails to
+  that runner's shared-logins list in your backend. Your main Mac keeps the
+  switches in `login-share.json` in its data folder: which runners, when it
+  last sent, how it went, and a digest of what was sent, never a token.
+  Switched off, that runner removes the folders it made this way (the token
+  deleted, the folder moved to `accounts/.removed/`), and never one you
+  signed in there yourself. Only your main Mac's key can send these, and the
+  runner checks so again.
 - **A cloud token for virtual runners, if you make one** (the
   `virtualRunners` experiment, off unless you turn it on;
   `runner/src/virtual-runners.ts`, `runner/src/cloud-token-helper.py`): Make
@@ -789,7 +849,9 @@ the host's `CLAUDE.md`. Faces are drawn by the `open-bot-avatar` package
   done) through a folder named for the old app's process,
   `$TMPDIR/threadbear-handover-<pid>`, deleted once it's over. It writes what it did and the build's output to
   `~/Library/Logs/threadbear-desktop-update.log` (the one before it in
-  `.log.1` once that passes 2 MB). `followMain: false` stops it too.
+  `.log.1` once that passes 2 MB). `followMain: false` stops it too,
+  except that a build staged by hand (`desktop/scripts/stage-update.sh`) is
+  still noticed and goes in the same way.
 - **Idle benchmarks** (`features/tools/idle-perf.ts`), only when run explicitly:
   compile CPU counters, a window watcher and (for Swift references) an
   owned-PID activation helper into a temporary folder, removed at the end.
@@ -870,10 +932,16 @@ the host's `CLAUDE.md`. Faces are drawn by the `open-bot-avatar` package
   `runner/bring-in.json` in the data folder.
   Once a release has landed, that thread offers a check-up for Mike
   (`runner/src/checkup.ts`, `tb checkup`): a short report built from the
-  runner log's own error messages (only those in Mike's code are named),
-  the release tags (and the releases kept under `refs/threadbear/upstream/`;
-  with a release key pinned, each counts only if it verifies against it),
-  which of Mike's patches won't load, and how long `tb land`'s checks took
+  runner log's own error messages (only those in Mike's code are named,
+  grouped into bursts with allowlisted causes such as OS errno codes, error
+  classes, reinstall exit codes, and RPC methods or `runner/src/` stack
+  files that exist in Mike's release; fork-only crashes and methods are
+  counted as other), coarse health flags (whether a release rolled back in
+  `runner/state.json`, whether `run/error-exits.json`'s restart guard
+  tripped, and free disk space only when under 10 GiB), the release tags
+  (and the releases kept under `refs/threadbear/upstream/`; with a release
+  key pinned, each counts only if it verifies against it), which of Mike's
+  patches won't load, and how long `tb land`'s checks took
   (`.git/threadbear-land-times.log`: counts and times, step names only when
   they're `check.sh`'s, never host names). You see the
   draft; only if you say Send does it go, through your `gh`, as a comment on
@@ -980,6 +1048,19 @@ the host's `CLAUDE.md`. Faces are drawn by the `open-bot-avatar` package
   own copy) and deleted threads after 30 days in the trash. Archived
   threads keep their pictures unless you set `"archivedMediaDays": <days>`
   in `runner.json`.
+- **Build cache cleanup** (`runner/src/build-cache-cleanup.ts`, the
+  `buildCacheCleanup` experiment): sweeps stale build output hourly (5
+  minutes after start, then every hour) and checks free disk space every 10
+  minutes and before each runner update build. Removes git-ignored Cargo
+  `CACHEDIR.TAG` build folders (such as `desktop/target`) in spare and
+  kept-archived worktrees, and in open threads idle for 2 days (2 hours
+  when free space is under 10 GiB); removes week-old `update-desktop/target`,
+  `update/build`, `check-desktop-target` and non-App-Store `ios-builds/*`
+  under `~/Library/Caches/Threadbear`, and week-old `shared-*` folders under
+  `~/.cache/threadbear-check/local-builds`. When free space drops below 10
+  GiB, clears all non-busy build caches until 20 GiB is free. Skips any
+  folder with a held build lock, a live process cwd inside the worktree, or
+  a write in the last 30 minutes.
 - **Moving threads** (`runner/src/moves.ts`, only with the Convex
   backend): watches your Convex deployment for threads you've
   moved to or from this machine. One moving away is packed (its folder,
@@ -993,7 +1074,10 @@ the host's `CLAUDE.md`. Faces are drawn by the `open-bot-avatar` package
   mouse have been idle (`ioreg`), so your phone knows whether you're at
   the Mac. A runner that signs releases with a Touch ID key also reads
   whether the screen is locked (`ioreg`'s console session), as it can't
-  sign until you've unlocked it.
+  sign until you've unlocked it. With `releases.delegate`, it keeps a
+  weekly signing key and its certificate in `runner/release-delegate*` in
+  the data folder, and asks for Touch ID about once a week to renew them
+  (`runner/src/release-delegate.ts`).
 - **Dialogs on the screen** (`runner/src/mac-screen.ts`): every 2 minutes it
   runs `osascript` to count the windows of macOS's UserNotificationCenter, so
   it can tell you when a dialog has been left waiting. It sees how many, not
@@ -1139,10 +1223,10 @@ the host's `CLAUDE.md`. Faces are drawn by the `open-bot-avatar` package
 | index.crates.io | crates.io (Rust's package registry) | With the daily CEF check above, the installed Mac runner reads `/3/c/cef`, the list of published releases of cef-rs (CEF's Rust bindings), so the warning can say whether a newer CEF can be moved to yet. It sends nothing else and keeps only the newest version in `<home>/runner/web-runtime-check.json`. |
 | cef-builds.spotifycdn.com | Spotify (CEF's official builds) | The installed Mac runner, only while a web runtime is installed, reads `/index.json` once a day, a minute after starting if due, to warn when this release's CEF pin is over 14 days behind stable (or checks fail for 3 days). Dev runners/tests do not poll; `THREADBEAR_CLI_UPDATES=off` disables it too. It sends no user content and stores the check in `<home>/runner/web-runtime-check.json`. From the GPUI app, only when you press Install web runtime: one download of the pinned build (135 MB), which nothing is sent with. Threadbear will publish its own signed copy later. Chromium itself then goes online only for the pages the GPUI app's web panels show; its own background requests are off (`--disable-background-networking`), and an agent's html and diagrams reach nothing (`desktop/web/src/mac/sealed.rs`). |
 | downloads.claude.ai, registry.npmjs.org | Anthropic, npm | CLI version checks and installs; `npm ci` |
-| Anthropic, OpenAI | yours | Your threads, through the official CLIs on your own logins. An approval card in a thread on Auto, with the thread's first and latest messages, goes to Opus through the same CLI so it can decide in your place. With the `inboxGuess` experiment on (off by default), when one of your own threads finishes with nothing for you, your last message to it and the agent's reply go to Haiku and to Opus through the same CLI, each to guess whether you needed to see it (not for a thread in a private folder). Unless you turn off Settings > General > Code review (`"labReview": false`), a thread's code change, with your message and the agent's reply, goes to your other provider's CLI as a review thread, as if you'd started one (or a fresh session of the same provider, with no other login). After a turn fails because the API couldn't be reached, the runner itself opens (and straight away closes) a connection to api.anthropic.com or chatgpt.com on port 443, at most once a minute, until one opens and the thread carries on. Nothing is sent over it (`runner/src/net-probe.ts`). |
-| OpenCode's Zen (opencode.ai), models.dev, and whichever providers you've logged it into | theirs | Only with a thread on OpenCode: that thread's prompts and tool output, through the official CLI, and small jobs' text when a pool of only OpenCode logins is picked for them in Settings |
+| Anthropic, OpenAI | yours | Your threads, through the official CLIs on your own logins, and small jobs' text (titles, summaries, the librarian and fuzzy Wake when…) on whichever pool and provider order you pick in Settings > Models (Claude first, then Codex by default, using isolated `codex exec` with tools disabled). An approval card in a thread on Auto, with the thread's first and latest messages, goes to Opus through the same CLI so it can decide in your place. With the `inboxGuess` experiment on (off by default), when one of your own threads finishes with nothing for you, your last message to it and the agent's reply go to Haiku and to Opus through the same CLI, each to guess whether you needed to see it (not for a thread in a private folder). Unless you turn off Settings > General > Code review (`"labReview": false`), a thread's code change, with your message and the agent's reply, goes to your other provider's CLI as a review thread, as if you'd started one (or a fresh session of the same provider, with no other login). After a turn fails because the API couldn't be reached, the runner itself opens (and straight away closes) a connection to api.anthropic.com or chatgpt.com on port 443, at most once a minute, until one opens and the thread carries on. Nothing is sent over it (`runner/src/net-probe.ts`). |
+| OpenCode's Zen (opencode.ai), models.dev, and whichever providers you've logged it into | theirs | Only with a thread on OpenCode: that thread's prompts and tool output, through the official CLI, and small jobs' text when a pool with OpenCode logins is picked for them in Settings (according to your provider order, or when earlier providers in the pool are out of room) |
 | Cursor (api2.cursor.sh) | theirs | Only with a thread on Cursor: the same, on your own login |
-| xAI (cli-chat-proxy.grok.com and Grok's other services) | theirs | Only with a thread on Grok: the same, on your own login, and small jobs' text when a pool of only Grok logins is picked for them in Settings. After a Grok turn fails because the API couldn't be reached, the runner opens (and closes) a connection to cli-chat-proxy.grok.com as it does for the others |
+| xAI (cli-chat-proxy.grok.com and Grok's other services) | theirs | Only with a thread on Grok: the same, on your own login, and small jobs' text when a pool with Grok logins is picked for them in Settings (according to your provider order, or when earlier providers in the pool are out of room). After a Grok turn fails because the API couldn't be reached, the runner opens (and closes) a connection to cli-chat-proxy.grok.com as it does for the others |
 | Google (cloudcode-pa.googleapis.com and Antigravity's other services) | theirs | With a thread on Gemini: the same, on your own Google login. When Gemini is set up, also its every-10-minute `/usage` read, which asks Google for your plan's quota. After a Gemini turn fails because the API couldn't be reached, the runner opens (and closes) a connection to cloudcode-pa.googleapis.com as it does for the others |
 | Fly.io from the Mac (api.machines.dev, and flyctl's own services) | yours, if you set it up | From the Mac only while you set up a cloud runner in Settings > Runners or with `tb cloud setup`, `check` or `rebuild` (`runner/src/cloud-setup.ts`): the runner checks the token you gave and makes the app on api.machines.dev, runs your flyctl to make a token (Set up with flyctl's sign-in), to build the box image from this Mac's checkout on Fly's remote builder (the runner/ folder is uploaded to it), and to make the image's own deploy token; runs your `gh` to set `FLY_BOX_APP` and `FLY_BOX_IMAGE_TOKEN` on the checkout's GitHub repo; sets `FLY_API_TOKEN`, `FLY_APP`, `FLY_ORG` and, if missing, `BOX_SEAL_KEY` on your deployment with your deploy key; and starts and deletes one test Machine. Otherwise only from your Convex deployment, and only once you've made a virtual runner there (`boxes:setRunnerService`, docs/virtual-runners.md) and set `FLY_API_TOKEN` and `FLY_APP` on the deployment. It makes, pauses, resumes, lists and deletes a Fly Machine for each thread on a virtual runner (`convex/boxService.ts`, `convex/boxProviders/fly.ts`), and every 10 minutes lists them to delete any nobody wants. A machine's environment holds only your deployment's address and a single-use boot token that lapses in 10 minutes, and its tags name the box's rows. |
 | Fly.io from your backend (api.machines.dev) | yours, if you set it up | From your Convex deployment, and only once you've made a virtual runner there (`boxes:setRunnerService`, docs/virtual-runners.md) and set `FLY_API_TOKEN` and `FLY_APP` on the deployment. It makes, pauses, resumes, lists and deletes a Fly Machine for each thread on a virtual runner (`convex/boxService.ts`, `convex/boxProviders/fly.ts`), and every 10 minutes lists them to delete any nobody wants. A machine's environment holds only your deployment's address and a single-use boot token that lapses in 10 minutes, and its tags name the box's rows. |

@@ -38,7 +38,7 @@ import { makeFunctionReference } from 'convex/server';
 import type { Clock, TimerHandle } from './clock.ts';
 import type { Logger } from './log.ts';
 import { agentsStillWorking, ARCHIVE_VERDICTS, ErrorCode, isEffortLevel, remoteCreateModeOf } from './protocol.ts';
-import type { Account, ArchiveVerdict, ApprovalDecision, ApprovalOption, AskAnswer, DesignReview, EffortLevel, ReviewDraft, ImageRef, LabReviewLedger, OpenAsk, PermissionMode, PersistedEvent, Project, Question, ReplyButton, Schedule, ThreadSummary } from './protocol.ts';
+import type { Account, ArchiveVerdict, ApprovalDecision, ApprovalOption, AskAnswer, DesignReview, EffortLevel, ReviewDraft, ImageRef, LabReviewLedger, OpenAsk, PermissionMode, PersistedEvent, Pool, Project, Question, ReplyButton, Schedule, ThreadSummary } from './protocol.ts';
 import { REMOTE_ALLOW_REFUSED, remoteAllowRefused, remoteCardShowsAll, summaryField } from './tools.ts';
 import type { Notification } from './runner.ts';
 import type { ScheduleBackend, StoredSchedule } from './schedules.ts';
@@ -175,16 +175,27 @@ export type SyncConfig = {
 // lower one means its backend hasn't been deployed since this runner was:
 // said in runner.status, tb status and the log rather than stopping, since
 // the runner only adds to what it sends while the number stays the same.
-// 111 in this copy's backend: Mike's 81 to 99, then this copy's own 100 to
-// 111 (Prints, webhooks, Tasks, completion, Tasks and Linear, task
+// 117 in this copy's backend: Mike's 81 to 105, then this copy's own 106 to
+// 117 (Prints, webhooks, Tasks, completion, Tasks and Linear, task
 // favorites, removing a cloud runner; convex/version.ts). This copy's were
-// 98 to 109 until Mike's release took 98 and 99 (25 Nov 2026).
-export const BACKEND_API_VERSION = 111;
+// 98 to 109 until Mike's release took 98 and 99 (25 Nov 2026), then 100 to
+// 111 until his took 100 to 105 (27 Nov 2026).
+export const BACKEND_API_VERSION = 117;
 // Optional agent-reported task summaries on thread cards (this copy's: 85,
 // moved to 100 when Mike's release took 81 to 95, 20 Nov 2026, to 102
-// when his took 96 and 97, 21 Nov, then to 104 when his took 98 and 99,
-// 25 Nov).
-export const COMPLETION_API_VERSION = 104;
+// when his took 96 and 97, 21 Nov, to 104 when his took 98 and 99,
+// 25 Nov, then to 110 when his took 100 to 105, 27 Nov).
+export const COMPLETION_API_VERSION = 110;
+export const INDEX_POOL_API_VERSION = 101;
+export const COORDINATORS_API_VERSION = 102;
+export const NEXT_PICK_API_VERSION = 103;
+// From this one an account can carry `resetHint` and `usage.resets` (with its
+// readAt), and a `call` can be accounts.useReset.
+export const RESET_HINT_API_VERSION = 104;
+// logins.sealKey and logins.share calls (login-share.ts).
+export const SHARE_LOGINS_API_VERSION = 105;
+// A logins call older than this is refused (the clocks' drift included).
+const SHARE_STALE_MS = 5 * 60_000;
 // From this one sync:removeThreads takes the runner's id and leaves a row
 // that's another runner's alone (a thread moved away), whatever the key.
 export const REMOVE_OWN_ROWS_API_VERSION = 92;
@@ -195,13 +206,14 @@ const HELD_NOTES = 200;
 // webhooks:* and the /hook/ route (this copy's, experiment webhooks): 78,
 // then 81, then 82, moved to 97 when Mike's release took 81 to 95 (20 Nov
 // 2026), then to 99 when his took 96 and 97 (21 Nov), then 101 when his
-// took 98 and 99 (25 Nov).
-export const WEBHOOKS_API_VERSION = 101;
+// took 98 and 99 (25 Nov), then 107 when his took 100 to 105 (27 Nov).
+export const WEBHOOKS_API_VERSION = 107;
 // sync:publishPrint and sync:unpublishPrint (Prints can be published).
 // This copy's: 73, then 77, then 80, then 81, moved to 96 when Mike's
 // release took 81 to 95 (20 Nov 2026), then 98 when his took 96 and 97,
-// then 100 when his took 98 and 99 (25 Nov).
-export const PRINTS_API_VERSION = 100;
+// then 100 when his took 98 and 99 (25 Nov), then 106 when his took 100
+// to 105 (27 Nov).
+export const PRINTS_API_VERSION = 106;
 // From this one sync:sharedThreads lists a runner's rows shared by link, which
 // it checks against its own threads on every start and every
 // SHARE_RECONCILE_MS (reconcileShares).
@@ -247,6 +259,8 @@ export const SCHEDULE_CHECK_API_VERSION = 51;
 export const SCHEDULE_CHECK_TIMEOUT_API_VERSION = 55;
 // From this one it can carry `provider`, the kind of login in its pool.
 export const SCHEDULE_PROVIDER_API_VERSION = 97;
+// From this one it can carry `starThreads`: each new thread starts starred.
+export const SCHEDULE_STAR_API_VERSION = 100;
 // Pools shared between runners: the pools table (shared-pools.ts).
 export const SHARED_POOLS_API_VERSION = 38;
 // From this one sync:pools gives other runners' keys a member that has an
@@ -541,6 +555,7 @@ export type ThreadDoc = {
   keywords?: string;
   archivedAt?: string;
   starredAt?: string;
+  coordinatorProjectId?: string;
   costUsd?: number;
   projects?: { id: string; title: string }[];
   working?: string;
@@ -550,6 +565,8 @@ export type ThreadDoc = {
   asks?: PhoneAsk[];
   asksSeq?: number;
   next?: string[];
+  nextPick?: 'one';
+  nextSuggested?: number;
   looseEnds?: { kind: string; text: string; threadId?: string; at?: string }[];
   completion?: { tasks: { id: string; title: string; status: 'completed' | 'pending' | 'blocked' }[] };
   review?: LabReviewLedger;
@@ -677,6 +694,7 @@ type Host = {
   listProjects?: () => Project[];
   listSchedules?: () => Schedule[];
   listAccounts?: () => Account[];
+  listPools?: () => { pools: Pool[] };
   // The thread's reply buttons (buttons.list); absent in small tests, and
   // then no row carries any.
   buttons?: (threadId: string) => ReplyButton[];
@@ -712,7 +730,7 @@ export type CommandHost = {
   hibernateWhen?(p: { threadId: string; said: string }): unknown;
   // Seen up to the last event it has.
   markSeen(threadId: string): unknown;
-  create(p: { text: string; images?: ImageRef[]; cwd?: string; accountId?: string; model?: string; effort?: EffortLevel; permissionMode?: PermissionMode; origin?: 'phone' }): { thread: ThreadSummary };
+  create(p: { text: string; images?: ImageRef[]; cwd?: string; accountId?: string; model?: string; effort?: EffortLevel; permissionMode?: PermissionMode; origin?: 'phone' }): { thread: ThreadSummary } | Promise<{ thread: ThreadSummary }>;
   // Stops the thread's turn (a command from the main Mac, API 44).
   interrupt?(threadId: string): unknown;
   share(threadId: string, p: { access: 'off' | 'link'; newLink?: boolean }): unknown;
@@ -736,6 +754,13 @@ export type CommandHost = {
   // The Mac's Runners panel: Year-long token… for a login here (an
   // `accounts.yearToken` call, year-token-maker.ts). Never on a box.
   yearToken?: (accountId: string, p: { code?: string; check?: boolean; cancel?: boolean }) => Promise<unknown>;
+  // `accounts.useReset` from the main Mac (rpc.ts useResetElsewhere).
+  useReset?: (accountId: string) => Promise<unknown>;
+  // The Mac's Runners panel's Use this Mac's Claude logins (login-share.ts):
+  // this runner's public sealing key, and the main Mac's logins sealed to it.
+  // Never on a box.
+  loginsSealKey?: () => string;
+  loginsShare?: (logins: { email: unknown; box: unknown }[]) => Promise<unknown>;
   // The phone's Reviews sheet (API 86).
   listReviews?: (threadId: string) => unknown;
   getReview?: (threadId: string, reviewId: string) => unknown;
@@ -1032,9 +1057,9 @@ export function defaultRunnerName(hostname = os.hostname()): string {
 // Which of the phone's lists a thread's in. A starred one that's hibernating
 // stays in the inbox list: the phone has Starred at the top of its inbox, and
 // doesn't load Hibernating at all while that's folded.
-function threadView(t: Pick<ThreadSummary, 'archivedAt' | 'snoozedUntil' | 'starredAt'> & { waitState?: string }, now: number): ThreadDoc['view'] {
+function threadView(t: Pick<ThreadSummary, 'archivedAt' | 'snoozedUntil' | 'starredAt' | 'coordinatorProjectId'> & { waitState?: string }, now: number): ThreadDoc['view'] {
   if (t.archivedAt) return 'den';
-  if (t.starredAt) return 'inbox';
+  if (t.starredAt || (typeof t.coordinatorProjectId === 'string' && t.coordinatorProjectId.trim())) return 'inbox';
   // Waiting on its own work: drawn under Running, so it's with the inbox's rows.
   if (t.waitState === 'onThreads' || t.waitState === 'landing' || t.waitState === 'appRestart') return 'inbox';
   return t.snoozedUntil && Date.parse(t.snoozedUntil) > now ? 'hibernating' : 'inbox';
@@ -1064,7 +1089,7 @@ export function phoneNeedsYou(t: Pick<ThreadSummary, 'needsYou' | 'archivedAt' |
   return t.needsYou && !t.archivedAt && !(t.snoozedUntil && Date.parse(t.snoozedUntil) > now);
 }
 
-export function toThreadDoc(t: ThreadSummary, runnerId: string, now: number, pending?: PendingApproval, earliestSeq?: number, next?: string[], scrub?: (text: string) => string, review?: LabReviewLedger, cardTurn?: string): ThreadDoc {
+export function toThreadDoc(t: ThreadSummary, runnerId: string, now: number, pending?: PendingApproval, earliestSeq?: number, next?: string[], scrub?: (text: string) => string, review?: LabReviewLedger, cardTurn?: string, nextPick?: 'one', nextSuggested?: number): ThreadDoc {
   const doc: ThreadDoc = {
     threadId: t.id,
     runnerId,
@@ -1094,6 +1119,7 @@ export function toThreadDoc(t: ThreadSummary, runnerId: string, now: number, pen
   if (t.keywords) doc.keywords = t.keywords;
   if (t.archivedAt) doc.archivedAt = t.archivedAt;
   if (t.starredAt) doc.starredAt = t.starredAt;
+  if (typeof t.coordinatorProjectId === 'string' && t.coordinatorProjectId.trim()) doc.coordinatorProjectId = t.coordinatorProjectId;
   // To the cent: a running thread's cost moves every turn and the phone
   // doesn't need a write for the fourth decimal.
   if (t.costUsd !== undefined) doc.costUsd = Math.round(t.costUsd * 100) / 100;
@@ -1108,7 +1134,15 @@ export function toThreadDoc(t: ThreadSummary, runnerId: string, now: number, pen
     doc.asks = t.asks.map(toPhoneAsk);
     doc.asksSeq = t.asksSeq;
   }
-  if (next?.length) doc.next = next;
+  if (next?.length) {
+    doc.next = next;
+    if (nextPick === 'one' && next.length > 1) {
+      doc.nextPick = 'one';
+      if (typeof nextSuggested === 'number' && Number.isInteger(nextSuggested) && nextSuggested >= 0 && nextSuggested < next.length) {
+        doc.nextSuggested = nextSuggested;
+      }
+    }
+  }
   if (t.completion && t.status === 'idle' && !t.archivedAt) {
     const clean = scrub ?? ((text: string) => text);
     doc.completion = { tasks: t.completion.tasks.map((task) => ({ ...task, title: clean(task.title) })) };
@@ -1217,7 +1251,7 @@ function phoneAnswers(raw: unknown): AskAnswer[] | undefined {
 export function forBackend(d: ThreadDoc, v: number, now: number): ThreadDoc {
   const asks = d.asks !== undefined || d.asksSeq !== undefined || d.next !== undefined;
   const sections = d.needs !== undefined || d.pendingReviews !== undefined || d.waitingForRoom !== undefined;
-  if ((v >= COMPLETION_API_VERSION || !d.completion) && (v >= SHARE_API_VERSION || !d.share) && (v >= WOKE_API_VERSION || !d.woke) && (v >= ASKS_API_VERSION || !asks) && (v >= OPTION_NOTES_API_VERSION || !d.asks?.some((a) => a.optionNotes)) && (v >= LOOSE_ENDS_API_VERSION || !d.looseEnds) && (v >= RELAY_CARDS_API_VERSION || (!d.review && !d.cardTurn)) && (v >= SECTIONS_API_VERSION || !sections) && (v >= STARTED_BY_API_VERSION || !d.startedBy) && (v >= STARS_API_VERSION || !d.starredAt) && (v >= LINKS_API_VERSION || !d.links) && (v >= ASKED_API_VERSION || !d.asked) && (v >= KEYWORDS_API_VERSION || !d.keywords) && (v >= WAKE_NOTE_API_VERSION || !d.wakeNote) && (v >= NETWORK_WAIT_API_VERSION || !d.waitingForNetwork) && (v >= WAIT_STATE_API_VERSION || !d.waitState) && (v >= SECRETS_API_VERSION || d.pendingApproval?.kind !== 'secret') && (v >= RELAY_API_VERSION || d.pendingApproval?.seq === undefined) && (v >= PLAN_API_VERSION || d.pendingApproval?.kind !== 'approval' || d.pendingApproval.planSeq === undefined)) return d;
+  if ((v >= COMPLETION_API_VERSION || !d.completion) && (v >= NEXT_PICK_API_VERSION || (!d.nextPick && d.nextSuggested === undefined)) && (v >= COORDINATORS_API_VERSION || !d.coordinatorProjectId) && (v >= SHARE_API_VERSION || !d.share) && (v >= WOKE_API_VERSION || !d.woke) && (v >= ASKS_API_VERSION || !asks) && (v >= OPTION_NOTES_API_VERSION || !d.asks?.some((a) => a.optionNotes)) && (v >= LOOSE_ENDS_API_VERSION || !d.looseEnds) && (v >= RELAY_CARDS_API_VERSION || (!d.review && !d.cardTurn)) && (v >= SECTIONS_API_VERSION || !sections) && (v >= STARTED_BY_API_VERSION || !d.startedBy) && (v >= STARS_API_VERSION || !d.starredAt) && (v >= LINKS_API_VERSION || !d.links) && (v >= ASKED_API_VERSION || !d.asked) && (v >= KEYWORDS_API_VERSION || !d.keywords) && (v >= WAKE_NOTE_API_VERSION || !d.wakeNote) && (v >= NETWORK_WAIT_API_VERSION || !d.waitingForNetwork) && (v >= WAIT_STATE_API_VERSION || !d.waitState) && (v >= SECRETS_API_VERSION || d.pendingApproval?.kind !== 'secret') && (v >= RELAY_API_VERSION || d.pendingApproval?.seq === undefined) && (v >= PLAN_API_VERSION || d.pendingApproval?.kind !== 'approval' || d.pendingApproval.planSeq === undefined)) return d;
   const out = { ...d };
   if (v < SECTIONS_API_VERSION) {
     delete out.needs;
@@ -1245,6 +1279,14 @@ export function forBackend(d: ThreadDoc, v: number, now: number): ThreadDoc {
     delete out.waitState;
     out.view = threadView(out, now);
   }
+  if (v < COORDINATORS_API_VERSION && out.coordinatorProjectId) {
+    delete out.coordinatorProjectId;
+    out.view = threadView(out, now);
+  }
+  if (v < NEXT_PICK_API_VERSION) {
+    delete out.nextPick;
+    delete out.nextSuggested;
+  }
   if (v < STARS_API_VERSION && out.starredAt) {
     // That backend's phones have no Starred section to show it in.
     delete out.starredAt;
@@ -1263,6 +1305,8 @@ export function forBackend(d: ThreadDoc, v: number, now: number): ThreadDoc {
     delete out.asks;
     delete out.asksSeq;
     delete out.next;
+    delete out.nextPick;
+    delete out.nextSuggested;
   }
   return out;
 }
@@ -1464,6 +1508,7 @@ export function toOwnedScheduleDoc(s: StoredSchedule, apiVersion = BACKEND_API_V
   if (s.check !== undefined && apiVersion >= SCHEDULE_CHECK_API_VERSION) out.check = s.check;
   if (s.checkTimeoutSecs !== undefined && apiVersion >= SCHEDULE_CHECK_TIMEOUT_API_VERSION) out.checkTimeoutSecs = s.checkTimeoutSecs;
   if (s.provider !== undefined && apiVersion >= SCHEDULE_PROVIDER_API_VERSION) out.provider = s.provider;
+  if (s.starThreads && apiVersion >= SCHEDULE_STAR_API_VERSION) out.starThreads = true;
   if (s.lastRun) {
     out.lastRun = { at: s.lastRun.at, outcome: s.lastRun.outcome, ...(s.lastRun.threadId ? { threadId: s.lastRun.threadId } : {}), ...(s.lastRun.note ? { note: s.lastRun.note } : {}) };
   }
@@ -1493,8 +1538,11 @@ export function toAccountDoc(a: Account, apiVersion = 0) {
       ...(u.stale ? { stale: true } : {}),
       ...(u.blocked ? { blocked: true } : {}),
       ...(u.notice ? { notice: u.notice } : {}),
+      ...(u.resets && apiVersion >= RESET_HINT_API_VERSION ? { resets: { available: u.resets.available, ...(u.resets.nextExpiresAt ? { nextExpiresAt: u.resets.nextExpiresAt } : {}), ...(u.resets.readAt ? { readAt: u.resets.readAt } : {}) } } : {}),
     };
   }
+  // An older backend's validator would turn the whole row down.
+  if (a.resetHint && apiVersion >= RESET_HINT_API_VERSION) out.resetHint = { why: a.resetHint.why, available: a.resetHint.available, ...(a.resetHint.nextExpiresAt ? { nextExpiresAt: a.resetHint.nextExpiresAt } : {}) };
   return out;
 }
 
@@ -1603,7 +1651,7 @@ export class ConvexSync {
   // start({ hold }) till release(): see release.
   private holding = false;
   private earliest = new Map<string, number | null>(); // threadId -> seq of its first text message (null: none yet)
-  private nexts = new Map<string, { lastSeq: number; next?: string[]; review?: LabReviewLedger; turn?: string }>(); // threadId -> its last turn's next steps, review and turn, as of lastSeq
+  private nexts = new Map<string, { lastSeq: number; next?: string[]; nextPick?: 'one'; nextSuggested?: number; review?: LabReviewLedger; turn?: string }>(); // threadId -> its last turn's next steps, review and turn, as of lastSeq
   private lists: { projects?: Project[]; schedules?: Schedule[]; accounts?: Account[] } = {};
   private dirtyLists = new Set<ListName>();
   // Each project as the backend has it, id -> digest of its doc without
@@ -1840,6 +1888,8 @@ export class ConvexSync {
         takesKeywords: () => (this.backendApiVersion ?? 0) >= KEYWORDS_API_VERSION,
         takesMode: () => (this.backendApiVersion ?? 0) >= INDEX_MODE_API_VERSION,
         takesWaitState: () => (this.backendApiVersion ?? 0) >= WAIT_STATE_API_VERSION,
+        takesPool: () => (this.backendApiVersion ?? 0) >= INDEX_POOL_API_VERSION,
+        takesCoordinator: () => (this.backendApiVersion ?? 0) >= COORDINATORS_API_VERSION,
         takesSince: () => (this.backendApiVersion ?? 0) >= INDEX_SINCE_API_VERSION,
         takesOrder: () => (this.backendApiVersion ?? 0) >= RUNNER_ORDER_API_VERSION,
         takesServices: () => this.virtualRunnersReady(),
@@ -1971,7 +2021,7 @@ export class ConvexSync {
       const card = (t: ThreadSummary) => Boolean(t.asks?.length) || (t.needs === 'nothing' && t.status === 'idle' && !t.archivedAt);
       // Likewise needs, reviews and waiting for room, for the phone's sections.
       const sections = (t: ThreadSummary) => Boolean(t.needs || t.pendingReviews || t.waitingForRoom);
-      for (const t of this.deps.runner.list(ALL)) if (t.share || (t.woke && v >= WOKE_API_VERSION) || (t.startedBy && v >= STARTED_BY_API_VERSION) || (t.starredAt && v >= STARS_API_VERSION) || (v >= LINKS_API_VERSION && t.actions?.some((a) => a.kind === 'url')) || (v >= ASKS_API_VERSION && card(t)) || (v >= SECTIONS_API_VERSION && sections(t)) || (v >= ASKED_API_VERSION && t.asked && !t.archivedAt) || (v >= KEYWORDS_API_VERSION && t.keywords) || (v >= NETWORK_WAIT_API_VERSION && t.waitingForNetwork) || (v >= WAKE_NOTE_API_VERSION && wakeNote(t)) || (v >= WAIT_STATE_API_VERSION && t.waitState && !t.archivedAt)) this.mark(t);
+      for (const t of this.deps.runner.list(ALL)) if ((t.coordinatorProjectId && v >= COORDINATORS_API_VERSION) || t.share || (t.woke && v >= WOKE_API_VERSION) || (t.startedBy && v >= STARTED_BY_API_VERSION) || (t.starredAt && v >= STARS_API_VERSION) || (v >= LINKS_API_VERSION && t.actions?.some((a) => a.kind === 'url')) || (v >= ASKS_API_VERSION && card(t)) || (v >= SECTIONS_API_VERSION && sections(t)) || (v >= ASKED_API_VERSION && t.asked && !t.archivedAt) || (v >= KEYWORDS_API_VERSION && t.keywords) || (v >= NETWORK_WAIT_API_VERSION && t.waitingForNetwork) || (v >= WAKE_NOTE_API_VERSION && wakeNote(t)) || (v >= WAIT_STATE_API_VERSION && t.waitState && !t.archivedAt)) this.mark(t);
       this.scheduleFlush();
     }
     // The pictures wait for the first heartbeat to say the backend takes them.
@@ -2985,7 +3035,19 @@ export class ConvexSync {
     if (t.status === 'idle' || t.status === 'error' || t.status === 'stopped') this.forgetCards(t.id);
     this.noteShared(t);
     const end = this.lastEnd(t);
-    const doc = toThreadDoc(t, this.runnerId, this.deps.clock.now(), this.pending.get(t.id), this.earliestSeq(t), t.needs === 'nothing' ? end?.next : undefined, this.scrubber.safeText, end?.review, end?.turn);
+    const doc = toThreadDoc(
+      t,
+      this.runnerId,
+      this.deps.clock.now(),
+      this.pending.get(t.id),
+      this.earliestSeq(t),
+      t.needs === 'nothing' ? end?.next : undefined,
+      this.scrubber.safeText,
+      end?.review,
+      end?.turn,
+      t.needs === 'nothing' ? end?.nextPick : undefined,
+      t.needs === 'nothing' ? end?.nextSuggested : undefined,
+    );
     const now = this.deps.clock.now();
     // Against the row as this backend took it: `sent` holds that, without
     // the fields an older one doesn't know, which would otherwise make every
@@ -3395,11 +3457,13 @@ export class ConvexSync {
   // (end_turn's `next`, for the phone's done card, sent only on a turn that
   // needs nothing) and another lab's review ledger (for another Mac's relay).
   // Read from the end of its log once per lastSeq.
-  private lastEnd(t: ThreadSummary): { next?: string[]; review?: LabReviewLedger; turn?: string } | undefined {
+  private lastEnd(t: ThreadSummary): { next?: string[]; nextPick?: 'one'; nextSuggested?: number; review?: LabReviewLedger; turn?: string } | undefined {
     if (t.status !== 'idle' || t.archivedAt) return undefined;
     const known = this.nexts.get(t.id);
     if (known && known.lastSeq === t.lastSeq) return known;
     let next: string[] | undefined;
+    let nextPick: 'one' | undefined;
+    let nextSuggested: number | undefined;
     let review: LabReviewLedger | undefined;
     let turn: string | undefined;
     try {
@@ -3407,7 +3471,15 @@ export class ConvexSync {
       for (let i = events.length - 1; i >= 0; i--) {
         const e = events[i]!;
         if (e.type === 'turn.completed') {
-          if (e.next?.length) next = e.next;
+          if (e.next?.length) {
+            next = e.next;
+            if (e.nextPick === 'one' && e.next.length > 1) {
+              nextPick = 'one';
+              if (typeof e.nextSuggested === 'number' && Number.isInteger(e.nextSuggested) && e.nextSuggested >= 0 && e.nextSuggested < e.next.length) {
+                nextSuggested = e.nextSuggested;
+              }
+            }
+          }
           if (e.review) review = e.review;
           // As message rows name it (toMessageDoc).
           if (e.turnId) turn = e.turnId.slice(0, 8);
@@ -3419,7 +3491,7 @@ export class ConvexSync {
     } catch {
       return undefined;
     }
-    const end = { lastSeq: t.lastSeq, next, review, turn };
+    const end = { lastSeq: t.lastSeq, next, nextPick, nextSuggested, review, turn };
     this.nexts.set(t.id, end);
     return end;
   }
@@ -4413,6 +4485,9 @@ export class ConvexSync {
       startedAt: this.deps.startedAt,
       draining: false,
       threadCount: this.deps.runner.list(ALL).length,
+      ...((this.backendApiVersion ?? 0) >= INDEX_POOL_API_VERSION && this.deps.runner.listPools
+        ? { usagePools: this.deps.runner.listPools().pools.map(({ id, title, accountIds }) => ({ id, title, accountIds })) }
+        : {}),
       ...(this.deps.config.icon && (this.backendApiVersion ?? 0) >= RUNNER_ICON_API_VERSION ? { icon: this.deps.config.icon } : {}),
       ...(this.stats?.pressure && (this.backendApiVersion ?? 0) >= RUNNER_STATS_API_VERSION ? { pressure: this.stats.pressure } : {}),
       ...followProblem,
@@ -5270,6 +5345,24 @@ export class ConvexSync {
         // Year-long token… from the main Mac's Runners panel: only its own
         // (a phone's command never says from: "mac"), and the answer is a
         // state and the claude.ai page, never the token.
+        // Use this Mac's Claude logins, from the main Mac's Runners panel
+        // (login-share.ts): only a command the owner key queued (from:
+        // "mac"), never a phone's or another runner's. The answers carry
+        // a public key and how each login went, never a token.
+        if (a.method === 'logins.sealKey' || a.method === 'logins.share') {
+          if (a.from !== 'mac') throw new Error("Only the main Mac shares its logins with this runner.");
+          // One left waiting in the backend while this runner was away is
+          // stale: the main Mac sends what's true now when it sees it's back,
+          // and an old one could put back logins switched off since.
+          if (this.deps.clock.now() - c.createdAt > SHARE_STALE_MS) throw new Error('That was sent a while ago; the main Mac sends it again.');
+          if (a.method === 'logins.sealKey') {
+            if (!host.loginsSealKey) throw new Error("This runner can't take another Mac's logins.");
+            return { result: { key: host.loginsSealKey() } };
+          }
+          if (!host.loginsShare) throw new Error("This runner can't take another Mac's logins.");
+          if (!Array.isArray(params.logins)) throw new Error('Which logins?');
+          return { result: await host.loginsShare(params.logins as { email: unknown; box: unknown }[]) };
+        }
         if (a.method === 'accounts.yearToken') {
           if (!host.yearToken) throw new Error("This runner can't make tokens from another Mac.");
           if (a.from !== 'mac') throw new Error('Only the main Mac makes a token for a login here.');
@@ -5282,6 +5375,15 @@ export class ConvexSync {
               ...(params.cancel === true ? { cancel: true } : {}),
             }),
           };
+        }
+        // Use a reset from the main Mac, on one of this runner's logins its
+        // own runner has no twin of (rpc.ts useResetElsewhere). Mike's click
+        // there; never a phone's.
+        if (a.method === 'accounts.useReset') {
+          if (!host.useReset) throw new Error("This runner can't use a reset from another Mac.");
+          if (a.from !== 'mac') throw new Error('Only the main Mac uses a reset for a login here.');
+          if (typeof params.accountId !== 'string' || !params.accountId) throw new Error('Which login?');
+          return { result: await host.useReset(params.accountId) };
         }
         if (a.method !== 'files.list') throw new Error(`${String(a.method)} can't be asked of this runner`);
         const list = listFolderFor({ path: params.path });

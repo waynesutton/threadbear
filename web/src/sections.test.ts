@@ -2,7 +2,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { archived, archiveShown, build, clampWidth, hibernating, isFiltering, isSnoozed, matches, neighbour, NO_FILTER, passes, placeChoices, readFolded, readOrder, readWidth, shows, SIDEBAR_DEFAULT, SIDEBAR_MIN, urgency, wakeLine, wakesOf, type ThreadRow } from './sections.ts';
+import { archived, archiveShown, build, clampWidth, hibernating, isFiltering, isSnoozed, matches, neighbour, NO_FILTER, passes, placeChoices, readFolded, readOrder, readWidth, SECTIONS, shows, SIDEBAR_DEFAULT, SIDEBAR_MIN, urgency, wakeLine, wakesOf, type ThreadRow } from './sections.ts';
 
 const NOW = Date.parse('2026-11-05T10:00:00Z');
 let n = 0;
@@ -290,4 +290,28 @@ test('a hibernating row that waits for more than a time says so first', () => {
   assert.equal(wakeLine(row({ snoozedUntil: '2026-11-06T09:00:00Z' }), ['misc'], now), undefined);
   // Awake again: the note is stale.
   assert.equal(wakeLine(row({ wakeNote: 'the runner updates' }), ['misc'], now), undefined);
+});
+
+
+test('coordinators stay before normal sections across waits and keep questions visible', () => {
+  assert.deepEqual(SECTIONS.slice(0, 3), ['starred', 'coordinators', 'inbox']);
+  const a = row({ coordinatorProjectId: 'p_a', waitState: 'hibernating', snoozedUntilRestart: true });
+  const b = row({ coordinatorProjectId: 'p_b', waitState: 'card', needsYou: true, starredAt: '2026-11-01T00:00:00Z' });
+  const gone = row({ coordinatorProjectId: 'p_c', archivedAt: '2026-11-01T00:00:00Z' });
+  const plain = row();
+  const split = build([b, gone, plain, a], NOW, none, 'newest');
+  assert.deepEqual(ids(split.coordinators), ids([a, b]));
+  assert.deepEqual(ids(split.inbox), ids([plain]));
+  assert.deepEqual(split.starred, []);
+  assert.equal(passes(b, { show: 'needsYou' }, NOW), true);
+  assert.deepEqual(hibernating([], [a], none), []);
+});
+
+test('bad coordinator metadata keeps an ordinary thread visible', () => {
+  for (const bad of ['', '  ', 12, {}, null]) {
+    const r = row({ coordinatorProjectId: bad as string });
+    const split = build([r], NOW, none, 'needsYou');
+    assert.deepEqual(ids(split.inbox), [r.threadId]);
+    assert.deepEqual(split.coordinators, []);
+  }
 });

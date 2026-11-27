@@ -130,9 +130,12 @@ impl Composer {
                     &text,
                     text_services::check(&text, paragraph..caret, &checks, true),
                 );
+                // Pictures' chips, and links' addresses (the # picker's
+                // `[Title](thread:<id>)`), and skill mentions, aren't words to correct.
                 let mut chips: Vec<Range<usize>> = Self::chips_in(&input, cx)
                     .into_iter()
                     .map(|(r, _)| r)
+                    .chain(spelling::link_targets(&text))
                     .collect();
                 chips.extend(
                     threadbear_core::skill_mentions::find(&text, &self.mention_commands(cx))
@@ -268,9 +271,12 @@ impl Composer {
                 &text,
                 text_services::check(&text, 0..text.len(), &asked, false),
             );
+            // Pictures' chips, and links' addresses (the # picker's
+            // `[Title](thread:<id>)`), and skill mentions, aren't words to mark.
             let mut chips: Vec<Range<usize>> = Self::chips_in(&input, cx)
                 .into_iter()
                 .map(|(r, _)| r)
+                .chain(spelling::link_targets(&text))
                 .collect();
             chips.extend(
                 threadbear_core::skill_mentions::find(&text, &self.mention_commands(cx))

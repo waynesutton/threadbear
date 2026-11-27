@@ -46,6 +46,10 @@ pub struct Saved {
     /// `InboxSection`'s raw value. None means nothing saved yet (Hibernating
     /// and Archived start folded, as `storedCollapsedSections` makes them).
     pub collapsed_sections: Option<Vec<String>>,
+    /// `sectionOrder`: the Threads sidebar's section keys in Mike's chosen
+    /// order. None is the default (Starred above Coordinators, then Inbox,
+    /// Running, Hibernating and Archived).
+    pub section_order: Option<Vec<String>>,
     /// `collapsedScheduleSections`: the Scheduled list's headings folded
     /// away, by `ScheduleSection`'s raw value. None means nothing saved yet
     /// (Done starts folded, as `storedCollapsedScheduleSections` makes it).
@@ -197,10 +201,6 @@ pub struct Saved {
     /// `looks_once`): once, apart from the rest, which had already come
     /// across on most Macs before this app had looks.
     pub swift_look_import: Option<String>,
-    /// The Canvas page's board (thread_canvas.rs, the `threadCanvas`
-    /// experiment): each project's area, where each thread sits and the
-    /// camera, as `threadbear_core::thread_canvas::Layout` saves it.
-    pub thread_canvas: Option<Value>,
     /// Fields this build doesn't know (a newer build's), kept as they are,
     /// so going back a version and forward again loses nothing.
     #[serde(flatten)]
@@ -359,6 +359,16 @@ impl Settings {
         self.saved.inbox_order = Some(order.name().to_string());
     }
 
+    pub fn section_order(&self) -> Vec<&'static str> {
+        threadbear_core::section_drag::normalize_section_order(self.saved.section_order.as_deref())
+    }
+
+    pub fn set_section_order(&mut self, order: &[&'static str]) {
+        self.saved.section_order =
+            (!threadbear_core::section_drag::is_default_section_order(order))
+                .then(|| order.iter().map(|k| (*k).to_string()).collect());
+    }
+
     pub fn ding_on(&self) -> bool {
         self.saved.completion_sound.unwrap_or(false)
     }
@@ -429,6 +439,14 @@ mod tests {
         assert_eq!(s.saved, Saved::default(), "no file yet");
         s.set_zoom_percent(125);
         s.set_inbox_order(InboxOrder::Newest);
+        s.set_section_order(&[
+            "starred",
+            "running",
+            "inbox",
+            "coordinators",
+            "hibernating",
+            "archived",
+        ]);
         s.saved.collapsed_sections = Some(vec!["inbox".into()]);
         s.saved.window_frame = Some(WindowFrame {
             x: 10.,
@@ -440,6 +458,17 @@ mod tests {
         let read = Settings::load_from(path);
         assert_eq!(read.zoom_percent(), 125);
         assert_eq!(read.inbox_order(), InboxOrder::Newest);
+        assert_eq!(
+            read.section_order(),
+            vec![
+                "starred",
+                "running",
+                "inbox",
+                "coordinators",
+                "hibernating",
+                "archived",
+            ]
+        );
         assert_eq!(
             read.saved.collapsed_sections,
             Some(vec!["inbox".to_string()])

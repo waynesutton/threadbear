@@ -10,6 +10,7 @@ mod lab_review;
 pub(crate) mod list;
 pub(crate) mod markdown;
 mod parts;
+mod review_note;
 pub(crate) use markdown::reading_style;
 pub(crate) mod metrics;
 mod phone;
@@ -327,6 +328,13 @@ impl ThreadPane {
     ) -> AnyElement {
         if message.is_from_schedule() {
             return self.schedule_message_row(ix, row, message, cx);
+        }
+        if let Some(note) = message
+            .review_note
+            .as_deref()
+            .filter(|_| message.is_from_runner())
+        {
+            return self.review_note_row(ix, row, note, message.review_ledger.as_deref(), cx);
         }
         if message.shows_as_note() {
             return self.runner_note_row(ix, row, message, cx);
@@ -1073,7 +1081,13 @@ impl ThreadPane {
             );
             return row_wrap(row, content.child(text));
         }
-        row_wrap(row, content.child(note.to_owned()))
+        let content = content.child(note.to_owned());
+        // A line naming something that acts by itself (the quiet inbox)
+        // says what it is on hover.
+        match row.content.note_tip() {
+            Some(tip) => row_wrap(row, content.id(SharedString::from(row.id.clone())).tip(tip)),
+            None => row_wrap(row, content),
+        }
     }
 
     /// A failed turn's message in its pink box, and what to do about it when
@@ -1173,6 +1187,8 @@ impl ThreadPane {
             // This transcript's thread, which in a panel of its own isn't
             // the main panel's.
             let (app, id) = (self.app.clone(), self.summary.id.clone());
+            let archive_words =
+                crate::composer_card::done_archive_words(self.summary.is_archived());
             body = body.child(
                 h_flex()
                     .w_full()
@@ -1192,9 +1208,9 @@ impl ThreadPane {
                     .child(
                         card_button(
                             ("past-done-archive", ix),
-                            "Archive",
+                            archive_words.0,
                             ButtonLook::Plain,
-                            "Archive this thread",
+                            archive_words.1,
                             cx,
                         )
                         .on_click(move |ev, window, cx| {

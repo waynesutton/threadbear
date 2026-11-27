@@ -83,6 +83,7 @@ export function Lists({ token, selected, isNew }: { token: string; selected?: st
   // the first one drawn has it.
   const seen = new Set<string>();
   const keep = (rows: Row[]) => rows.filter((r) => shows(r, q, filter, selected) && !seen.has(r.threadId) && seen.add(r.threadId));
+  const coordinators = keep(split.coordinators);
   const starred = keep(split.starred);
   const inInbox = keep(split.inbox);
   const running = keep(split.running);
@@ -93,6 +94,7 @@ export function Lists({ token, selected, isNew }: { token: string; selected?: st
   const archive = archiveShown(allArchived, archiveLimit, narrowing, selected);
 
   const count: Record<SectionKey, number> = {
+    coordinators: coordinators.length,
     starred: starred.length,
     inbox: inInbox.length,
     running: running.length,
@@ -101,9 +103,9 @@ export function Lists({ token, selected, isNew }: { token: string; selected?: st
     hibernating: snoozed ? asleep.length : (counts?.hibernating ?? 0) + asleep.length,
     archived: narrowing ? allArchived.length : (counts?.den ?? allArchived.length),
   };
-  const rows: Record<SectionKey, Row[]> = { starred, inbox: inInbox, running, hibernating: asleep, archived: archive.rows };
+  const rows: Record<SectionKey, Row[]> = { coordinators, starred, inbox: inInbox, running, hibernating: asleep, archived: archive.rows };
   const isOpen = (s: SectionKey) => narrowing || !folded.has(s);
-  const drawn = (['starred', 'inbox', 'running', 'hibernating', 'archived'] as SectionKey[]).filter(isOpen).flatMap((s) => rows[s].map((r) => r.threadId));
+  const drawn = (['starred', 'coordinators', 'inbox', 'running', 'hibernating', 'archived'] as SectionKey[]).filter(isOpen).flatMap((s) => rows[s].map((r) => r.threadId));
   const settling = narrowing && (!snoozed || !den || (!!q && (q !== sought || !older)));
   const nothing = narrowing && !settling && drawn.length === 0;
 
@@ -152,6 +154,7 @@ export function Lists({ token, selected, isNew }: { token: string; selected?: st
         <nav className="lists" ref={nav} tabIndex={-1}>
           {nothing ? <div className="list note">No threads match.</div> : null}
           {count.starred > 0 ? section('starred', 'Starred', <Icon.Star />) : null}
+          {count.coordinators > 0 ? section('coordinators', 'Coordinators', <Icon.Folder />) : null}
           {count.inbox > 0 || !narrowing ? section('inbox', 'Inbox', <Icon.Inbox />, <OrderMenu order={order} pick={pickOrder} />, count.inbox === 0 ? <div className="list note">Nothing waiting.</div> : null) : null}
           {count.running > 0 ? section('running', 'Running', <Icon.Bolt />) : null}
           {count.hibernating > 0 ? section('hibernating', 'Hibernating', <Icon.Moon />, undefined, !snoozed ? <div className="list note">Loading…</div> : null) : null}

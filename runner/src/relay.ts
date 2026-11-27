@@ -45,7 +45,7 @@ import type { Notification } from './runner.ts';
 import type { RemoteThread, RemoteThreads } from './thread-index.ts';
 import type { Download, Post, Subscribe, Upload } from './sync.ts';
 import { picturesSaid, withoutCountLine } from './pictures.ts';
-import { ErrorCode, RpcError, remoteCreateMode, type AskAnswer, type LabReviewLedger } from './protocol.ts';
+import { ErrorCode, RpcError, remoteCreateMode, type Account, type AskAnswer, type LabReviewLedger } from './protocol.ts';
 import { seal } from './secrets.ts';
 
 export const SCALE = 8;
@@ -274,6 +274,8 @@ export type RelayThreadRow = {
   asks?: { action: string; why?: string; reply?: string; options?: string[]; optionNotes?: string[]; suggested?: number; links?: { title: string; url: string }[]; ticked?: boolean }[];
   asksSeq?: number;
   next?: string[];
+  nextPick?: 'one';
+  nextSuggested?: number;
   // The done card's loose ends (backend API 73), while that card stands.
   looseEnds?: { kind: string; text: string; threadId?: string; at?: string }[];
   // Another lab's review of the last turn (backend API 76).
@@ -526,7 +528,15 @@ export function relayEvents(threadId: string, rows: RelayRow[], row: RelayThread
           durationMs: Math.max(0, Date.parse(r.at) - (Number.isFinite(started) ? started : Date.parse(r.at))),
           ...(last && row?.needs ? { needs: row.needs } : {}),
           ...(asks ? { asks } : {}),
-          ...(last && row?.needs === 'nothing' && row.next?.length ? { next: row.next } : {}),
+          ...(last && row?.needs === 'nothing' && row.next?.length
+            ? {
+                next: row.next,
+                ...(row.nextPick === 'one' && row.next.length > 1 ? { nextPick: 'one' as const } : {}),
+                ...(row.nextPick === 'one' && row.next.length > 1 && typeof row.nextSuggested === 'number' && Number.isInteger(row.nextSuggested) && row.nextSuggested >= 0 && row.nextSuggested < row.next.length
+                  ? { nextSuggested: row.nextSuggested }
+                  : {}),
+              }
+            : {}),
           // Only on the turn it's from: a newer turn's row can come before its rows.
           ...(last && row?.review && row.cardTurn === r.turn ? { review: row.review } : {}),
           ...(last && row?.completion && row.cardTurn === r.turn ? { completion: row.completion } : {}),
@@ -731,7 +741,7 @@ export class Relay {
       lastSeenSeq: 0,
       runnerId: t.runnerId,
     };
-    for (const k of ['model', 'createdAt', 'lastActivityAt', 'snoozedUntil', 'archivedAt', 'starredAt', 'startedBy', 'asked', 'keywords', 'waitState'] as const) {
+    for (const k of ['poolId', 'model', 'createdAt', 'lastActivityAt', 'snoozedUntil', 'archivedAt', 'starredAt', 'coordinatorProjectId', 'startedBy', 'asked', 'keywords', 'waitState'] as const) {
       if (t[k] !== undefined) thread[k] = t[k];
     }
     // Its real access, or "unknown" from a runner that doesn't say: never
@@ -1450,7 +1460,7 @@ export class Relay {
    * (or, with `done`, finished). A runner that's offline is said at once
    * rather than left to pick it up whenever it's back.
    */
-  private async command(runnerId: string, threadId: string | undefined, kind: string, args: Record<string, unknown>, opts: { done?: boolean; ms?: number; settleBy?: number } = {}): Promise<{ state: string; note?: string; threadId?: string; result?: unknown }> {
+  private async command(runnerId: string, threadId: string | undefined, kind: string, args: Record<string, unknown>, opts: { done?: boolean; ms?: number; settleBy?: number; anyway?: boolean } = {}): Promise<{ state: string; note?: string; threadId?: string; result?: unknown }> {
     // settleBy: a send carrying pictures, and when it must answer by
     // (REPLY_BUDGET_MS). That runner marks it taken before it fetches them,
     // and a fetch that fails then fails the command, so taken isn't enough
@@ -1458,7 +1468,9 @@ export class Relay {
     // taken as a yes. Still pending at TAKE_MS is queued, as for any send
     // (Codex's review, 8 Nov).
     const name = this.runnerName(runnerId);
-    this.mustBeOnline(runnerId);
+    // `anyway`: the caller has fresher word than the sidebar's list, which
+    // stops updating while no app is open (login-share.ts).
+    if (!opts.anyway) this.mustBeOnline(runnerId);
     let src: RelaySource;
     try {
       src = this.src();
@@ -1749,6 +1761,7 @@ export class Relay {
           const patch: Partial<RemoteThread> = {};
           if (typeof applied.accountId === 'string') patch.accountId = applied.accountId;
           else if (typeof change.accountId === 'string') patch.accountId = change.accountId;
+          if (change.accountId !== undefined) patch.poolId = undefined;
           if ('model' in applied) patch.model = typeof applied.model === 'string' ? applied.model : undefined;
           this.remember(threadId, patch);
           return { thread: this.summary(threadId) };
@@ -1930,19 +1943,47 @@ export class Relay {
     return done.result;
   }
 
+  /**
+   * accounts.useReset for one of another runner's logins (a `call` the
+   * backend lets only the owner key queue): spent there, with its Codex.
+   */
+  async useReset(runnerId: string, accountId: string): Promise<unknown> {
+    const done = await this.command(runnerId, undefined, 'call', { method: 'accounts.useReset', params: { accountId } }, { done: true, ms: CALL_MS });
+    return done.result;
+  }
+
+  /**
+   * Use this Mac's Claude logins (login-share.ts): that runner's public
+   * sealing key, then the logins sealed to it. Both are `call`s the backend
+   * lets only the owner key queue; only ciphertext goes, and the answers
+   * carry no token.
+   */
+  async loginsSealKey(runnerId: string): Promise<string> {
+    const done = await this.command(runnerId, undefined, 'call', { method: 'logins.sealKey', params: {} }, { done: true, ms: CALL_MS, anyway: true });
+    const key = (done.result as { key?: unknown } | undefined)?.key;
+    if (typeof key !== 'string' || !key) throw new RpcError(ErrorCode.other, `${this.runnerName(runnerId)} didn't give a key to seal to.`);
+    return key;
+  }
+
+  async shareLogins(runnerId: string, logins: { email: string; box: string }[]): Promise<unknown> {
+    const done = await this.command(runnerId, undefined, 'call', { method: 'logins.share', params: { logins } }, { done: true, ms: CALL_MS, anyway: true });
+    return done.result;
+  }
+
   /** Another runner's logins for the new-thread pickers, from the backend's accounts rows. */
-  async logins(runnerId: string): Promise<{ accounts: unknown[]; pools: unknown[]; defaults: Record<string, unknown> }> {
+  async logins(runnerId: string): Promise<{ accounts: unknown[]; pools: unknown[]; usagePools?: unknown[]; defaults: Record<string, unknown> }> {
     // A box lists no logins of its own (its key can't, BOX_CALLS): it runs
     // on this Mac's login its cloud token is for, so that one is shown,
     // with its models, from this Mac's own rows.
     const box = this.runner(runnerId)?.box;
     const own = box ? this.deps.ownRunnerId?.() : undefined;
-    const rows = (await this.read('relay:remoteAccounts', { runnerId: own ?? runnerId })) as { id: string; provider: string; email?: string; runnerId?: string }[];
+    const rows = (await this.read('relay:remoteAccounts', { runnerId: own ?? runnerId })) as (Account & { runnerId?: string })[];
     const login = box?.login?.toLowerCase();
     const mine = own ? rows.filter((a) => a.provider === 'claude' && (!login || a.email?.toLowerCase() === login)) : rows;
     const accounts = mine.map(({ runnerId: _r, ...a }) => ({ ...a, configDir: '' }));
     const recent = this.deps.remote().threads.filter((t) => t.runnerId === runnerId).sort((a, b) => b.lastActivityAt.localeCompare(a.lastActivityAt))[0];
-    return { accounts, pools: [], defaults: { cwd: recent?.cwd ?? '', accountId: recent?.accountId ?? accounts[0]?.id ?? '', models: {}, efforts: {} } };
+    const usagePools = (this.src().apiVersion ?? 0) >= 101 ? await this.read('relay:remotePools', { runnerId }) : undefined;
+    return { accounts, pools: [], ...(Array.isArray(usagePools) ? { usagePools } : {}), defaults: { cwd: recent?.cwd ?? '', accountId: recent?.accountId ?? accounts[0]?.id ?? '', models: {}, efforts: {} } };
   }
 }
 

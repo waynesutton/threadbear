@@ -3,7 +3,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { makeHarness, tick } from '../helpers/fakes.ts';
-import { ThreadIndex, type RemoteThreads } from '../../src/thread-index.ts';
+import { ThreadIndex, toIndexRow, type RemoteThreads } from '../../src/thread-index.ts';
 import { nullLogger } from '../../src/log.ts';
 import type { Notification } from '../../src/runner.ts';
 
@@ -584,4 +584,13 @@ test('the virtual runners watch starts and stops with a refresh, as the experime
   assert.equal(index.list().services, undefined);
   assert.equal(heard.at(-1)!.services, undefined, 'the app hears they went');
   index.stop();
+});
+
+test('the sidebar keeps pool identity and omits it for older backends', () => {
+  const { h } = setup();
+  const { thread } = h.runner.create({ text: 'Pool usage', accountId: 'claude-3' });
+  const pooled = { ...thread, poolId: 'personal' };
+  assert.equal(toIndexRow(pooled).poolId, 'personal');
+  assert.equal(toIndexRow(pooled, true, true, true, true, true, true, false).poolId, undefined);
+  assert.equal(toIndexRow({ ...pooled, poolId: undefined }).poolId, undefined);
 });

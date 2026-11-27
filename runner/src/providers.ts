@@ -27,7 +27,10 @@ export const PROVIDER_INFO: Record<Provider, ProviderInfo> = {
     effort: 'codex',
     autoMode: 'asks',
     rewind: true,
-    smallJobs: false,
+    // Isolated `codex exec --ephemeral --ignore-user-config` in an empty
+    // folder with tools disabled and a runtime tool-item guard
+    // (models/codex-oneshot.ts).
+    smallJobs: true,
     usageReadings: true,
   },
   // Over ACP (adapters/acp/): Auto behaves like Ask, and rewind doesn't
@@ -50,7 +53,9 @@ export const PROVIDER_INFO: Record<Provider, ProviderInfo> = {
     name: 'OpenCode',
     cliName: 'OpenCode',
     loginCommand: 'opencode auth login',
-    effort: 'none',
+    // OpenCode 2 exposes per-model effort levels as thought_level (low to max);
+    // models without one omit effortLevels.
+    effort: 'claude',
     autoMode: 'asks',
     rewind: false,
     smallJobs: true,
@@ -79,7 +84,9 @@ export const PROVIDER_INFO: Record<Provider, ProviderInfo> = {
     name: 'Gemini',
     cliName: 'Antigravity',
     loginCommand: '',
-    effort: 'none',
+    // Its models list their own levels (low to high or xhigh), which narrow
+    // this (AcpSession sets them as the session's thought_level option).
+    effort: 'claude',
     autoMode: 'asks',
     rewind: false,
     smallJobs: false,
