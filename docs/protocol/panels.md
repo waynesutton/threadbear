@@ -820,3 +820,45 @@ pretty-printed, 16 KB in all. A bear that's away holds them in
 
 `webhooks.create` and `revoke` need Full access from a thread. Turning the
 experiment off revokes every hook.
+
+## Prints
+
+The pages experiment (`runner/src/pages.ts`). People and agents call these **Prints** since 10 Nov 2026 (Wayne picked the name, in the app's sewing-box vocabulary: threads, patches, pins, pocket). Only the words changed: the methods, the notification, the `Page` type, the `pg_` ids, the experiment's id and the `pages` folder keep "page", so an app and a runner from either side of the rename work together. A Print is a named, versioned page an agent makes for the user (a bundle size report, a progress card) that outlives the reply it was posted in. The runner keeps it, not a folder, so it can be in zero, one or several projects whatever folder its thread ran in.
+
+```ts
+type Page = {
+  id: string            // "pg_bundle_size"
+  title: string
+  summary: string       // at most 280 characters, for lists and other apps
+  ownerThread: string   // the thread that made it
+  projects: { id: string; by: "mike" | "agent" | "librarian"; pinned?: boolean }[]
+  version: number       // 1 up; each content change is a new version
+  bytes: number
+  live: boolean         // scripts allowed, run only after Run them in the side pane
+  source?: string       // what made it ("bundle-analyzer summary"), so a rerun updates it
+  kind?: "page" | "chart" | "dashboard" | "report" | "doc" | "diagram" | "bundle" | "todo" | "board"  // absent: "page"
+  recipe?: string       // how to make it again, for Refresh; an agent follows it
+  editedBy?: "agent" | "user"  // who wrote the newest version
+  published?: { slug: string; at: string; version: number }  // while published: its link's slug, and the version last sent
+  deletedAt?: string    // while deleted
+  createdAt: string
+  updatedAt: string
+}
+```
+
+- **Stored** in `<home>/pages/`: `index.json`, and each version as a folder `<id>/v<n>/` holding `index.html` and the assets it names (`.css .svg .png .jpg .webp .gif .mp4 .webm .woff2`). The last 10 versions are kept. Nothing about a print goes to Convex unless the user publishes it.
+- **Published** (opt-in, per print, API 98): `pages.publish` puts the newest `index.html` (only that file, static, at most 700,000 characters) in the backend's `prints` table. `prints:view { slug }` answers the website's `/p/<slug>` page for anyone with the link; it draws the HTML in a frame with an empty `sandbox` behind the same Content-Security-Policy as a page in a reply (`web/src/print-doc.ts`), so it can't run, load or go anywhere. `prints:list { token }` gives the phone and website the published ones without their HTML. The Mac asks before publishing; an agent's `publish_print` always asks the user.
+- **Static by default.** A page whose HTML has `<script` is refused unless it was made `live`. Links, `.js` and `.json` files are refused in a page folder. `index.html` is at most 1 MB and the folder 25 MB.
+- **Projects.** Made with no `projects`, a page joins its thread's project when the thread is pinned to exactly one; `[]` means none.
+- **Docs.** A page given as `markdown` is a doc: the runner draws it (`runner/src/page-doc.ts`, a small escaped subset: headings, lists, task lists, tables, quotes, code, http(s) and mailto links; no HTML passes through) and keeps the text as `source.md` beside it, so the user can edit it (`pages.saveDoc`) and the next agent starts from their words.
+- **Diagrams.** A Print given as `mermaid` is a diagram. The runner renders static SVG with the app's pinned Pele bundle, keeps `source.mmd`, and returns it from `pages.get` and `read_print`. Edit Text saves through `pages.saveDiagram`. Source and generated HTML are size-limited; rendering has a timeout. Source is never executed as code. Restore and export keep the Mermaid source. Only the resulting static HTML goes to Convex when published.
+- **Todo lists and boards.** `create_print` with `markdown` and `kind: "todo"` or `"board"` (`runner/src/page-list.ts`). A todo list is GitHub task-list markdown (`- [ ] item`, `- [x] done`) under optional headings; a board is one `#`, `##` or `###` heading per column with a list item per card. The runner draws them static, like a doc, with each box and each card's move a link: `threadbear-print:toggle?v=<version>&item=<n>` and `threadbear-print:move?v=<version>&card=<n>&to=<column>`, counted in source order from 0. The Mac app catches those links in a Print's view (nothing else follows them) and calls `pages.toggleItem { pageId, version, item }` or `pages.moveCard { pageId, version, card, to }`, which change that line of the source and save a new version marked edited by the user (so Versions undoes a click). A `version` that isn't the newest is refused (`-32602`, saying it changed). Editing the text keeps the kind, and restoring an old version draws it again so its links name the new version. Published or downloaded, the links go nowhere.
+- **Deleted** pages are kept 7 days (`pages.restore`), then removed with their files when the store next loads.
+- **Agent tools:** `create_print` (`kind`, `markdown`, `mermaid`, `recipe`), `update_print` (`markdown`, `mermaid`, `recipe`, `restoreVersion`), `list_prints` (`deleted`), `read_print` (`version`; shows the recipe, kept versions and Markdown or Mermaid source), `delete_print`, `restore_print`, `export_print`, `publish_print` (always asks the user), `unpublish_print`, `add_print_to_project`, `remove_print_from_project`, only while the experiment is on. `list_prints` and `read_print` never ask. The older arguments still work, and so does each tool's name from before the rename (`create_page` and the rest), for sessions that loaded them.
+- **Only when asked.** With `Settings.printsWhenAsked` on, `create_print`'s description says to make a Print only when the user asks for one, and the runner checks: when the thread's latest `user.message` doesn't name a print, chart, graph, dashboard or diagram (whole words, either number), the call puts an approval card up first ("Make the print "<title>"? You asked to approve Prints you didn't ask for."). Deny makes nothing and tells the agent so. Other Print tools act on one that exists and don't ask.
+- **Progress prints.** With `Settings.progressPrints` false (runner.json `progressPrints: false`; true when absent), `create_print`'s description says progress prints are off and to start work without asking, and a call whose `source` starts with `progress:` (the make-print skill's progress print) makes nothing and answers, not as an error, that it wasn't made and to carry on. No card, so a long task never waits on it. Other Prints are made as usual.
+- **Updates ask once.** In Ask before edits, a Claude session that was allowed one `update_print` (or `update_page`) on a Print id lets later updates to that id through without a card (`printGrants` in `adapters/claude/adapter.ts`), for as long as the session lives. Only an Allow counts; a Deny asks again next time. Other Prints, and other Print tools, still ask. Codex threads ask every time.
+- **Skills.** `make-print` builds charts, dashboards and reports from CSV, TSV, JSON or XLSX through a spec, and exports PDFs; `bundle-report` is its recipe for Convex bundle size. Both live in the user's skills folder, not the repo.
+- **In a reply**, an agent shows a print with a ```` ```print <id> ```` block (```` ```page ````, its name before the rename, still works; the id in the info string, or alone on the fence's one line; `PageFence`). The Mac app draws it as a card (`PageCardCell`, "Preview on top", Wayne picked it on 10 Nov 2026): the top of the newest version's `index.html` from `pages.get`, drawn off screen under the html block's lockdown at 1080 by 470 and scaled down, over a footer with the kind, title, version and age and Open, Refresh and a ⋯ menu. It follows `pages.updated`, so every card naming a page shows its newest version; a version newer than the first made in the last 15 minutes is marked "New version". With the experiment off, or in an app that doesn't know pages, the block shows as code.
+- **In the Mac app's Highlights and rail** (app-side only, from `pages.list` and `pages.updated`): Highlights has a Prints section for the thread's own (`ownerThread`), and the rail's built-in `threadbear.prints` panel lists every Print with its projects. Neither is a patch panel, and another runner's thread doesn't show the rail button.
+- **On the website**, the same block is a card too (`print-card.tsx`, read with the Mac's rules in `web/src/print-fence.ts`). Its title, kind, version and summary come from `prints:list` (API 98), and Open goes to the Print's `/p/<slug>` page. A Print that isn't published has no row, so its card says it's kept on the Mac that made it. It never reads the Mac's files, and a shared page (`/s/`) has no list, so its cards all say that. The iPhone app still shows the block as code.

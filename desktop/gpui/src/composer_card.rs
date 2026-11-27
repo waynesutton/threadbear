@@ -871,10 +871,6 @@ impl Composer {
 
     /// RowRenderer.doneText: Done, with Archive at the right, and the agent's
     /// follow-ups under "Or carry on", each a row with a tick and a "?".
-    #[expect(
-        clippy::too_many_lines,
-        reason = "baselined when the lint came in with Mike's 21 Nov 2026 release; split it when it's next worked on"
-    )]
     fn render_done_card(
         &mut self,
         card: &AsksCard,

@@ -45,8 +45,8 @@ It was all this one file once. Work made on that comes across by itself in `tb l
 | [threads.md](protocol/threads.md) | Pictures in a message, Queued calls, Plan first, Slash commands, Context breakdown, Editing a message, Who started a thread, Who archived a thread, Search, Searching Agent Archive, What Mike last asked, What Mike first asked (taken out), Loose ends, Nested threads, Clearer completion, A quiet inbox, Inbox guess, Secrets |
 | [patches.md](protocol/patches.md) | Patches, The Convex panel, The Git panel, Plans as files, Skills |
 | [trust.md](protocol/trust.md) | Trusting a folder's patches, What changed, Trusting a folder's Claude Code hooks |
-| [panels.md](protocol/panels.md) | Highlights, Worktrees, Showing panels, The Browser panel, Profile page, Pull requests, Connectors, Gateway approvals, Connectors setup, Outside agents, Bears, Tables, Webhooks |
-| [projects.md](protocol/projects.md) | Projects, Project tasks, Prints, Schedules, Recipes, Habits, Project coordinators, Tasks and work items, Handing a project to its coordinator |
+| [panels.md](protocol/panels.md) | Highlights, Worktrees, Showing panels, The Browser panel, Profile page, Pull requests, Connectors, Gateway approvals, Connectors setup, Outside agents, Bears, Tables, Webhooks, Prints |
+| [projects.md](protocol/projects.md) | Projects, Project tasks, Schedules, Recipes, Habits, Project coordinators, Tasks and work items, Handing a project to its coordinator |
 | [runners.md](protocol/runners.md) | Other runners' threads, Other runners' threads through the backend, Asking another runner, Sharing |
 | [moves.md](protocol/moves.md) | Moving a thread to another runner, Sync, Devices |
 | [keys.md](protocol/keys.md) | Runner keys, Virtual runners |
