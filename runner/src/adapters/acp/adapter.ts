@@ -447,6 +447,9 @@ export class AcpSession implements AgentSession {
   // in place of ours: then none of its calls go ahead unasked (Cursor's
   // ~/.cursor/mcp.json or the folder's).
   private ownShadowed = false;
+  // Its own tools' answers, by tool, oldest first, for an agent whose result
+  // frames don't carry them (AcpNormalizer, ownResult). Cleared each turn.
+  private ownResults = new Map<string, { ok: boolean; text: string }[]>();
   // Whether this turn's end_turn was taken (mcp-http.ts, onResult), so a turn
   // that ended without it is sent back once (runTurn), as Claude's Stop hook
   // does.
@@ -495,7 +498,11 @@ export class AcpSession implements AgentSession {
     this.rules = new Set(opts.allowRules ?? []);
     this.exitPromise = new Promise((r) => (this.resolveExit = r));
     this.ctx = fileContext(opts.cwd, opts.mediaDir, opts.blobsDir);
-    this.normalizer = new AcpNormalizer(this.ctx, { movesAskedCalls: this.deps.agent.movesAskedCalls === true });
+    this.normalizer = new AcpNormalizer(this.ctx, {
+      movesAskedCalls: this.deps.agent.movesAskedCalls === true,
+      wrapsMcpCalls: this.deps.agent.wrapsMcpCalls === true,
+      ownResult: (tool) => this.ownResults.get(tool)?.shift(),
+    });
     this.trusted = deps.agent.trusts?.(opts.cwd) ?? false;
     this.binary = binary;
     this.startRefusal = deps.agent.refuses?.({ cwd: opts.cwd, mode: 'ask', trusted: this.trusted, binary });
@@ -544,6 +551,7 @@ export class AcpSession implements AgentSession {
         addRules: (rules) => this.addRules(rules),
         onResult: (name, r) => {
           if (name === 'end_turn' && endTurnTaken(r)) this.endTurnTaken = true;
+          if (this.deps.agent.wrapsMcpCalls) this.ownResults.set(name, [...(this.ownResults.get(name) ?? []), r]);
         },
         ...(opts.coordinator
           ? {
@@ -1320,6 +1328,7 @@ export class AcpSession implements AgentSession {
       this.guardSeen = false;
       dispatched = true;
       this.endTurnTaken = false;
+      this.ownResults.clear();
       let r = await this.proc.request<{ stopReason?: string }>('session/prompt', { sessionId: this.sessionId, prompt: this.promptBlocks(input) }, null);
       // A turn that finished without end_turn leaves the runner reading the
       // card from the prose, which drops follow-ups and the task list; on

@@ -59,6 +59,9 @@ export type AcpAgent = {
   // the agent says. A threadbear tool's request is allowed as it comes: the
   // runner's own MCP server gates those (tool-gate.ts).
   mcpToolName?(call: AcpToolCall): string | undefined;
+  // Its MCP calls come wrapped ({ providerIdentifier, toolName, args }) and
+  // its results don't carry the server's answer (AcpNormalizer).
+  wrapsMcpCalls?: boolean;
   // The plugin a process started with these args must report running before
   // the model does anything each turn, or the turn is stopped (AcpSession).
   guardName?(args: string[]): string | undefined;
@@ -530,6 +533,7 @@ export const ACP_AGENTS: Record<AcpProvider, AcpAgent> = {
     // (AcpSession, ownShadowed): its calls would look like ours.
     mcpConfigFiles: (home, cwd) => [path.join(home, '.cursor', 'mcp.json'), path.join(cwd, '.cursor', 'mcp.json')],
     mcpToolName: cursorMcpToolName,
+    wrapsMcpCalls: true,
   },
   grok: {
     provider: 'grok',

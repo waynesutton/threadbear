@@ -329,10 +329,12 @@ async function prompt(id, p) {
     });
     log({ answered: r });
     if (r.outcome?.outcome === 'selected' && r.outcome.optionId !== 'reject-once') {
+      update(p.sessionId, { sessionUpdate: 'tool_call_update', toolCallId, status: 'in_progress' });
       const headers = Object.fromEntries(s.mcp.headers.map((h) => [h.name, h.value]));
       const res = await fetch(s.mcp.url, { method: 'POST', headers: { 'content-type': 'application/json', ...headers }, body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: 'end_turn', arguments: {} } }) });
       log({ endTurn: (await res.json()).result });
-      update(p.sessionId, { sessionUpdate: 'tool_call_update', toolCallId, status: 'completed', rawOutput: { success: true } });
+      // As Cursor does: the arguments back as the content, and no answer.
+      update(p.sessionId, { sessionUpdate: 'tool_call_update', toolCallId, status: 'completed', content: [{ type: 'content', content: { type: 'text', text: '```json\n{"headline":"probe"}\n```' } }], rawOutput: { success: true } });
     }
   }
   // OpenCode 2's question tool, as a form (when the client offered forms).

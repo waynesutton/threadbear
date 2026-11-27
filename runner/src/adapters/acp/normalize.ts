@@ -27,6 +27,8 @@ type AcpToolContent = { type?: string; content?: AcpBlock; path?: string; newTex
 
 type Tool = {
   id: string;
+  // Its input came from Cursor's MCP wrapper, which later frames don't replace.
+  unwrapped?: boolean;
   // The row's item id: the call's own, or the request's it took over
   // (askedFor).
   row: string;
@@ -217,10 +219,19 @@ export class AcpNormalizer {
   costUsd?: number;
 
   private movesAskedCalls: boolean;
+  // Cursor: an MCP call's rawInput is { providerIdentifier, toolName, args },
+  // and its result only says it worked, with the arguments as its content.
+  private wrapsMcpCalls: boolean;
+  // What Threadbear's own MCP server answered a call of one of its tools
+  // (adapter.ts), in the order they ran: for an agent whose frames don't
+  // carry it, the runner's only way to see end_turn taken or refused.
+  private ownResult?: (tool: string) => { ok: boolean; text: string } | undefined;
 
-  constructor(ctx: NormalizerContext, o: { movesAskedCalls?: boolean } = {}) {
+  constructor(ctx: NormalizerContext, o: { movesAskedCalls?: boolean; wrapsMcpCalls?: boolean; ownResult?: (tool: string) => { ok: boolean; text: string } | undefined } = {}) {
     this.ctx = ctx;
     this.movesAskedCalls = o.movesAskedCalls === true;
+    this.wrapsMcpCalls = o.wrapsMcpCalls === true;
+    this.ownResult = o.ownResult;
   }
 
   // The last reply's words, for a Plan first thread's plan card.
@@ -319,7 +330,13 @@ export class AcpNormalizer {
       // and the thread it reviewed slept on (16 Nov 2026, 53cd067b).
       t.name = wrapped.name;
       t.input = wrapped.input;
-    } else if (isPlainObject(u.rawInput) && Object.keys(u.rawInput).length) t.input = u.rawInput;
+    } else if (this.wrapsMcpCalls && isPlainObject(u.rawInput) && typeof u.rawInput.providerIdentifier === 'string' && u.rawInput.providerIdentifier && typeof u.rawInput.toolName === 'string' && u.rawInput.toolName && isPlainObject(u.rawInput.args)) {
+      // Cursor's wrapper: the row is the tool it calls, with that tool's
+      // arguments, so end_turn's card fields reach the runner (27 Nov 2026).
+      t.name = `mcp__${u.rawInput.providerIdentifier}__${u.rawInput.toolName}`;
+      t.input = u.rawInput.args;
+      t.unwrapped = true;
+    } else if (isPlainObject(u.rawInput) && Object.keys(u.rawInput).length && !t.unwrapped) t.input = u.rawInput;
     // Everything this call has ever named, however it was named.
     for (const p of requestPaths(u)) if (!t.paths.includes(p)) t.paths.push(p);
     if (Array.isArray(u.content)) t.output = u.content;
@@ -442,6 +459,12 @@ export class AcpNormalizer {
 
   private emitResult(t: Tool, ok: boolean, out: AdapterOutput[]): void {
     t.done = true;
+    const name = canonicalToolName(t.name || t.title || t.acpKind || 'tool');
+    const own = this.wrapsMcpCalls && ok && name.startsWith('mcp__threadbear__') ? this.ownResult?.(name.slice('mcp__threadbear__'.length)) : undefined;
+    if (own) {
+      out.push({ kind: 'event', event: { type: 'tool.result', itemId: t.row, ok: own.ok, ...truncateResultText(own.text, t.row, this.ctx), images: [] } });
+      return;
+    }
     const texts: string[] = [];
     const images: ImageRef[] = [];
     const pushContentBlock = (block: unknown): void => {

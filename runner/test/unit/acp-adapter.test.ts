@@ -545,6 +545,16 @@ test('Cursor: Threadbear\'s own end_turn goes ahead in Ask with no card, and the
   assert.ok(!r.outputs.some((o) => o.kind === 'endTurnNudge'));
 });
 
+test('Cursor: the runner sees end_turn by name, with its own arguments and Threadbear\'s answer', async () => {
+  const r = cursor({ mode: 'full' });
+  await turn(r, r.start(), 'cursormcp');
+  const call = (events(r.outputs, 'tool.call') as { itemId: string; name: string; input: Record<string, unknown> }[]).find((e) => e.name === 'mcp__threadbear__end_turn');
+  assert.ok(call, 'named end_turn, not "threadbear: end_turn" or "MCP: tool"');
+  assert.deepEqual(call.input, { headline: 'probe' }, 'the arguments, not Cursor\'s wrapper');
+  const result = (events(r.outputs, 'tool.result') as { itemId: string; ok: boolean; text: string }[]).find((e) => e.itemId === call.itemId);
+  assert.ok(result?.ok && result.text.startsWith('Noted'), `Threadbear's answer, not the echoed arguments: ${result?.text}`);
+});
+
 test('Cursor: a server of the folder\'s own named threadbear still asks, as its calls look like ours', async () => {
   const r = cursor();
   fs.mkdirSync(path.join(r.cwd, '.cursor'));
