@@ -90,7 +90,9 @@ function droppedNestedNullHint(raw: Record<string, unknown>, issues: readonly z.
   return `\nIf your tool wrapper dropped nested objects to null, pass ${[...topFields].join(', ')} as a JSON-encoded string instead.`;
 }
 
-export type AcpMcpDeps = ToolGateDeps & { log: Logger; label: string };
+// onResult: each call's outcome, so the adapter knows whether end_turn was
+// taken this turn (adapter.ts, runTurn) without reading the event stream.
+export type AcpMcpDeps = ToolGateDeps & { log: Logger; label: string; onResult?: (name: string, result: { ok: boolean; text: string }) => void };
 
 type JsonRpcRequest = { jsonrpc?: string; id?: number | string | null; method?: unknown; params?: unknown };
 
@@ -267,6 +269,8 @@ export class AcpMcpServer {
     if (!gate.allowed) return this.text(gate.message, true);
     try {
       const result = await tool.handler(args, { signal });
+      const text = (result.content ?? []).map((c) => (c && typeof c === 'object' && 'text' in c && typeof c.text === 'string' ? c.text : '')).join('');
+      this.deps.onResult?.(name, { ok: !result.isError, text });
       return { content: result.content ?? [], ...(result.isError ? { isError: true } : {}) };
     } catch (e) {
       return this.text((e as Error)?.message ?? String(e), true);

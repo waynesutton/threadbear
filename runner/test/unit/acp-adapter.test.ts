@@ -12,6 +12,8 @@ import type { AcpAgent } from '../../src/adapters/acp/agents.ts';
 import { AcpMcpServer } from '../../src/adapters/acp/mcp-http.ts';
 import { commandRule } from '../../src/adapters/codex/approvals.ts';
 import { remoteCardShowsAll } from '../../src/tools.ts';
+import { ACP_END_TURN_NUDGE } from '../../src/needs.ts';
+import type { ToolDefinition } from '../../src/adapters/codex/tools.ts';
 import type { AdapterOutput, QuestionAnswer, QuestionRequest, SessionSink, StartSessionOptions, ToolApprovalAnswer, ToolApprovalRequest } from '../../src/adapters/types.ts';
 import type { Account, PermissionMode } from '../../src/protocol.ts';
 import { nullLogger } from '../../src/log.ts';
@@ -44,7 +46,7 @@ afterEach(async () => {
   for (const d of made.splice(0)) fs.rmSync(d, { recursive: true, force: true });
 });
 
-function rig(o: { mode?: PermissionMode; agent?: AcpAgent; env?: Record<string, string>; opts?: Partial<StartSessionOptions>; mcpServers?: () => Record<string, { command: string; args: string[] }>; deny?: boolean; answer?: (r: ToolApprovalRequest) => ToolApprovalAnswer | Promise<ToolApprovalAnswer>; question?: (r: QuestionRequest) => QuestionAnswer | Promise<QuestionAnswer>; extraMcpServers?: () => Promise<unknown[]> } = {}) {
+function rig(o: { mode?: PermissionMode; agent?: AcpAgent; env?: Record<string, string>; opts?: Partial<StartSessionOptions>; mcpServers?: () => Record<string, { command: string; args: string[] }>; deny?: boolean; answer?: (r: ToolApprovalRequest) => ToolApprovalAnswer | Promise<ToolApprovalAnswer>; question?: (r: QuestionRequest) => QuestionAnswer | Promise<QuestionAnswer>; extraMcpServers?: () => Promise<unknown[]>; toolsFor?: () => ToolDefinition[] } = {}) {
   const root = tmp();
   made.push(root);
   const cwd = path.join(root, 'work');
@@ -85,6 +87,7 @@ function rig(o: { mode?: PermissionMode; agent?: AcpAgent; env?: Record<string, 
     timings: { closeWaitMs: 300 },
     ...(o.extraMcpServers ? { extraMcpServers: o.extraMcpServers } : {}),
     ...(o.mcpServers ? { mcpServers: o.mcpServers } : {}),
+    ...(o.toolsFor ? { toolsFor: o.toolsFor } : {}),
   });
   const start = (): AcpSession => {
     const s = adapter.start(
@@ -494,6 +497,41 @@ test("Cursor isn't offered when the only `agent` is another program's", () => {
   fs.rmSync(path.join(home, '.local', 'bin', 'agent'));
   fs.symlinkSync(path.join(dir, 'cursor-agent'), path.join(home, '.local', 'bin', 'agent'));
   assert.deepEqual(acpAccounts({ home, pathEnv: path.join(home, '.local', 'bin') }).map((a) => a.id), ['cursor-main']);
+});
+
+// ---- end_turn for agents with no Stop hook
+
+// Threadbear's end_turn as the handler answers a taken one (needs.ts, endTurnTaken).
+const endTurnTool = (): ToolDefinition => ({
+  name: 'end_turn',
+  description: 'end_turn',
+  inputSchema: {},
+  handler: async () => ({ content: [{ type: 'text', text: 'Noted: this thread is done. Now write your reply.' }] }),
+});
+
+test('A turn that ends without end_turn is sent back once to call it, in the same turn', async () => {
+  const r = rig({ mode: 'full', toolsFor: () => [endTurnTool()] });
+  const s = r.start();
+  await turn(r, s, 'hello');
+  const prompts = r.log().flatMap((l) => ('prompt' in l ? [l.prompt as string] : []));
+  assert.equal(prompts.length, 2, 'the turn, then one nudge');
+  assert.equal(prompts[1], ACP_END_TURN_NUDGE);
+  const kinds = r.outputs.map((o) => o.kind);
+  assert.ok(kinds.indexOf('endTurnNudge') >= 0 && kinds.indexOf('endTurnNudge') < kinds.indexOf('result'), 'the runner hears of the nudge before the result');
+  assert.equal(results(r.outputs).length, 1, 'one turn, one result');
+});
+
+test('A turn that took end_turn, or was never offered it, is not sent back', async () => {
+  const offered = rig({ mode: 'full', toolsFor: () => [endTurnTool()] });
+  await turn(offered, offered.start(), 'endturn');
+  const called = offered.log().find((l) => 'endTurn' in l)?.endTurn as { isError?: boolean } | undefined;
+  assert.ok(called && !called.isError, 'the agent called end_turn and it was taken');
+  assert.equal(offered.log().filter((l) => 'prompt' in l).length, 1);
+  assert.ok(!offered.outputs.some((o) => o.kind === 'endTurnNudge'));
+  const plain = rig({ mode: 'full' });
+  await turn(plain, plain.start(), 'hello');
+  assert.equal(plain.log().filter((l) => 'prompt' in l).length, 1);
+  assert.ok(!plain.outputs.some((o) => o.kind === 'endTurnNudge'));
 });
 
 // ---- The MCP endpoint

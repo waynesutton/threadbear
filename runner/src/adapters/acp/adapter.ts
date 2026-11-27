@@ -23,6 +23,7 @@ import { toolGuidance, type ToolDefinition } from '../codex/tools.ts';
 import { fileContext, type NormalizerContext } from '../context.ts';
 import { formContent, formQuestions, type FormSchema } from '../elicitation.ts';
 import { acpCoordinatorTool, archiveReadTool, isHelperQuestionTool } from '../../coordinator-policy.ts';
+import { ACP_END_TURN_NUDGE, endTurnTaken } from '../../needs.ts';
 import type { AdapterOutput, AgentAdapter, AgentSession, QuestionAnswer, SessionSink, StartSessionOptions, ToolApprovalAnswer, TurnResult, UserInput } from '../types.ts';
 import { SessionNotFoundError } from '../types.ts';
 import type { AcpAgent } from './agents.ts';
@@ -442,6 +443,10 @@ export class AcpSession implements AgentSession {
   private ownEfforts = new Map<string, { levels: EffortLevel[]; defaultEffort?: EffortLevel }>();
   // The threadbear tools this session's MCP server offers, as the agent names them.
   private ownTools = new Set<string>();
+  // Whether this turn's end_turn was taken (mcp-http.ts, onResult), so a turn
+  // that ended without it is sent back once (runTurn), as Claude's Stop hook
+  // does.
+  private endTurnTaken = false;
   // Agent Archive is the runner's own server in this session (session start).
   private archiveOurs = false;
   // Every frame of a tool call, by id, as the agent sent it: whether any said
@@ -533,6 +538,9 @@ export class AcpSession implements AgentSession {
         mode: () => this.mode,
         rules: () => this.rules,
         addRules: (rules) => this.addRules(rules),
+        onResult: (name, r) => {
+          if (name === 'end_turn' && endTurnTaken(r)) this.endTurnTaken = true;
+        },
         ...(opts.coordinator
           ? {
               checkCoordinator: (fullName: string, args: Record<string, unknown>) =>
@@ -1297,7 +1305,19 @@ export class AcpSession implements AgentSession {
       if (turn.interrupted) throw new Error('Stopped');
       this.guardSeen = false;
       dispatched = true;
-      const r = await this.proc.request<{ stopReason?: string }>('session/prompt', { sessionId: this.sessionId, prompt: this.promptBlocks(input) }, null);
+      this.endTurnTaken = false;
+      let r = await this.proc.request<{ stopReason?: string }>('session/prompt', { sessionId: this.sessionId, prompt: this.promptBlocks(input) }, null);
+      // A turn that finished without end_turn leaves the runner reading the
+      // card from the prose, which drops follow-ups and the task list; on
+      // 27 Nov 2026 Gemini, OpenCode and Cursor threads ended with no card at
+      // all. Claude's Stop hook sends such a turn back once; ACP has no hook,
+      // so the adapter asks in one more prompt, in the same turn. The runner
+      // is told first, so words from here are dropped like any after
+      // end_turn and the reply already written stands.
+      if (this.owesEndTurn(turn, r?.stopReason)) {
+        this.sink.output({ kind: 'endTurnNudge' });
+        r = await this.proc.request<{ stopReason?: string }>('session/prompt', { sessionId: this.sessionId, prompt: [{ type: 'text', text: ACP_END_TURN_NUDGE }] }, null);
+      }
       this.emit(this.normalizer.closeOpen('Stopped'));
       result = this.resultFor(turn, r?.stopReason);
       const effort = this.effortNow();
@@ -1365,6 +1385,17 @@ export class AcpSession implements AgentSession {
     } catch (e) {
       this.deps.log.info('could not read the login\'s limits', { threadId: this.opts.threadId, error: String(e) });
     }
+  }
+
+  // Whether a turn that just finished is sent back for end_turn: only one
+  // that ended normally, in a session offered it, that didn't take one.
+  // Not in plan mode (the plan is the last text), nor for a coordinator's
+  // helper, whose calls never reach the thread.
+  private owesEndTurn(turn: Turn, stop: string | undefined): boolean {
+    if (turn.interrupted || this.endTurnTaken || this.mode === 'plan') return false;
+    if (stop !== undefined && stop !== 'end_turn') return false;
+    if (this.opts.coordinator?.role === 'helper') return false;
+    return this.ownTools.has('threadbear__end_turn');
   }
 
   private resultFor(turn: Turn, stop: string | undefined): TurnResult {

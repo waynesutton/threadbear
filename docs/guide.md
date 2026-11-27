@@ -2184,7 +2184,11 @@ first, and reads inside the thread's folder go ahead.
 Everything the agent wants to do comes through Threadbear first: on Ask and
 Plan first you get the usual cards, Auto behaves like Ask, and Full access
 goes ahead without them. A folder's own OpenCode config and plugins aren't
-read in these threads. Cursor can't be told to always ask, so its Ask, Auto
+read in these threads. These threads end with the same Done and Needs you
+cards as Claude's: a turn that finishes without calling `end_turn` is sent
+back once, in the same turn, to call it, so its follow-ups and task list
+reach the card. An agent that doesn't take MCP servers over HTTP never gets `end_turn`, so
+its card is still read from the reply. Cursor can't be told to always ask, so its Ask, Auto
 and Plan first threads run in its read-only modes and can't change
 anything; to let Cursor change files, use Full access. Grok's own settings
 (including your `~/.claude/settings.json`, which it reads) can tell it to

@@ -305,6 +305,12 @@ async function prompt(id, p) {
   if (AGY) return agyPrompt(id, p, s, word, rest);
   if (word === 'write') await runTool(p.sessionId, s.cwd, 'edit', { filePath: rest[0], content: rest.slice(1).join(' ') }, [{ path: rest[0] }], () => fs.writeFileSync(rest[0], rest.slice(1).join(' ')));
   else if (word === 'exec') await runTool(p.sessionId, s.cwd, 'execute', { command: rest.join(' ') }, [], () => log({ ran: rest.join(' ') }));
+  // Calls Threadbear's own end_turn over the HTTP MCP server it was given.
+  else if (word === 'endturn' && s.mcp) {
+    const headers = Object.fromEntries(s.mcp.headers.map((h) => [h.name, h.value]));
+    const r = await fetch(s.mcp.url, { method: 'POST', headers: { 'content-type': 'application/json', ...headers }, body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: 'end_turn', arguments: {} } }) });
+    log({ endTurn: (await r.json()).result });
+  }
   // OpenCode 2's question tool, as a form (when the client offered forms).
   else if (word === 'form') {
     if (!clientForms) log({ form: 'not offered' });
@@ -435,7 +441,7 @@ const handlers = {
   'session/new': (p) => {
     if (env.FAKE_ACP_NEEDS_LOGIN) throw Object.assign(new Error('Authentication required'), { code: -32000 });
     const sessionId = `ses-${Math.random().toString(36).slice(2)}`;
-    sessions.set(sessionId, { cwd: p.cwd, dirs: p.additionalDirectories, steps: 0 });
+    sessions.set(sessionId, { cwd: p.cwd, dirs: p.additionalDirectories, steps: 0, mcp: (p.mcpServers ?? []).find((m) => m.type === 'http' && m.name === 'threadbear') });
     openedSession(p.cwd);
     log({ newSession: { cwd: p.cwd, mcpServers: p.mcpServers, ...(p.additionalDirectories ? { additionalDirectories: p.additionalDirectories } : {}) } });
     if (AGY) {
