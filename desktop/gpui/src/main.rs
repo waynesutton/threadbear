@@ -122,7 +122,6 @@ mod patch_icons;
 mod patches;
 mod picture_picker;
 mod pinned_panels;
-mod plan_board;
 mod pr_view;
 mod prefs;
 mod print_cards;

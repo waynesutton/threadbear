@@ -573,16 +573,6 @@ impl TranscriptModel {
         });
     }
 
-    /// Closes an open asks card when the user resolves the step directly on
-    /// the Plan board (Approve plan, Pick take, or Send box).
-    pub fn dismiss_open_asks(&mut self) -> TranscriptChange {
-        if self.open_asks_row.is_none() {
-            return TranscriptChange::default();
-        }
-        self.close_open_asks();
-        self.refresh_rows()
-    }
-
     /// Mike picked (or unpicked) answers on the card from `seq`.
     pub fn set_ask_picks(&mut self, seq: i64, picks: BTreeMap<i64, i64>) -> TranscriptChange {
         if self.ask_picks.get(&seq).cloned().unwrap_or_default() == picks {
@@ -1800,30 +1790,6 @@ impl TranscriptModel {
                     ..ToolItem::default()
                 };
                 self.append(Row::new(&row_id, seq, turn_id, RowContent::Tool(tool)));
-            }
-
-            // A plan board's new version (planBoard): one quiet line with a
-            // link that opens the board, the only other way to it besides
-            // the header's Show plan. A linked note never folds into the work.
-            EventPayload::BoardUpdated(board) => {
-                let version = board
-                    .get("version")
-                    .and_then(serde_json::Value::as_u64)
-                    .unwrap_or(0);
-                let thread = board
-                    .get("threadId")
-                    .and_then(serde_json::Value::as_str)
-                    .unwrap_or_default();
-                if version > 0 && !thread.is_empty() {
-                    self.append(Row::new(
-                        &format!("board:{seq}"),
-                        seq,
-                        turn_id,
-                        RowContent::Note(format!(
-                            "Drew a plan (v{version}) · [Show plan](board:{thread})"
-                        )),
-                    ));
-                }
             }
 
             // No row: the reply that links it draws it (ReplyButtons).

@@ -544,10 +544,6 @@ function mockExperiments() {
     ...(settings.experiments.some((e) => e.id === 'threadCanvas' && e.on) || process.env.TB_MOCK_THREAD_CANVAS ? ['threadCanvas'] : []),
     // Agent Archive in the sidebar's search, with TB_MOCK_ARCHIVE (ARCHIVE_SESSIONS).
     ...(process.env.TB_MOCK_ARCHIVE ? ['archive'] : []),
-    // The plan board, with TB_MOCK_PLAN_BOARD (addPlanBoardDemo).
-    // Its sent boxes nest under the planner, as they do with nestedThreads on.
-    ...(planBoardOn() ? ['planBoard', ...(process.env.TB_MOCK_NESTED ? [] : ['nestedThreads'])] : []),
-    ...(planBoardOn() && process.env.TB_MOCK_PLAN_MOCKUPS ? ['planBoardMockups'] : []),
   ];
 }
 
@@ -851,92 +847,6 @@ const mockPr = {
 // threads it started, as in mockup sub-A. Only when asked, as it adds rows
 // other specs count.
 if (process.env.TB_MOCK_NESTED) addDemoNested();
-
-// TB_MOCK_PLAN_BOARD: the planBoard experiment (runner/src/experiments/planBoard.md)
-// with a planner thread whose agent drew a v1 plan, and "Fix the login bug"
-// with none. The board's state lives here as the runner's boards.ts keeps it;
-// its graphs are written out already parsed, as the runner sends them.
-const planBoards = new Map();
-const ACME_GRAPH = (kpiLabel = 'KPI cards') => ({
-  direction: 'LR',
-  nodes: [
-    { id: 'store', label: 'Storefront', shape: 'box' },
-    { id: 'orders', label: 'ORDERS', shape: 'db' },
-    { id: 'summary', label: 'GET /api/summary', shape: 'box', group: 'server' },
-    { id: 'kpi', label: kpiLabel, shape: 'box', group: 'dash' },
-    { id: 'revenue', label: 'Revenue chart', shape: 'box', group: 'dash' },
-    { id: 'live', label: 'Live orders', shape: 'box', group: 'dash' },
-  ],
-  groups: [{ id: 'server', label: 'SERVER · NODE' }, { id: 'dash', label: 'DASHBOARD · REACT' }],
-  edges: [
-    { from: 'store', to: 'orders', label: 'new order' },
-    { from: 'orders', to: 'summary', label: 'read' },
-    { from: 'summary', to: 'kpi', label: 'every 5 s' },
-    { from: 'summary', to: 'revenue' },
-    { from: 'summary', to: 'live', line: true },
-  ],
-  notes: [],
-  skipped: 0,
-});
-function planBoardOf(threadId) {
-  const b = planBoards.get(threadId);
-  if (!b) return null;
-  const latest = b.versions[b.versions.length - 1];
-  return {
-    threadId, version: latest.version, savedAt: latest.savedAt, mermaid: latest.mermaid, graph: latest.graph,
-    ...(latest.note ? { note: latest.note } : {}), changed: latest.changed,
-    state: b.approved?.version === latest.version ? 'approved' : 'draft', approved: b.approved,
-    positions: b.positions, skills: b.skills, links: b.links,
-    versions: b.versions.map((v) => ({ version: v.version, savedAt: v.savedAt, ...(v.note ? { note: v.note.text } : {}) })),
-  };
-}
-function writePlanVersion(threadId, graph, note, changed = []) {
-  const b = planBoards.get(threadId) ?? { versions: [], approved: null, positions: {}, skills: [], links: {}, sends: {} };
-  planBoards.set(threadId, b);
-  b.versions.push({ version: (b.versions.at(-1)?.version ?? 0) + 1, savedAt: iso(), mermaid: 'flowchart LR', graph, ...(note ? { note: { text: note } } : {}), changed });
-  b.versions = b.versions.slice(-10);
-  return planBoardOf(threadId);
-}
-function addPlanBoardDemo() {
-  const now = iso();
-  const make = (id, title, text) => {
-    const summary = {
-      id, title, cwd: defaults.cwd, accountId: 'claude-main', provider: 'claude', model: defaults.models.claude, permissionMode: 'full',
-      status: 'idle', live: false, needsYou: false, needs: 'nothing', createdAt: now, updatedAt: now, lastActivityAt: now, preview: text, lastSeq: 0, lastSeenSeq: 0,
-    };
-    threads.set(id, { summary, events: [], inProgress: new Map(), timers: [] });
-    const push = (fields, turnId) => {
-      const t = threads.get(id);
-      t.events.push({ seq: t.events.length + 1, ts: now, threadId: id, ...(turnId ? { turnId } : {}), ...fields });
-      summary.lastSeq = summary.lastSeenSeq = t.events.length;
-    };
-    push({ type: 'user.message', text: title, images: [] }, `${id}_t0`);
-    push({ type: 'turn.started' }, `${id}_t0`);
-    return { summary, push };
-  };
-  const planner = make('pb_planner', 'Plan the Acme dashboard', 'The plan is on the board. Approve it and I can start the boxes.');
-  const board = writePlanVersion('pb_planner', ACME_GRAPH(), 'Orders reach the dashboard every 5 s.');
-  // As a real planner's turn goes: the board arrives while its update_board
-  // call is still open, among other work, one of which failed.
-  const tool = (itemId, name, ok, during) => {
-    planner.push({ type: 'tool.call', itemId, name, kind: 'mcp', title: `threadbear: ${name}`, input: {} }, 'pb_planner_t0');
-    during?.();
-    planner.push({ type: 'tool.result', itemId, ok, text: ok ? 'Done.' : 'Not ended: try again.', truncated: false, images: [] }, 'pb_planner_t0');
-  };
-  tool('pb_planner_u0', 'update_board', true, () => planner.push({ type: 'board.updated', board }, 'pb_planner_t0'));
-  // Its Highlights row, as the runner's highlights.ts finds it.
-  highlights.set('pb_planner', { highlights: [{ id: 'board', kind: 'link', title: 'Plan board', url: 'board:pb_planner', how: 'created', seq: 4, lastSeq: 4, at: now }], edited: [] });
-  tool('pb_planner_e0', 'end_turn', false);
-  tool('pb_planner_e1', 'end_turn', true);
-  planner.push({ type: 'assistant.text', itemId: 'pb_planner_m0', text: planner.summary.preview }, 'pb_planner_t0');
-  planner.push({ type: 'turn.completed', outcome: 'completed', durationMs: 9000, needs: 'nothing' }, 'pb_planner_t0');
-  const other = make('pb_login', 'Fix the login bug', 'Fixed: the session cookie now survives a reload.');
-  other.push({ type: 'assistant.text', itemId: 'pb_login_m0', text: other.summary.preview }, 'pb_login_t0');
-  other.push({ type: 'turn.completed', outcome: 'completed', durationMs: 4000, needs: 'nothing' }, 'pb_login_t0');
-}
-if (process.env.TB_MOCK_PLAN_BOARD) addPlanBoardDemo();
-const planFrames = new Map();
-const planBoardOn = () => Boolean(process.env.TB_MOCK_PLAN_BOARD) && !process.env.TB_MOCK_PLAN_BOARD_OFF;
 // Parts of a project (docs/protocol/projects.md, Projects, "Parts"): Photo sync as a
 // part of Threadbear, for features/projects.feature.
 if (process.env.TB_MOCK_PARTS) {
@@ -2105,8 +2015,6 @@ async function dispatch(client, method, p) {
         { name: 'cloudflare', description: 'Cloudflare platform: Workers, Pages, KV, D1, R2 and the rest.', source: 'skill' },
         { name: 'claude-api', description: 'Model ids, pricing, params and the Anthropic SDK.', source: 'skill' },
         { name: 'deslop', description: 'A second-pass cleanup over AI-written code using the repo style guide.', source: 'skill', scope: 'project', path: `${t.summary.cwd}/.claude/skills/deslop/SKILL.md` },
-        // The plan board's demo picks it as a board skill (plan-board.feature).
-        ...(planBoardOn() ? [{ name: 'component-canvas', description: 'Explore UI components and their variants on a canvas.', source: 'skill', scope: 'user' }] : []),
         { name: 'delegate', description: 'Get answers from other labs and models, and run consensus panels.', source: 'skill' },
         { name: 'ship', description: 'Drive a branch to merge-ready: PR, checks, bot comments.', source: 'skill', scope: 'store' },
       ];
@@ -2173,105 +2081,6 @@ async function dispatch(client, method, p) {
     case 'mock.failHighlights': {
       need(p.threadId).highlightsFailures = Number(p.count ?? 1);
       return {};
-    }
-    // The plan board (TB_MOCK_PLAN_BOARD; runner/src/board-methods.ts).
-    case 'board.get':
-    case 'board.approve':
-    case 'board.move':
-    case 'board.skills':
-    case 'board.send': {
-      if (!planBoardOn()) throw rpcError(-32010, 'Plan board is off. Turn it on in Settings > General > Experiments.');
-      const b = planBoards.get(p.threadId);
-      if (method === 'board.get') return { board: planBoardOf(p.threadId) };
-      if (!b) throw rpcError(-32602, 'This thread has no plan.');
-      const latest = b.versions.at(-1).version;
-      if (method === 'board.approve') {
-        if (p.version !== latest) throw rpcError(-32602, `That was v${p.version}; the plan is at v${latest} now.`);
-        b.approved = { version: latest, at: iso() };
-      } else if (method === 'board.move') {
-        if (p.tidy) b.positions = {};
-        for (const [id, at] of Object.entries(p.positions ?? {})) { if (at === null) delete b.positions[id]; else b.positions[id] = at; }
-      } else if (method === 'board.skills') {
-        b.skills = p.skills;
-      } else {
-        if (b.sends[p.requestId]) return { board: planBoardOf(p.threadId), repeated: true, threadId: b.sends[p.requestId] };
-        if (b.approved?.version !== latest) throw rpcError(-32602, "The plan isn't approved yet. Ask Wayne to press Approve plan.");
-        const node = b.versions.at(-1).graph.nodes.find((n) => n.id === p.nodeId);
-        if (!node) throw rpcError(-32602, `The plan has no box "${p.nodeId}".`);
-        await sleep(300);
-        const planner = need(p.threadId).summary;
-        const id = 'th_' + crypto.randomBytes(6).toString('hex');
-        const provider = p.accountId ? providerOf(p.accountId) : 'claude';
-        const now = iso();
-        const summary = {
-          id, title: p.title || node.label, cwd: planner.cwd, accountId: p.accountId ?? 'claude-main', provider, model: defaults.models[provider], permissionMode: p.permissionMode ?? planner.permissionMode,
-          status: 'running', live: true, needsYou: false, createdAt: now, updatedAt: now, lastActivityAt: now, preview: 'Edit src/components/' + node.label.replace(/\s+/g, '') + '.tsx', lastSeq: 0, lastSeenSeq: 0,
-          startedBy: { kind: 'thread', label: 'Plan board', threadId: planner.id, threadTitle: planner.title, why: `Box "${node.label}" of the plan` },
-        };
-        threads.set(id, { summary, events: [], inProgress: new Map(), timers: [] });
-        persist(id, { type: 'user.message', text: p.brief ?? node.label, images: [] }, `${id}_t0`);
-        persist(id, { type: 'turn.started' }, `${id}_t0`);
-        const was = b.links[p.nodeId];
-        b.links[p.nodeId] = { threadId: id, harness: provider, planVersion: latest, at: now, history: was ? [...was.history, { threadId: was.threadId, harness: was.harness, planVersion: was.planVersion, at: was.at }] : [] };
-        b.sends[p.requestId] = id;
-        return { board: planBoardOf(p.threadId), thread: summary };
-      }
-      return { board: planBoardOf(p.threadId) };
-    }
-    // The planner's agent writes a new version {threadId, bad?, kpiLabel?}, or
-    // a linked thread asks or finishes {title, do: 'ask' | 'finish'}.
-    case 'mock.boardPlan': {
-      const t = need(p.threadId);
-      if (p.bad) {
-        persist(t.summary.id, { type: 'tool.call', itemId: 'pb_bad_' + Date.now(), name: 'update_board', kind: 'mcp', title: 'update_board', input: {} });
-        return { board: planBoardOf(t.summary.id) };
-      }
-      const board = writePlanVersion(t.summary.id, ACME_GRAPH(p.kpiLabel ?? 'KPI cards'), 'Changed: the KPI cards show today against yesterday.', ['kpi']);
-      persist(t.summary.id, { type: 'board.updated', board });
-      return { board };
-    }
-    case 'mock.boardThread': {
-      const entry = [...threads.values()].find((x) => x.summary.title === p.title && x.summary.startedBy?.label === 'Plan board');
-      if (!entry) throw rpcError(-32602, `No board thread called "${p.title}"`);
-      const id = entry.summary.id;
-      if (p.do === 'ask') {
-        persist(id, { type: 'assistant.text', itemId: `${id}_q`, text: 'Should the KPI cards show yesterday as well?' }, `${id}_t0`);
-        persist(id, { type: 'turn.completed', outcome: 'completed', durationMs: 3000, needs: 'you', asks: [{ action: 'Should the KPI cards show yesterday as well?' }] }, `${id}_t0`);
-        setStatus(id, 'idle', true);
-      } else {
-        persist(id, { type: 'assistant.text', itemId: `${id}_d`, text: 'Built it.' }, `${id}_t0`);
-        persist(id, { type: 'turn.completed', outcome: 'completed', durationMs: 3000, needs: 'nothing' }, `${id}_t0`);
-        setStatus(id, 'idle', false);
-      }
-      return { thread: entry.summary };
-    }
-    // planBoardMockups's screens (TB_MOCK_PLAN_MOCKUPS; runner/src/board-frames.ts).
-    case 'board.frames': {
-      if (!planBoardOn() || !process.env.TB_MOCK_PLAN_MOCKUPS) throw rpcError(-32010, 'Plan board mockups is off.');
-      const list = planFrames.get(p.threadId) ?? [];
-      if (typeof p.pick === 'string') {
-        const hit = list.find((f) => f.id === p.pick);
-        for (const f of list) if (hit && f.node === hit.node && f.frame === hit.frame) f.picked = f.id === hit.id;
-      }
-      const out = list.map((f) => ({ ...f, changed: f.version > 1 && (f.seen ?? 0) < f.version }));
-      if (p.seen) for (const f of list) f.seen = f.version;
-      return { frames: out };
-    }
-    // The agent writes screens {threadId, node, variants: ['A','B','C'], script?}.
-    case 'mock.boardFrames': {
-      const list = planFrames.get(p.threadId) ?? [];
-      planFrames.set(p.threadId, list);
-      for (const v of p.variants ?? ['A']) {
-        const id = `${p.node}-row-${v}`;
-        let f = list.find((x) => x.id === id);
-        if (!f) { f = { id, node: p.node, frame: 'row', variant: v, title: 'KPI row', viewport: 'desktop', version: 0 }; list.push(f); }
-        f.version += 1;
-        const dir = path.join(os.tmpdir(), 'tb-mock-frames', p.threadId, id, `v${f.version}`);
-        fs.mkdirSync(dir, { recursive: true });
-        f.path = path.join(dir, 'index.html');
-        fs.writeFileSync(f.path, `<!doctype html><html><head><meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'none'"></head><body style="margin:0;font:32px system-ui;background:#fff"><div style="display:flex;gap:16px;padding:24px">${['Revenue', 'Orders', 'Visitors'].map((k) => `<div style="flex:1;border:1px solid #ddd;border-radius:12px;padding:16px">${k} ${v}</div>`).join('')}</div></body></html>`);
-      }
-      return { frames: list };
     }
     case 'mock.savedPlan': {
       // A Plan first turn whose plan the runner saved, as runner.ts

@@ -349,9 +349,6 @@ impl Panels {
 }
 
 fn panel_symbol(panel: &str) -> Option<&'static str> {
-    if crate::plan_board::board_thread(panel).is_some() {
-        return Some("point.3.connected.trianglepath.dotted");
-    }
     Some(match panel {
         THREADS => "bubble.left.and.bubble.right",
         MAIN => "text.alignleft",
@@ -667,7 +664,6 @@ impl Threadbear {
         if let Some(title) = self
             .thread_panel_title(panel)
             .or_else(|| self.pinned_title(panel))
-            .or_else(|| self.plan_board_title(panel))
         {
             return title;
         }
@@ -746,7 +742,6 @@ impl Threadbear {
             THREADS | MAIN | USAGE | UPDATES | CONNECTORS | RUNNERS | SETUP | TERMINAL
         ) && crate::thread_panels::pinned_thread(panel).is_none()
             && crate::pinned_panels::pinned(panel).is_none()
-            && crate::plan_board::board_thread(panel).is_none()
     }
 
     /// `available` in `RootView.content`: Highlights, Files and a thread's own
@@ -979,7 +974,6 @@ impl Threadbear {
         // A patch panel come into sight goes in ⌘K's Recent.
         self.note_panels_shown(&layout, cx);
         self.pinned_panels_layout_changed(&layout);
-        self.plan_boards_layout_changed(&layout, cx);
         cx.notify();
     }
 
@@ -2411,10 +2405,6 @@ impl Threadbear {
             // A panel pinned to its thread (pinned_panels.rs).
             _ if crate::pinned_panels::pinned(panel).is_some() => {
                 self.pinned_panel_view(panel, ghost, window, cx)
-            }
-            // A thread's plan board (plan_board.rs, the planBoard experiment).
-            _ if crate::plan_board::board_thread(panel).is_some() => {
-                self.plan_board_view(panel, ghost, cx)
             }
             // Highlights, Files, Patches and a patch's own panels are sections of
             // the one pane beside the thread (highlights.rs), each its own panel

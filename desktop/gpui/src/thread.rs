@@ -1705,15 +1705,6 @@ impl ThreadPane {
         cx.notify();
     }
 
-    /// Dismisses an open asks card when the user acts directly on the Plan
-    /// board (Approve plan, Pick take, Send box), keeping the main thread
-    /// composer and the board in sync.
-    pub(crate) fn dismiss_open_asks(&mut self, cx: &mut Context<Self>) {
-        let change = self.feed.dismiss_open_asks();
-        self.apply(change, cx);
-        cx.notify();
-    }
-
     /// Something the composer tried that didn't work, for the error line.
     pub(crate) fn show_error(&mut self, message: String, cx: &mut Context<Self>) {
         self.error = Some(message);

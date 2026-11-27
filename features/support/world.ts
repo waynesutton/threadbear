@@ -197,13 +197,6 @@ Before(async function (this: ThreadbearWorld, { pickle }) {
   // The Recipes view: the recipes experiment on, with the mock's recipes.
   if (pickle.tags.some((t) => t.name === '@recipes')) process.env.TB_MOCK_RECIPES = '1';
   else delete process.env.TB_MOCK_RECIPES;
-  // The plan board: the planBoard experiment on, with the mock's planner thread.
-  if (pickle.tags.some((t) => t.name === '@plan.board')) process.env.TB_MOCK_PLAN_BOARD = '1';
-  else delete process.env.TB_MOCK_PLAN_BOARD;
-  if (pickle.tags.some((t) => t.name === '@plan.board.mockups')) process.env.TB_MOCK_PLAN_MOCKUPS = '1';
-  else delete process.env.TB_MOCK_PLAN_MOCKUPS;
-  if (pickle.tags.some((t) => t.name === '@plan.board.off')) process.env.TB_MOCK_PLAN_BOARD_OFF = '1';
-  else delete process.env.TB_MOCK_PLAN_BOARD_OFF;
   if (pickle.tags.some((t) => t.name === '@review.canvas')) process.env.TB_MOCK_REVIEW_CANVAS = '1';
   else delete process.env.TB_MOCK_REVIEW_CANVAS;
   // The Canvas page, with the nested demo's coordinator and the threads it started.
@@ -232,10 +225,6 @@ Before(async function (this: ThreadbearWorld, { pickle }) {
   } else delete process.env.BROWSERBEAR_HOME;
   // The web runtime's folder for this scenario (support/web-runtime.ts).
   if ((await webRuntimeSetup(pickle.tags.map((t) => t.name))) === 'skipped') return 'skipped';
-  // Plan board coordinators need Mike's project coordinators
-  // (runner/src/coordinators.ts): skipped on a copy without them, as Wayne's
-  // fork is, where the destination compiles to absent.
-  if (pickle.tags.some((t) => t.name === '@needs.coordinators') && !fs.existsSync(path.join(import.meta.dirname, '..', '..', 'runner', 'src', 'coordinators.ts'))) return 'skipped';
   await this.app.start();
   // The stress run's window size and look (tools/stress.mjs), before any step.
   const size = /^(\d+)x(\d+)$/.exec(process.env.TB_STRESS_SIZE ?? '');

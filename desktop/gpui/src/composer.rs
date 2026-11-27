@@ -1193,35 +1193,6 @@ impl Composer {
         cx.notify();
     }
 
-    /// A plan board's box, group or arrow as a chip at the end of the box
-    /// (plan_board.rs), added the way a Tasks card is, once.
-    pub(crate) fn mention_reference(&mut self, reference: String, cx: &mut Context<Self>) {
-        let mention = threadbear_core::board::PendingMention {
-            reference,
-            edit: self.editing.as_ref().map(|e| e.seq),
-        };
-        if !self.pending_mentions.contains(&mention) {
-            self.pending_mentions.push(mention);
-        }
-        cx.notify();
-    }
-
-    /// Takes the plan board's chips back out (Esc on the board), leaving the
-    /// rest of the draft and its pictures as they are.
-    pub(crate) fn forget_references(&mut self, references: &[String], cx: &mut Context<Self>) {
-        self.pending_mentions
-            .retain(|m| !references.contains(&m.reference));
-        let (text, images) = self.draft(cx);
-        let mut next = text.clone();
-        for r in references {
-            next = next.replace(&format!("{r} "), "").replace(r.as_str(), "");
-        }
-        if next != text {
-            self.pending_box = Some((next.trim_end().to_owned(), images));
-        }
-        cx.notify();
-    }
-
     fn append_card_reference(
         &mut self,
         reference: &str,

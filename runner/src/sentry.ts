@@ -159,7 +159,7 @@ export function scrubForSentry(text: string): string {
 export const ERROR_CLASSES: ReadonlySet<string> = new Set([
   'Error', 'TypeError', 'RangeError', 'SyntaxError', 'ReferenceError', 'EvalError', 'URIError', 'AggregateError',
   'AbortError', 'TimeoutError', 'SystemError', 'DOMException',
-  'AcpExitedError', 'AcpRpcError', 'AmbiguousPeer', 'BoardError', 'BoxBootRefused', 'BoxFolderBroken', 'CheckRefused', 'CodexExitedError', 'CodexRpcError',
+  'AcpExitedError', 'AcpRpcError', 'AmbiguousPeer', 'BoxBootRefused', 'BoxFolderBroken', 'CheckRefused', 'CodexExitedError', 'CodexRpcError',
   'ConvexAdminError', 'CronError', 'ForeignPeer', 'GaveUp', 'HeldLocal', 'KeysBusy', 'NoSwitches', 'Refused', 'RewindRefusedError',
   'RpcClientError', 'RpcError', 'RunnerJsonError', 'RunnerNotProvedError', 'SessionNotFoundError', 'SpawnRefused',
   'SpecialFile', 'StaleProcess', 'TooBig', 'TregDown', 'Unknown', 'UnresolvedPeer', 'Waiting',

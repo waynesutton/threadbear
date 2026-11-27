@@ -152,11 +152,6 @@ export function observe(state: HighlightState, events: Iterable<PersistedEvent>,
         }
         break;
       }
-      case 'board.updated':
-        // A plan board (experiment planBoard): one row that opens it, kept
-        // as the agent draws new versions (Wayne, 26 Nov).
-        add({ id: 'board', kind: 'link', title: 'Plan board', url: `board:${e.board.threadId}`, how: 'created', seq: e.seq }, e);
-        break;
       default:
         // Other events show nothing here.
         break;

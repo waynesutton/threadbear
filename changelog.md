@@ -23,11 +23,7 @@ How the Tasks section works today (an experiment: turn it on in Settings > Exper
 ### Added
 
 - Settings > General has a search bar at the top, above Appearance, that filters sections and rows by name, description and choices, including Experiments toggles such as Canvas and fork settings such as New thread box.
-- A thread with a plan board has a Plan board link in Highlights that opens it.
-- A line under the plan board's bar says what to do next (talk about a box, approve, send or say "build it"), and an empty board says to start one with "plan board".
-- The plan board's bar has ⧉ to open the board in a window of its own and ↙ to put it back beside the thread. Its buttons wrap onto a second row in a narrow pane instead of running off the end.
-- Plan board (experiment, off by default): say "plan board" in a message and the thread's agent draws the plan beside the thread as boxes, groups and labelled arrows. Click a box to talk about it, drag boxes where you like, press Approve plan, then send boxes one at a time to nested Claude Code or Codex threads whose state shows on each box. Ask planner to review sends one message once every box is done. Plan board mockups adds sealed screens beside a box, up to three takes; Plan board coordinators hands a box to the project's coordinator where Threadbear has them. How to use it: docs/guide.md, "Plan board (experiment)".
-
+- Removed the Plan board experiment from the app and Settings, and parked its commits on `plan-board-parked` (`plan-board-final`).
 - Settings > General > Appearance has a Theme row with three pictures: Stock, Harbor and Squall. Stock is the usual look and stays the default. Harbor is charcoal with blue-slate code blocks and a sea-blue accent, light or dark. Squall is blue-grey with a steel-blue accent and always dark. A theme colours the window, cards, menus, code and the Terminal, and the first accent dot becomes the theme's own accent. The website's gear menu has the same three. The choice is saved as `palette` in `desktop-settings.json`.
 - Settings > Runners has a Cloud runners section. Add a cloud runner… sets up Fly from one org token, or from flyctl's own sign-in: it makes the Fly app, saves the token and keys to your backend, builds the box image, makes the runner and tries a test box, showing each step as it goes. Afterwards the section lists each cloud runner's box size and threads, with Check again, Rebuild and Edit…. `tb cloud setup`, `check` and `rebuild` do the same from a terminal. Needs the `virtualRunners` experiment and flyctl.
 - Fixed: Use flyctl's sign-in in Add a cloud runner failed at Fly token works with a 401, because the runner cut the token flyctl made to 300 characters. It now keeps the whole token.
@@ -52,10 +48,6 @@ How the Tasks section works today (an experiment: turn it on in Settings > Exper
 
 ### Fixed
 
-- Drawing a plan board in Ask before edits or plan mode no longer stops on an Allow card, and a box sent from a planner in plan mode starts with Full access so it can build.
-- Mockups asked for on a plan board box now go beside the box under Screens…, instead of a review window and loose files that left Screens… empty. The Changed badge sits clear of the box's edge.
-- The plan board's bar has a ✕ at its end that closes the board, always in view, as the tab's own × only shows when you hover its title.
-- Show plan in a "Drew a plan" line in the transcript did nothing when clicked. Links in a centred note are now clickable where they're drawn.
 - Open the bottom sidebar panels and Settings on the first click from Canvas.
 
 - Reopen Terminal with Command-J after hiding it, keeping the same shell running.

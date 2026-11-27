@@ -690,10 +690,6 @@ pub fn highlight_symbol(item: &Highlight) -> &'static str {
     match item.kind {
         HighlightKind::Pr => "arrow.triangle.pull",
         HighlightKind::Commit => "smallcircle.filled.circle",
-        // The plan board's row (experiment planBoard), as its Show plan.
-        HighlightKind::Link if item.url.as_deref().is_some_and(|u| u.starts_with("board:")) => {
-            "point.3.connected.trianglepath.dotted"
-        }
         HighlightKind::Link => "link",
         HighlightKind::File => file_symbol(item.path.as_deref().unwrap_or(&item.title)),
         HighlightKind::Other => item.path.as_deref().map_or("link", file_symbol),

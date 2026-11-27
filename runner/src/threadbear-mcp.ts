@@ -50,8 +50,6 @@ import { starterIn, type StartRequest } from './cross-runner.ts';
 import { SECRET_TIMEOUT_DEFAULT_MIN, SECRET_TIMEOUT_MAX_MIN } from './secrets.ts';
 import { cutSafely, firstLineSafely } from './safe-cut.ts';
 import { pickRunner } from './moves.ts';
-import { BoardError, boardText, withBriefHeader, type BoardTools } from './boards.ts';
-import { framesText, type BoardFrames } from './board-frames.ts';
 import { MAX_RECIPE, MAX_SUMMARY, MAX_TITLE, PAGE_KINDS, printLink, publishPage, unpublishPage, type PagePublisher, type PageRecord, type Pages } from './pages.ts';
 import { above, LEAST, raises, type Authority } from './access.ts';
 export { above, LEAST, raises, type Authority };
@@ -186,11 +184,7 @@ export const ALWAYS_ASK_TOOLS = new Set([`mcp__${SERVER_NAME}__delete_thread`]);
 // Restart to Update asks only wake or file this thread, with the runner's
 // words, and the turn they start runs in its mode then, so they stay in.
 export const NEVER_ASK_TOOLS = new Set(
-  // The plan board's tools only change the board beside this thread
-  // (Threadbear's own files, never the project's), and Wayne asked for it by
-  // name and approves it himself: an Allow card on every redraw in Ask
-  // before edits, or plan mode, would stall the plan it's for.
-  ['end_turn', 'list_tasks', 'list_threads', 'read_thread', 'list_accounts', 'list_schedules', 'list_projects', 'read_project', 'unpin', 'ask_secret', 'add_button', 'list_prints', 'read_print', 'list_pages', 'read_page', 'read_board', 'update_board', 'read_frames', 'update_frame'].map(
+  ['end_turn', 'list_tasks', 'list_threads', 'read_thread', 'list_accounts', 'list_schedules', 'list_projects', 'read_project', 'unpin', 'ask_secret', 'add_button', 'list_prints', 'read_print', 'list_pages', 'read_page'].map(
     (n) => `mcp__${SERVER_NAME}__${n}`,
   ),
 );
@@ -313,13 +307,6 @@ export function buildThreadbearTools(
     // (experiments/reviewCanvas.md). Read once, here, as it changes the
     // tool's shape; the runner drops marks itself with it off.
     reviewCanvas?: () => boolean;
-    // Experiment planBoard (experiments/planBoard.md): read_board,
-    // update_board and create_thread's board_node, only while it's on. Read
-    // once, here, as it changes the tools' shape.
-    boards?: () => BoardTools | undefined;
-    // Experiment planBoardMockups (experiments/planBoardMockups.md): screens
-    // on a box, only with planBoard on too.
-    frames?: () => BoardFrames | undefined;
     // The once-a-turn note asking for a card in plain words (needs.ts,
     // plainCardNudge). Off only in tests about the rest of end_turn, which
     // would otherwise each have to answer it first.
@@ -333,8 +320,6 @@ export function buildThreadbearTools(
   } = {},
 ) {
   const codex = opts.provider === 'codex';
-  const boards = opts.boards?.();
-  const frames = boards ? opts.frames?.() : undefined;
   // A schedule's check (schedule-check.ts).
   const checkArg = (update: boolean): Record<string, z.ZodOptional<z.ZodTypeAny>> => ({
           check: (update ? z.string().nullable() : z.string())
@@ -2321,78 +2306,6 @@ export function buildThreadbearTools(
     ...secretTools,
     ...pageTools,
     ...pocketTools,
-    ...(boards ? [
-      tool(
-        'read_board',
-        "Reads this thread's plan board: the Mermaid, its version, whether Wayne approved it (draft or approved), each box's id, label and the thread it was sent to with that thread's state, the board's skills, and the note. Call it before changing the plan.",
-        {},
-        handle(async () => {
-          const board = boards.read(selfId);
-          if (!board) return 'This thread has no plan board yet. Draw one with update_board only when the user asks for a plan board.';
-          return boardText(board, (id) => boards.statusOf(id));
-        }),
-        { annotations: { readOnlyHint: true } },
-      ),
-      tool(
-        'update_board',
-        "A thread's first board only once the user asked for a plan board by name (refused otherwise). Draws or changes this thread's plan as a board beside the thread: boxes, groups and labelled arrows Wayne can point at, approve, then send to threads one box at a time. A Mermaid flowchart subset: `flowchart LR` or `TB`, id[label], id[(label)] for data, id((label)), `subgraph id[label]` … `end`, a -->|label| b, a --- b, `%% note:` lines. At most 25 boxes, 40 arrows, labels of 60 characters. Ids stay the same across versions; labels can change. Each call is a new version; a change after Wayne approved returns the plan to draft. Writes no project files.",
-        {
-          mermaid: z.string().min(1).describe('The whole plan, as a Mermaid flowchart in the subset above.'),
-          note: z.string().max(400).optional().describe('A short note in plain words: what this version changed, or how the plan works. Shown as a bubble on the board.'),
-          near: z.string().optional().describe('The id of the box the note is about.'),
-          changed: z.array(z.string()).optional().describe('Ids of the boxes this version changed; they get a Changed badge.'),
-          baseVersion: z.number().int().min(0).optional().describe('The version you read (read_board). If the board moved on since, nothing is written and you read it again.'),
-        },
-        handle(async ({ mermaid, note, near, changed, baseVersion }) => {
-          try {
-            const { board, backToDraft, redacted } = boards.write(selfId, { mermaid, ...(note ? { note } : {}), ...(near ? { near } : {}), ...(changed ? { changed } : {}), ...(baseVersion !== undefined ? { baseVersion } : {}) });
-            const g = board.graph;
-            return [
-              `Saved plan v${board.version}: ${g.nodes.length} box${g.nodes.length === 1 ? '' : 'es'}, ${g.groups.length} group${g.groups.length === 1 ? '' : 's'}, ${g.edges.length} arrow${g.edges.length === 1 ? '' : 's'}. Wayne sees it under Show plan.`,
-              backToDraft ? `This changed a plan Wayne had approved (v${board.approved?.version}), so it's a draft again: no box can be sent until he presses Approve plan on the board. Boxes already sent keep running.` : `It's a draft until Wayne presses Approve plan on the board. Don't build anything or send boxes until then.`,
-              `Because the board has its own Approve plan, Screens, and Send buttons, end this turn with end_turn needs "nothing" (no asks card) unless you need an answer to a question before he can use the board.`,
-              g.skipped ? `${g.skipped} line${g.skipped === 1 ? '' : 's'} aren't drawn (outside the subset).` : '',
-              redacted ? 'Something that looked like a secret was masked before it was kept.' : '',
-            ].filter(Boolean).join(' ');
-          } catch (e) {
-            if (e instanceof BoardError) throw new Error(`Not saved; the board still shows v${boards.read(selfId)?.version ?? 0}. ${e.message}`);
-            throw e;
-          }
-        }),
-      ),
-    ] : []),
-    ...(frames ? [
-      tool(
-        'update_frame',
-        "Puts a screen beside a box of this thread's plan board, drawn as a still. Use it, not show_options or files, whenever Wayne asks for mockups or takes of a box: up to three takes (variant A, B, C) of a screen. Give html for a sketch: one self-contained file, Tailwind compiled and inlined, pictures and fonts as data: URLs, no <script> (it won't run; render React to static HTML first), under 2 MB. Or give route for a page of the thread's own dev server (http://localhost:<port>/…). Each call is a new version of that screen.",
-        {
-          node: z.string().min(1).describe('The box id on the board.'),
-          frame: z.string().min(1).describe('A short id for the screen, like "kpi-row". The same id with another variant is another take.'),
-          variant: z.enum(['A', 'B', 'C']).optional().describe('Which take. Default A.'),
-          title: z.string().min(1).max(80),
-          viewport: z.enum(['desktop', 'tablet', 'phone']).optional().describe('Default desktop (1280×800); tablet 834×1112; phone 390×844.'),
-          html: z.string().optional(),
-          route: z.string().optional(),
-          baseVersion: z.number().int().min(0).optional(),
-        },
-        handle(async (a) => {
-          try {
-            const f = frames.write(selfId, a);
-            return `Saved screen ${f.id} v${f.version} beside box ${f.node}. Wayne sees and picks it under Screens on the board, so end this turn with end_turn needs "nothing" (no asks card) unless you have a real blocking question.`;
-          } catch (e) {
-            if (e instanceof BoardError) throw new Error(`Not saved. ${e.message}`);
-            throw e;
-          }
-        }),
-      ),
-      tool(
-        'read_frames',
-        "Lists the screens on this thread's plan board (or one box's): their versions, and which take Wayne picked.",
-        { node: z.string().optional() },
-        handle(async ({ node }) => framesText(frames.list(selfId, node))),
-        { annotations: { readOnlyHint: true } },
-      ),
-    ] : []),
     ...(opts.tasks?.() ? [
       tool('list_tasks', 'List synced Tasks; preferences.columns is the board. Follow next with after for more.', { after: z.string().optional() }, handle(async a => JSON.stringify({ ...(await opts.tasks!()!.call('list', a) as object), projects: await opts.tasks!()!.call('projects'), preferences: await opts.tasks!()!.call('preferences') }))),
       tool('create_task', 'Add a synced task. Project is optional: its name, id, or runnerId/id from list_tasks. Supply id to retry safely.', { id: z.string().optional(), title: z.string(), notes: z.string().optional(), columnId: z.string().optional().describe('id or name'), status: z.enum(['backlog', 'todo', 'doing', 'done']).optional(), project: z.union([z.string(), z.object({ runnerId: z.string(), id: z.string() })]).optional(), priority: taskPriority.optional(), dueDate: z.string().optional().describe('YYYY-MM-DD'), dueTime: z.string().optional().describe('HH:MM; reminds') }, handle(async a => JSON.stringify(await opts.tasks!()!.call('create', a, await taskAgent(control, selfId))))),
@@ -2527,25 +2440,8 @@ export function buildThreadbearTools(
         why: z.string().optional().describe('A few plain words on why this thread exists, about 6 ("fixing a hook it hit"). The sidebar shows them when the user hovers the mark on its row, as they have none of your context for it.'),
         runner: z.string().optional().describe('Another of the user\'s machines to start it on: its name, or "main". folder is a path there (~ for its home). Where this machine can\'t, it asks the user first and waits.'),
         nested: z.boolean().optional().describe("false when the new thread isn't part of this thread's work (the user asked for one about something else), so it doesn't sit under this one."),
-        ...(boards ? { board_node: z.string().optional().describe("The id of a box on this thread's plan board this thread builds. Refused unless Wayne approved the plan's latest version. The box then shows the thread's state.") } : {}),
       },
-      handle(async ({ text: asText, title, folder: f, pool: p, account: acc, model, effort, permissionMode: asked, why, runner, nested, ...more }, extra) => {
-        // A box of an approved plan (planBoard): refused on a draft, and the
-        // brief starts with the runner's header so the thread can read_board.
-        const boardNode = boards ? (more as { board_node?: string }).board_node?.trim() : undefined;
-        let text = asText;
-        let plan: { version: number; node: import('./boards.ts').BoardNode; skills: string[] } | undefined;
-        if (boards && boardNode) {
-          let board;
-          try {
-            board = boards.mustSend(selfId, boardNode);
-          } catch (e) {
-            throw new Error(e instanceof BoardError ? `Not started. ${e.message}` : String(e));
-          }
-          if (runner?.trim()) throw new Error('Not started. A box of the plan board starts on this Mac: leave runner out.');
-          if (nested === false) throw new Error("Not started. A box of the plan board is part of this thread's work: leave nested out.");
-          plan = { version: board.version, node: board.graph.nodes.find((n) => n.id === boardNode)!, skills: board.skills };
-        }
+      handle(async ({ text, title, folder: f, pool: p, account: acc, model, effort, permissionMode: asked, why, runner, nested }, extra) => {
         // From a thread not in full mode, the new thread gets its mode
         // unless the call says otherwise, and anything above it asks
         // (raising access, above). On another machine too.
@@ -2583,21 +2479,11 @@ export function buildThreadbearTools(
           // That runner is this one: asked again for here, as the card said there.
           ({ cwd } = await ask(false));
         }
-        const accountId = await account(acc);
-        if (plan) {
-          // The skills line in the form the new thread's CLI reads.
-          const h = control.hello();
-          const provider = (accountId ? h.accounts.find((a) => a.id === accountId)?.provider : undefined)
-            ?? (model ? h.accounts.find((a) => a.models?.some((m) => m.id === model || m.model === model))?.provider : undefined)
-            ?? (p !== undefined ? h.accounts.find((a) => a.id === (h.pools ?? []).find((x) => x.id === pool(p))?.accountIds[0])?.provider : undefined)
-            ?? 'claude';
-          text = withBriefHeader(text, selfId, plan.node, plan.version, plan.skills, provider);
-        }
         const r = await control.create({
           text: head + text,
-          title: title?.trim() || firstLineSafely(asText, 200) || undefined,
+          title: title?.trim() || firstLineSafely(text, 200) || undefined,
           cwd: cwd!,
-          accountId,
+          accountId: await account(acc),
           ...(p !== undefined && !acc ? { poolId: pool(p) } : {}),
           model,
           effort,
@@ -2609,7 +2495,6 @@ export function buildThreadbearTools(
         });
         const where = r.thread.poolId ? ` It's in the ${r.thread.poolId} pool, so it moves to another login if this one runs dry.` : '';
         const inherited = caller && asked === undefined ? ` It's in ${MODE_NAMES[caller.mode]}, as this thread is.` : '';
-        if (boards && boardNode && plan) boards.linkThread(selfId, boardNode, { id: r.thread.id, provider: r.thread.provider }, plan.version);
         return `Started thread ${r.thread.id} "${r.thread.title}" in ${r.thread.cwd} on ${r.thread.accountId}${r.thread.model ? ` (${r.thread.model})` : ''}.${where}${inherited}`;
       }),
     ),
@@ -2906,18 +2791,6 @@ export const RICH_BLOCKS_LINE =
 export const LIVE_PAGES_LINE =
   'For something that moves or turns round (a 3D model, an animation, a simulation), put a self-contained .html file in your reply like a picture, ![title](/abs/path/page.html): it shows as a live page the user runs in the thread, on the Mac and iPhone. Everything goes inline (scripts, models, data), as it gets no network or other files, and at most 10 MB.';
 
-// Only with the planBoard experiment on (experiments/planBoard.md). One line,
-// so boards stay rare and ordinary threads stay ordinary.
-export const PLAN_BOARD_LINE =
-  'Draw a plan board with update_board only when the user asks for one by name ("plan board"); any other plan, plan mode\'s included, stays as you would write it without boards. On a board: 25 boxes at most, no secrets, then wait: build nothing and send no boxes until Wayne presses Approve plan on the board, and end the turn with needs "nothing" (the board itself has the Approve plan, Screens, and Send buttons, so don\'t put an asks card on the composer unless you have a blocking question). read_board shows its state and skills.';
-
-// planBoardMockups's screens: without this, an agent asked for a box's
-// mockups wrote HTML files and put them in show_options, so the box's
-// Screens… stayed empty (Wayne, 26 Nov). One file either way, so no more
-// tokens; on the board it stays beside the box, versioned, and Pick is there.
-export const PLAN_BOARD_SCREENS_LINE =
-  "Mockups, takes or screens for a box of this thread's plan board (a message with the box's board: chip, or one naming it) go beside the box with update_frame, one call per take, not in show_options or loose files: Wayne sees them under the box's Screens…, compares them side by side and picks one there (end the turn with needs \"nothing\" rather than an asks card for picking a take).";
-
 // Only for a thread that has the pocket tool: the Pocket lives in the Convex
 // backend, so with phone sync off there's no tool to tell it about.
 export const POCKET_LINE =
@@ -2975,7 +2848,7 @@ export function patchesLine(guide = guidePath(), exists: (p: string) => boolean 
 // What a Claude session's threadbear server tells it, standing in every
 // turn's context. Measured by the context budget test with the tools
 // (test/unit/context-budget.test.ts), so growth is a choice.
-export function serverInstructions(selfId: string, o: { one: boolean; bulletReplies: boolean; pocket: boolean; projects: boolean; livePages?: boolean; planBoard?: boolean; planBoardScreens?: boolean }): string {
+export function serverInstructions(selfId: string, o: { one: boolean; bulletReplies: boolean; pocket: boolean; projects: boolean; livePages?: boolean }): string {
   const guide = guideLine();
   const patches = patchesLine();
   return (
@@ -2988,8 +2861,6 @@ export function serverInstructions(selfId: string, o: { one: boolean; bulletRepl
     `${SHOWING_THE_USER} ` +
     `${RICH_BLOCKS_LINE} ` +
     (o.livePages ? `${LIVE_PAGES_LINE} ` : '') +
-    (o.planBoard ? `${PLAN_BOARD_LINE} ` : '') +
-    (o.planBoard && o.planBoardScreens ? `${PLAN_BOARD_SCREENS_LINE} ` : '') +
     (o.pocket ? `${POCKET_LINE} ` : '') +
     (o.projects ? `${FILING_PROJECTS} ` : '') +
     (o.one
@@ -3009,14 +2880,13 @@ async function taskAgent(control: ThreadControl, selfId: string): Promise<{ kind
     return { kind: 'agent', name: 'Agent' };
   }
 }
-export function threadbearMcpServer(control: ThreadControl, selfId: string, schedules?: ScheduleControl, projects?: ProjectControl, appRestarts?: AppRestartControl, bulletReplies: () => boolean = () => true, pocket?: () => PocketControl | undefined, oneReply: () => boolean = () => false, gateway?: () => string | undefined, gatewayHealth?: () => Promise<ConnectorService[] | undefined>, remote?: () => RemoteControl | undefined, loadEndTurn?: () => boolean, reviewCanvas?: () => boolean, livePages?: () => boolean, pages?: () => Pages | undefined, printPublisher?: () => PagePublisher | undefined, printsWhenAsked?: () => boolean, tasks?: () => import('./tasks.ts').Tasks | undefined, clearerCompletion?: () => boolean, progressPrints?: () => boolean, boards?: () => BoardTools | undefined, frames?: () => BoardFrames | undefined): McpSdkServerConfigWithInstance {
+export function threadbearMcpServer(control: ThreadControl, selfId: string, schedules?: ScheduleControl, projects?: ProjectControl, appRestarts?: AppRestartControl, bulletReplies: () => boolean = () => true, pocket?: () => PocketControl | undefined, oneReply: () => boolean = () => false, gateway?: () => string | undefined, gatewayHealth?: () => Promise<ConnectorService[] | undefined>, remote?: () => RemoteControl | undefined, loadEndTurn?: () => boolean, reviewCanvas?: () => boolean, livePages?: () => boolean, pages?: () => Pages | undefined, printPublisher?: () => PagePublisher | undefined, printsWhenAsked?: () => boolean, tasks?: () => import('./tasks.ts').Tasks | undefined, clearerCompletion?: () => boolean, progressPrints?: () => boolean): McpSdkServerConfigWithInstance {
   const one = oneReply();
-  const board = boards?.();
   const server = createSdkMcpServer({
     name: SERVER_NAME,
     version: RUNNER_VERSION,
-    instructions: serverInstructions(selfId, { one, bulletReplies: bulletReplies(), pocket: Boolean(pocket?.()), projects: Boolean(projects), livePages: livePages?.() ?? false, planBoard: Boolean(board), planBoardScreens: Boolean(board && frames?.()) }),
-    tools: buildThreadbearTools(control, selfId, Date.now, schedules, projects, appRestarts, { bulletReplies, pocket, oneReply: () => one, gateway, gatewayHealth, remote, pages, printPublisher, printsWhenAsked, tasks, clearerCompletion, progressPrints, loadEndTurn, reviewCanvas, boards: () => board, frames }),
+    instructions: serverInstructions(selfId, { one, bulletReplies: bulletReplies(), pocket: Boolean(pocket?.()), projects: Boolean(projects), livePages: livePages?.() ?? false }),
+    tools: buildThreadbearTools(control, selfId, Date.now, schedules, projects, appRestarts, { bulletReplies, pocket, oneReply: () => one, gateway, gatewayHealth, remote, pages, printPublisher, printsWhenAsked, tasks, clearerCompletion, progressPrints, loadEndTurn, reviewCanvas }),
   });
   server.tools = [...ALWAYS_ASK_TOOLS].map((name) => ({ name: name.split('__').at(-1)!, permission_policy: 'always_ask' as const }));
   return server;

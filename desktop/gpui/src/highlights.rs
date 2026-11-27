@@ -1035,18 +1035,6 @@ impl SidePane {
     /// here: an agent's links only start other apps once Mike has been
     /// asked, which the app can't do yet (`LinkPolicy.ask`).
     pub(crate) fn follow_link(&mut self, url: &str, cx: &mut Context<Self>) {
-        // The thread's plan board, beside it (plan_board.rs). After this
-        // click: showing it updates the app, which draws this pane.
-        if let Some(rest) = url.strip_prefix("board:") {
-            let thread = rest.split('#').next().unwrap_or_default().to_owned();
-            let app = self.app.clone();
-            cx.defer(move |cx| {
-                if let Some(app) = app.upgrade() {
-                    app.update(cx, |a, cx| a.show_plan(&thread, cx));
-                }
-            });
-            return;
-        }
         if let Some(path) = url.strip_prefix("file://") {
             if let Some(thread) = self.thread(cx) {
                 let decoded = crate::files::percent_decode(path);
@@ -2457,7 +2445,6 @@ impl SidePane {
             // Not when it says the same as the title (a bare localhost link).
             item.url
                 .as_deref()
-                .filter(|u| !u.starts_with("board:"))
                 .map(core::text::address)
                 .filter(|a| *a != item.title)
         };

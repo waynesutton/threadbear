@@ -287,14 +287,3 @@ test('links in a reply: a network path is never looked for on Windows', () => {
     assert.ok(looked.includes(P('//evil.example/s/a.png')), 'a Mac or Linux looks as before');
   }
 });
-
-test('a plan board is one Highlights row that opens it, however many versions', () => {
-  seq = 0;
-  const state = emptyHighlights();
-  const board = (version: number) => ({ threadId: 't-plan', version });
-  observe(state, [ev({ type: 'board.updated', board: board(1) }), ev({ type: 'board.updated', board: board(2) })], ctx);
-  const rows = view(state).highlights.filter((h) => h.id === 'board');
-  assert.equal(rows.length, 1);
-  assert.equal(rows[0].url, 'board:t-plan');
-  assert.equal(rows[0].title, 'Plan board');
-});

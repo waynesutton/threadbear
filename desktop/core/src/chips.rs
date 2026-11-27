@@ -53,10 +53,6 @@ pub enum MentionKind {
     Card,
     /// Another thread, as a `thread:<id>` link, which opens in the app.
     Thread,
-    /// A box, group or arrow on a thread's plan board (the planBoard
-    /// experiment), as a `board:<threadId>#<id>` link: the agent reads the
-    /// box's id from it (desktop/core/src/plan_board.rs, `chip_markdown`).
-    Board,
     /// A file on the runner's Mac that isn't a picture (a video, a PDF, a
     /// folder), as its full path in backticks: it isn't uploaded, the agent
     /// opens it where it is (`find_files`).
@@ -94,7 +90,7 @@ impl Mention {
 /// starts, so notion.so.example.com is no card. Each character is looked at
 /// a few times at most.
 pub fn find_mentions(text: &str) -> Vec<Mention> {
-    if !text.contains("notion.") && !text.contains("](thread:") && !text.contains("](board:") {
+    if !text.contains("notion.") && !text.contains("](thread:") {
         return Vec::new();
     }
     let chars: Vec<char> = text.chars().collect();
@@ -162,8 +158,6 @@ pub fn find_mentions(text: &str) -> Vec<Mention> {
                 let url: String = chars[url].iter().collect();
                 let kind = if url.starts_with("thread:") {
                     MentionKind::Thread
-                } else if url.starts_with("board:") {
-                    MentionKind::Board
                 } else {
                     MentionKind::Card
                 };
@@ -195,26 +189,7 @@ fn destination(u: &[char], at: usize, stop: &[usize]) -> Option<(Range<usize>, u
             .all(|(o, c)| u.get(index + o) == Some(&c))
     };
     let mut k;
-    if has("board:", begin) {
-        // board:<thread id>#<box id>, an arrow's from->to, or a screen's
-        // <box>/<frame>@v<n> (plan_board.rs).
-        k = begin + "board:".len();
-        let id_start = k;
-        while k < n && is_id_char(u[k]) {
-            k += 1;
-        }
-        if k == id_start || k >= n || u[k] != '#' {
-            return None;
-        }
-        k += 1;
-        let node_start = k;
-        while k < n && (is_id_char(u[k]) || matches!(u[k], '>' | '/' | '@')) {
-            k += 1;
-        }
-        if k == node_start {
-            return None;
-        }
-    } else if has("thread:", begin) {
+    if has("thread:", begin) {
         k = begin + "thread:".len();
         let id_start = k;
         while k < n && is_id_char(u[k]) {
@@ -614,17 +589,6 @@ mod tests {
 
     fn links(text: &str) -> Vec<&str> {
         web_links(text).into_iter().map(|r| &text[r]).collect()
-    }
-
-    #[test]
-    fn finds_plan_board_chips() {
-        let text = "Change [KPI cards](board:5533c870-aa#kpi) and [a → b (x)](board:5533c870-aa#a->b), not [x](board:nobox)";
-        let found = find_mentions(text);
-        assert_eq!(found.len(), 2);
-        assert_eq!(found[0].kind, MentionKind::Board);
-        assert_eq!(found[0].title, "KPI cards");
-        assert_eq!(found[0].url, "board:5533c870-aa#kpi");
-        assert_eq!(found[1].url, "board:5533c870-aa#a->b");
     }
 
     #[test]

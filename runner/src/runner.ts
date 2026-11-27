@@ -161,7 +161,6 @@ import { nestedPart, type NestedPart } from './runner/nested.ts';
 import { ceilingPart, type CeilingPart } from './runner/ceiling.ts';
 import { mailPart, type MailPart } from './runner/mail.ts';
 import { coldCompactPart, compactionResult, type ColdCompactPart, type Precompact } from './runner/cold-compact.ts';
-import { boardsPart, type BoardsPart } from './runner/boards.ts';
 import { COPIED_REFUSAL, neutraliseCopied, realCopy } from './real-copy.ts';
 import type { YearTokenAnswer, YearTokenParams } from './year-token-maker.ts';
 import { placeBucket, placeOf } from './place.ts';
@@ -770,7 +769,7 @@ const ACCOUNT_RESCAN_MS = 10_000;
 // this often, always ending on the latest list.
 const ACCOUNTS_THROTTLE_MS = 5_000;
 // Parts of the Runner that live in runner/ (see each file's top).
-export interface Runner extends LooseEndsPart, QuietInboxPart, InboxGuessPart, NestedPart, CeilingPart, MailPart, ColdCompactPart, LabReviewPart, NewThreadsPart, HibernationPart, TitlesPart, HighlightsPart, PatchesPart, EditingPart, ClisPart, ReviewsPart, ButtonsPart, ApprovalsPart, ProjectsHostPart, StoppedWorkPart, HandoversPart, PoolsPart, NetworkPart, WorktreesPart, CommandsPart, ContextUsagePart, MovesPart, WarmStartPart, BoardsPart {}
+export interface Runner extends LooseEndsPart, QuietInboxPart, InboxGuessPart, NestedPart, CeilingPart, MailPart, ColdCompactPart, LabReviewPart, NewThreadsPart, HibernationPart, TitlesPart, HighlightsPart, PatchesPart, EditingPart, ClisPart, ReviewsPart, ButtonsPart, ApprovalsPart, ProjectsHostPart, StoppedWorkPart, HandoversPart, PoolsPart, NetworkPart, WorktreesPart, CommandsPart, ContextUsagePart, MovesPart, WarmStartPart {}
 export class Runner {
   // While main.ts is still starting up: waking a thread for its waits
   // (reconcileWaits) would start a CLI whose tools aren't ready, so they
@@ -5697,7 +5696,7 @@ export class Runner {
 
 // The Runner's other methods live in parts under runner/, one area each;
 // they go onto its prototype here, as the class's own methods would be.
-for (const part of [looseEndsPart, quietInboxPart, inboxGuessPart, nestedPart, ceilingPart, mailPart, coldCompactPart, labReviewPart, newThreadsPart, hibernationPart, titlesPart, highlightsPart, patchesPart, editingPart, clisPart, reviewsPart, buttonsPart, approvalsPart, projectsHostPart, stoppedWorkPart, handoversPart, poolsPart, networkPart, worktreesPart, commandsPart, contextUsagePart, movesPart, warmStartPart, boardsPart]) {
+for (const part of [looseEndsPart, quietInboxPart, inboxGuessPart, nestedPart, ceilingPart, mailPart, coldCompactPart, labReviewPart, newThreadsPart, hibernationPart, titlesPart, highlightsPart, patchesPart, editingPart, clisPart, reviewsPart, buttonsPart, approvalsPart, projectsHostPart, stoppedWorkPart, handoversPart, poolsPart, networkPart, worktreesPart, commandsPart, contextUsagePart, movesPart, warmStartPart]) {
   for (const [key, d] of Object.entries(Object.getOwnPropertyDescriptors(part))) {
     Object.defineProperty(Runner.prototype, key, { ...d, enumerable: false });
   }

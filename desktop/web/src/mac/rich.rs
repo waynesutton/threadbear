@@ -54,9 +54,6 @@ struct DiagramView {
 thread_local! {
     static DIAGRAMS: RefCell<Option<Rc<DiagramView>>> = const { RefCell::new(None) };
     static PAGES: RefCell<Option<Rc<Offscreen>>> = const { RefCell::new(None) };
-    // The plan board's screens (draw_page_at): a view of their own, so a
-    // screen never shares the transcript's html blocks' view.
-    static SCREENS: RefCell<Option<Rc<Offscreen>>> = const { RefCell::new(None) };
 }
 
 /// Drops both views, for a drawing that took too long (a stuck page is
@@ -64,7 +61,6 @@ thread_local! {
 pub fn reset() {
     DIAGRAMS.with(|d| d.borrow_mut().take());
     PAGES.with(|p| p.borrow_mut().take());
-    SCREENS.with(|p| p.borrow_mut().take());
 }
 
 /// One of the app's own pages as an address, its bytes in the address
@@ -305,56 +301,4 @@ pub async fn draw_page(html: &str, zoom: u32, scale: f32) -> Result<Drawn, Strin
         dark: dark.2,
         light: light.2,
     })
-}
-
-/// A plan board screen (the planBoardMockups experiment): the agent's html
-/// laid out `width` CSS pixels wide and pictured `height` tall, a viewport
-/// rather than the whole page, in one look, at `scale` pixels a point. The
-/// same sealed renderer as `draw_page` (JavaScript off, only data: and
-/// about:, html_page's policy first), in a view of its own, so the 720-point
-/// transcript path is unchanged.
-pub async fn draw_page_at(
-    html: &str,
-    width: u32,
-    height: u32,
-    scale: f32,
-    dark: bool,
-) -> Result<Vec<u8>, String> {
-    let view = match SCREENS
-        .with(|p| p.borrow().clone())
-        .filter(|v| !v.stopped())
-    {
-        Some(view) => view,
-        None => {
-            let (page, loaded) = Offscreen::open(
-                "about:blank",
-                Options {
-                    javascript: false,
-                    width: width.max(1) as i32,
-                    height: 1,
-                    scale,
-                },
-            )?;
-            loaded
-                .await
-                .map_err(|_| "the page went away".to_owned())??;
-            let view = Rc::new(page);
-            SCREENS.with(|p| *p.borrow_mut() = Some(view.clone()));
-            view
-        }
-    };
-    let page = rich::html_page(html);
-    view.load(&data_url(&page))
-        .await
-        .map_err(|_| "the page went away".to_owned())??;
-    call(&view, "Emulation.setEmulatedMedia", json!({ "features": [{ "name": "prefers-color-scheme", "value": if dark { "dark" } else { "light" } }] })).await?;
-    let png = capture(
-        &view,
-        f64::from(width.max(1)),
-        f64::from(height.max(1)),
-        f64::from(scale),
-    )
-    .await?;
-    let _ = view.load("about:blank").await;
-    Ok(png)
 }

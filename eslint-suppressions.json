@@ -315,7 +315,7 @@
   },
   "runner/src/protocol.ts": {
     "mikecann-lint/prefer-kind-discriminant": {
-      "count": 24
+      "count": 23
     }
   },
   "runner/src/reviews.ts": {

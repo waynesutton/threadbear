@@ -30,12 +30,6 @@ Then('the transcript shows the note {string} outside the turn\'s work', async fu
   assert.ok(!row.inGroup, 'the note folded into the work');
 });
 
-When('I rest on the link {string} in the note {string}', async function (this: ThreadbearWorld, link: string, words: string) {
-  const row = await this.until(`the note "${words}"`, (d) => note(d, words));
-  await this.app.do({ cmd: 'peek', row: row.id, words: link, hover: true });
-  await new Promise((r) => setTimeout(r, 1500));
-});
-
 When('I click the link {string} in the note {string}', async function (this: ThreadbearWorld, link: string, words: string) {
   const row = await this.until(`the note "${words}"`, (d) => note(d, words));
   await this.app.do({ cmd: 'peek', row: row.id, words: link, follow: true });

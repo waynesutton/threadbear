@@ -62,7 +62,6 @@ pub mod open_policy;
 pub mod outbox;
 pub mod panel_requests;
 pub mod pinned_panels;
-pub mod plan_board;
 pub mod pools;
 pub mod prints;
 pub mod private_file;
