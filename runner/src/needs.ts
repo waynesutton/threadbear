@@ -1532,6 +1532,14 @@ export const ACP_END_TURN_NUDGE =
   "Call the threadbear server's end_turn tool now, with the summary, needs, completion, and any asks or next follow-ups from what you just wrote. " +
   "Your message above is the reply: don't write it again, and write nothing after end_turn.";
 
+// The same for Codex, which has no Stop hook either: the session sends it
+// as one more Codex turn (codex/adapter.ts, nudge). Codex sees the tool as
+// threadbear's end_turn.
+export const CODEX_END_TURN_NUDGE =
+  'This turn ended without end_turn, so Threadbear has no summary or card for it. ' +
+  "Call threadbear's end_turn tool now, with the summary, needs, completion, and any asks or next follow-ups from what you just wrote. " +
+  "Your message above is the reply: don't write it again, and write nothing after end_turn.";
+
 export const ALREADY_ENDED = 'Already ended: this turn has had its end_turn, and the user has its summary and asks. Stop here, with no more text.';
 
 // A repeat end_turn that only adds archive: the card that was taken stands

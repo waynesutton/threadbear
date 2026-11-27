@@ -2187,7 +2187,8 @@ goes ahead without them. A folder's own OpenCode config and plugins aren't
 read in these threads. These threads end with the same Done and Needs you
 cards as Claude's: a turn that finishes without calling `end_turn` is sent
 back once, in the same turn, to call it, so its follow-ups and task list
-reach the card. An agent that doesn't take MCP servers over HTTP never gets `end_turn`, so
+reach the card. Codex threads get the same follow-up (not after `/compact`
+or `/review`). An agent that doesn't take MCP servers over HTTP never gets `end_turn`, so
 its card is still read from the reply. Cursor can't be told to always ask, so its Ask, Auto
 and Plan first threads run in its read-only modes and can't change
 anything; to let Cursor change files, use Full access. Grok's own settings

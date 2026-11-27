@@ -21,6 +21,7 @@ import { nullLogger } from '../../src/log.ts';
 import type { Account } from '../../src/protocol.ts';
 import { FakeCodex } from '../helpers/fake-app-server.ts';
 import { PATIENCE_MS } from '../helpers/patience.ts';
+import { CODEX_END_TURN_NUDGE } from '../../src/needs.ts';
 
 const dirs: string[] = [];
 function tmp(prefix = 'tb-cxa-'): string {
@@ -1325,4 +1326,69 @@ test('Codex coordinator lockdown helpers', () => {
   assert.deepEqual(coordinatorMcpLeaks([{ name: 'agent-archive', runtimeStatus: 'connected', tools: { write_file: {} } }], true), ['agent-archive'], 'only its read tools');
   assert.deepEqual(coordinatorMcpLeaks([{ name: 'agent-archive', runtimeStatus: 'connected', tools: { search_archive: {} } }], false), ['agent-archive'], 'not kept: must be off');
   assert.deepEqual(coordinatorMcpLeaks([{ name: 'y', runtimeStatus: null, tools: {} }], true), ['y'], 'unknown status is not proof it is off');
+});
+
+// ---- end_turn: a turn that ends without it is sent back once
+
+const endTurnTool = (answer = 'Noted: this thread is done. Now write your reply.') => tool('end_turn', 'End the turn.', { headline: z.string().optional() }, async () => ({ content: [{ type: 'text', text: answer }] }));
+
+test('a turn that ends without end_turn gets one follow-up Codex turn, inside the same runner turn', async () => {
+  const h = await open({ deps: { toolsFor: () => [endTurnTool()] } });
+  await started(h);
+  h.session.send({ id: 'm1', text: 'hello', images: [] });
+  await turnStarts(h, 'u1');
+  complete(h, 'u1');
+  const follow = await h.conn.request('turn/start');
+  const p = follow.params as { input: { type: string; text?: string }[]; clientUserMessageId?: string };
+  assert.equal(p.input[0].text, CODEX_END_TURN_NUDGE);
+  assert.equal(p.clientUserMessageId, undefined, 'not one of the user\'s messages');
+  assert.ok(h.rec.kinds().includes('endTurnNudge'));
+  assert.equal(h.rec.results().length, 0, 'the runner turn is still open');
+  h.conn.respond(follow.id, { turn: { id: 'u2', rootTurnId: 'u2', status: 'inProgress', error: null, durationMs: null, items: [] } });
+  h.conn.notify('turn/started', { threadId: 'th-1', turn: { id: 'u2', rootTurnId: 'u2', status: 'inProgress' } });
+  await h.conn.serverRequest('item/tool/call', { threadId: 'th-1', turnId: 'u2', callId: 'e1', namespace: 'threadbear', tool: 'end_turn', arguments: {} });
+  complete(h, 'u2');
+  await waitFor(() => h.rec.results().length === 1);
+  assert.equal(h.rec.results()[0].outcome, 'completed');
+  assert.equal(h.rec.results()[0].answers, 'm1');
+  assert.equal(h.rec.kinds().filter((k) => k === 'endTurnNudge').length, 1, 'sent back once, not again');
+  await h.session.end();
+});
+
+test('a turn that took end_turn ends as it is, and so does /compact', async () => {
+  const h = await open({ deps: { toolsFor: () => [endTurnTool()] } });
+  await started(h);
+  h.session.send({ id: 'm1', text: 'hello', images: [] });
+  await turnStarts(h, 'u1');
+  await h.conn.serverRequest('item/tool/call', { threadId: 'th-1', turnId: 'u1', callId: 'e1', namespace: 'threadbear', tool: 'end_turn', arguments: {} });
+  complete(h, 'u1');
+  await waitFor(() => h.rec.results().length === 1);
+  assert.ok(!h.rec.kinds().includes('endTurnNudge'));
+  h.session.send({ id: 'm2', text: '/compact', images: [] });
+  const c = await h.conn.request('thread/compact/start');
+  h.conn.respond(c.id, {});
+  h.conn.notify('turn/started', { threadId: 'th-1', turn: { id: 'u3', rootTurnId: 'u3', status: 'inProgress' } });
+  complete(h, 'u3');
+  await waitFor(() => h.rec.results().length === 2);
+  assert.ok(!h.rec.kinds().includes('endTurnNudge'));
+  await h.session.end();
+});
+
+test('a refused end_turn still counts as missing, and a session without end_turn is never sent back', async () => {
+  const refused = await open({ deps: { toolsFor: () => [endTurnTool('Not ended: this turn has no task list.')] } });
+  await started(refused);
+  refused.session.send({ id: 'm1', text: 'hello', images: [] });
+  await turnStarts(refused, 'u1');
+  await refused.conn.serverRequest('item/tool/call', { threadId: 'th-1', turnId: 'u1', callId: 'e1', namespace: 'threadbear', tool: 'end_turn', arguments: {} });
+  complete(refused, 'u1');
+  await waitFor(() => refused.rec.kinds().includes('endTurnNudge'));
+  await refused.session.end();
+  const none = await open({ deps: { toolsFor: () => [] } });
+  await started(none);
+  none.session.send({ id: 'm1', text: 'hello', images: [] });
+  await turnStarts(none, 'u1');
+  complete(none, 'u1');
+  await waitFor(() => none.rec.results().length === 1);
+  assert.ok(!none.rec.kinds().includes('endTurnNudge'));
+  await none.session.end();
 });

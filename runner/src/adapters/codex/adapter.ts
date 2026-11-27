@@ -14,6 +14,7 @@ import type { Logger } from '../../log.ts';
 import type { ProcessRegistry } from '../../proc.ts';
 import type { AdapterOutput, AgentAdapter, AgentSession, LimitsCheck, RewindRequest, RewindResult, SessionSink, StartSessionOptions, TurnResult, UseResetResult, UserInput } from '../types.ts';
 import { RewindRefusedError, SessionNotFoundError } from '../types.ts';
+import { CODEX_END_TURN_NUDGE, endTurnTaken } from '../../needs.ts';
 import { fileContext, type NormalizerContext } from '../context.ts';
 import {
   AppServerProcess,
@@ -595,6 +596,13 @@ type ActiveTurn = {
   ending: boolean;
   dropped: string[]; // held messages Stop dropped
   openCommands: Set<string>;
+  // A slash command's turn (/compact, /review), which never calls end_turn.
+  command?: boolean;
+  // Its end_turn was taken (callTool), so it isn't sent back for one.
+  endTurnTaken?: boolean;
+  // Sent back once for end_turn (turnCompleted), with the result of the
+  // Codex turn before it, which stands if the follow-up can't start.
+  nudged?: { first: TurnResult };
 };
 
 type State = 'starting' | 'ready' | 'turnPending' | 'turnActive' | 'closing' | 'closed';
@@ -634,6 +642,9 @@ export class CodexSession implements AgentSession {
   private effort?: EffortLevel;
   private effortChanged = false;
   private mode: PermissionMode;
+  // This session's tools include end_turn: a turn that ends without it is
+  // sent back once (turnCompleted), as Claude's Stop hook does.
+  private hasEndTurn = false;
   private cwd: string;
   private sentCwd: string;
   // The model Codex said it runs, and whether the thread is in Codex's plan
@@ -662,7 +673,9 @@ export class CodexSession implements AgentSession {
     const ctx: NormalizerContext = { ...base, readFile: (p) => base.readFile(path.isAbsolute(p) ? p : path.join(ctx.cwd, p)) };
     this.ctx = ctx;
     this.normalizer = deps.normalizer ? deps.normalizer(ctx, { threadId: opts.threadId }) : new CodexNormalizer(ctx, { log: deps.log });
-    this.tools = new CodexTools(deps.toolsFor?.(opts.threadId) ?? [], {
+    const defs = deps.toolsFor?.(opts.threadId) ?? [];
+    this.hasEndTurn = opts.coordinator?.role !== 'helper' && defs.some((d) => d.name === 'end_turn');
+    this.tools = new CodexTools(defs, {
       requestApproval: (req) => this.sink.requestApproval(req),
       cwd: () => this.cwd,
       mode: () => this.mode,
@@ -700,7 +713,12 @@ export class CodexSession implements AgentSession {
       cwd: () => this.cwd,
       itemPaths: (id) => this.itemPaths.get(id),
       runsAsCode: (file) => runsAsCodeByName(file) || (opts.runsAsCode?.(file) ?? false),
-      callTool: (params, o) => this.tools.call(params, o),
+      callTool: async (params, o) => {
+        const r = await this.tools.call(params, o);
+        const text = r.contentItems.map((c) => c.text).join('');
+        if (!o.fromChild && params.tool === 'end_turn' && this.turn && endTurnTaken({ ok: r.success, text })) this.turn.endTurnTaken = true;
+        return r;
+      },
       now: this.now,
       fullAccess: () => this.opts.coordinator?.role !== 'coordinator' && this.mode === 'full',
       ...(opts.coordinator
@@ -1140,6 +1158,8 @@ export class CodexSession implements AgentSession {
 
   private startTurn(input: UserInput, steerLater: UserInput[] = []): void {
     const turn = this.newTurn({ ids: input.id ? [input.id] : [], own: false });
+    // Only Codex's own commands: a /<skill> runs as a turn that should end with end_turn.
+    if (['compact', 'review'].includes(parseCommand(input.text)?.name.toLowerCase() ?? '')) turn.command = true;
     turn.steerQueue.push(...steerLater);
     this.turn = turn;
     this.state = 'turnPending';
@@ -1245,11 +1265,12 @@ export class CodexSession implements AgentSession {
     const steerIds = turn.steerQueue.map((m) => m.id).filter((x): x is string => Boolean(x));
     this.turn = undefined;
     this.state = 'ready';
-    this.finishTurn(
-      turn,
-      { outcome: turn.interruptRequested ? 'interrupted' : 'failed', durationMs: Math.max(0, this.now() - turn.startedAt), ...(turn.interruptRequested ? {} : { error: errText(e) }) },
-      steerIds,
-    );
+    // The follow-up couldn't start: the turn it followed still finished.
+    const base: TurnResult =
+      turn.nudged && !turn.interruptRequested
+        ? turn.nudged.first
+        : { outcome: turn.interruptRequested ? 'interrupted' : 'failed', durationMs: Math.max(0, this.now() - turn.startedAt), ...(turn.interruptRequested ? {} : { error: errText(e) }) };
+    this.finishTurn(turn, base, steerIds);
     this.next();
   }
 
@@ -1339,9 +1360,20 @@ export class CodexSession implements AgentSession {
     let endAfter = false;
     if (p.turn.status === 'interrupted' && turn.openCommands.size) endAfter = !(await this.stopOpenCommands(turn));
     if (this.turn !== turn) return;
+    const result = outs.find((o): o is Extract<AdapterOutput, { kind: 'result' }> => o.kind === 'result')?.result;
+    // A turn that finished without end_turn leaves the runner reading the
+    // card from the prose, which drops follow-ups and the task list: 63 of
+    // 417 finished Codex turns on Wayne's Mac did (27 Nov 2026). Codex has
+    // no Stop hook, so the session asks in one more Codex turn, inside the
+    // same runner turn. The runner is told first, so words from here are
+    // dropped like any after end_turn and the reply already written stands.
+    if (!endAfter && this.owesEndTurn(turn, p)) {
+      this.emit(outs.filter((o) => o.kind !== 'result'));
+      this.nudge(turn, result ?? fallbackResult(p.turn, turn, this.now()));
+      return;
+    }
     this.turn = undefined;
     this.clearWaitTimers();
-    const result = outs.find((o): o is Extract<AdapterOutput, { kind: 'result' }> => o.kind === 'result')?.result;
     this.emit(outs);
     if (endAfter) {
       // The runner's turn ends with the session (as interrupted, since Stop
@@ -1356,10 +1388,33 @@ export class CodexSession implements AgentSession {
     this.next();
   }
 
+  private owesEndTurn(turn: ActiveTurn, p: TurnNotification): boolean {
+    if (!this.hasEndTurn || turn.nudged || turn.endTurnTaken || turn.command || turn.own || turn.interruptRequested) return false;
+    if (p.turn.status !== 'completed' || this.mode === 'plan') return false;
+    return true;
+  }
+
+  // The follow-up: a Codex turn of its own (a steer can't join a turn that
+  // has ended), with no runner message id, so its prompt never shows as one
+  // of the user's (the normalizer ignores userMessage items).
+  private nudge(turn: ActiveTurn, first: TurnResult): void {
+    turn.nudged = { first };
+    turn.ending = false;
+    turn.codexTurnId = undefined;
+    this.state = 'turnPending';
+    this.sink.output({ kind: 'endTurnNudge' });
+    this.normalizer.startingTurn?.(undefined);
+    this.turnStart(this.turnParams({ text: CODEX_END_TURN_NUDGE, images: [] }))
+      .then((res) => this.enqueue(() => this.turnStartAnswered(turn, res)))
+      .catch((e: unknown) => this.enqueue(() => this.turnStartFailed(turn, e)));
+  }
+
   // Fills in which runner messages the turn answered, and how many wait for
   // the next turn/start, then hands the result to the runner.
   private finishTurn(turn: ActiveTurn, base: TurnResult, extra: string[] = []): void {
     const r: TurnResult = { ...base };
+    // One runner turn across the follow-up's Codex turn too.
+    if (turn.nudged) r.durationMs = Math.max(0, this.now() - turn.startedAt);
     const answered = [...turn.ids, ...extra, ...turn.dropped];
     delete r.own;
     delete r.answers;
