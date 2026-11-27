@@ -311,6 +311,30 @@ async function prompt(id, p) {
     const r = await fetch(s.mcp.url, { method: 'POST', headers: { 'content-type': 'application/json', ...headers }, body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: 'end_turn', arguments: {} } }) });
     log({ endTurn: (await r.json()).result });
   }
+  // Cursor's call to an MCP tool, frame by frame as cursor-agent acp sends
+  // one (27 Nov 2026): named in the update's rawInput, and in the
+  // permission request only by its title. Runs only once allowed.
+  else if (word === 'cursormcp' && s.mcp) {
+    const toolCallId = `0_tool_${Math.random().toString(36).slice(2)}`;
+    const server = rest[0] ?? 'threadbear';
+    update(p.sessionId, { sessionUpdate: 'tool_call', toolCallId, title: 'MCP: tool', kind: 'other', status: 'pending', rawInput: {} });
+    update(p.sessionId, { sessionUpdate: 'tool_call_update', toolCallId, title: `${server}: end_turn`, rawInput: { providerIdentifier: server, toolName: 'end_turn', args: { headline: 'probe' } } });
+    const r = await ask('session/request_permission', {
+      sessionId: p.sessionId,
+      toolCall: { toolCallId, title: `${server}-end_turn: end_turn`, kind: 'other', status: 'pending', content: [{ type: 'content', content: { type: 'text', text: '{"headline":"probe"}' } }] },
+      options: [
+        { optionId: 'allow-once', name: 'Allow once', kind: 'allow_once' },
+        { optionId: 'reject-once', name: 'Reject', kind: 'reject_once' },
+      ],
+    });
+    log({ answered: r });
+    if (r.outcome?.outcome === 'selected' && r.outcome.optionId !== 'reject-once') {
+      const headers = Object.fromEntries(s.mcp.headers.map((h) => [h.name, h.value]));
+      const res = await fetch(s.mcp.url, { method: 'POST', headers: { 'content-type': 'application/json', ...headers }, body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: 'end_turn', arguments: {} } }) });
+      log({ endTurn: (await res.json()).result });
+      update(p.sessionId, { sessionUpdate: 'tool_call_update', toolCallId, status: 'completed', rawOutput: { success: true } });
+    }
+  }
   // OpenCode 2's question tool, as a form (when the client offered forms).
   else if (word === 'form') {
     if (!clientForms) log({ form: 'not offered' });

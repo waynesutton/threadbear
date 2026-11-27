@@ -443,6 +443,10 @@ export class AcpSession implements AgentSession {
   private ownEfforts = new Map<string, { levels: EffortLevel[]; defaultEffort?: EffortLevel }>();
   // The threadbear tools this session's MCP server offers, as the agent names them.
   private ownTools = new Set<string>();
+  // The agent's own MCP config names a server threadbear, which could answer
+  // in place of ours: then none of its calls go ahead unasked (Cursor's
+  // ~/.cursor/mcp.json or the folder's).
+  private ownShadowed = false;
   // Whether this turn's end_turn was taken (mcp-http.ts, onResult), so a turn
   // that ended without it is sent back once (runTurn), as Claude's Stop hook
   // does.
@@ -551,6 +555,13 @@ export class AcpSession implements AgentSession {
       const url = await this.mcp.listen();
       mcpServers = [{ type: 'http', name: 'threadbear', url, headers: [{ name: 'Authorization', value: `Bearer ${this.mcp.token}` }] }];
       this.ownTools = new Set(defs.map((d) => `threadbear__${d.name}`));
+      this.ownShadowed = (deps.agent.mcpConfigFiles?.(os.homedir(), opts.cwd) ?? []).some((f) => {
+        try {
+          return /"threadbear"\s*:/.test(fs.readFileSync(f, 'utf8'));
+        } catch {
+          return false;
+        }
+      });
     }
     if (this.init.agentCapabilities?.mcpCapabilities?.http && deps.extraMcpServers) {
       // Without them the thread still starts; the dep logs why.
@@ -867,7 +878,10 @@ export class AcpSession implements AgentSession {
     // for one of Threadbear's own tools only when every such frame named it
     // (Codex's and Gemini's ninth reviews, 20 Nov 2026).
     const raw = isPlainObject(u.rawInput) ? u.rawInput : undefined;
-    const id = mcpIdOf(u) ?? (this.deps.agent.provider === 'grok' && typeof raw?.tool_name === 'string' && raw.tool_name ? raw.tool_name : undefined);
+    const id =
+      mcpIdOf(u) ??
+      (this.deps.agent.provider === 'grok' && typeof raw?.tool_name === 'string' && raw.tool_name ? raw.tool_name : undefined) ??
+      (this.deps.agent.provider === 'cursor' ? this.deps.agent.mcpToolName?.(u as AcpToolCall) : undefined);
     if (id) f.ids.add(id);
     if (typeof u.name === 'string' && u.name) f.names.add(u.name);
     const acting =
@@ -993,7 +1007,7 @@ export class AcpSession implements AgentSession {
     // (Codex's eighth review, 20 Nov 2026).
     // A call with no id has no history to check, so it never goes ahead this
     // way (Codex's tenth review, 20 Nov 2026).
-    if (mcpName && this.ownTools.has(mcpName) && frames && [...frames.ids].every((i) => i === mcpName) && frames.named.get(mcpName) === frames.acting && frames.kinds.size <= 1 && ![...frames.kinds].some((k) => k === 'execute' || writesFiles(k))) return this.answer(id, options, true, seen.id);
+    if (mcpName && this.ownTools.has(mcpName) && !this.ownShadowed && frames && [...frames.ids].every((i) => i === mcpName) && frames.named.get(mcpName) === frames.acting && frames.kinds.size <= 1 && ![...frames.kinds].some((k) => k === 'execute' || writesFiles(k))) return this.answer(id, options, true, seen.id);
 
     const { kind } = seen;
     // A read of the thread's own files, for an agent whose own rules can't

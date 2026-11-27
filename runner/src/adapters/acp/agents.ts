@@ -450,6 +450,27 @@ const ANTIGRAVITY: AcpAgent = {
   },
 };
 
+// Which MCP tool a Cursor frame is for. Its tool_call_update names it in
+// rawInput ({ providerIdentifier, toolName, args }), and its permission
+// request only in the title, "<server>-<tool>: <tool>" (cursor-agent acp,
+// 27 Nov 2026). Without this, Threadbear's own end_turn put up a card in
+// Ask mode, so Cursor threads waited on it instead of showing a Done card.
+export function cursorMcpToolName(call: AcpToolCall): string | undefined {
+  const raw = call.rawInput;
+  if (raw && typeof raw === 'object' && !Array.isArray(raw)) {
+    const r = raw as Record<string, unknown>;
+    if (typeof r.providerIdentifier === 'string' && r.providerIdentifier && typeof r.toolName === 'string' && r.toolName) return `${r.providerIdentifier}__${r.toolName}`;
+  }
+  const title = typeof call.title === 'string' ? call.title : '';
+  const at = title.lastIndexOf(': ');
+  if (at < 0) return undefined;
+  const tool = title.slice(at + 2);
+  const head = title.slice(0, at);
+  if (!tool || !head.endsWith(`-${tool}`)) return undefined;
+  const server = head.slice(0, -(tool.length + 1));
+  return server ? `${server}__${tool}` : undefined;
+}
+
 export const ACP_AGENTS: Record<AcpProvider, AcpAgent> = {
   opencode: {
     provider: 'opencode',
@@ -505,6 +526,10 @@ export const ACP_AGENTS: Record<AcpProvider, AcpAgent> = {
     // Its ask and plan modes are read-only, so a thread that has to ask
     // runs in one of those: it can't change anything, card or no card.
     modeFor: (mode) => (mode === 'full' ? 'agent' : mode === 'plan' ? 'plan' : 'ask'),
+    // Where a server of the user's own named threadbear would be set up
+    // (AcpSession, ownShadowed): its calls would look like ours.
+    mcpConfigFiles: (home, cwd) => [path.join(home, '.cursor', 'mcp.json'), path.join(cwd, '.cursor', 'mcp.json')],
+    mcpToolName: cursorMcpToolName,
   },
   grok: {
     provider: 'grok',

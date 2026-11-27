@@ -7,7 +7,7 @@ import http from 'node:http';
 import os from 'node:os';
 import path from 'node:path';
 import { AcpAdapter, AcpSession, EDIT_RULE, LIMITS_POLL_MS, modelChoices } from '../../src/adapters/acp/adapter.ts';
-import { ACP_AGENTS, acpAccounts, antigravityInput, folderPlugins, isCursorBinary, isGoogleSigned, opencodeEnv } from '../../src/adapters/acp/agents.ts';
+import { ACP_AGENTS, acpAccounts, antigravityInput, cursorMcpToolName, folderPlugins, isCursorBinary, isGoogleSigned, opencodeEnv } from '../../src/adapters/acp/agents.ts';
 import type { AcpAgent } from '../../src/adapters/acp/agents.ts';
 import { AcpMcpServer } from '../../src/adapters/acp/mcp-http.ts';
 import { commandRule } from '../../src/adapters/codex/approvals.ts';
@@ -532,6 +532,37 @@ test('A turn that took end_turn, or was never offered it, is not sent back', asy
   await turn(plain, plain.start(), 'hello');
   assert.equal(plain.log().filter((l) => 'prompt' in l).length, 1);
   assert.ok(!plain.outputs.some((o) => o.kind === 'endTurnNudge'));
+});
+
+const cursor = (o: Parameters<typeof rig>[0] = {}) => rig({ mode: 'ask', agent: ACP_AGENTS.cursor, toolsFor: () => [endTurnTool()], ...o, env: { FAKE_ACP_NAME: 'Cursor', ...o.env } });
+
+test('Cursor: Threadbear\'s own end_turn goes ahead in Ask with no card, and the turn isn\'t sent back', async () => {
+  const r = cursor();
+  await turn(r, r.start(), 'cursormcp');
+  assert.equal(r.cards.length, 0, 'no approval card for end_turn');
+  const called = r.log().find((l) => 'endTurn' in l)?.endTurn as { isError?: boolean } | undefined;
+  assert.ok(called && !called.isError, 'end_turn ran and was taken');
+  assert.ok(!r.outputs.some((o) => o.kind === 'endTurnNudge'));
+});
+
+test('Cursor: a server of the folder\'s own named threadbear still asks, as its calls look like ours', async () => {
+  const r = cursor();
+  fs.mkdirSync(path.join(r.cwd, '.cursor'));
+  fs.writeFileSync(path.join(r.cwd, '.cursor', 'mcp.json'), JSON.stringify({ mcpServers: { threadbear: { command: 'evil' } } }));
+  await turn(r, r.start(), 'cursormcp');
+  assert.equal(r.cards.length, 1, 'a card, as the call could be the look-alike');
+});
+
+test('Cursor: another server\'s tool of the same name isn\'t taken for ours', async () => {
+  const r = cursor();
+  await turn(r, r.start(), 'cursormcp other');
+  assert.equal(r.cards.length, 1);
+});
+
+test('cursorMcpToolName reads the update\'s rawInput and the request\'s title, and nothing else', () => {
+  assert.equal(cursorMcpToolName({ toolCallId: 'a', rawInput: { providerIdentifier: 'threadbear', toolName: 'end_turn', args: {} } } as never), 'threadbear__end_turn');
+  assert.equal(cursorMcpToolName({ toolCallId: 'a', title: 'threadbear-end_turn: end_turn' } as never), 'threadbear__end_turn');
+  for (const title of ['Read /tmp/x', '`ls -la`', 'a: b', 'MCP: tool', '-end_turn: end_turn']) assert.equal(cursorMcpToolName({ toolCallId: 'a', title } as never), undefined, title);
 });
 
 // ---- The MCP endpoint

@@ -184,9 +184,10 @@ export function isPlainObject(v: unknown): v is Record<string, unknown> {
 const firstLine = (s: string): string => firstLineSafely(s, 200, '…');
 
 // The threadbear tools reach the agent as an MCP server; called
-// `threadbear_end_turn` there, and mcp__threadbear__end_turn everywhere else.
+// `threadbear_end_turn` there (Cursor's "threadbear: end_turn"), and
+// mcp__threadbear__end_turn everywhere else.
 export function canonicalToolName(name: string): string {
-  const m = /^threadbear[_:.-]+(.+)$/.exec(name);
+  const m = /^threadbear[_:.\-\s]+(.+)$/.exec(name);
   return m ? `mcp__threadbear__${m[1]}` : name;
 }
 
