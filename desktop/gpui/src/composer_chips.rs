@@ -2860,7 +2860,7 @@ fn model_row(
                 .items_center()
                 .justify_center()
                 .when(row.is_older, |s| s.opacity(0.6))
-                .child(crate::icons::provider_icon(
+                .child(crate::icons::provider_model_icon(
                     provider,
                     px(14.),
                     if selected { fg } else { secondary },
