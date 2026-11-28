@@ -390,6 +390,7 @@ impl Threadbear {
             cx,
         );
         crate::style::set_compact(settings.saved.compact.unwrap_or(false));
+        crate::style::set_color_model_icons(settings.color_model_icons());
         crate::style::set_font_choice(
             settings
                 .saved
@@ -1889,6 +1890,16 @@ impl Threadbear {
     pub(crate) fn set_new_thread_box_bottom(&mut self, bottom: bool, cx: &mut Context<Self>) {
         self.settings.saved.new_thread_box_bottom = bottom.then_some(true);
         self.save_settings_soon(cx);
+        cx.notify();
+    }
+
+    /// Appearance's Color model icons: provider logos in brand colours, or
+    /// monochrome as it ships. Only on is saved, so None stays the default.
+    pub(crate) fn set_color_model_icons(&mut self, on: bool, cx: &mut Context<Self>) {
+        crate::style::set_color_model_icons(on);
+        self.settings.saved.color_model_icons = on.then_some(true);
+        self.save_settings_soon(cx);
+        cx.refresh_windows();
         cx.notify();
     }
 

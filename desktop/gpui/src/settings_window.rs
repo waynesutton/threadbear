@@ -1439,6 +1439,22 @@ impl SettingsWindow {
         )
     }
 
+    /// Appearance's Color model icons switch: off keeps monochrome logos, on
+    /// draws each provider's logo in colour.
+    fn color_model_icons_switch(&self, cx: &mut Context<Self>) -> AnyElement {
+        self.switch(
+            "settings-color-model-icons",
+            style::color_model_icons(),
+            "Show provider logos for Claude, Codex, Cursor, OpenCode, Grok and Gemini in colour",
+            cx,
+            |this, on, cx| {
+                this.app
+                    .update(cx, |app, cx| app.set_color_model_icons(on, cx))
+                    .ok();
+            },
+        )
+    }
+
     /// Appearance's New thread box: Middle as it ships, or Bottom.
     fn new_box_choice(&self, cx: &mut Context<Self>) -> AnyElement {
         let app = self.app.clone();
@@ -1644,6 +1660,7 @@ impl SettingsWindow {
             cx,
         );
         let box_place = self.new_box_choice(cx);
+        let color_icons = self.color_model_icons_switch(cx);
         let font_now = style::font_choice();
         let font_app = app;
         let font_menu = Button::new("settings-font")
@@ -1679,11 +1696,11 @@ impl SettingsWindow {
             "settings-appearance-section",
             "Appearance",
             if cfg!(target_os = "macos") {
-                "How Threadbear looks, for Threadbear only. Same as the Mac follows System Settings > Appearance, and the first accent is the Mac's own, or the theme's when one is on. Text size is the same as View > Zoom (⌘= and ⌘-). New thread box puts the message box on a new thread in the middle of the window, or near the bottom so it grows upwards as you type. The bear colours are Wayne Sutton's, from his fork."
+                "How Threadbear looks, for Threadbear only. Same as the Mac follows System Settings > Appearance, and the first accent is the Mac's own, or the theme's when one is on. Text size is the same as View > Zoom (⌘= and ⌘-). New thread box puts the message box on a new thread in the middle of the window, or near the bottom so it grows upwards as you type. Color model icons draws the provider logos in colour instead of monochrome. The bear colours are Wayne Sutton's, from his fork."
             } else if cfg!(target_os = "windows") {
-                "How Threadbear looks, for Threadbear only. Same as Windows follows Settings > Personalization > Colors. Text size is the same as View > Zoom (Ctrl+= and Ctrl+-). New thread box puts the message box on a new thread in the middle of the window, or near the bottom so it grows upwards as you type. The bear colours are Wayne Sutton's, from his fork."
+                "How Threadbear looks, for Threadbear only. Same as Windows follows Settings > Personalization > Colors. Text size is the same as View > Zoom (Ctrl+= and Ctrl+-). New thread box puts the message box on a new thread in the middle of the window, or near the bottom so it grows upwards as you type. Color model icons draws the provider logos in colour instead of monochrome. The bear colours are Wayne Sutton's, from his fork."
             } else {
-                "How Threadbear looks, for Threadbear only. Text size is the same as View > Zoom (Ctrl+= and Ctrl+-). New thread box puts the message box on a new thread in the middle of the window, or near the bottom so it grows upwards as you type. The bear colours are Wayne Sutton's, from his fork."
+                "How Threadbear looks, for Threadbear only. Text size is the same as View > Zoom (Ctrl+= and Ctrl+-). New thread box puts the message box on a new thread in the middle of the window, or near the bottom so it grows upwards as you type. Color model icons draws the provider logos in colour instead of monochrome. The bear colours are Wayne Sutton's, from his fork."
             },
             "change any of it for you.",
             search,
@@ -1745,6 +1762,23 @@ impl SettingsWindow {
                         "The new-thread box sits near the bottom and grows upwards as you type",
                     ],
                     row("New thread box", box_place, cx),
+                ),
+                (
+                    &[
+                        "Color model icons",
+                        "Colour model icons",
+                        "Model icons",
+                        "Claude",
+                        "Codex",
+                        "Cursor",
+                        "OpenCode",
+                        "Grok",
+                        "Gemini",
+                        "toggle",
+                        "switch",
+                        "Show provider logos for Claude, Codex, Cursor, OpenCode, Grok and Gemini in colour",
+                    ],
+                    row("Color model icons", color_icons, cx),
                 ),
             ],
             cx,
@@ -2529,12 +2563,14 @@ impl SettingsWindow {
                     .collect();
                 let set = settings.pool.clone();
                 // The pool's own icon, else its logins' provider's mark (`Pools.symbol`).
-                let face: Option<Icon> = set
+                let face: Option<AnyElement> = set
                     .as_ref()
                     .and_then(|id| pools.iter().find(|p| &p.0 == id))
                     .map(|(_, _, icon, provider)| match icon {
-                        Some(symbol) => icons::symbol(symbol),
-                        None => icons::provider_mark(provider),
+                        Some(symbol) => icons::symbol(symbol).with_size(px(14.)).into_any_element(),
+                        None => {
+                            icons::provider_icon(provider, px(14.), style::secondary_text(cx), cx)
+                        }
                     });
                 let label = match &set {
                     Some(id) => pools.iter().find(|p| &p.0 == id).map_or_else(
@@ -2558,7 +2594,7 @@ impl SettingsWindow {
                     set.is_none(),
                     json!({ "models": { "pool": Value::Null } }),
                 ));
-                let menu = self.menu(
+                let menu = self.menu_with_face(
                     "settings-small-jobs",
                     label,
                     face,
@@ -2826,6 +2862,53 @@ impl SettingsWindow {
         cx: &mut Context<Self>,
     ) -> AnyElement {
         self.menu_owned(id.to_owned(), label, face, tip.to_owned(), choices, cx)
+    }
+
+    /// `menu`, taking an already-built face element (such as a colour provider
+    /// logo) so `Button::icon`'s monochrome SVG isn't forced on it.
+    fn menu_with_face(
+        &self,
+        id: &'static str,
+        label: String,
+        face: Option<AnyElement>,
+        tip: &'static str,
+        choices: Vec<(String, bool, Value)>,
+        cx: &mut Context<Self>,
+    ) -> AnyElement {
+        let me = cx.entity().downgrade();
+        let mut button = Button::new(SharedString::from(id))
+            .accessibility_label(label.clone())
+            .small()
+            .secondary()
+            .dropdown_caret(true)
+            .tooltip(tip);
+        if let Some(face) = face {
+            button = button.child(face).child(label);
+        } else {
+            button = button.label(label);
+        }
+        div()
+            .id(SharedString::from(format!("{id}-holder")))
+            .test_support()
+            .a11y_role(Role::GenericContainer)
+            .aria_label(tip)
+            .flex_none()
+            .child(button.dropdown_menu(move |menu: PopupMenu, _, _| {
+                let mut menu = menu;
+                for (title, checked, change) in &choices {
+                    let (me, change) = (me.clone(), change.clone());
+                    menu = menu.item(
+                        PopupMenuItem::new(title.clone())
+                            .checked(*checked)
+                            .on_click(move |_, _, cx| {
+                                let change = change.clone();
+                                me.update(cx, |this, cx| this.update(change, cx)).ok();
+                            }),
+                    );
+                }
+                menu
+            }))
+            .into_any_element()
     }
 
     /// `menu`, for one whose id or tip is made up as it's drawn (a
@@ -3566,6 +3649,7 @@ impl SettingsWindow {
             "accent": style::accent_choice().name(),
             "palette": style::palette_choice().name(),
             "compact": style::compact(),
+            "colorModelIcons": style::color_model_icons(),
             "font": style::font_choice().name(),
             "defaultFolder": settings.as_ref().map(|s| s.default_cwd.clone()),
             "keepAwake": settings.as_ref().and_then(|s| s.keep_awake),

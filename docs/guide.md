@@ -3635,6 +3635,10 @@ app opens.
   type. Bottom puts it near the bottom of the window, with the heading
   above it and the room cards under it, so it grows upwards as you add
   lines with Shift-Return.
+- **Color model icons**: off by default, keeping the existing monochrome
+  provider marks. Turn it on to draw the Claude, Codex, Cursor, OpenCode,
+  Grok and Gemini provider icons in colour across the model picker, composer
+  chip, Usage panel and settings.
 
 The website has the same three themes in its settings menu (the gear),
 under the light and dark choices. It remembers the one you pick on that

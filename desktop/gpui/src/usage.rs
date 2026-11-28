@@ -1363,11 +1363,12 @@ fn login_row(
         login.tip.clone(),
         gpui_kit::Role::GenericContainer,
     )
-    .child(
-        icons::provider_mark(&login.provider)
-            .with_size(px(13.))
-            .text_color(p.secondary),
-    )
+    .child(icons::provider_icon(
+        &login.provider,
+        px(13.),
+        p.secondary,
+        cx,
+    ))
     .child(
         div()
             .min_w_0()

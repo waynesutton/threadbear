@@ -1205,9 +1205,12 @@ fn hello_row(
     let secondary = style::secondary_text(cx);
     let green = hsla(145. / 360., 0.45, 0.55, 1.);
     let mark = if matches!(icon, "claude" | "codex") {
-        crate::icons::provider_mark(icon)
+        crate::icons::provider_icon(icon, px(14.), fg.opacity(0.8), cx)
     } else {
         crate::icons::symbol(icon)
+            .with_size(px(14.))
+            .text_color(fg.opacity(0.8))
+            .into_any_element()
     };
     // Long words (the first message) wrap rather than being cut off.
     let mut name = h_flex().gap(px(8.)).items_center().child(
@@ -1261,7 +1264,7 @@ fn hello_row(
                 .flex()
                 .items_center()
                 .justify_center()
-                .child(mark.with_size(px(14.)).text_color(fg.opacity(0.8))),
+                .child(mark),
         )
         .child(
             v_flex()

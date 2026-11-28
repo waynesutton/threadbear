@@ -382,11 +382,7 @@ impl Threadbear {
             .flex()
             .items_center()
             .justify_center()
-            .child(
-                icons::provider_mark(&hit.agent)
-                    .with_size(px(15.))
-                    .text_color(p.secondary),
-            );
+            .child(icons::provider_icon(&hit.agent, px(15.), p.secondary, cx));
         let snippet = (!hit.snippet.is_empty()).then(|| marked_text(&hit.snippet, query, p.fg, cx));
         let title = hit.title.clone();
         let hover_key = row_key(&hit.thread_id);

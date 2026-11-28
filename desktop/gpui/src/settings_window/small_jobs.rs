@@ -54,11 +54,12 @@ impl Render for SmallJobProviderGhost {
                     .border_color(edge),
             )
             .shadow_lg()
-            .child(
-                icons::provider_mark(&self.provider)
-                    .with_size(px(14.))
-                    .text_color(style::secondary_text(cx)),
-            )
+            .child(icons::provider_icon(
+                &self.provider,
+                px(14.),
+                style::secondary_text(cx),
+                cx,
+            ))
             .child(
                 div()
                     .text_size(px(12.))
@@ -303,11 +304,18 @@ impl SettingsWindow {
         }
         group = group
             .child(
-                div().flex_none().w(px(18.)).flex().justify_center().child(
-                    icons::provider_mark(provider)
-                        .with_size(px(14.))
-                        .text_color(if here { secondary } else { tertiary }),
-                ),
+                div()
+                    .flex_none()
+                    .w(px(18.))
+                    .flex()
+                    .justify_center()
+                    .when(!here, |d| d.opacity(0.55))
+                    .child(icons::provider_icon(
+                        provider,
+                        px(14.),
+                        if here { secondary } else { tertiary },
+                        cx,
+                    )),
             )
             .child(
                 div()

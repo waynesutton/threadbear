@@ -6,7 +6,12 @@
 // easy to spot in a screenshot; a project's own icon falls back to its letter
 // instead (see `try_symbol`).
 use gpui_kit::assets::IconName;
-use gpui_kit::component::Icon;
+use gpui_kit::component::{ActiveTheme as _, Icon, Sizable as _};
+use gpui_kit::{
+    img, AnyElement, App, Hsla, Image, ImageFormat, ImageSource, IntoElement as _, ObjectFit,
+    Pixels, Styled as _, StyledImage as _,
+};
+use std::sync::{Arc, OnceLock};
 
 /// `star.fill` has no Lucide twin (Lucide's stars are outlines), so it's drawn
 /// here: the star's shape, filled with the current text colour.
@@ -72,6 +77,59 @@ const CURSOR_LOGO: &[u8] = br#"<svg xmlns="http://www.w3.org/2000/svg" viewBox="
 /// (Gemini on a Google plan), which shows as Gemini.
 const GEMINI_LOGO: &[u8] = br#"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill-rule="evenodd"><path fill="black" d="M20.616 10.835a14.147 14.147 0 01-4.45-3.001 14.111 14.111 0 01-3.678-6.452.503.503 0 00-.975 0 14.134 14.134 0 01-3.679 6.452 14.155 14.155 0 01-4.45 3.001c-.65.28-1.318.505-2.002.678a.502.502 0 000 .975c.684.172 1.35.397 2.002.677a14.147 14.147 0 014.45 3.001 14.112 14.112 0 013.679 6.453.502.502 0 00.975 0c.172-.685.397-1.351.677-2.003a14.145 14.145 0 013.001-4.45 14.113 14.113 0 016.453-3.678.503.503 0 000-.975 13.245 13.245 0 01-2.003-.678z"/></svg>"#;
 
+/// Colour versions of the six provider marks above, shown when Appearance's
+/// Color model icons switch is on. Each keeps the same silhouette as its
+/// monochrome mark above, rendered at 64x64 so Retina icons stay sharp.
+/// Sources: LobeHub icons (`claude-color`, `codex-color`, `gemini-color`),
+/// Cursor's official shaded 3D cube (`cursor.com/brand`), and OpenCode's
+/// official two-tone mark (`opencode.ai/brand`).
+const CLAUDE_COLOR_SVG: &[u8] = br##"<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 24 24" fill-rule="evenodd"><path fill="#D97757" d="M13.827 3.52h3.603L24 20h-3.603l-6.57-16.48zm-7.258 0h3.767L16.906 20h-3.674l-1.343-3.461H5.017l-1.344 3.46H0L6.57 3.522zm4.132 9.959L8.453 7.687 6.205 13.48H10.7z"/></svg>"##;
+const CODEX_COLOR_SVG: &[u8] = br##"<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 24 24" fill-rule="evenodd"><defs><linearGradient id="codex" gradientUnits="userSpaceOnUse" x1="12" y1="0" x2="12" y2="24"><stop offset="0" stop-color="#B1A7FF"/><stop offset="0.5" stop-color="#7A9DFF"/><stop offset="1" stop-color="#3941FF"/></linearGradient></defs><path fill="url(#codex)" d="M8.086.457a6.105 6.105 0 013.046-.415c1.333.153 2.521.72 3.564 1.7a.117.117 0 00.107.029c1.408-.346 2.762-.224 4.061.366l.063.03.154.076c1.357.703 2.33 1.77 2.918 3.198.278.679.418 1.388.421 2.126a5.655 5.655 0 01-.18 1.631.167.167 0 00.04.155 5.982 5.982 0 011.578 2.891c.385 1.901-.01 3.615-1.183 5.14l-.182.22a6.063 6.063 0 01-2.934 1.851.162.162 0 00-.108.102c-.255.736-.511 1.364-.987 1.992-1.199 1.582-2.962 2.462-4.948 2.451-1.583-.008-2.986-.587-4.21-1.736a.145.145 0 00-.14-.032c-.518.167-1.04.191-1.604.185a5.924 5.924 0 01-2.595-.622 6.058 6.058 0 01-2.146-1.781c-.203-.269-.404-.522-.551-.821a7.74 7.74 0 01-.495-1.283 6.11 6.11 0 01-.017-3.064.166.166 0 00.008-.074.115.115 0 00-.037-.064 5.958 5.958 0 01-1.38-2.202 5.196 5.196 0 01-.333-1.589 6.915 6.915 0 01.188-2.132c.45-1.484 1.309-2.648 2.577-3.493.282-.188.55-.334.802-.438.286-.12.573-.22.861-.304a.129.129 0 00.087-.087A6.016 6.016 0 015.635 2.31C6.315 1.464 7.132.846 8.086.457zm-.804 7.85a.848.848 0 00-1.473.842l1.694 2.965-1.688 2.848a.849.849 0 001.46.864l1.94-3.272a.849.849 0 00.007-.854l-1.94-3.393zm5.446 6.24a.849.849 0 000 1.695h4.848a.849.849 0 000-1.696h-4.848z"/></svg>"##;
+const CURSOR_COLOR_SVG: &[u8] = br##"<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 24 24" fill="none"><g transform="translate(12 12) scale(0.08307) translate(-800 -500)"><path fill="#72716D" d="M800.004 500L923.821 571.486C923.061 572.804 921.957 573.929 920.591 574.716L804.863 641.531C801.858 643.266 798.151 643.266 795.146 641.531L679.417 574.716C678.052 573.929 676.948 572.804 676.188 571.486L800.004 500Z"/><path fill="#55544F" d="M800.005 357.168V500L676.188 571.486C675.427 570.168 675.004 568.647 675.004 567.072V432.928C675.004 429.774 676.686 426.865 679.418 425.285L795.141 358.47C796.646 357.602 798.323 357.168 799.999 357.168H800.005Z"/><path fill="#43413C" d="M923.815 428.515C923.055 427.197 921.951 426.072 920.586 425.285L804.857 358.47C803.357 357.602 801.68 357.168 800.004 357.168V500L923.821 571.486C924.581 570.168 925.005 568.647 925.005 567.072V432.928C925.005 431.348 924.587 429.838 923.821 428.515H923.815Z"/><path fill="#D6D5D2" d="M915.156 433.518C915.857 434.728 915.954 436.281 915.156 437.663L802.764 632.323C802.008 633.641 800 633.1 800 631.584V503.311C800 502.287 799.727 501.302 799.229 500.44L915.15 433.512H915.156V433.518Z"/><path fill="#FFFFFF" d="M915.155 433.518L799.233 500.445C798.741 499.588 798.023 498.86 797.134 498.345L686.049 434.209C684.731 433.453 685.272 431.445 686.788 431.445H911.566C913.162 431.445 914.459 432.307 915.155 433.518Z"/></g></svg>"##;
+const OPENCODE_COLOR_DARK_SVG: &[u8] = br##"<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 24 24" fill="none"><path fill="#6A6868" d="M8 10h8v8H8z"/><path fill="#EEEEEE" fill-rule="evenodd" d="M16 6H8v12h8V6zm4 16H4V2h16v20z"/></svg>"##;
+const OPENCODE_COLOR_LIGHT_SVG: &[u8] = br##"<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 24 24" fill="none"><path fill="#BDBDBD" d="M8 10h8v8H8z"/><path fill="#1F1F1F" fill-rule="evenodd" d="M16 6H8v12h8V6zm4 16H4V2h16v20z"/></svg>"##;
+const GROK_COLOR_DARK_SVG: &[u8] = br##"<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 24 24" fill-rule="evenodd"><defs><linearGradient id="grokd" gradientUnits="userSpaceOnUse" x1="2" y1="2" x2="22" y2="22"><stop offset="0" stop-color="#FFFFFF"/><stop offset="1" stop-color="#B8C0CC"/></linearGradient></defs><path fill="url(#grokd)" d="M9.27 15.29l7.978-5.897c.391-.29.95-.177 1.137.272.98 2.369.542 5.215-1.41 7.169-1.951 1.954-4.667 2.382-7.149 1.406l-2.711 1.257c3.889 2.661 8.611 2.003 11.562-.953 2.341-2.344 3.066-5.539 2.388-8.42l.006.007c-.983-4.232.242-5.924 2.75-9.383.06-.082.12-.164.179-.248l-3.301 3.305v-.01L9.267 15.292M7.623 16.723c-2.792-2.67-2.31-6.801.071-9.184 1.761-1.763 4.647-2.483 7.166-1.425l2.705-1.25a7.808 7.808 0 00-1.829-1A8.975 8.975 0 005.984 5.83c-2.533 2.536-3.33 6.436-1.962 9.764 1.022 2.487-.653 4.246-2.34 6.022-.599.63-1.199 1.259-1.682 1.925l7.62-6.815"/></svg>"##;
+const GROK_COLOR_LIGHT_SVG: &[u8] = br##"<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 24 24" fill-rule="evenodd"><defs><linearGradient id="grokl" gradientUnits="userSpaceOnUse" x1="2" y1="2" x2="22" y2="22"><stop offset="0" stop-color="#111317"/><stop offset="1" stop-color="#4A5260"/></linearGradient></defs><path fill="url(#grokl)" d="M9.27 15.29l7.978-5.897c.391-.29.95-.177 1.137.272.98 2.369.542 5.215-1.41 7.169-1.951 1.954-4.667 2.382-7.149 1.406l-2.711 1.257c3.889 2.661 8.611 2.003 11.562-.953 2.341-2.344 3.066-5.539 2.388-8.42l.006.007c-.983-4.232.242-5.924 2.75-9.383.06-.082.12-.164.179-.248l-3.301 3.305v-.01L9.267 15.292M7.623 16.723c-2.792-2.67-2.31-6.801.071-9.184 1.761-1.763 4.647-2.483 7.166-1.425l2.705-1.25a7.808 7.808 0 00-1.829-1A8.975 8.975 0 005.984 5.83c-2.533 2.536-3.33 6.436-1.962 9.764 1.022 2.487-.653 4.246-2.34 6.022-.599.63-1.199 1.259-1.682 1.925l7.62-6.815"/></svg>"##;
+const GEMINI_COLOR_SVG: &[u8] = br##"<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 24 24"><defs><linearGradient id="g0" gradientUnits="userSpaceOnUse" x1="7" y1="15.5" x2="11" y2="12"><stop stop-color="#08B962"/><stop offset="1" stop-color="#08B962" stop-opacity="0"/></linearGradient><linearGradient id="g1" gradientUnits="userSpaceOnUse" x1="8" y1="5.5" x2="11.5" y2="11"><stop stop-color="#F94543"/><stop offset="1" stop-color="#F94543" stop-opacity="0"/></linearGradient><linearGradient id="g2" gradientUnits="userSpaceOnUse" x1="3.5" y1="13.5" x2="17.5" y2="12"><stop stop-color="#FABC12"/><stop offset="0.46" stop-color="#FABC12" stop-opacity="0"/></linearGradient></defs><path fill="#3186FF" d="M20.616 10.835a14.147 14.147 0 01-4.45-3.001 14.111 14.111 0 01-3.678-6.452.503.503 0 00-.975 0 14.134 14.134 0 01-3.679 6.452 14.155 14.155 0 01-4.45 3.001c-.65.28-1.318.505-2.002.678a.502.502 0 000 .975c.684.172 1.35.397 2.002.677a14.147 14.147 0 014.45 3.001 14.112 14.112 0 013.679 6.453.502.502 0 00.975 0c.172-.685.397-1.351.677-2.003a14.145 14.145 0 013.001-4.45 14.113 14.113 0 016.453-3.678.503.503 0 000-.975 13.245 13.245 0 01-2.003-.678z"/><path fill="url(#g0)" d="M20.616 10.835a14.147 14.147 0 01-4.45-3.001 14.111 14.111 0 01-3.678-6.452.503.503 0 00-.975 0 14.134 14.134 0 01-3.679 6.452 14.155 14.155 0 01-4.45 3.001c-.65.28-1.318.505-2.002.678a.502.502 0 000 .975c.684.172 1.35.397 2.002.677a14.147 14.147 0 014.45 3.001 14.112 14.112 0 013.679 6.453.502.502 0 00.975 0c.172-.685.397-1.351.677-2.003a14.145 14.145 0 013.001-4.45 14.113 14.113 0 016.453-3.678.503.503 0 000-.975 13.245 13.245 0 01-2.003-.678z"/><path fill="url(#g1)" d="M20.616 10.835a14.147 14.147 0 01-4.45-3.001 14.111 14.111 0 01-3.678-6.452.503.503 0 00-.975 0 14.134 14.134 0 01-3.679 6.452 14.155 14.155 0 01-4.45 3.001c-.65.28-1.318.505-2.002.678a.502.502 0 000 .975c.684.172 1.35.397 2.002.677a14.147 14.147 0 014.45 3.001 14.112 14.112 0 013.679 6.453.502.502 0 00.975 0c.172-.685.397-1.351.677-2.003a14.145 14.145 0 013.001-4.45 14.113 14.113 0 016.453-3.678.503.503 0 000-.975 13.245 13.245 0 01-2.003-.678z"/><path fill="url(#g2)" d="M20.616 10.835a14.147 14.147 0 01-4.45-3.001 14.111 14.111 0 01-3.678-6.452.503.503 0 00-.975 0 14.134 14.134 0 01-3.679 6.452 14.155 14.155 0 01-4.45 3.001c-.65.28-1.318.505-2.002.678a.502.502 0 000 .975c.684.172 1.35.397 2.002.677a14.147 14.147 0 014.45 3.001 14.112 14.112 0 013.679 6.453.502.502 0 00.975 0c.172-.685.397-1.351.677-2.003a14.145 14.145 0 013.001-4.45 14.113 14.113 0 016.453-3.678.503.503 0 000-.975 13.245 13.245 0 01-2.003-.678z"/></svg>"##;
+
+fn svg_image(slot: &'static OnceLock<Arc<Image>>, bytes: &'static [u8]) -> Arc<Image> {
+    slot.get_or_init(|| Arc::new(Image::from_bytes(ImageFormat::Svg, bytes.to_vec())))
+        .clone()
+}
+
+/// Colour image for a known provider logo, cached once per variant.
+pub fn provider_color_image(provider: &str, dark: bool) -> Option<Arc<Image>> {
+    static CLAUDE: OnceLock<Arc<Image>> = OnceLock::new();
+    static CODEX: OnceLock<Arc<Image>> = OnceLock::new();
+    static CURSOR: OnceLock<Arc<Image>> = OnceLock::new();
+    static OPENCODE_DARK: OnceLock<Arc<Image>> = OnceLock::new();
+    static OPENCODE_LIGHT: OnceLock<Arc<Image>> = OnceLock::new();
+    static GROK_DARK: OnceLock<Arc<Image>> = OnceLock::new();
+    static GROK_LIGHT: OnceLock<Arc<Image>> = OnceLock::new();
+    static GEMINI: OnceLock<Arc<Image>> = OnceLock::new();
+    match if provider.is_empty() {
+        "claude"
+    } else {
+        provider
+    } {
+        "claude" => Some(svg_image(&CLAUDE, CLAUDE_COLOR_SVG)),
+        "codex" => Some(svg_image(&CODEX, CODEX_COLOR_SVG)),
+        "cursor" => Some(svg_image(&CURSOR, CURSOR_COLOR_SVG)),
+        "opencode" => Some(if dark {
+            svg_image(&OPENCODE_DARK, OPENCODE_COLOR_DARK_SVG)
+        } else {
+            svg_image(&OPENCODE_LIGHT, OPENCODE_COLOR_LIGHT_SVG)
+        }),
+        "grok" => Some(if dark {
+            svg_image(&GROK_DARK, GROK_COLOR_DARK_SVG)
+        } else {
+            svg_image(&GROK_LIGHT, GROK_COLOR_LIGHT_SVG)
+        }),
+        "antigravity" => Some(svg_image(&GEMINI, GEMINI_COLOR_SVG)),
+        _ => None,
+    }
+}
+
 /// A provider's logo ("claude", "codex", "grok", "opencode", "cursor", "antigravity"), or its symbol where there's no logo
 /// (`ProviderMark`, with `ModelPicker.providerSymbol`'s fallbacks).
 pub fn provider_mark(provider: &str) -> Icon {
@@ -88,6 +146,25 @@ pub fn provider_mark(provider: &str) -> Icon {
         "antigravity" => Icon::default().data(GEMINI_LOGO),
         _ => symbol("cpu"),
     }
+}
+
+/// Draws a provider's logo at `size`: in colour when Appearance's Color model
+/// icons switch is on, else as the existing monochrome symbol tinted with
+/// `color`. Unknown providers keep the monochrome `cpu` symbol either way.
+pub fn provider_icon(provider: &str, size: Pixels, color: Hsla, cx: &App) -> AnyElement {
+    if crate::style::color_model_icons() {
+        if let Some(image) = provider_color_image(provider, cx.theme().mode.is_dark()) {
+            return img(ImageSource::Image(image))
+                .flex_shrink_0()
+                .size(size)
+                .object_fit(ObjectFit::Contain)
+                .into_any_element();
+        }
+    }
+    provider_mark(provider)
+        .with_size(size)
+        .text_color(color)
+        .into_any_element()
 }
 
 /// `RunnerIcon.symbol`: a runner's own icon name as a symbol this app has a
@@ -331,4 +408,36 @@ pub fn try_symbol(name: &str) -> Option<Icon> {
         _ => return None,
     };
     Some(Icon::new(lucide))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn color_provider_svgs_render_for_every_known_provider() {
+        let renderer = gpui_kit::SvgRenderer::new(Arc::new(()));
+        for provider in [
+            "",
+            "claude",
+            "codex",
+            "cursor",
+            "opencode",
+            "grok",
+            "antigravity",
+        ] {
+            for dark in [false, true] {
+                let image = provider_color_image(provider, dark)
+                    .unwrap_or_else(|| panic!("missing color icon for {provider:?} dark={dark}"));
+                let rendered = renderer
+                    .render_single_frame(image.bytes(), 1.0)
+                    .unwrap_or_else(|e| panic!("bad SVG for {provider:?} dark={dark}: {e}"));
+                let size = rendered.size(0);
+                assert!(size.width.0 >= 64, "{provider:?} width {}", size.width.0);
+                assert_eq!(size.width.0, size.height.0, "{provider:?} square");
+            }
+        }
+        assert!(provider_color_image("unknown", true).is_none());
+        assert!(provider_color_image("unknown", false).is_none());
+    }
 }

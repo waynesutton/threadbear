@@ -358,6 +358,21 @@ pub fn set_compact(on: bool) {
     }
 }
 
+/// Settings > General > Appearance's Color model icons: when on, provider logos
+/// (Claude, Codex, Cursor, OpenCode, Grok, Gemini) draw in colour instead of
+/// monochrome.
+static COLOR_MODEL_ICONS: AtomicBool = AtomicBool::new(false);
+
+pub fn color_model_icons() -> bool {
+    COLOR_MODEL_ICONS.load(Ordering::Relaxed)
+}
+
+pub fn set_color_model_icons(on: bool) {
+    if COLOR_MODEL_ICONS.swap(on, Ordering::Relaxed) != on {
+        bump_look();
+    }
+}
+
 /// Settings > General > Appearance's Font: the whole app's, but code keeps
 /// its monospaced one.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

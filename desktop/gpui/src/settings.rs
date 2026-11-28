@@ -87,6 +87,10 @@ pub struct Saved {
     /// the new-thread box near the bottom of the window, growing upwards as
     /// you type. None is the middle, as it ships (Wayne, 26 Nov).
     pub new_thread_box_bottom: Option<bool>,
+    /// `colorModelIcons`: Appearance's Color model icons. Some(true) draws each
+    /// provider's logo in colour instead of monochrome. None is monochrome, as
+    /// it ships (Wayne, 27 Nov).
+    pub color_model_icons: Option<bool>,
     /// `activityLog` (ActivityRecorder): Settings > General's Keep an
     /// activity log (activity.rs). Off until it's turned on.
     pub activity_log: Option<bool>,
@@ -396,6 +400,10 @@ impl Settings {
         self.saved.new_thread_box_bottom.unwrap_or(false)
     }
 
+    pub fn color_model_icons(&self) -> bool {
+        self.saved.color_model_icons.unwrap_or(false)
+    }
+
     pub fn slash_return_runs(&self) -> bool {
         self.saved.slash_return_runs.unwrap_or(false)
     }
@@ -551,5 +559,16 @@ mod tests {
             serde_json::from_str(&std::fs::read_to_string(&path).unwrap()).unwrap();
         assert_eq!(written["somethingNewer"], serde_json::json!({ "on": true }));
         assert_eq!(written["textZoomPercent"], 110);
+    }
+
+    #[test]
+    fn color_model_icons_defaults_off_and_round_trips() {
+        let path = temp_file("color-model-icons");
+        let mut s = Settings::load_from(path.clone());
+        assert!(!s.color_model_icons());
+        s.saved.color_model_icons = Some(true);
+        s.save_checked().unwrap();
+        let reloaded = Settings::load_from(path);
+        assert!(reloaded.color_model_icons());
     }
 }

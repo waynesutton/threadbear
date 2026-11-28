@@ -513,7 +513,7 @@ impl Composer {
             let trigger = CoordinatorFieldTrigger {
                 id: "coordinator-account-field".into(),
                 title: settings.account_chip_title().into(),
-                icon: Icon::from(IconName::CircleUser),
+                icon: TriggerIcon::Symbol(Icon::from(IconName::CircleUser)),
                 accent_icon: false,
                 tip: settings.account_chip_help().into(),
                 badge: settings.account_badge(),
@@ -924,7 +924,7 @@ impl Composer {
                 id: "composer-permission-chip".into(),
                 kind: TriggerKind::Label,
                 title: title.into(),
-                icon: Some(icon),
+                icon: Some(TriggerIcon::Symbol(icon)),
                 tip: tip.into(),
                 selected: false,
             }
@@ -940,7 +940,7 @@ impl Composer {
                 id: "composer-permission-chip".into(),
                 kind: TriggerKind::Chip,
                 title: title.into(),
-                icon: Some(icon),
+                icon: Some(TriggerIcon::Symbol(icon)),
                 tip: help.into(),
                 selected: false,
             })
@@ -989,7 +989,7 @@ impl Composer {
             id: "composer-account-chip".into(),
             kind: TriggerKind::Chip,
             title: title.into(),
-            icon: Some(Icon::from(IconName::CircleUser)),
+            icon: Some(TriggerIcon::Symbol(Icon::from(IconName::CircleUser))),
             tip: tip.into(),
             selected: false,
         };
@@ -1329,13 +1329,29 @@ enum TriggerKind {
     Ring(ContextMeter),
 }
 
+enum TriggerIcon {
+    Symbol(Icon),
+    Provider(String),
+}
+
+impl TriggerIcon {
+    fn render_at(self, side: gpui_kit::Pixels, color: gpui_kit::Hsla, cx: &App) -> AnyElement {
+        match self {
+            TriggerIcon::Symbol(icon) => icon.with_size(side).text_color(color).into_any_element(),
+            TriggerIcon::Provider(provider) => {
+                crate::icons::provider_icon(&provider, side, color, cx)
+            }
+        }
+    }
+}
+
 #[derive(IntoElement)]
 struct ChipTrigger {
     id: ElementId,
     kind: TriggerKind,
     title: SharedString,
-    /// A bundled icon or one drawn from data (a provider's logo).
-    icon: Option<Icon>,
+    /// A bundled icon or a provider's logo (monochrome or colour).
+    icon: Option<TriggerIcon>,
     tip: SharedString,
     selected: bool,
     /// After the title: "· 12%" in orange, "Limit reached" in red
@@ -1427,12 +1443,11 @@ impl RenderOnce for ChipTrigger {
                     s.child(div().flex_none().child(spinner(size::CHIP)))
                 })
                 .when_some(self.icon.filter(|_| !busy), |s, icon| {
-                    s.child(
-                        div().flex_none().flex().child(
-                            icon.with_size(px(size::CHIP - 1.))
-                                .text_color(style::faint_icon(cx)),
-                        ),
-                    )
+                    s.child(div().flex_none().flex().child(icon.render_at(
+                        px(size::CHIP - 1.),
+                        style::faint_icon(cx),
+                        cx,
+                    )))
                 })
                 // Its title is what gives way, ending "…", as a SwiftUI
                 // Text with lineLimit(1) does.
@@ -1477,17 +1492,17 @@ impl RenderOnce for ChipTrigger {
 
 /// The pool's own icon when one was picked for it, a pinned login's person,
 /// else the provider's logo (`modelChipLogo`, `modelChipIcon`).
-fn model_chip_icon(settings: &ChipSettings<'_>) -> Icon {
+fn model_chip_icon(settings: &ChipSettings<'_>) -> TriggerIcon {
     if !settings.uses_pools() {
-        return crate::icons::provider_mark(&settings.provider);
+        return TriggerIcon::Provider(settings.provider.clone());
     }
     match settings.pool() {
-        None => Icon::from(IconName::CircleUser),
+        None => TriggerIcon::Symbol(Icon::from(IconName::CircleUser)),
         Some(pool) => match pool.icon.as_deref().filter(|i| !i.is_empty()) {
-            Some(symbol) => {
-                crate::icons::try_symbol(symbol).unwrap_or_else(|| Icon::from(IconName::Layers))
-            }
-            None => crate::icons::provider_mark(&settings.provider),
+            Some(symbol) => TriggerIcon::Symbol(
+                crate::icons::try_symbol(symbol).unwrap_or_else(|| Icon::from(IconName::Layers)),
+            ),
+            None => TriggerIcon::Provider(settings.provider.clone()),
         },
     }
 }
@@ -1498,7 +1513,7 @@ fn model_chip_icon(settings: &ChipSettings<'_>) -> Icon {
 struct CoordinatorFieldTrigger {
     id: ElementId,
     title: SharedString,
-    icon: Icon,
+    icon: TriggerIcon,
     accent_icon: bool,
     tip: SharedString,
     badge: Option<ChipBadge>,
@@ -1592,10 +1607,7 @@ impl RenderOnce for CoordinatorFieldTrigger {
                     .with_size(px(13.))
                     .into_any_element()
             } else {
-                self.icon
-                    .with_size(px(14.))
-                    .text_color(icon_color)
-                    .into_any_element()
+                self.icon.render_at(px(14.), icon_color, cx)
             }))
             .child(title_el)
             .when_some(self.badge, |s, badge| {
@@ -2192,11 +2204,7 @@ impl ModelPickerView {
                             });
                         }
                     })
-                    .child(
-                        crate::icons::provider_mark(provider)
-                            .with_size(px(16.))
-                            .text_color(color),
-                    )
+                    .child(crate::icons::provider_icon(provider, px(16.), color, cx))
             }))
             .into_any_element()
     }
@@ -2852,11 +2860,12 @@ fn model_row(
                 .items_center()
                 .justify_center()
                 .when(row.is_older, |s| s.opacity(0.6))
-                .child(
-                    crate::icons::provider_mark(provider)
-                        .with_size(px(14.))
-                        .text_color(if selected { fg } else { secondary }),
-                ),
+                .child(crate::icons::provider_icon(
+                    provider,
+                    px(14.),
+                    if selected { fg } else { secondary },
+                    cx,
+                )),
         )
         .child(
             v_flex()
