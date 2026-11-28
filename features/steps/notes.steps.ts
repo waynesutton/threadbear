@@ -81,6 +81,10 @@ When('I click the box on line {int} of the note', async function (this: Threadbe
   await this.app.do({ cmd: 'notes', tick: line });
 });
 
+When('I click {string} in the note', async function (this: ThreadbearWorld, text: string) {
+  await this.app.do({ cmd: 'notes', clickLink: text });
+});
+
 When("I press the note's bin", async function (this: ThreadbearWorld) {
   await this.app.do({ cmd: 'click', tip: 'Delete this note' });
 });

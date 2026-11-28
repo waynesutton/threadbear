@@ -3080,7 +3080,9 @@ with the same notes as the Swift app. Back and ⌘W leave it as Esc does.
 There a note reads like a doc rather than code: it's set in the app's own
 type on roomy lines, with the line numbers level with each line. Under the
 note's title, − and + make the text smaller or larger (12 to 22 points),
-and Sans or Mono picks the type; it remembers both. Two things differ
+and Sans or Mono picks the type; it remembers both. Click a web or
+Markdown link in a note to open it (hold Option while clicking, or drag,
+to edit or select it). Two things differ
 there for now: headings are bold but not bigger, and you can't dictate
 into a note.
 

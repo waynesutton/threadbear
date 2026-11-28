@@ -189,9 +189,19 @@ pub(crate) struct NotesPage {
     /// The text's size at 100%, and whether it's set in the code font.
     text_size: f32,
     mono: bool,
+    /// A link pressed with a single left click, opened on release when it wasn't a drag.
+    pending_link: Option<(Point<Pixels>, String)>,
+    /// Whether the pointer currently sits over a link or task box.
+    hovered_hand: bool,
     scroll: ScrollHandle,
     focus: FocusHandle,
     _subs: Vec<Subscription>,
+}
+
+/// Interactive text runs inside a note's editor.
+enum InteractiveTarget {
+    Checkbox(usize),
+    Link(String),
 }
 
 impl NotesPage {
@@ -272,6 +282,8 @@ impl NotesPage {
             list_hidden,
             text_size,
             mono,
+            pending_link: None,
+            hovered_hand: false,
             scroll: ScrollHandle::new(),
             focus: cx.focus_handle(),
             _subs: subs,
@@ -301,6 +313,8 @@ impl NotesPage {
     /// Another note in the editor, the last one's title and text written first.
     fn pick(&mut self, id: Option<String>, window: &mut Window, cx: &mut Context<Self>) {
         self.flush(cx);
+        self.pending_link = None;
+        self.hovered_hand = false;
         self.selection = id.filter(|id| self.store.get(id).is_some());
         let (title, body) = self
             .open_note()
@@ -632,24 +646,126 @@ impl NotesPage {
         self.body_typed(cx);
     }
 
+    /// The UTF-8 byte offset of the glyph directly under `position`, or `None`
+    /// when the pointer sits in the gutter, past a row's end, or outside the text.
+    fn char_at_point(&self, position: Point<Pixels>, text: &str, cx: &App) -> Option<usize> {
+        let editor = self.editor.read(cx);
+        if !editor.input_bounds().contains(&position) {
+            return None;
+        }
+        let line_height = editor.line_height()?;
+        let at = editor.offset_for_point(position).min(text.len());
+        let hits = |start: usize, end: usize| -> bool {
+            let Some(bounds) = editor.range_to_bounds(&(start..end)) else {
+                return false;
+            };
+            if bounds.size.height <= line_height + gpui_kit::px(1.) {
+                return bounds.contains(&position);
+            }
+            // The last character before a soft wrap has its end offset on the next
+            // visual row, so check the glyph's own row from its start edge.
+            let Some(edge) = editor.range_to_bounds(&(start..start)) else {
+                return false;
+            };
+            position.y >= edge.top()
+                && position.y <= edge.bottom()
+                && position.x >= edge.left()
+                && position.x <= edge.left() + line_height
+        };
+        if let Some(ch) = text[at..].chars().next().filter(|&c| c != '\n') {
+            if hits(at, at + ch.len_utf8()) {
+                return Some(at);
+            }
+        }
+        if let Some(ch) = text[..at].chars().next_back().filter(|&c| c != '\n') {
+            let prev = at - ch.len_utf8();
+            if hits(prev, at) {
+                return Some(prev);
+            }
+        }
+        None
+    }
+
+    /// What interactive run sits under `position`, if any: a task's box or a link.
+    fn interactive_at_point(&self, position: Point<Pixels>, cx: &App) -> Option<InteractiveTarget> {
+        let text = self.editor.read(cx).value().to_string();
+        let at = self.char_at_point(position, &text, cx)?;
+        if let Some(boxed) = notes::spans(&text)
+            .into_iter()
+            .find(|s| s.kind == Kind::Checkbox && s.range.start <= at && at < s.range.end)
+        {
+            return Some(InteractiveTarget::Checkbox(boxed.range.start));
+        }
+        notes::link_at(&text, at).map(|(_, url)| InteractiveTarget::Link(url))
+    }
+
     /// A click on a task's box ticks it, through the editor's own edit so
-    /// ⌘Z unticks it, and the caret stays where it was.
+    /// ⌘Z unticks it, and the caret stays where it was. A press on a link
+    /// is remembered so a plain click opens it on release without blocking
+    /// drag selection or editing.
     fn on_press(
         &mut self,
-        position: Point<Pixels>,
+        event: &MouseDownEvent,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> bool {
-        let editor = self.editor.read(cx);
-        let at = editor.offset_for_point(position);
-        let text = editor.value().to_string();
-        let Some(boxed) = notes::spans(&text)
-            .into_iter()
-            .find(|s| s.kind == Kind::Checkbox && s.range.start <= at && at < s.range.end)
-        else {
+        self.pending_link = None;
+        if event.button != MouseButton::Left
+            || event.click_count != 1
+            || event.modifiers.shift
+            || event.modifiers.alt
+        {
             return false;
+        }
+        match self.interactive_at_point(event.position, cx) {
+            Some(InteractiveTarget::Checkbox(at)) => self.tick(at, window, cx),
+            Some(InteractiveTarget::Link(url)) => {
+                self.pending_link = Some((event.position, url));
+                false
+            }
+            None => false,
+        }
+    }
+
+    /// Opens the link pressed in `on_press` when the pointer was released
+    /// on it without dragging or selecting text.
+    fn on_release(&mut self, event: &MouseUpEvent, cx: &mut Context<Self>) {
+        let Some((down_pos, url)) = self.pending_link.take() else {
+            return;
         };
-        self.tick(boxed.range.start, window, cx)
+        if event.button != MouseButton::Left
+            || event.click_count != 1
+            || event.modifiers.shift
+            || event.modifiers.alt
+        {
+            return;
+        }
+        let drag_limit = gpui_kit::px(4.);
+        if (event.position.x - down_pos.x).abs() > drag_limit
+            || (event.position.y - down_pos.y).abs() > drag_limit
+        {
+            return;
+        }
+        if !self.editor.read(cx).selected_range().is_empty() {
+            return;
+        }
+        if !matches!(
+            self.interactive_at_point(event.position, cx),
+            Some(InteractiveTarget::Link(ref up_url)) if up_url == &url
+        ) {
+            return;
+        }
+        crate::open_gate::open_link(&url, crate::open_gate::Origin::ThisMac, "", cx);
+    }
+
+    fn on_hover(&mut self, event: &MouseMoveEvent, cx: &mut Context<Self>) {
+        let over = !event.modifiers.alt
+            && !event.modifiers.shift
+            && self.interactive_at_point(event.position, cx).is_some();
+        if self.hovered_hand != over {
+            self.hovered_hand = over;
+            cx.notify();
+        }
     }
 
     fn tick(&mut self, at: usize, window: &mut Window, cx: &mut Context<Self>) -> bool {
@@ -947,6 +1063,7 @@ impl NotesPage {
         let me = cx.entity().downgrade();
         let body = div()
             .id("notes-editor")
+            .relative()
             .flex_1()
             .min_h_0()
             .pl(px(4.))
@@ -955,18 +1072,41 @@ impl NotesPage {
                 cx.listener(|this, action: &Enter, window, cx| this.on_enter(action, window, cx)),
             )
             .capture_any_mouse_down(move |event, window, cx| {
-                if event.button != MouseButton::Left || event.click_count != 1 {
-                    return;
-                }
                 if me
-                    .update(cx, |this, cx| this.on_press(event.position, window, cx))
+                    .update(cx, |this, cx| this.on_press(event, window, cx))
                     .unwrap_or(false)
                 {
                     cx.stop_propagation();
                     window.prevent_default();
                 }
             })
-            .child(editor);
+            .on_mouse_up(
+                MouseButton::Left,
+                cx.listener(|this, event: &MouseUpEvent, _, cx| this.on_release(event, cx)),
+            )
+            .on_mouse_move(
+                cx.listener(|this, event: &MouseMoveEvent, _, cx| this.on_hover(event, cx)),
+            )
+            .child(editor)
+            .when(self.hovered_hand, |d| {
+                // Painted after the editor so GPUI's reverse cursor order shows the
+                // pointing hand over links and task boxes without blocking editor input.
+                d.child(
+                    canvas(
+                        |bounds, window, _| {
+                            (!window.modifiers().alt)
+                                .then(|| window.insert_hitbox(bounds, HitboxBehavior::Normal))
+                        },
+                        |_, hitbox, window, _| {
+                            if let Some(hitbox) = hitbox {
+                                window.set_cursor_style(CursorStyle::PointingHand, &hitbox);
+                            }
+                        },
+                    )
+                    .absolute()
+                    .inset_0(),
+                )
+            });
         let _ = window;
         v_flex()
             .flex_1()
@@ -1210,6 +1350,26 @@ pub(crate) fn automation(
             .read(cx)
             .range_to_bounds(&(at + 1..at + 2))
             .ok_or("the box isn't on screen")?;
+        let point = bounds.center();
+        window.pointer_move(point, None, cx);
+        window.pointer_down(point, MouseButton::Left, cx);
+        window.pointer_up(point, MouseButton::Left, cx);
+        window.render_frame(cx);
+    }
+    if let Some(needle) = cmd["clickLink"].as_str() {
+        // Through a real click on the link text, where it's drawn.
+        window.render_frame(cx);
+        let text = page.read(cx).editor.read(cx).value().to_string();
+        let at = text
+            .find(needle)
+            .ok_or_else(|| format!("no {needle:?} in the note"))?;
+        let ch_len = text[at..].chars().next().map_or(1, char::len_utf8);
+        let bounds = page
+            .read(cx)
+            .editor
+            .read(cx)
+            .range_to_bounds(&(at..at + ch_len))
+            .ok_or("the link isn't on screen")?;
         let point = bounds.center();
         window.pointer_move(point, None, cx);
         window.pointer_down(point, MouseButton::Left, cx);

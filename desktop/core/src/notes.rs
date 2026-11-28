@@ -489,6 +489,37 @@ pub fn toggled_box(text: &str, at: usize) -> Option<(Range<usize>, &'static str)
     }
 }
 
+/// The destination URL of a `Kind::Link` span (`[label](url)` or bare `http(s)://...`).
+pub fn link_target(raw: &str) -> Option<String> {
+    if raw.starts_with('[') && raw.ends_with(')') {
+        let open = raw.find("](")?;
+        let url = &raw[open + 2..raw.len() - 1];
+        return (!url.is_empty()).then(|| url.to_owned());
+    }
+    let trimmed = raw.trim_end_matches(|c| {
+        matches!(
+            c,
+            '.' | ',' | ';' | ':' | '!' | '?' | '\'' | '"' | '>' | ']'
+        )
+    });
+    if (trimmed.starts_with("https://") && trimmed.len() > "https://".len())
+        || (trimmed.starts_with("http://") && trimmed.len() > "http://".len())
+    {
+        Some(trimmed.to_owned())
+    } else {
+        None
+    }
+}
+
+/// The `Kind::Link` span and its target URL at byte offset `at`, if any.
+pub fn link_at(text: &str, at: usize) -> Option<(Range<usize>, String)> {
+    let span = spans(text)
+        .into_iter()
+        .find(|s| s.kind == Kind::Link && s.range.start <= at && at < s.range.end)?;
+    let target = link_target(&text[span.range.clone()])?;
+    Some((span.range, target))
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Newline {
     /// An ordinary new line.
@@ -919,6 +950,59 @@ mod tests {
         assert_eq!(toggled_box(text, 13), Some((14..15, " ")));
         assert_eq!(toggled_box(text, 0), None);
         assert_eq!(toggled_box(text, 99), None);
+    }
+
+    #[test]
+    fn links_resolve_bare_and_markdown_targets() {
+        let text = "add to design and tag dashboard and calendar https://www.paneloui.com/components/dashboard-pages-13";
+        let start = text.find("https://").unwrap();
+        let expected = "https://www.paneloui.com/components/dashboard-pages-13";
+        assert_eq!(link_at(text, start - 1), None);
+        assert_eq!(
+            link_at(text, start),
+            Some((start..text.len(), expected.into()))
+        );
+        assert_eq!(
+            link_at(text, text.len() - 1),
+            Some((start..text.len(), expected.into()))
+        );
+        assert_eq!(link_at(text, text.len()), None);
+
+        let punctuated = "see https://example.com/a, or https://example.com/b.";
+        let first = punctuated.find("https://example.com/a").unwrap();
+        assert_eq!(
+            link_at(punctuated, first).map(|(_, u)| u),
+            Some("https://example.com/a".into())
+        );
+        let second = punctuated.find("https://example.com/b").unwrap();
+        assert_eq!(
+            link_at(punctuated, second).map(|(_, u)| u),
+            Some("https://example.com/b".into())
+        );
+
+        let md = "check [panelo](https://www.paneloui.com/components/dashboard-pages-13) now";
+        let md_start = md.find('[').unwrap();
+        let md_end = md.find(')').unwrap() + 1;
+        assert_eq!(
+            link_at(md, md_start + 2),
+            Some((md_start..md_end, expected.into()))
+        );
+        assert_eq!(
+            link_at(md, md_end - 2),
+            Some((md_start..md_end, expected.into()))
+        );
+        assert_eq!(link_at(md, md_end), None);
+
+        let task = "- [ ] read https://example.com/task";
+        let task_url = task.find("https://").unwrap();
+        assert_eq!(
+            link_at(task, task_url).map(|(_, u)| u),
+            Some("https://example.com/task".into())
+        );
+
+        let fenced = "```\nhttps://example.com/code\n```";
+        let fenced_url = fenced.find("https://").unwrap();
+        assert_eq!(link_at(fenced, fenced_url), None);
     }
 
     #[test]

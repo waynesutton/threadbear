@@ -86,3 +86,13 @@ Feature: Notes
     Then the note's text is 12 points in "Mono"
     When I set the note in "Sans"
     Then the note's text is 12 points in "Sans"
+
+  @notes.page @swift-pending
+  Scenario: Clicking a link in a note opens it
+    When I open Notes
+    And I start a new note
+    And I type "see https://www.paneloui.com/components/dashboard-pages-13 and [docs](https://example.com/docs)" in the note
+    And I click "dashboard-pages-13" in the note
+    Then "https://www.paneloui.com/components/dashboard-pages-13" was opened through the app
+    When I click "[docs]" in the note
+    Then "https://example.com/docs" was opened through the app
